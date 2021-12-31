@@ -1,0 +1,9 @@
+numpy
+scipy
+pandas
+collections
+glob
+tabulate
+sys
+numdifftools
+enum
