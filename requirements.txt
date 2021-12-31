@@ -1,3 +1,5 @@
+pip
+wheel
 numpy
 scipy
 pandas
