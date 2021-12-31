@@ -23,7 +23,7 @@ VERSION = '0.1.0'
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-    'numpy', 'scipy', 'pandas', 'collections', 'glob', 'tabulate', 'sys', 'numdifftools', 'enum']
+    'numpy', 'scipy', 'pandas', 'tabulate', 'numdifftools']
 
 # What packages are optional?
 EXTRAS = {
@@ -104,7 +104,7 @@ setup(
     url=URL,
     packages=find_packages(exclude=["tests", "*.tests", "*.tests.*", "tests.*"]),
     # If your package is a single module, use this instead of 'packages':
-    # py_modules=['mypackage'],
+    py_modules=['pyrestoolbox'],
 
     # entry_points={
     #     'console_scripts': ['mycli=mymodule:cli'],
