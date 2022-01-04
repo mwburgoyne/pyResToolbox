@@ -170,7 +170,7 @@ Or a set of Water-Oil relative permeability curves with the Corey method
 .. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/swof.png
     :alt: SWOF Relative Permeability Curves
 
-A set of AQUTAB Aquifer Influence function for constant terminal rate Van Everdingin & Hurst aquifers
+A set of dimensionless pressures for the constant terminal rate Van Everdingin & Hurst aquifer, along with an AQUTAB.INC export for use in ECLIPSE.
 
 .. code-block:: python
 
