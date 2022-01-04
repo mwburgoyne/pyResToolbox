@@ -24,20 +24,10 @@ Function List
 =============
 
 +-------------------------+-----------------------------------------------------------------------------------------------+
-| Inflow                  | gas_rate_radial(...) <./docs/api.rst#pyrestoolbox.gas_rate_radial>                            |
-|                         | gas_rate_linear(...) <./docs/api.html#pyrestoolbox.gas_rate_linear>`_,                        |
-|                         | oil_rate_radial(...) <./docs/api.html#pyrestoolbox.pyrestoolbox.oil_rate_radial>              |
-|                         | oil_rate_linear(...) <./docs/api.html#pyrestoolbox.pyrestoolbox.oil_rate_radial>              |
-+-------------------------+-----------------------------------------------------------------------------------------------+
-| Gas PVT                 | gas_tc_pc(...) <./docs/api.html#pyrestoolbox.gas_tc_pc>                                       |
-|                         | gas_z(...) <./docs/api.html#pyrestoolbox.gas_z>                                               |
-+-------------------------+-----------------------------------------------------------------------------------------------+
-
-+-------------------------+-----------------------------------------------------------------------------------------------+
-| Inflow                  | `gas_rate_radial(...) <./docs/api.rst#pyrestoolbox.gas_rate_radial>`_,                        |
-|                         | `gas_rate_linear(...) <./docs/api.html#pyrestoolbox.gas_rate_linear>`_,                       |
-|                         | `oil_rate_radial(...) <./docs/api.html#pyrestoolbox.pyrestoolbox.oil_rate_radial>`_,          |
-|                         | `oil_rate_linear(...) <./docs/api.html#pyrestoolbox.pyrestoolbox.oil_rate_radial>`_,          |
+| Inflow                  | - `gas_rate_radial(...) <./docs/api.rst#pyrestoolbox.gas_rate_radial>`_,                        |
+|                         | - `gas_rate_linear(...) <./docs/api.html#pyrestoolbox.gas_rate_linear>`_,                       |
+|                         | - `oil_rate_radial(...) <./docs/api.html#pyrestoolbox.pyrestoolbox.oil_rate_radial>`_,          |
+|                         | - `oil_rate_linear(...) <./docs/api.html#pyrestoolbox.pyrestoolbox.oil_rate_radial>`_,          |
 +-------------------------+-----------------------------------------------------------------------------------------------+
 | Gas PVT                 | `gas_tc_pc(...) <./docs/api.html#pyrestoolbox.gas_tc_pc>`_,                                   |
 |                         | `gas_z(...) <./docs/api.html#pyrestoolbox.gas_z>`_,                                           |
