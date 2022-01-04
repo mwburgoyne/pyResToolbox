@@ -65,7 +65,7 @@ Function List
 |                         | - Lorenz factor to permeability array: `lorenz_2_layers(...) <./docs/api.html#pyrestoolbox.lorenz_2_layers>`_                   |        
 +-------------------------+---------------------------------------------------------------------------------------------------------------------------------+
 | Simulation Helpers      | - Summarize IX convergence errors: `ix_extract_problem_cells(...) <./docs/api.html#pyrestoolbox.ix_extract_problem_cells>`_     |
-|                         | - Create Aquifer Influence Functions: `influence_tables(...) <./docs/api.html#pyrestoolbox.influence_tables>`_                   |        
+|                         | - Create Aquifer Influence Functions: `influence_tables(...) <./docs/api.html#pyrestoolbox.influence_tables>`_                  |        
 +-------------------------+---------------------------------------------------------------------------------------------------------------------------------+
 | Relative Permeability   | - Create sets of rel perm tables: `rel_perm(...) <./docs/api.html#pyrestoolbox.rel_perm>`_                                      |
 +-------------------------+---------------------------------------------------------------------------------------------------------------------------------+
