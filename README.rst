@@ -9,6 +9,7 @@ A collection of Reservoir Engineering Utilities
 This set of functions focuses on those that the author uses often while creating programmatic solutions. These are the scripts that are often copy/pasted from previous work - sometimes slightly modified - resulting in a trail of slightly different versions over the years. Some attempt has been made here to make this implementation flexible enough such that it can be relied as-is going forward.
 
 Includes functions to perform simple calculations including;
+
 - Inflow for oil and gas
 - PVT Calculations for oil
 - PVT calculation for gas
@@ -30,6 +31,7 @@ Family                         Function
  Test 2:                      Row 1                         
 ============================= ================================  
 
+.. table
 
 +----------------------------+---------------------------------------------------------------------------------------------------------------------------------+
 | Inflow                     | `gas_rate_radial(...) <./docs/api.html#pyrestoolbox.gas_rate_radial>`_,                                                          |
