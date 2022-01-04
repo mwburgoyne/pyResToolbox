@@ -19,7 +19,8 @@ Includes functions to perform simple calculations including;
 
 This is the initial public release, with improvements and additions expected over time. Apologies that it is only in oilfield units, with no current plans to add multi-unit support.
 
-The current function list is as follows
+Function List
+=============
 
 
 +----------------------------+---------------------------------------------------------------------------------------------------------------------------------+
@@ -135,7 +136,7 @@ And gas
 .. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/dry_gas.png
     :alt: Dry Gas Properties
     
-A set of Gas-Oil relative permeability curves with LET method
+A set of Gas-Oil relative permeability curves with the LET method
 
 .. code-block:: python
 
@@ -152,7 +153,7 @@ A set of Gas-Oil relative permeability curves with LET method
 .. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/sgof.png
     :alt: SGOF Relative Permeability Curves
 
-Or a set of Water-Oil curves with Corey method
+Or a set of Water-Oil relative permeability curves with the Corey method
 
 .. code-block:: python
 
