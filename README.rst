@@ -21,6 +21,7 @@ This is the initial public release, with improvements and additions expected ove
 
 The current function list is as follows
 
+
 +----------------------------+---------------------------------------------------------------------------------------------------------------------------------+
 | Inflow                     | `gas_rate_radial(...) </docs/api.html#pyrestoolbox.gas_rate_radial>`_,                                                          |
 |                            | `gas_rate_linear(...) </docs/api.html#pyrestoolbox.gas_rate_linear>`_,                                                          |
@@ -67,6 +68,7 @@ The current function list is as follows
 +----------------------------+---------------------------------------------------------------------------------------------------------------------------------+  
 | Relative Permeability      | `rel_perm(...) </docs/api.html#pyrestoolbox.rel_perm>`_,                                                                           |
 +----------------------------+---------------------------------------------------------------------------------------------------------------------------------+
+
 
 
 Getting Started
@@ -121,6 +123,7 @@ Or creating black oil table information for oil
 And gas
 
 .. code-block:: python
+
     >>> fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10,10))
     >>> ax1.semilogy(df['Pressure (psia)'], df['Bg (rb/mscf'])
     >>> ax2.plot(df['Pressure (psia)'], df['ug (cP)'])
@@ -152,6 +155,7 @@ A set of Gas-Oil relative permeability curves with LET method
 Or a set of Water-Oil curves with Corey method
 
 .. code-block:: python
+
     >>> df = rtb.rel_perm(rows=25, krtable='SWOF', kromax =1, krwmax =0.25, swc =0.15, swcr = 0.2, sorw =0.15, no=2.5, nw=1.5)
     >>> plt.plot(df['Sw'], df['Krow'], c = 'g', label='Oil')
     >>> plt.plot(df['Sw'], df['Krwo'], c = 'b', label='Water')
