@@ -24,7 +24,7 @@ Function List
 =============
 
 +-------------------------+-----------------------------------------------------------------------------------------------+
-| Inflow                  | - `gas_rate_radial(...) <./docs/api.rst#pyrestoolbox.gas_rate_radial>`_                       |
+| Inflow                  | - Gas Flow Rate Radial: `gas_rate_radial(...) <./docs/api.rst#pyrestoolbox.gas_rate_radial>`_                       |
 |                         | - `gas_rate_linear(...) <./docs/api.html#pyrestoolbox.gas_rate_linear>`_                      |
 |                         | - `oil_rate_radial(...) <./docs/api.html#pyrestoolbox.pyrestoolbox.oil_rate_radial>`_         |
 |                         | - `oil_rate_linear(...) <./docs/api.html#pyrestoolbox.pyrestoolbox.oil_rate_radial>`_         |
