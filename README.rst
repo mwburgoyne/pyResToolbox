@@ -90,7 +90,7 @@ A simple example below of estimating oil bubble point pressure.
     5179.51086900132
 
 
-Or creating black oil table information
+Or creating black oil table information for oil
 
 .. code-block:: python
 
@@ -117,6 +117,8 @@ Or creating black oil table information
 
 .. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/bot.png
     :alt: Black Oil Properties
+    
+And gas
 
 .. code-block:: python
     >>> fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10,10))
