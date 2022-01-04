@@ -6,7 +6,8 @@
 A collection of Reservoir Engineering Utilities
 -----------------------------
 
-This set of functions focuses on those that the author uses often while creating programmatic solutions. These are the scripts that are often copy/pasted from previous work - sometimes slightly modified - resulting in a trail of slightly different versions over the years. Some attempt has been made here to make this implementation flexible enough such that it can be relied as-is going forward.
+This set of functions focuses on those that the author uses often while crafting programming solutions. 
+These are the scripts that are often copy/pasted from previous work - sometimes slightly modified - resulting in a trail of slightly different versions over the years. Some attempt has been made here to make this implementation flexible enough such that it can be relied on as-is going forward.
 
 Includes functions to perform simple calculations including;
 
@@ -18,7 +19,7 @@ Includes functions to perform simple calculations including;
 - Extract problem cells information from Intesect (IX) print files
 - Creation of Corey and LET relative permeability tables in Eclipse format
 
-This is the initial public release, with improvements and additions expected over time. Apologies that it is only in oilfield units, with no current plans to add multi-unit support.
+This is the initial public release, with improvements and additions expected over time. Apologies in advance that it is only in oilfield units with no current plans to add multi-unit support.
 
 Function List
 =============
@@ -64,6 +65,7 @@ Function List
 |                         | - Lorenz factor to permeability array: `lorenz_2_layers(...) <./docs/api.html#pyrestoolbox.lorenz_2_layers>`_                   |        
 +-------------------------+---------------------------------------------------------------------------------------------------------------------------------+
 | Simulation Helpers      | - Summarize IX convergence errors: `ix_extract_problem_cells(...) <./docs/api.html#pyrestoolbox.ix_extract_problem_cells>`_     |
+|                         | - Create Aquifer Influence Functions: `influence_tables(...) <./docs/api.html#pyrestoolbox.influence_tables>`_                   |        
 +-------------------------+---------------------------------------------------------------------------------------------------------------------------------+
 | Relative Permeability   | - Create sets of rel perm tables: `rel_perm(...) <./docs/api.html#pyrestoolbox.rel_perm>`_                                      |
 +-------------------------+---------------------------------------------------------------------------------------------------------------------------------+
@@ -168,7 +170,29 @@ Or a set of Water-Oil relative permeability curves with the Corey method
 .. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/swof.png
     :alt: SWOF Relative Permeability Curves
 
-See the-  `API documentation <./docs/api.html>`_ for a complete listing and usage examples.
+A set of AQUTAB Aquifer Influence function for constant terminal rate Van Everdingin & Hurst aquifers
+
+.. code-block:: python
+
+    >>> ReDs = [1.5, 2, 3, 5, 10, 25, 1000]
+    >>> tds, pds = rtb.influence_tables(ReDs=ReDs, export=True)
+    >>> 
+    >>> for p, pd in enumerate(pds):
+    >>>     plt.plot(tds, pd, label = str(ReDs[p]))
+    >>>     
+    >>> plt.xscale('log')
+    >>> plt.yscale('log')
+    >>> plt.legend(loc='upper left')
+    >>> plt.grid(which='both')
+    >>> plt.xlabel('Dimensionless Time (tD)')
+    >>> plt.ylabel('Dimensionless Pressure Drop (PD)')
+    >>> plt.title('Constant Terminal Rate Solution')
+    >>> plt.show()
+    
+.. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/influence.png
+    :alt: Constant Terminal Rate influence tables
+    
+See the  `API documentation <./docs/api.html>`_ for a complete listing and usage examples.
 
 
 Development
