@@ -150,6 +150,7 @@ A set of Gas-Oil relative permeability curves with LET method
     :alt: SGOF Relative Permeability Curves
 
 Or a set of Water-Oil curves with Corey method
+
 .. code-block:: python
     >>> df = rtb.rel_perm(rows=25, krtable='SWOF', kromax =1, krwmax =0.25, swc =0.15, swcr = 0.2, sorw =0.15, no=2.5, nw=1.5)
     >>> plt.plot(df['Sw'], df['Krow'], c = 'g', label='Oil')
