@@ -168,6 +168,7 @@ Or creating black oil table information
 .. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/bot.png
     :alt: Black Oil Properties
 
+.. code-block:: python
     >>> fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10,10))
     >>> ax1.semilogy(df['Pressure (psia)'], df['Bg (rb/mscf'])
     >>> ax2.plot(df['Pressure (psia)'], df['ug (cP)'])
@@ -196,6 +197,7 @@ Or a set of relative permeability curves
 .. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/sgof.png
     :alt: SGOF Relative Permeability Curves
 
+.. code-block:: python
     >>> df = rtb.rel_perm(rows=25, krtable='SWOF', kromax =1, krwmax =0.25, swc =0.15, swcr = 0.2, sorw =0.15, no=2.5, nw=1.5)
     >>> plt.plot(df['Sw'], df['Krow'], c = 'g', label='Oil')
     >>> plt.plot(df['Sw'], df['Krwo'], c = 'b', label='Water')
