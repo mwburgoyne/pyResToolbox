@@ -71,52 +71,52 @@ The current function list is as follows
    * - Relative Permeability  
      - `rel_perm(...) </docs/api.html#pyrestoolbox.rel_perm>`_
 
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------+
-| Inflow                     | `gas_rate_radial(...) </docs/api.html#pyrestoolbox.gas_rate_radial>`_,                                                             |
-|                            | `gas_rate_linear(...) </docs/api.html#pyrestoolbox.gas_rate_linear>`_,                                                             |
-|                            | `oil_rate_radial(...) </docs/api.html#pyrestoolbox.pyrestoolbox.oil_rate_radial>`_,                                                |
-|                            | `oil_rate_linear(...) </docs/api.html#pyrestoolbox.pyrestoolbox.oil_rate_radial>`_,                                                |
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------+
-| Gas PVT                    | `gas_tc_pc(...) </docs/api.html#pyrestoolbox.gas_tc_pc>`_,                                                                         |
-|                            | `gas_z(...) </docs/api.html#pyrestoolbox.gas_z>`_,                                                                                 |
-|                            | `gas_ug(...) </docs/api.html#pyrestoolbox.gas_ug>`_,                                                                               |       
-|                            | `gas_ugz(...) </docs/api.html#pyrestoolbox.gas_ugz>`_,                                                                             |         
-|                            | `gas_cg(...) </docs/api.html#pyrestoolbox.gas_cg>`_,                                                                               |       
-|                            | `gas_bg(...) </docs/api.html#pyrestoolbox.gas_bg>`_,                                                                               |       
-|                            | `gas_den(...) </docs/api.html#pyrestoolbox.gas_den>`_,                                                                             |         
-|                            | `gas_water_content(...) </docs/api.html#pyrestoolbox.gas_water_content>`_,                                                         |                             
-|                            | `gas_ponz2p(...) </docs/api.html#pyrestoolbox.gas_ponz2p>`_,                                                                       |               
-|                            | `gas_grad2sg(...) </docs/api.html#pyrestoolbox.gas_grad2sg>`_,                                                                     |                 
-|                            | `gas_dmp(...) </docs/api.html#pyrestoolbox.gas_dmp>`_,                                                                             |
-|                            | `gas_dsg2rv(...) </docs/api.html#pyrestoolbox.gas_dsg2rv>`_,                                                                       |
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------+  
-| Oil PVT                    | `oil_ja_sg(...) </docs/api.html#pyrestoolbox.oil_ja_sg>`_,                                                                         |
-|                            | `oil_twu_props(...) </docs/api.html#pyrestoolbox.oil_twu_props>`_,                                                                 |
-|                            | `oil_ja_sg(...) </docs/api.html#pyrestoolbox.oil_ja_sg>`_,                                                                         |
-|                            | `oil_rs_st(...) </docs/api.html#pyrestoolbox.oil_rs_st>`_,                                                                         |
-|                            | `oil_pbub(...) </docs/api.html#pyrestoolbox.oil_pbub>`_,                                                                           |
-|                            | `oil_rs_bub(...) </docs/api.html#oil_rs_bub>`_,                                                                                    |
-|                            | `oil_rs(...) </docs/api.html#pyrestoolbox.oil_rs>`_,                                                                               |
-|                            | `oil_co(...) </docs/api.html#pyrestoolbox.oil_co>`_,                                                                               |
-|                            | `oil_deno(...) </docs/api.html#pyrestoolbox.oil_deno>`_,                                                                           |
-|                            | `oil_bo(...) </docs/api.html#pyrestoolbox.oil_bo>`_,                                                                               |
-|                            | `oil_viso(...) </docs/api.html#pyrestoolbox.oil_viso>`_,                                                                           |
-|                            | `make_bot(...) </docs/api.html#pyrestoolbox.make_bot>`_,                                                                           |
-|                            | `sg_evolved_gas(...) </docs/api.html#pyrestoolbox.sg_evolved_gas>`_,                                                               |
-|                            | `sg_st_gas(...) </docs/api.html#pyrestoolbox.sg_st_gas>`_,                                                                         |
-|                            | `sgg_wt_avg(...) </docs/api.html#pyrestoolbox.sgg_wt_avg>`_,                                                                       |
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------+  
-| Water PVT                  | `brine_props(...) </docs/api.html#pyrestoolbox.brine_props>`_,                                                                     |
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------+  
-| Permeability Layering      | `lorenzfromb(...) </docs/api.html#pyrestoolbox.lorenzfromb>`_,                                                                     |
-|                            | `lorenz_from_flow_fraction(...) </docs/api.html#pyrestoolbox.lorenz_from_flow_fraction>`_,                                         |
-|                            | `lorenz_2_flow_frac(...) </docs/api.html#pyrestoolbox.lorenz_2_flow_frac>`_,                                                       |
-|                            | `lorenz_2_layers(...) </docs/api.html#pyrestoolbox.lorenz_2_layers>`_,                                                             |        
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------+  
-| Simulation Helpers         | `ix_extract_problem_cells(...) </docs/api.html#pyrestoolbox.ix_extract_problem_cells>`_                                            |
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------+  
-| Relative Permeability      | `rel_perm(...) </docs/api.html#pyrestoolbox.rel_perm>`_,                                                                           |
-+----------------------------+---------------------------------------------------------------------------------------------------------------------------------+
+    +----------------------------+---------------------------------------------------------------------------------------------------------------------------------+
+    | Inflow                     | `gas_rate_radial(...) </docs/api.html#pyrestoolbox.gas_rate_radial>`_,                                                             |
+    |                            | `gas_rate_linear(...) </docs/api.html#pyrestoolbox.gas_rate_linear>`_,                                                             |
+    |                            | `oil_rate_radial(...) </docs/api.html#pyrestoolbox.pyrestoolbox.oil_rate_radial>`_,                                                |
+    |                            | `oil_rate_linear(...) </docs/api.html#pyrestoolbox.pyrestoolbox.oil_rate_radial>`_,                                                |
+    +----------------------------+---------------------------------------------------------------------------------------------------------------------------------+
+    | Gas PVT                    | `gas_tc_pc(...) </docs/api.html#pyrestoolbox.gas_tc_pc>`_,                                                                         |
+    |                            | `gas_z(...) </docs/api.html#pyrestoolbox.gas_z>`_,                                                                                 |
+    |                            | `gas_ug(...) </docs/api.html#pyrestoolbox.gas_ug>`_,                                                                               |       
+    |                            | `gas_ugz(...) </docs/api.html#pyrestoolbox.gas_ugz>`_,                                                                             |         
+    |                            | `gas_cg(...) </docs/api.html#pyrestoolbox.gas_cg>`_,                                                                               |       
+    |                            | `gas_bg(...) </docs/api.html#pyrestoolbox.gas_bg>`_,                                                                               |       
+    |                            | `gas_den(...) </docs/api.html#pyrestoolbox.gas_den>`_,                                                                             |         
+    |                            | `gas_water_content(...) </docs/api.html#pyrestoolbox.gas_water_content>`_,                                                         |                             
+    |                            | `gas_ponz2p(...) </docs/api.html#pyrestoolbox.gas_ponz2p>`_,                                                                       |               
+    |                            | `gas_grad2sg(...) </docs/api.html#pyrestoolbox.gas_grad2sg>`_,                                                                     |                 
+    |                            | `gas_dmp(...) </docs/api.html#pyrestoolbox.gas_dmp>`_,                                                                             |
+    |                            | `gas_dsg2rv(...) </docs/api.html#pyrestoolbox.gas_dsg2rv>`_,                                                                       |
+    +----------------------------+---------------------------------------------------------------------------------------------------------------------------------+  
+    | Oil PVT                    | `oil_ja_sg(...) </docs/api.html#pyrestoolbox.oil_ja_sg>`_,                                                                         |
+    |                            | `oil_twu_props(...) </docs/api.html#pyrestoolbox.oil_twu_props>`_,                                                                 |
+    |                            | `oil_ja_sg(...) </docs/api.html#pyrestoolbox.oil_ja_sg>`_,                                                                         |
+    |                            | `oil_rs_st(...) </docs/api.html#pyrestoolbox.oil_rs_st>`_,                                                                         |
+    |                            | `oil_pbub(...) </docs/api.html#pyrestoolbox.oil_pbub>`_,                                                                           |
+    |                            | `oil_rs_bub(...) </docs/api.html#oil_rs_bub>`_,                                                                                    |
+    |                            | `oil_rs(...) </docs/api.html#pyrestoolbox.oil_rs>`_,                                                                               |
+    |                            | `oil_co(...) </docs/api.html#pyrestoolbox.oil_co>`_,                                                                               |
+    |                            | `oil_deno(...) </docs/api.html#pyrestoolbox.oil_deno>`_,                                                                           |
+    |                            | `oil_bo(...) </docs/api.html#pyrestoolbox.oil_bo>`_,                                                                               |
+    |                            | `oil_viso(...) </docs/api.html#pyrestoolbox.oil_viso>`_,                                                                           |
+    |                            | `make_bot(...) </docs/api.html#pyrestoolbox.make_bot>`_,                                                                           |
+    |                            | `sg_evolved_gas(...) </docs/api.html#pyrestoolbox.sg_evolved_gas>`_,                                                               |
+    |                            | `sg_st_gas(...) </docs/api.html#pyrestoolbox.sg_st_gas>`_,                                                                         |
+    |                            | `sgg_wt_avg(...) </docs/api.html#pyrestoolbox.sgg_wt_avg>`_,                                                                       |
+    +----------------------------+---------------------------------------------------------------------------------------------------------------------------------+  
+    | Water PVT                  | `brine_props(...) </docs/api.html#pyrestoolbox.brine_props>`_,                                                                     |
+    +----------------------------+---------------------------------------------------------------------------------------------------------------------------------+  
+    | Permeability Layering      | `lorenzfromb(...) </docs/api.html#pyrestoolbox.lorenzfromb>`_,                                                                     |
+    |                            | `lorenz_from_flow_fraction(...) </docs/api.html#pyrestoolbox.lorenz_from_flow_fraction>`_,                                         |
+    |                            | `lorenz_2_flow_frac(...) </docs/api.html#pyrestoolbox.lorenz_2_flow_frac>`_,                                                       |
+    |                            | `lorenz_2_layers(...) </docs/api.html#pyrestoolbox.lorenz_2_layers>`_,                                                             |        
+    +----------------------------+---------------------------------------------------------------------------------------------------------------------------------+  
+    | Simulation Helpers         | `ix_extract_problem_cells(...) </docs/api.html#pyrestoolbox.ix_extract_problem_cells>`_                                            |
+    +----------------------------+---------------------------------------------------------------------------------------------------------------------------------+  
+    | Relative Permeability      | `rel_perm(...) </docs/api.html#pyrestoolbox.rel_perm>`_,                                                                           |
+    +----------------------------+---------------------------------------------------------------------------------------------------------------------------------+
 
 
 Getting Started
