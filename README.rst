@@ -6,26 +6,6 @@
 A collection of Reservoir Engineering Utilities
 -----------------------------
 
-.. image:: https://img.shields.io/pypi/v/petbox-dca.svg
-    :target: https://pypi.org/project/petbox-dca/
-    :alt: PyPi Version
-
-.. image:: https://travis-ci.org/petbox-dev/dca.svg?branch=master
-    :target: https://travis-ci.org/github/petbox-dev/dca
-    :alt: Build Status
-
-.. image:: https://readthedocs.org/projects/petbox-dca/badge/?version=latest
-    :target: /docs/?badge=latest
-    :alt: Documentation Status
-
-.. image:: https://coveralls.io/repos/github/petbox-dev/dca/badge.svg
-    :target: https://coveralls.io/github/petbox-dev/dca
-    :alt: Coverage Status
-
-.. image:: https://open.vscode.dev/badges/open-in-vscode.svg
-    :target: https://open.vscode.dev/petbox-dev/dca
-    :alt: Open in Visual Studio Code
-
 This set of functions focuses on those that the author uses often while creating programmatic solutions. These are the scripts that are often copy/pasted from previous work - sometimes slightly modified - resulting in a trail of slightly different versions over the years. Some attempt has been made here to make this implementation flexible enough such that it can be relied as-is going forward.
 
 Includes functions to perform simple calculations including;
@@ -135,7 +115,7 @@ Or creating black oil table information
 	Reservoir Water Compressibility: 2.930237693350768e-06 1/psi
 	Reservoir Water Viscosity: 0.3640686136171888 cP
 
-.. image:: https://github.com/vinomarkus/pyResToolbox/tree/main/docs/img/bot.png
+.. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/bot.png
     :alt: Black Oil Properties
 
     >>> fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10,10))
@@ -146,7 +126,7 @@ Or creating black oil table information
     >>> ...
     >>> plt.show()
 
-.. image:: https://github.com/vinomarkus/pyResToolbox/tree/main/docs/img/dry_gas.png
+.. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/dry_gas.png
     :alt: Dry Gas Properties
     
 Or a set of relative permeability curves
@@ -163,7 +143,7 @@ Or a set of relative permeability curves
     >>> plt.grid('both')
     >>> plt.plot()
 
-.. image:: https://github.com/vinomarkus/pyResToolbox/tree/main/docs/img/sgof.png
+.. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/sgof.png
     :alt: SGOF Relative Permeability Curves
 
     >>> df = rtb.rel_perm(rows=25, krtable='SWOF', kromax =1, krwmax =0.25, swc =0.15, swcr = 0.2, sorw =0.15, no=2.5, nw=1.5)
@@ -176,7 +156,7 @@ Or a set of relative permeability curves
     >>> plt.grid('both')
     >>> plt.plot()
     
-.. image:: https://github.com/vinomarkus/pyResToolbox/tree/main/docs/img/swof.png
+.. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/swof.png
     :alt: SWOF Relative Permeability Curves
 
 See the `API documentation </docs/api.html>`_ for a complete listing and usage examples.
