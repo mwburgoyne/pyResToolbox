@@ -2,6 +2,46 @@
 Gas PVT
 ===================================
 
+Calculation Methods & Class Objects
+===================================
+pyResToolBox uses class objects to track calculation options through the functions. Class objects can be set via strings or explicitly via object options
+
++----------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| Class Variable | Class Object          | Class Description & Options                                                                                                                    |
++----------------+-----------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| zmethod        | z_method              | Method for calculating gas Z-Factor. Defaults to 'DAK'. Options are;                                                                           |
+|                |                       | - 'LIN': An explicit linearized form (2015) from https://link.springer.com/article/10.1007/s13202-015-0209-3,                                  |
+|                |                       | - 'DAK': Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al. |
+|                |                       | - 'HY': Hall & Yarborough (1973)                                                                                                               |
++----------------+-----------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| n2             | float                 | Molar fraction of Nitrogen. Defaults to zero if undefined                                                                                      |
++----------------+-----------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| co2            | float                 | Molar fraction of CO2. Defaults to zero if undefined                                                                                           |
++----------------+-----------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| h2s            | float                 | Molar fraction of H2S. Defaults to zero if undefined                                                                                           |
++----------------+-----------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| cmethod        | String or c_method cla| Method for calculating gas critical parameters                                                                                                 |
++----------------+-----------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| tc             | float                 | Critical gas temperature (deg R). Uses cmethod correlation if not specified                                                                    |
++----------------+-----------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| n2             | float                 | Critical gas pressure (psia). Uses cmethod correlation if not specified                                                                        |
++----------------+-----------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+
+Users can specify which calculation method to use either by passing an option string, or a class object to any given function. The implementation of class objects should make it easier to program in an IDE that supports type hinting
+
+Examples:
+
+Calculating bubble point pressure with Standing correlation via option string, and then via class object
+
+.. code-block:: python
+
+    >>> rtb.oil_pbub(api=43, degf=185, rsb=2350, sg_g =0.72, pbmethod ='STAN')
+    6406.067846808766
+    
+    >>> rtb.oil_pbub(api=43, degf=185, rsb=2350, sg_g =0.72, pbmethod = rtb.pb_method.STAN)
+    6406.067846808766
+
+
 Function List
 =============
 
@@ -31,7 +71,7 @@ pyrestoolbox.gas_tc_pc
 Returns a tuple of critical temperature (deg R) and critical pressure (psia) for hydrocarbon gas. If one or both of the tc and pc parameters are set to be non-zero, then this function will simply return that value for the corresponding critical parameter.
 
 +---------------------------------------------------+---------------------------------------------------------------------------------------------+
-| Parameter     |  Type                             | Description                                                                                 |
+| Parameter     | Type                              | Description                                                                                 |
 +---------------+-----------------------------------+---------------------------------------------------------------------------------------------+
 | sg            | float                             | Gas SG relative to air                                                                      |
 +---------------+-----------------------------------+---------------------------------------------------------------------------------------------+
@@ -58,4 +98,3 @@ Examples:
     >>> rtb.gas_tc_pc(sg=0.7, co2 = 0.15, tc=365, cmethod='SUT')
     (365, 709.2389730048743)
 
-Returns a tuple of critical temperature (deg R) and critical pressure (psia) for hydrocarbon 
