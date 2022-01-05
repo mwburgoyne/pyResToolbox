@@ -16,8 +16,8 @@ pyResToolBox uses class objects to track calculation options through the functio
    * - Albatross
      - 2.99
      - On a stick!:
-       * b1
-       * b2
+         * b1
+         * b2
    * - Crunchy Frog
      - 1.49
      - If we took the bones out, it wouldn't be
