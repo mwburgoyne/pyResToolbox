@@ -6,8 +6,8 @@ Calculation Methods & Class Objects
 ===================================
 pyResToolBox uses class objects to track calculation options through the functions. Class objects can be set via strings or explicitly via object options
 
-.. list-table:: Frozen Delights!
-   :widths: 15 10 30
+.. list-table:: Method Variables & Class Objects
+   :widths: 10 15 40
    :header-rows: 1
 
    * - Treat
@@ -16,6 +16,8 @@ pyResToolBox uses class objects to track calculation options through the functio
    * - Albatross
      - 2.99
      - On a stick!
+       - b1
+       - b2
    * - Crunchy Frog
      - 1.49
      - If we took the bones out, it wouldn't be
