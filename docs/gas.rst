@@ -47,7 +47,7 @@ Function List
 =============
 
 +-------------------------+---------------------------------------------------------------------------------------------------------------------------------+
-| Gas PVT                 | - Gas Tc & Pc Calculation: `pyrestoolbox.gas_tc_pc`_                                           |
+| Gas PVT                 | - Gas Tc & Pc Calculation: `pyrestoolbox.gas_tc_pc`_                                                                            |
 |                         | - Gas Z-Factor Calculation: `gas_z(...) <./docs/api.html#pyrestoolbox.gas_z>`_                                                  |
 |                         | - Gas Viscosity: `gas_ug(...) <./docs/api.html#pyrestoolbox.gas_ug>`_                                                           |
 |                         | - Gas Viscosity * Z: `gas_ugz(...) <./docs/api.html#pyrestoolbox.gas_ugz>`_                                                     |
