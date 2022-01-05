@@ -17,15 +17,15 @@ pyResToolBox uses class objects to track calculation options through the functio
      - z_method
      - Method for calculating gas Z-Factor. Defaults to 'DAK'. 
        Options are:
-        * 'LIN': An explicit linearized form `(2015) <https://link.springer.com/article/10.1007/s13202-015-0209-3>`
-        * 'DAK': Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-        * 'HY': Hall & Yarborough (1973)
+        + 'LIN': An explicit linearized form `(2015) <https://link.springer.com/article/10.1007/s13202-015-0209-3>`
+        + 'DAK': Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
+        + 'HY': Hall & Yarborough (1973)
    * - cmethod
      - c_method
      - Method for calculating gas critical properties. Defaults to 'PMC' 
        Options are:
-        * 'SUT': Sutton with Wichert & Aziz non-hydrocarbon corrections
-        * 'PMC': Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
+        + 'SUT': Sutton with Wichert & Aziz non-hydrocarbon corrections
+        + 'PMC': Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
 
 
 Users can specify which calculation method to use either by passing an option string, or a class object to any given function. The implementation of class objects should make it easier to program in an IDE that supports type hinting
