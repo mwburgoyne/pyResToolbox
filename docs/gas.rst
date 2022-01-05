@@ -9,7 +9,7 @@ pyResToolBox uses class objects to track calculation options through the functio
 +----------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
 | Class Variable | Class Object          | Class Description & Options                                                                                                                    |
 +----------------+-----------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
-| zmethod        | z_method              | Method for calculating gas Z-Factor. Defaults to 'DAK'. Options are                                                                           |
+| zmethod        | z_method              | Method for calculating gas Z-Factor. Defaults to 'DAK'. Options are                                                                            |
 |                |                       | * 'LIN': An explicit linearized form (2015) from https://link.springer.com/article/10.1007/s13202-015-0209-3,                                  |
 |                |                       | * 'DAK': Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al. |
 |                |                       | * 'HY': Hall & Yarborough (1973)                                                                                                               |
