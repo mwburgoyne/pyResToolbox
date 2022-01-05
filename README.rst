@@ -108,7 +108,7 @@ A set of Gas-Oil relative permeability curves with the LET method
     >>> plt.grid('both')
     >>> plt.plot()
 
-.. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/sgof.png
+.. image:: https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/img/sgof.png
     :alt: SGOF Relative Permeability Curves
 
 Or a set of Water-Oil relative permeability curves with the Corey method
@@ -125,7 +125,7 @@ Or a set of Water-Oil relative permeability curves with the Corey method
     >>> plt.grid('both')
     >>> plt.plot()
     
-.. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/swof.png
+.. image:: https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/img/swof.png
     :alt: SWOF Relative Permeability Curves
 
 A set of dimensionless pressures for the constant terminal rate Van Everdingin & Hurst aquifer, along with an AQUTAB.INC export for use in ECLIPSE.
@@ -147,7 +147,7 @@ A set of dimensionless pressures for the constant terminal rate Van Everdingin &
     >>> plt.title('Constant Terminal Rate Solution')
     >>> plt.show()
     
-.. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/influence.png
+.. image:: https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/img/influence.png
     :alt: Constant Terminal Rate influence tables
 
 Or creating black oil table information for oil
@@ -175,7 +175,7 @@ Or creating black oil table information for oil
     Reservoir Water Compressibility: 2.930237693350768e-06 1/psi
     Reservoir Water Viscosity: 0.3640686136171888 cP
 
-.. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/bot.png
+.. image:: https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/img/bot.png
     :alt: Black Oil Properties
     
 And gas
@@ -190,7 +190,7 @@ And gas
     >>> ...
     >>> plt.show()
 
-.. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/dry_gas.png
+.. image:: https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/img/dry_gas.png
     :alt: Dry Gas Properties
     
 With ability to generate Live Oil PVTO style table data as well
@@ -284,7 +284,7 @@ With ability to generate Live Oil PVTO style table data as well
     Reservoir Water Compressibility: 2.930237693350768e-06 1/psi
     Reservoir Water Viscosity: 0.3640686136171888 cP
     
-.. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/bot_PVTO.png
+.. image:: https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/img/bot_PVTO.png
     :alt: Live Oil Properties
     
 See the  `API documentation <./docs/api.html>`_ for a complete listing and usage examples.
@@ -292,4 +292,4 @@ See the  `API documentation <./docs/api.html>`_ for a complete listing and usage
 
 Development
 ===========
-``pyrestoolbox`` is maintained by Mark W. Burgoyne (`<https://github.com/vinomarkus>`_).
+``pyrestoolbox`` is maintained by Mark W. Burgoyne (`<https://github.com/mwburgoyne>`_).
