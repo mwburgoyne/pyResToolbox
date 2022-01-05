@@ -196,7 +196,8 @@ With ability to generate Live Oil PVTO style table data as well
 
 .. code-block:: python
 
-    >>> results = rtb.make_bot_og(pvto=True, pi=4000, api=38, degf=175, sg_g=0.68, pmax=5500, pb=4500, nrows=25, export=True)
+    >>> pb = 4500
+    >>> results = rtb.make_bot_og(pvto=True, pi=4000, api=38, degf=175, sg_g=0.68, pmax=5500, pb=pb, nrows=25, export=True)
     >>> df, st_deno, st_deng, res_denw, res_cw, visw, pb, rsb, rsb_frac, usat = results['bot'], results['deno'], results['deng'], results['denw'], results['cw'], results['uw'], results['pb'], results['rsb'], results['rsb_scale'], results['usat']
     >>> 
     >>> if len(usat) == 0:
