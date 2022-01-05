@@ -42,6 +42,7 @@ Function List
 |                         | - Convert P/Z to P: `gas_ponz2p(...) <./docs/api.html#pyrestoolbox.gas_ponz2p>`_                                                |
 |                         | - Convert Gas Gradient to SG: `gas_grad2sg(...) <./docs/api.html#pyrestoolbox.gas_grad2sg>`_                                    |            
 |                         | - Delta Pseudopressure: `gas_dmp(...) <./docs/api.html#pyrestoolbox.gas_dmp>`_                                                  |
+|                         | - Gas Condensate FWS SG: `gas_fws_sg(...) <./docs/api.html#pyrestoolbox.gas_fws_sg>`_                                           |
 +-------------------------+---------------------------------------------------------------------------------------------------------------------------------+
 | Oil PVT                 | - Oil Density from MW: `oil_ja_sg(...) <./docs/api.html#pyrestoolbox.oil_ja_sg>`_                                               |
 |                         | - Oil Critical Properties with Twu: `oil_twu_props(...) <./docs/api.html#pyrestoolbox.oil_twu_props>`_                          |
