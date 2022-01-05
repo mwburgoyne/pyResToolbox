@@ -53,7 +53,7 @@ Function List
 |                         | - Oil Density: `oil_deno(...) <./docs/api.html#pyrestoolbox.oil_deno>`_                                                         |
 |                         | - Oil Formation Volume Factor: `oil_bo(...) <./docs/api.html#pyrestoolbox.oil_bo>`_                                             |
 |                         | - Oil Viscosity: `oil_viso(...) <./docs/api.html#pyrestoolbox.oil_viso>`_                                                       |
-|                         | - Generate Black Oil Table data: `make_bot_og(...) <./docs/api.html#pyrestoolbox.make_bot_og>`_                                       |
+|                         | - Generate Black Oil Table data: `make_bot_og(...) <./docs/api.html#pyrestoolbox.make_bot_og>`_                                 |
 |                         | - Estimate soln gas SG from oil: `sg_evolved_gas(...) <./docs/api.html#pyrestoolbox.sg_evolved_gas>`_                           |
 |                         | - Estimate SG of gas post separator: `sg_st_gas(...) <./docs/api.html#pyrestoolbox.sg_st_gas>`_                                 |
 |                         | - Calculate weighted average surface gas SG: `sgg_wt_avg(...) <./docs/api.html#pyrestoolbox.sgg_wt_avg>`_                       |
