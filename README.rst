@@ -17,6 +17,7 @@ Includes functions to perform simple calculations including;
 - Creation of Black Oil Table information
 - Creation of layered permeability distribution consistent with a Lorenze heterogeneity factor
 - Extract problem cells information from Intesect (IX) print files
+- Generation of AQUTAB include file influence functions for use in ECLIPSE
 - Creation of Corey and LET relative permeability tables in Eclipse format
 
 This is the initial public release, with improvements and additions expected over time. Apologies in advance that it is only in oilfield units with no current plans to add multi-unit support.
@@ -52,7 +53,7 @@ Function List
 |                         | - Oil Density: `oil_deno(...) <./docs/api.html#pyrestoolbox.oil_deno>`_                                                         |
 |                         | - Oil Formation Volume Factor: `oil_bo(...) <./docs/api.html#pyrestoolbox.oil_bo>`_                                             |
 |                         | - Oil Viscosity: `oil_viso(...) <./docs/api.html#pyrestoolbox.oil_viso>`_                                                       |
-|                         | - Generate Black Oil Table data: `make_bot(...) <./docs/api.html#pyrestoolbox.make_bot>`_                                       |
+|                         | - Generate Black Oil Table data: `make_bot_og(...) <./docs/api.html#pyrestoolbox.make_bot_og>`_                                       |
 |                         | - Estimate soln gas SG from oil: `sg_evolved_gas(...) <./docs/api.html#pyrestoolbox.sg_evolved_gas>`_                           |
 |                         | - Estimate SG of gas post separator: `sg_st_gas(...) <./docs/api.html#pyrestoolbox.sg_st_gas>`_                                 |
 |                         | - Calculate weighted average surface gas SG: `sgg_wt_avg(...) <./docs/api.html#pyrestoolbox.sgg_wt_avg>`_                       |
@@ -91,50 +92,6 @@ A simple example below of estimating oil bubble point pressure.
     >>> import restoolbox as rtb
     >>> rtb.oil_pbub(api=43, degf=185, rsb=2350, sg_g =0.72, pbmethod ='VALMC')
     5179.51086900132
-
-
-Or creating black oil table information for oil
-
-.. code-block:: python
-
-    >>> import matplotlib.pyplot as plt
-    >>> df, st_deno, st_deng, res_denw, res_cw, visw = rtb.make_bot(pi=4000, api=38, degf=175, sg_g=0.68, pmax=5000, pb=3900, rsb=2300, nrows=50)
-    >>> print('Stock Tank Oil Density:', st_deno, 'lb/cuft')
-    >>> print('Stock Tank Gas Density:', st_deng, 'lb/cuft')
-    >>> print('Reservoir Water Density:', res_denw, 'lb/cuft')
-    >>> print('Reservoir Water Compressibility:', res_cw, '1/psi')
-    >>> print('Reservoir Water Viscosity:', visw,'cP')
-
-    >>> fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10,10))
-    >>> ax1.plot(df['Pressure (psia)'], df['Rs (scf/stb)'])
-    >>> ax2.plot(df['Pressure (psia)'], df['Bo (rb/stb)'])
-    >>> ax3.plot(df['Pressure (psia)'], df['uo (cP)'])
-    >>> ax4.semilogy(df['Pressure (psia)'], df['Co (1/psi)'])
-    >>> ...
-    >>> plt.show()
-    Stock Tank Oil Density: 52.05522123893805 lb/cuft
-    Stock Tank Gas Density: 0.052025361717109773 lb/cuft
-    Reservoir Water Density: 61.40223160167964 lb/cuft
-    Reservoir Water Compressibility: 2.930237693350768e-06 1/psi
-    Reservoir Water Viscosity: 0.3640686136171888 cP
-
-.. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/bot.png
-    :alt: Black Oil Properties
-    
-And gas
-
-.. code-block:: python
-
-    >>> fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10,10))
-    >>> ax1.semilogy(df['Pressure (psia)'], df['Bg (rb/mscf'])
-    >>> ax2.plot(df['Pressure (psia)'], df['ug (cP)'])
-    >>> ax3.plot(df['Pressure (psia)'], df['Gas Z (v/v)'])
-    >>> ax4.semilogy(df['Pressure (psia)'], df['Cg (1/psi)'])
-    >>> ...
-    >>> plt.show()
-
-.. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/dry_gas.png
-    :alt: Dry Gas Properties
     
 A set of Gas-Oil relative permeability curves with the LET method
 
@@ -191,6 +148,142 @@ A set of dimensionless pressures for the constant terminal rate Van Everdingin &
     
 .. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/influence.png
     :alt: Constant Terminal Rate influence tables
+
+Or creating black oil table information for oil
+
+.. code-block:: python
+
+    >>> import matplotlib.pyplot as plt
+    >>> df, st_deno, st_deng, res_denw, res_cw, visw = rtb.make_bot_og(pi=4000, api=38, degf=175, sg_g=0.68, pmax=5000, pb=3900, rsb=2300, nrows=50)
+    >>> print('Stock Tank Oil Density:', st_deno, 'lb/cuft')
+    >>> print('Stock Tank Gas Density:', st_deng, 'lb/cuft')
+    >>> print('Reservoir Water Density:', res_denw, 'lb/cuft')
+    >>> print('Reservoir Water Compressibility:', res_cw, '1/psi')
+    >>> print('Reservoir Water Viscosity:', visw,'cP')
+
+    >>> fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10,10))
+    >>> ax1.plot(df['Pressure (psia)'], df['Rs (scf/stb)'])
+    >>> ax2.plot(df['Pressure (psia)'], df['Bo (rb/stb)'])
+    >>> ax3.plot(df['Pressure (psia)'], df['uo (cP)'])
+    >>> ax4.semilogy(df['Pressure (psia)'], df['Co (1/psi)'])
+    >>> ...
+    >>> plt.show()
+    Stock Tank Oil Density: 52.05522123893805 lb/cuft
+    Stock Tank Gas Density: 0.052025361717109773 lb/cuft
+    Reservoir Water Density: 61.40223160167964 lb/cuft
+    Reservoir Water Compressibility: 2.930237693350768e-06 1/psi
+    Reservoir Water Viscosity: 0.3640686136171888 cP
+
+.. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/bot.png
+    :alt: Black Oil Properties
+    
+And gas
+
+.. code-block:: python
+
+    >>> fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10,10))
+    >>> ax1.semilogy(df['Pressure (psia)'], df['Bg (rb/mscf'])
+    >>> ax2.plot(df['Pressure (psia)'], df['ug (cP)'])
+    >>> ax3.plot(df['Pressure (psia)'], df['Gas Z (v/v)'])
+    >>> ax4.semilogy(df['Pressure (psia)'], df['Cg (1/psi)'])
+    >>> ...
+    >>> plt.show()
+
+.. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/dry_gas.png
+    :alt: Dry Gas Properties
+    
+With ability to generate Live Oil PVTO style table data as well
+
+.. code-block:: python
+
+    >>> results = rtb.make_bot_og(pvto=True, pi=4000, api=38, degf=175, sg_g=0.68, pmax=5500, pb=4500, nrows=25, export=True)
+    >>> df, st_deno, st_deng, res_denw, res_cw, visw, pb, rsb, rsb_frac, usat = results['bot'], results['deno'], results['deng'], results['denw'], results['cw'], results['uw'], results['pb'], results['rsb'], results['rsb_scale'], results['usat']
+    >>> 
+    >>> if len(usat) == 0:
+    >>>     usat_flag = False
+    >>> else:
+    >>>     usat_flag=True
+    >>>     usat_p, usat_bo, usat_uo = usat 
+    >>> 
+    >>> try:
+    >>>     pb_idx = df['Pressure (psia)'].tolist().index(pb)
+    >>>     bob = df['Bo (rb/stb)'].iloc[pb_idx]
+    >>>     rsb = df['Rs (mscf/stb)'].iloc[pb_idx]
+    >>>     uob = df['uo (cP)'].iloc[pb_idx]
+    >>>     cob = df['Co (1/psi)'].iloc[pb_idx]
+    >>>     no_pb = False
+    >>> except:
+    >>>     print('Pb was > Pmax')
+    >>>     no_pb = True
+    >>> 
+    >>> print('Pb (psia):', pb)
+    >>> print('Bob (rb/stb):', bob)
+    >>> print('Rsb (mscf/stb):', rsb)
+    >>> print('Rsb Scaling Required:', rsb_frac)
+    >>> print('Visob (cP):', uob)
+    >>> print('Cob (1/psi):', cob,'\n')
+    >>> print('Stock Tank Oil Density:', st_deno, 'lb/cuft')
+    >>> print('Stock Tank Gas Density:', st_deng, 'lb/cuft')
+    >>> print('Reservoir Water Density:', res_denw, 'lb/cuft')
+    >>> print('Reservoir Water Compressibility:', res_cw, '1/psi')
+    >>> print('Reservoir Water Viscosity:', visw,'cP')
+    >>> 
+    >>> fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10,10))
+    >>> ax1.plot(df['Pressure (psia)'], df['Rs (mscf/stb)'])
+    >>> ax2.plot(df['Pressure (psia)'], df['Bo (rb/stb)'])
+    >>> ax3.plot(df['Pressure (psia)'], df['uo (cP)'])
+    >>> ax4.semilogy(df['Pressure (psia)'], df['Co (1/psi)'])
+    >>> 
+    >>> ax1.plot([pb], [rsb], 'o', c='r')
+    >>> ax2.plot([pb], [bob], 'o', c='r')
+    >>> ax3.plot([pb], [uob], 'o', c='r')
+    >>> ax4.plot([pb], [cob], 'o', c='r')
+    >>> 
+    >>> if usat_flag:
+    >>>     if no_pb == False:
+    >>>         for i in range(len(usat_bo)):
+    >>>             ax2.plot(usat_p[i], usat_bo[i], c='k')
+    >>>             ax3.plot(usat_p[i], usat_uo[i], c='k')
+    >>> 
+    >>> fig.suptitle('Black Oil Properties')
+    >>> ax1.set_title("Rs vs P")
+    >>> ax1.set_ylabel('Rs (mscf/stb)')
+    >>> ax1.set_xlabel('Pressure (psia)')
+    >>> ax1.grid('both')
+    >>> 
+    >>> ax2.set_title("Bo vs P")
+    >>> ax2.set_ylabel('Bo (rb/stb)')
+    >>> ax2.set_xlabel('Pressure (psia)')
+    >>> ax2.grid('both')
+    >>> 
+    >>> ax3.set_title("Viso vs P")
+    >>> ax3.set_xlabel('Pressure (psia)')
+    >>> ax3.set_ylabel('Viscosity (cP)')
+    >>> ax3.grid('both')
+    >>> 
+    >>> ax4.set_title("Co vs P")
+    >>> ax4.set_ylabel('Co (1/psi)')
+    >>> ax4.set_xlabel('Pressure (psia)')
+    >>> ax4.grid('both', which='minor')
+    >>> ax4.grid('both', which='major')
+    >>> 
+    >>> plt.tight_layout()
+    >>> plt.show()
+    Pb (psia): 4500
+    Bob (rb/stb): 1.6072798403441817
+    Rsb (mscf/stb): 1.2863705330979234
+    Rsb Scaling Required: 0.9713981737449556
+    Visob (cP): 0.3422139569449832
+    Cob (1/psi): 5.711273668114706e-05 
+    
+    Stock Tank Oil Density: 52.05522123893805 lb/cuft
+    Stock Tank Gas Density: 0.052025361717109773 lb/cuft
+    Reservoir Water Density: 61.40223160167964 lb/cuft
+    Reservoir Water Compressibility: 2.930237693350768e-06 1/psi
+    Reservoir Water Viscosity: 0.3640686136171888 cP
+    
+.. image:: https://github.com/vinomarkus/pyResToolbox/blob/main/docs/img/bot_PVTO.png
+    :alt: Live Oil Properties
     
 See the  `API documentation <./docs/api.html>`_ for a complete listing and usage examples.
 
