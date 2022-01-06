@@ -47,7 +47,7 @@ Function List
 =============
 
 .. list-table:: Gas Functions
-   :widths: 10 15 40
+   :widths: 15 40
    :header-rows: 1
 
    * - Task
