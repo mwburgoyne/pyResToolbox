@@ -272,9 +272,8 @@ pyrestoolbox.oil_rs_bub
 
     oil_rs_bub(api, degf, pb, sg_g =0, sg_sp =0, pbmethod ='VALMC', rsmethod='VELAR') -> float
 
-Returns solution GOR (scf/stb) at bubble point pressure. Uses the inverse of the Bubble point pressure correlations, with the same method families. Note: At low pressures, the VALMC method will fail (generally when rsb < 10 scf/stb). The VALMC method will revert to the VELAR method in these cases
+Returns solution GOR (scf/stb) at bubble point pressure. Uses the inverse of the Bubble point pressure correlations, with the same method families. Note: At low pressures, the VALMC method will fail (generally when rsb < 10 scf/stb). The VALMC method will revert to the VELAR method in these cases. 
 At least one of sg_g and sg_sp must be supplied. This function will make simple assumption to estimate missing gas sg if only one is provided.
-
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -284,6 +283,7 @@ At least one of sg_g and sg_sp must be supplied. This function will make simple 
      - Type
      - Description
    * - api
+     - float
      - Density of stock tank liquid (API)
    * - degf
      - float
