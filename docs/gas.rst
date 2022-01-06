@@ -477,7 +477,7 @@ Returns saturated volume of water vapor in natural gas (stb/mmscf). From 'PVT an
      - Type
      - Description
    * - p
-     - float, list or np.array 
+     - float 
      - Gas pressure (psia)
    * - degf
      - float
