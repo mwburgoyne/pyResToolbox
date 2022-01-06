@@ -286,44 +286,6 @@ Examples:
     >>> rtb.gas_ugz(p=1000, sg=0.75, degf=140, zee=0.9)
     0.012192537840814146
     
-pyrestoolbox.gas_ugz
-====================
-
-.. code-block:: python
-
-    gas_ugz(p, sg, degf, zee) -> float or np.array
-
-Returns gas viscosity*Z-factor product (cP) using Lee, Gonzalez & Eakin (1966) correlation, utilizing a precaculated Z-factor
-A float or list / array can be used for p and zee, returning a 1-D array of gas viscosity*Z-factor products. 
-Using the gas_ugz function instead of the product of the gas_ug and gas_z functions removes duplications in calculating the z-factor as well as the critical properties
-
-
-.. list-table:: Inputs
-   :widths: 10 15 40
-   :header-rows: 1
-
-   * - Parameter
-     - Type
-     - Description
-   * - p
-     - float, list or np.array 
-     - Gas pressure (psia)
-   * - sg
-     - float
-     - Gas SG relative to air  
-   * - zee
-     - float, list or numpy array
-     - Gas Z-factor(s)
-
-Examples:
-
-.. code-block:: python
-
-    >>> rtb.gas_ugz(p=[1000,2000], sg=0.75, degf=140, zee=[0.9,1.0])
-    array([0.01219254, 0.01600964])
-    
-    >>> rtb.gas_ugz(p=1000, sg=0.75, degf=140, zee=0.9)
-    0.012192537840814146
     
 pyrestoolbox.gas_cg
 ===================
@@ -441,12 +403,12 @@ Examples:
     >>> 1 / rtb.gas_bg (p=[3000, 5000], sg=0.78, degf=240)
     array([168.60608691, 249.6801909 ])
 
-pyrestoolbox.gas_deno
+pyrestoolbox.gas_den
 =====================
 
 .. code-block:: python
 
-    gas_den (p, sg, degf, zmethod ='DAK', cmethod ='PMC', n2 = 0, co2 = 0, h2s = 0, tc = 0, pc = 0) -> float or np.array
+    gas_den(p, sg, degf, zmethod ='DAK', cmethod ='PMC', n2 = 0, co2 = 0, h2s = 0, tc = 0, pc = 0) -> float or np.array
 
 Returns gas density (lb/cuft) 
 A float or list / array can be used for p, returning corresponding 1-D array of gas densities. The cmethod will be used to calculate critical gas parameters unless tc and/or pc are explicitly set to be non-zero. This option enables users to use precalculate gas critical properties and so avoid repeated duplicated critical property calculations when compute time is an issue
@@ -499,7 +461,7 @@ Examples:
     
 
 pyrestoolbox.gas_water_content
-=====================
+==============================
 
 .. code-block:: python
 
@@ -529,7 +491,7 @@ Examples:
     0.6521546577394491  
 
 pyrestoolbox.gas_ponz2p
-=====================
+=======================
 
 .. code-block:: python
 
@@ -587,8 +549,8 @@ Examples:
     >>> rtb.gas_ponz2p(poverz=[2500,5000], sg=0.75, degf=165)
     array([2082.56483078, 4890.62070847])
     
-pyrestoolbox.gas_ponz2p
-=====================
+pyrestoolbox.gas_grad2sg
+========================
 
 .. code-block:: python
 
@@ -642,7 +604,7 @@ Examples:
     0.7500786632299423   
     
 
-pyrestoolbox.gas_ponz2p
+pyrestoolbox.gas_dmp
 =====================
 
 .. code-block:: python
@@ -703,12 +665,12 @@ Examples:
     >>> rtb.gas_dmp(p1=2000, p2=1000, degf=185, sg=0.78, tc = 371, pc = 682)
     -3691052075.812854
         
-pyrestoolbox.gas_ponz2p
-=====================
+pyrestoolbox.gas_fws_sg
+=======================
 
 .. code-block:: python
 
-    gas_fws_sg (sg_g, cgr, api_st) -> float
+    gas_fws_sg(sg_g, cgr, api_st) -> float
 
 Estimates FWS specific gravity of gas-condensate from separator gas SG, CGR and API. Uses Standing correlation to estimate condensate MW from API.
 Returns SG of FWS gas 
