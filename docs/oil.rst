@@ -551,10 +551,9 @@ pyrestoolbox.oil_viso
 
 .. code-block:: python
 
-    gas_grad2sg( grad, p, degf, zmethod='DAK', cmethod='PMC', n2 = 0, co2 = 0, h2s = 0, tc = 0, pc = 0, rtol = 1E-7) -> float
+    oil_viso(p, api, degf, pb, rs) -> float
 
-Returns gas specific gravity consistent with observed gas gradient. Calculated through iterative solution method. Will fail if gas SG is below 0.55, or greater than 1.75
-
+Returns Oil Viscosity with Beggs-Robinson (1975) correlation at saturated pressures and Petrosky-Farshad (1995) at undersaturated pressures
 .. list-table:: Inputs
    :widths: 10 15 40
    :header-rows: 1
@@ -562,54 +561,55 @@ Returns gas specific gravity consistent with observed gas gradient. Calculated t
    * - Parameter
      - Type
      - Description
-   * - grad
-     - float
-     - Observed gas gradient (psi/ft)
    * - p
-     - float, list or np.array 
+     - float
      - Pressure at observation (psia)
+   * - api
+     - float 
+     - Stock tank oil density (degrees API)
    * - degf
      - float
-     - Reservoir Temperature (deg F)
-   * - zmethod
-     - string or z_method
-     - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
-   * - cmethod
-     - string or c_method
-     - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
-   * - n2
+     - Oil Temperature (deg F)
+   * - pb
      - float
-     - Molar fraction of Nitrogen. Defaults to zero if undefined  
-   * - co2
+     - Original bubble point pressure of the oil (psia)
+   * - rs
      - float
-     - Molar fraction of CO2. Defaults to zero if undefined 
-   * - h2s
-     - float
-     - Molar fraction of H2S. Defaults to zero if undefined
-   * - tc
-     - float
-     - Critical gas temperature (deg R). Uses cmethod correlation if not specified  
-   * - pc
-     - float
-     - Critical gas pressure (psia). Uses cmethod correlation if not specified  
+     - Solution GOR at pressure of interest (scf/stb).
 
 Examples:
 
 .. code-block:: python
 
-    >>> rtb.gas_grad2sg(grad=0.0657, p=2500, degf=175)
-    0.7500786632299423   
+    >>> rtb.oil_viso(p=2000, api=38, degf=165, pb=3500, rs=1000)
+    0.416858469042502
     
 
-pyrestoolbox.gas_dmp
+pyrestoolbox.make_bot_og
 =====================
 
 .. code-block:: python
 
-    gas_dmp(p1, p2, degf, sg, zmethod='DAK', cmethod = 'PMC', n2 = 0, co2 = 0, h2s = 0, tc = 0, pc = 0) -> float
+    make_bot_og(pi, api, degf, sg_g, pmax, pb =0, rsb =0, pmin =14.7, nrows = 20, wt =0, ch4_sat =0, comethod='EXPLT', zmethod='DAK', rsmethod='VELAR', cmethod'PMC', denomethod='SWMH', bomethod='MCAIN', pbmethod='VALMC', export=False) -> tuple
 
-Returns gas pseudo-pressure integral between two pressure points. Will return a positive value if p1 < p2, and a negative value if p1 > p2. 
-Integrates the equation: m(p) = 2 * p / (ug * z) 
+Creates data required for Oil-Gas-Water black oil tables. Returns dictionary of results, with index:
+ - bot: Pandas table of blackoil data (for PVTO == False), or Saturated properties to pmax (if PVTO == True)
+ - deno: ST Oil Density (lb/cuft)
+ - deng: ST Gas Density (lb/cuft)
+ - denw: Water Density at Pi (lb/cuft), 
+ - cw: Water Compressibility at Pi (1/psi)
+ - uw: Water Viscosity at Pi (cP))
+ - pb: Bubble point pressure either calculated (if only Rsb provided), or supplied by user
+ - rsb: Solution GOR at Pb either calculated (if only Pb provided), or supplied by user
+ - rsb_scale: The scaling factor that was needed to match user supplied Pb and Rsb
+ - usat: a list of understaurated values (if PVTO == True) [usat_p, usat_bo, usat_uo]. This will be empty if PVTO == False
+
+If user species Pb or Rsb only, the corresponding property will be calculated. If both Pb and Rsb are specified, then Pb calculations will be adjusted to honor both
+
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -618,39 +618,135 @@ Integrates the equation: m(p) = 2 * p / (ug * z)
    * - Parameter
      - Type
      - Description
-   * - p1
-     - float, list or np.array 
-     - First gas pressure (psia)
-   * - p2
-     - float, list or np.array 
-     - Second gas pressure (psia)
-   * - sg
+   * - pi
      - float
-     - Gas SG relative to air.
+     - Initial Pressure (psia).
+   * - api
+     - Density of stock tank liquid (API)
    * - degf
      - float
-     - Reservoir Temperature (deg F)
+     - Oil Temperature (deg F)
+   * - sg_g
+     - float
+     - Weighted average specific gravity of surface gas, inclusive of gas evolved after separation (relative to air).   
+   * - pmax
+     - float
+     - Maximum pressure to calculate properties to.  
+   * - pb
+     - float
+     - Original bubble point pressure (psia). Calculated from rsb if not specified.
+   * - rsb
+     - float
+     - Original solution GOR at original bubble point pressure (scf/stb). Calculated from pb if not specified.
+   * - pmin
+     - float
+     - Minimum pressure to evaluate pressures down to. Default = 25 psia
+   * - nrows
+     - int
+     - Number of rows of table data to return
+   * - wt
+     - float
+     - Salt wt% in brine (0-100).
+   * - ch4_sat
+     - float
+     - Degree of methane saturation in the brine (0 - 1)
+   * - comethod
+     - string or co_method
+     - The method of Compressibility calculation to be employed. `Calculation Methods and Class Objects`_.
    * - zmethod
      - string or z_method
-     - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
+     - The method of gas z-factor calculation to be employed. `Calculation Methods and Class Objects`_.
+   * - rsmethod
+     - string or rs_method
+     - The method of Rs calculation to be employed. `Calculation Methods and Class Objects`_.
    * - cmethod
      - string or c_method
-     - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
-   * - n2
+     - The method of critical gas property calculation to be employed. `Calculation Methods and Class Objects`_.
+   * - denomethod
+     - string or deno_method
+     - The method of live oil density  calculation to be employed. `Calculation Methods and Class Objects`_.
+   * - bomethod
+     - string or bo_method
+     - The method of Bo calculation to be employed. `Calculation Methods and Class Objects`_.
+   * - pbmethod
+     - string or pb_method
+     - The method of Rs calculation to be employed. `Calculation Methods and Class Objects`_.
+   * - export
+     - bool
+     - Boolean flag that controls whether to export full table to excel, and separate PVDG and PVDO include files. Default is False.
+   * - pvto
+     - bool
+     - Boolean flag that controls whether the pvto live oil Eclipse format will be generated. 
+         - extends bubble point line up to maximum pressure
+         - generates undersaturated oil propeties
+         - writes out pvto include file
+         
+Examples:
+
+.. code-block:: python
+
+    >>> df, st_deno, st_deng, res_denw, res_cw, visw = rtb.make_bot(pi=4000, api=38, degf=175, sg_g=0.68, pmax=5000, pb=3900, rsb=2300, nrows=10)
+    >>> df
+        	Pressure (psia)	Rs (scf/stb)	Bo (rb/stb)	uo (cP)	Gas Z (v/v)	Bg (rb/mscf	ug (cP)	Bw (rb/stb)	uw (cP)
+    0	14.7	0	1.062457	1.83067	0.998651	2.17E-04	0.012685	1.027687	0.356003
+    1	726.8857	520.4289	1.289919	0.562439	0.938669	4.13E-06	0.013612	1.025392	0.357469
+    2	1439.071	855.4766	1.440451	0.429764	0.895074	1.99E-06	0.015214	1.023133	0.358924
+    3	2151.257	1199.924	1.598154	0.355871	0.875372	1.30E-06	0.017376	1.02091	0.360368
+    4	2863.443	1595.424	1.782423	0.303031	0.881091	9.84E-07	0.019924	1.018722	0.361802
+    5	3575.629	2068.841	2.005794	0.261505	0.908237	8.12E-07	0.02262	1.016568	0.363225
+    6	3900	2316.211	2.122961	0.245254	0.925664	7.59E-07	0.02385	1.015597	0.36387
+    7	4000	2300	2.104396	0.274803	0.931556	7.45E-07	0.024226	1.015299	0.364069
+    8	4287.814	2300	2.076106	0.357028	0.949547	7.08E-07	0.025303	1.014446	0.364638
+    9	5000	2300	2.01238	0.560491	0.997923	6.38E-07	0.027942	1.012356	0.366042
+
+    
+
+pyrestoolbox.pyrestoolbox.oil_deno
+==============================
+
+.. code-block:: python
+
+    oil_deno(p, degf, rs, rsb, sg_g = 0, sg_sp = 0, pb = 1e6, sg_o =0, api =0, denomethod='SWMH') -> float
+
+Returns live oil density (lb/cuft). 
+At least one of sg_g and sg_sp must be supplied. This function will make simple assumption to estimate missing gas sg if only one is provided.
+At least one of sg_o and api must be supplied. One will be calculated from the other if only one supplied. If both specified, api will be used.
+pb only needs to be set when pressures are above pb. For saturated oil, this can be left as default
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - p
      - float
-     - Molar fraction of Nitrogen. Defaults to zero if undefined  
-   * - co2
+     - Pressure (psia).
+   * - rs
      - float
-     - Molar fraction of CO2. Defaults to zero if undefined 
-   * - h2s
+     - Solution GOR at pressure of interest (scf/stb).
+   * - rsb
      - float
-     - Molar fraction of H2S. Defaults to zero if undefined
-   * - tc
+     - Original solution GOR at original bubble point pressure (scf/stb)
+   * - sg_g
      - float
-     - Critical gas temperature (deg R). Uses cmethod correlation if not specified  
-   * - pc
+     - Weighted average specific gravity of surface gas, inclusive of gas evolved after separation (relative to air).   
+   * - sg_sp
      - float
-     - Critical gas pressure (psia). Uses cmethod correlation if not specified  
+     - Separator gas gravity (relative to air). 
+   * - pb
+     - float
+     - Original bubble point pressure (psia) 
+   * - sg_sto
+     - float
+     - Specific gravity of stock tank liquid (rel water). Will calculate from api if not specified
+   * - api
+     - Density of stock tank liquid (API). Will calculate from sg_sto if not specified
+   * - denomethod
+     - string or deno_method
+     - The method of live oil density  calculation to be employed. `Calculation Methods and Class Objects`_.
+
 
 Examples:
 
