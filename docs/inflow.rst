@@ -201,7 +201,7 @@ Examples:
     >>> rtb.gas_rate_linear(k=0.1, area=50, length=200, pr=[2000, 1000, 500], pwf=250, degf=180, sg = 0.8)
     array([21.87803916,  4.89593662,  0.94342881])
     
-    pyrestoolbox.oil_rate_radial
+pyrestoolbox.oil_rate_radial
 ======================
 
 .. code-block:: python
