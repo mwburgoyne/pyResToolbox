@@ -118,6 +118,7 @@ pyrestoolbox.oil_ja_sg
     oil_ja_sg(mw, ja) -> float
 
 Returns liquid hydrocarbon specific gravity (SG relative to water) at stock tank conditions using Jacoby Aromaticity Factor relationship 
+
 .. list-table:: Inputs
    :widths: 10 15 40
    :header-rows: 1
