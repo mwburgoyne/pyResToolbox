@@ -55,9 +55,9 @@ Function List
    * - Gas Tc & Pc Calculation
      - `pyrestoolbox.gas_tc_pc`_  
    * - Gas Z-Factor Calculation
-     - <pyrestoolbox.gas_z`_
+     - pyrestoolbox.gas_z`_
    * - Gas Viscosity
-     - `<pyrestoolbox.gas_ug`_
+     - `pyrestoolbox.gas_ug`_
    * - Gas Viscosity * Z
      - `pyrestoolbox.gas_ugz`_
    * - Gas Compressibility
