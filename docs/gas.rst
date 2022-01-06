@@ -55,7 +55,7 @@ Function List
    * - Gas Tc & Pc Calculation
      - `pyrestoolbox.gas_tc_pc`_  
    * - Gas Z-Factor Calculation
-     - pyrestoolbox.gas_z`_
+     - `pyrestoolbox.gas_z`_
    * - Gas Viscosity
      - `pyrestoolbox.gas_ug`_
    * - Gas Viscosity * Z
@@ -67,7 +67,7 @@ Function List
    * - Gas Density
      - `pyrestoolbox.gas_den`_  
    * - Gas Water of Condensation
-     - `pyrestoolbox.gas_water_conten>`_
+     - `pyrestoolbox.gas_water_conten`_
    * - Convert P/Z to P
      - `pyrestoolbox.gas_ponz2p`_
    * - Convert Gas Gradient to SG
