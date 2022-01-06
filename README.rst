@@ -98,6 +98,7 @@ A set of Gas-Oil relative permeability curves with the LET method
 
 .. code-block:: python
 
+    >>> import matplotlib.pyplot as plt
     >>> df = rtb.rel_perm(rows=25, krtable='SGOF', krfamily='LET', kromax =1, krgmax =1, swc =0.2, sorg =0.15, Lo=2.5, Eo = 1.25, To = 1.75, Lg = 1.2, Eg = 1.5, Tg = 2.0)
     >>> plt.plot(df['Sg'], df['Krgo'], c = 'r', label='Gas')
     >>> plt.plot(df['Sg'], df['Krog'], c = 'g', label='Oil')
@@ -154,8 +155,8 @@ Or creating black oil table information for oil
 
 .. code-block:: python
 
-    >>> import matplotlib.pyplot as plt
-    >>> df, st_deno, st_deng, res_denw, res_cw, visw = rtb.make_bot_og(pi=4000, api=38, degf=175, sg_g=0.68, pmax=5000, pb=3900, rsb=2300, nrows=50)
+    >>> results = rtb.make_bot_og(pi=4000, api=38, degf=175, sg_g=0.68, pmax=5000, pb=3900, rsb=2300, nrows=50)
+    >>> df, st_deno, st_deng, res_denw, res_cw, visw, pb, rsb, rsb_frac, usat = results['bot'], results['deno'], results['deng'], results['denw'], results['cw'], results['uw'], results['pb'], results['rsb'], results['rsb_scale'], results['usat']
     >>> print('Stock Tank Oil Density:', st_deno, 'lb/cuft')
     >>> print('Stock Tank Gas Density:', st_deng, 'lb/cuft')
     >>> print('Reservoir Water Density:', res_denw, 'lb/cuft')
@@ -248,28 +249,8 @@ With ability to generate Live Oil PVTO style table data as well
     >>>             ax3.plot(usat_p[i], usat_uo[i], c='k')
     >>> 
     >>> fig.suptitle('Black Oil Properties')
-    >>> ax1.set_title("Rs vs P")
-    >>> ax1.set_ylabel('Rs (mscf/stb)')
-    >>> ax1.set_xlabel('Pressure (psia)')
-    >>> ax1.grid('both')
-    >>> 
-    >>> ax2.set_title("Bo vs P")
-    >>> ax2.set_ylabel('Bo (rb/stb)')
-    >>> ax2.set_xlabel('Pressure (psia)')
-    >>> ax2.grid('both')
-    >>> 
-    >>> ax3.set_title("Viso vs P")
-    >>> ax3.set_xlabel('Pressure (psia)')
-    >>> ax3.set_ylabel('Viscosity (cP)')
-    >>> ax3.grid('both')
-    >>> 
-    >>> ax4.set_title("Co vs P")
-    >>> ax4.set_ylabel('Co (1/psi)')
-    >>> ax4.set_xlabel('Pressure (psia)')
-    >>> ax4.grid('both', which='minor')
-    >>> ax4.grid('both', which='major')
-    >>> 
-    >>> plt.tight_layout()
+    >>> ..
+    >>> ..
     >>> plt.show()
     Pb (psia): 4500
     Bob (rb/stb): 1.6072798403441817
