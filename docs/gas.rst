@@ -2,7 +2,6 @@
 Gas PVT
 ===================================
 
-
 Calculation Methods and Class Objects
 =====================================
 pyResToolBox uses class objects to track calculation options through the functions. Class objects can be set via strings or explicitly via object options
@@ -21,8 +20,7 @@ pyResToolBox uses class objects to track calculation options through the functio
         + 'LIN': An explicit linearized form that is faster than DAK or HY `(2015) <https://link.springer.com/article/10.1007/s13202-015-0209-3>`_
         + 'DAK': Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
         + 'HY': Hall & Yarborough (1973)
-   * - _cemthod:
-       cmethod
+   * - cmethod
      - c_method
      - Method for calculating gas critical properties. Defaults to 'PMC' 
        Options are:
@@ -93,8 +91,8 @@ Returns a tuple of critical temperature (deg R) and critical pressure (psia) for
      - float
      - Molar fraction of H2S. Defaults to zero if undefined
    * - cmethod
-     - string or c_method_
-     - Method for calculating gas critical parameters  
+     - string or c_method
+     - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
    * - tc
      - float
      - Critical gas temperature (deg R). Uses cmethod correlation if not specified  
