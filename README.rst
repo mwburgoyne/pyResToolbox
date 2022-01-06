@@ -59,14 +59,14 @@ Function List
 |                                                                                                   | - Estimate SG of gas post separator                                    |
 |                                                                                                   | - Calculate weighted average surface gas SG                            |
 +---------------------------------------------------------------------------------------------------+------------------------------------------------------------------------+
-| `Water PVT <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/water.rst>`_                | - Calculate suite of brine properties                                  |
+| `Brine PVT <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/water.rst>`_                | - Calculate suite of brine properties                                  |
 +---------------------------------------------------------------------------------------------------+------------------------------------------------------------------------+
 | `Permeability Layering <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/layer.rst>`_    | - Lorenz factor from Beta value                                        |
 |                                                                                                   | - Lorenz factor from flow fraction                                     |
 |                                                                                                   | - Lorenz factor to flow fraction                                       |
 |                                                                                                   | - Lorenz factor to permeability array                                  |
 +---------------------------------------------------------------------------------------------------+------------------------------------------------------------------------+
-| `Simulation Helpers <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/sim.rst>`_         | - Summarize IX convergence errors                                      |
+| `Simulation Helpers <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/sim.rst>`_         | - Summarize IX convergence errors from PRT file                        |
 |                                                                                                   | - Create Aquifer Influence Functions                                   |
 +---------------------------------------------------------------------------------------------------+------------------------------------------------------------------------+
 | `Relative Permeability  <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/relperm.rst>`_ | - Create sets of rel perm tables                                       |
