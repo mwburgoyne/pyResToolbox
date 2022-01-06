@@ -46,21 +46,37 @@ Calculating bubble point pressure with Standing correlation via option string, a
 Function List
 =============
 
-+-------------------------+---------------------------------------------------------------------------------------------------------------------------------+
-| Gas PVT                 | - Gas Tc & Pc Calculation: `pyrestoolbox.gas_tc_pc`_                                                                            |
-|                         | - Gas Z-Factor Calculation: `gas_z(...) <./docs/api.html#pyrestoolbox.gas_z>`_                                                  |
-|                         | - Gas Viscosity: `gas_ug(...) <./docs/api.html#pyrestoolbox.gas_ug>`_                                                           |
-|                         | - Gas Viscosity * Z: `gas_ugz(...) <./docs/api.html#pyrestoolbox.gas_ugz>`_                                                     |
-|                         | - Gas Compressibility: `gas_cg(...) <./docs/api.html#pyrestoolbox.gas_cg>`_                                                     |
-|                         | - Gas Formation Volume Factor: `gas_bg(...) <./docs/api.html#pyrestoolbox.gas_bg>`_                                             |   
-|                         | - Gas Density: `gas_den(...) <./docs/api.html#pyrestoolbox.gas_den>`_                                                           |
-|                         | - Gas Water of Condensation: `gas_water_content(...) <./docs/api.html#pyrestoolbox.gas_water_content>`_                         |                       
-|                         | - Convert P/Z to P: `gas_ponz2p(...) <./docs/api.html#pyrestoolbox.gas_ponz2p>`_                                                |
-|                         | - Convert Gas Gradient to SG: `gas_grad2sg(...) <./docs/api.html#pyrestoolbox.gas_grad2sg>`_                                    |            
-|                         | - Delta Pseudopressure: `gas_dmp(...) <./docs/api.html#pyrestoolbox.gas_dmp>`_                                                  |
-|                         | - Gas Condensate FWS SG: `gas_fws_sg(...) <./docs/api.html#pyrestoolbox.gas_fws_sg>`_                                           |
-+-------------------------+---------------------------------------------------------------------------------------------------------------------------------+
+.. list-table:: Gas Functions
+   :widths: 10 15 40
+   :header-rows: 1
 
+   * - Task
+     - Function
+   * - Gas Tc & Pc Calculation
+     - `pyrestoolbox.gas_tc_pc`_  
+   * - Gas Z-Factor Calculation
+     - <pyrestoolbox.gas_z`_
+   * - Gas Viscosity
+     - `<pyrestoolbox.gas_ug`_
+   * - Gas Viscosity * Z
+     - `pyrestoolbox.gas_ugz`_
+   * - Gas Compressibility
+     - `pyrestoolbox.gas_cg`_
+   * - Gas Formation Volume Factor
+     - `pyrestoolbox.gas_bg`_  
+   * - Gas Density
+     - `pyrestoolbox.gas_den`_  
+   * - Gas Water of Condensation
+     - `pyrestoolbox.gas_water_conten>`_
+   * - Convert P/Z to P
+     - `pyrestoolbox.gas_ponz2p`_
+   * - Convert Gas Gradient to SG
+     - `pyrestoolbox.gas_grad2sg`_
+   * - Delta Pseudopressure
+     - `pyrestoolbox.gas_dmp`_
+   * - Gas Condensate FWS SG
+     - `pyrestoolbox.gas_fws_sg`_
+  
 
 pyrestoolbox.gas_tc_pc
 ======================
