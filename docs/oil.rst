@@ -219,7 +219,7 @@ Examples:
     >>> rtb.oil_rs_st(psp=114.7, degf_sp=80, api=38)
     4.176458005559282
     
-pyrestoolbox.pyrestoolbox.oil_pbub
+pyrestoolbox.oil_pbub
 ====================
 
 .. code-block:: python
@@ -622,6 +622,7 @@ If user species Pb or Rsb only, the corresponding property will be calculated. I
      - float
      - Initial Pressure (psia).
    * - api
+     - float
      - Density of stock tank liquid (API)
    * - degf
      - float
@@ -701,17 +702,14 @@ Examples:
 
     
 
-pyrestoolbox.pyrestoolbox.oil_deno
+pyrestoolbox.sg_evolved_gas
 ==============================
 
 .. code-block:: python
 
-    oil_deno(p, degf, rs, rsb, sg_g = 0, sg_sp = 0, pb = 1e6, sg_o =0, api =0, denomethod='SWMH') -> float
+    sg_evolved_gas(p, degf, rsb, api, sg_sp) -> float
 
-Returns live oil density (lb/cuft). 
-At least one of sg_g and sg_sp must be supplied. This function will make simple assumption to estimate missing gas sg if only one is provided.
-At least one of sg_o and api must be supplied. One will be calculated from the other if only one supplied. If both specified, api will be used.
-pb only needs to be set when pressures are above pb. For saturated oil, this can be left as default
+Returns estimated specific gravity of gas evolved from insitu-oil due to depressurization below Pb. Uses McCain & Hill Correlation (1995, SPE 30773) 
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -723,50 +721,37 @@ pb only needs to be set when pressures are above pb. For saturated oil, this can
    * - p
      - float
      - Pressure (psia).
-   * - rs
+   * - degf
      - float
-     - Solution GOR at pressure of interest (scf/stb).
+     - Oil Temperature (deg F).
    * - rsb
      - float
      - Original solution GOR at original bubble point pressure (scf/stb)
-   * - sg_g
+   * - api
      - float
-     - Weighted average specific gravity of surface gas, inclusive of gas evolved after separation (relative to air).   
+     - Density of stock tank liquid (API). Will calculate from sg_sto if not specified
    * - sg_sp
      - float
      - Separator gas gravity (relative to air). 
-   * - pb
-     - float
-     - Original bubble point pressure (psia) 
-   * - sg_sto
-     - float
-     - Specific gravity of stock tank liquid (rel water). Will calculate from api if not specified
-   * - api
-     - Density of stock tank liquid (API). Will calculate from sg_sto if not specified
-   * - denomethod
-     - string or deno_method
-     - The method of live oil density  calculation to be employed. `Calculation Methods and Class Objects`_.
 
 
 Examples:
 
 .. code-block:: python
 
-    >>> rtb.gas_dmp(p1=1000, p2=2000, degf=185, sg=0.78, zmethod='HY', cmethod = 'SUT', n2 = 0.05, co2 = 0.1, h2s = 0.02)
-    3690873383.43637  
+    >>> rtb.sg_st_gas(114.7, rsp=1500, api=42, sg_sp=0.72, degf_sp=80)
+    1.1923932340625523 
     
-    >>> rtb.gas_dmp(p1=2000, p2=1000, degf=185, sg=0.78, tc = 371, pc = 682)
-    -3691052075.812854
+
         
-pyrestoolbox.gas_fws_sg
+pyrestoolbox.sgg_wt_avg
 =======================
 
 .. code-block:: python
 
-    gas_fws_sg(sg_g, cgr, api_st) -> float
+    sgg_wt_avg (sg_sp, rsp, sg_st, rst) -> float
 
-Estimates specific gravity of full-wellstream (FWS) gas from gas-condensate well. Calculates from weighted average surface gas SG, CGR and API. Uses Standing correlation to estimate condensate MW from API.
-Returns SG of FWS gas 
+Calculates weighted average specific gravity of surface gas (sg_g) from separator and stock tank gas properties. Returns sg_g (Weighted average surface gas SG relative to air). From McCain Correlations book, Eq 3.4
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -775,19 +760,22 @@ Returns SG of FWS gas
    * - Parameter
      - Type
      - Description
-   * - sg_g
+   * - sg_sp
      - float
-     - Specific gravity of weighted average surface gas (relative to air) 
-   * - cgr
+     - Separator pressure (psia). 
+   * - rsp
      - float
-     - Condensate gas ratio (stb/mmscf). 
-   * - api_st
+     - Separator GOR (separator scf / stb). 
+   * - sg_st
      - float
-     - Density of stock tank liquid (API)  
-
+     - Specific gravity of incremental gas evolved from separator liquid as it equilibrates to stock tank conditions (relative to air)  
+   * - rst
+     - float
+     - Incremental gas evolved from separator liquid as it equilibrates to stock tank conditions (scf/stb). 
+     
 Examples:
 
 .. code-block:: python
 
-    >>> rtb.gas_fws_sg(sg_g=0.855, cgr=30, api_st=53)
-    0.9371015922844881
+    >>> rtb.sgg_wt_avg (sg_sp=0.72, rsp=1000, sg_st=1.1, rst=5)
+    0.7218905472636816
