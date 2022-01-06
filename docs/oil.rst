@@ -318,6 +318,10 @@ pyrestoolbox.oil_rs
 
 Returns solution gas oil ratio (scf/stb) calculated with different correlations. Either pb, rsb or both need to be specified. If one is missing, the other will be calculated from correlation
 
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
    * - Parameter
      - Type
      - Description
@@ -555,6 +559,7 @@ pyrestoolbox.oil_viso
     oil_viso(p, api, degf, pb, rs) -> float
 
 Returns Oil Viscosity with Beggs-Robinson (1975) correlation at saturated pressures and Petrosky-Farshad (1995) at undersaturated pressures
+
 .. list-table:: Inputs
    :widths: 10 15 40
    :header-rows: 1
