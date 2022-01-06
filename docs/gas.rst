@@ -71,23 +71,34 @@ pyrestoolbox.gas_tc_pc
 
 Returns a tuple of critical temperature (deg R) and critical pressure (psia) for hydrocarbon gas. If one or both of the tc and pc parameters are set to be non-zero, then this function will simply return that value for the corresponding critical parameter.
 
-+---------------------------------------------------+---------------------------------------------------------------------------------------------+
-| Parameter     | Type                              | Description                                                                                 |
-+---------------+-----------------------------------+---------------------------------------------------------------------------------------------+
-| sg            | float                             | Gas SG relative to air                                                                      |
-+---------------+-----------------------------------+---------------------------------------------------------------------------------------------+
-| n2            | float                             | Molar fraction of Nitrogen. Defaults to zero if undefined                                   |
-+---------------+-----------------------------------+---------------------------------------------------------------------------------------------+
-| co2           | float                             | Molar fraction of CO2. Defaults to zero if undefined                                        |
-+---------------+-----------------------------------+---------------------------------------------------------------------------------------------+
-| h2s           | float                             | Molar fraction of H2S. Defaults to zero if undefined                                        |
-+---------------+-----------------------------------+---------------------------------------------------------------------------------------------+
-| cmethod       | String or c_method class object   | Method for calculating gas critical parameters                                              |
-+---------------+-----------------------------------+---------------------------------------------------------------------------------------------+
-| tc            | float                             | Critical gas temperature (deg R). Uses cmethod correlation if not specified                 |
-+---------------+-----------------------------------+---------------------------------------------------------------------------------------------+
-| n2            | float                             | Critical gas pressure (psia). Uses cmethod correlation if not specified                     |
-+---------------+-----------------------------------+---------------------------------------------------------------------------------------------+
+.. list-table:: Method Variables & Class Objects
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - sg
+     - float
+     - Gas SG relative to air  
+   * - n2
+     - float
+     - Molar fraction of Nitrogen. Defaults to zero if undefined  
+   * - co2
+     - float
+     - Molar fraction of CO2. Defaults to zero if undefined 
+   * - h2s
+     - float
+     - Molar fraction of H2S. Defaults to zero if undefined
+   * - cmethod
+     - String or c_method `class object <Calculation Methods & Class Objects>`_
+     - Method for calculating gas critical parameters  
+   * - tc
+     - float
+     - Critical gas temperature (deg R). Uses cmethod correlation if not specified  
+   * - pc
+     - float
+     - Critical gas pressure (psia). Uses cmethod correlation if not specified  
 
 Examples:
 
