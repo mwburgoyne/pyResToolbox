@@ -433,7 +433,7 @@ Examples:
     0.00023290195865185949
     
 
-pyrestoolbox.pyrestoolbox.oil_deno
+pyrestoolbox.oil_deno
 ==============================
 
 .. code-block:: python
@@ -742,6 +742,43 @@ Examples:
     >>> rtb.sg_st_gas(114.7, rsp=1500, api=42, sg_sp=0.72, degf_sp=80)
     1.1923932340625523 
     
+
+pyrestoolbox.sg_st_gas
+=======================
+
+.. code-block:: python
+
+    sg_st_gas(psp, rsp, api, sg_sp, degf_sp) -> float
+
+Estimates specific gravity of gas evolving from liquid exiting the separator. Returns sg_st (Stock Tank gas specific gravity relative to air). Correlation reproduced from Valko McCain 2003 paper Eq 4-2
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - psp
+     - float
+     - Separator pressure (psia). 
+   * - rsp
+     - float
+     - Separator GOR (separator scf / stb). 
+   * - api
+     - float
+     - Density of stock tank liquid (API)
+   * - degf_sp
+     - float
+     - Separator temperature (deg F). 
+     
+Examples:
+
+.. code-block:: python
+
+    >>> rtb.sg_st_gas(114.7, rsp=1500, api=42, sg_sp=0.72, degf_sp=80)
+    1.1923932340625523
+
 
         
 pyrestoolbox.sgg_wt_avg
