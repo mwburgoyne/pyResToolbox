@@ -67,7 +67,7 @@ Function List
    * - Gas Density
      - `pyrestoolbox.gas_den`_  
    * - Gas Water of Condensation
-     - `pyrestoolbox.gas_water_conten`_
+     - `pyrestoolbox.gas_water_content`_
    * - Convert P/Z to P
      - `pyrestoolbox.gas_ponz2p`_
    * - Convert Gas Gradient to SG
