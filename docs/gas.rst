@@ -2,8 +2,8 @@
 Gas PVT
 ===================================
 
-Calculation Methods & Class Objects
-===================================
+Calculation Methods and Class Objects
+=====================================
 pyResToolBox uses class objects to track calculation options through the functions. Class objects can be set via strings or explicitly via object options
 
 .. list-table:: Method Variables & Class Objects
@@ -69,7 +69,7 @@ pyrestoolbox.gas_tc_pc
 
     gas_tc_pc(sg, n2 = 0, co2 = 0, h2s = 0, cmethod = 'PMC', tc = 0, pc = 0) -> tuple
 
-Returns a tuple of critical temperature (deg R) and critical pressure (psia) for hydrocarbon gas. If one or both of the tc and pc parameters are set to be non-zero, then this function will simply return that value for the corresponding critical parameter.
+Returns a tuple of critical temperature (deg R) and critical pressure (psia) for hydrocarbon gas. If one or both of the tc and pc parameters are set to be non-zero, then this function will return that unchanged value for the corresponding critical parameter.
 
 .. list-table:: Method Variables & Class Objects
    :widths: 10 15 40
@@ -91,7 +91,7 @@ Returns a tuple of critical temperature (deg R) and critical pressure (psia) for
      - float
      - Molar fraction of H2S. Defaults to zero if undefined
    * - cmethod
-     - String or c_method `class object <Calculation Methods & Class Objects>`_
+     - String or c_method `class object <Calculation Methods and Class Objects>`_
      - Method for calculating gas critical parameters  
    * - tc
      - float
