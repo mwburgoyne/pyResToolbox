@@ -672,7 +672,7 @@ pyrestoolbox.gas_fws_sg
 
     gas_fws_sg(sg_g, cgr, api_st) -> float
 
-Estimates FWS specific gravity of gas-condensate from separator gas SG, CGR and API. Uses Standing correlation to estimate condensate MW from API.
+Estimates specific gravity of full-wellstream (FWS) gas from gas-condensate well. Calculates from weighted average surface gas SG, CGR and API. Uses Standing correlation to estimate condensate MW from API.
 Returns SG of FWS gas 
 
 .. list-table:: Inputs
