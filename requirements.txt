@@ -1,9 +1,0 @@
-pip
-wheel
-numpy
-scipy
-pandas
-tabulate
-enum
-twine
-gwr_inversion
