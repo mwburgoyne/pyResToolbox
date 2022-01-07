@@ -3,7 +3,7 @@ from distutils.core import setup
 setup(
     name = 'pyrestoolbox',
     packages = ['pyrestoolbox'],
-    version = '0.0.1',  # Ideally should be same as your GitHub release tag varsion
+    version = 'v1.0.0',  # Ideally should be same as your GitHub release tag varsion
     description = 'pyResToolbox - A collection of Reservoir Engineering Utilities',
     author = 'Mark W. Burgoyne',
     author_email = 'mark.w.burgoyne@gmail.com',
