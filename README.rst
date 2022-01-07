@@ -61,10 +61,9 @@ Function List
 +---------------------------------------------------------------------------------------------------+------------------------------------------------------------------------+
 | `Brine PVT <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/water.rst>`_                | - Calculate suite of brine properties                                  |
 +---------------------------------------------------------------------------------------------------+------------------------------------------------------------------------+
-| `Permeability Layering <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/layer.rst>`_    | - Lorenz factor from Beta value                                        |
-|                                                                                                   | - Lorenz factor from flow fraction                                     |
-|                                                                                                   | - Lorenz factor to flow fraction                                       |
-|                                                                                                   | - Lorenz factor to permeability array                                  |
+| `Permeability Layering <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/layer.rst>`_    | - Lorenz coefficient from Beta value                                   |                                                                                                       | - Lorenz coefficient from flow fraction                                |
+|                                                                                                   | - Lorenz coefficient to flow fraction                                  |
+|                                                                                                   | - Lorenz coefficient to permeability array                             |
 +---------------------------------------------------------------------------------------------------+------------------------------------------------------------------------+
 | `Simulation Helpers <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/sim.rst>`_         | - Summarize IX convergence errors from PRT file                        |
 |                                                                                                   | - Create Aquifer Influence Functions                                   |
