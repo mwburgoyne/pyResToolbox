@@ -61,7 +61,8 @@ Function List
 +---------------------------------------------------------------------------------------------------+------------------------------------------------------------------------+
 | `Brine PVT <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/water.rst>`_                | - Calculate suite of brine properties                                  |
 +---------------------------------------------------------------------------------------------------+------------------------------------------------------------------------+
-| `Permeability Layering <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/layer.rst>`_    | - Lorenz coefficient from Beta value                                   |                                                                                                       | - Lorenz coefficient from flow fraction                                |
+| `Permeability Layering <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/layer.rst>`_    | - Lorenz coefficient from Beta value                                   |
+|                                                                                                   | - Lorenz coefficient from flow fraction                                |
 |                                                                                                   | - Lorenz coefficient to flow fraction                                  |
 |                                                                                                   | - Lorenz coefficient to permeability array                             |
 +---------------------------------------------------------------------------------------------------+------------------------------------------------------------------------+
