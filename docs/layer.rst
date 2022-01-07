@@ -160,14 +160,14 @@ Examples:
     
    
        
-pyrestoolbox.lorenz_2_flow_frac
+pyrestoolbox.lorenz_2_layers
 ======================
 
 .. code-block:: python
 
-    lorenz_2_layers(lorenz, nlayers, k_avg, shuffle = False, lrnz_method = 'EXP', B = -1) -> np.ndarray
+    lorenz_2_layers(lorenz, k_avg, nlayers = 1, shuffle = False, lrnz_method = 'EXP', B = -1, phi_h_fracs = []) -> np.ndarray
 
-Returns np.array of permeability values honoring a specified average permeability (assuming equal thickness layers), with degree of heterogeneity consistant with specified Lorenz coefficient and method
+Returns np.array of permeability values honoring a specified average permeability (assuming equal thickness layers unless list of phi_h_fracs is provided), with degree of heterogeneity consistant with specified Lorenz coefficient and method
         
 If B is left default, then it will be calculated. If B is explictly specified > 0, then it will be used instead of the provided lorenz coefficient so as to eliminate repetitive solving for B.
 
@@ -181,12 +181,12 @@ If B is left default, then it will be calculated. If B is explictly specified > 
    * - lorenz
      - float
      - Lorenz coefficient (0 < lorenz < 1). If B is provided, will ignore this parameter to be more efficient. If not, will calculate B from this parameter.
-   * - nlayers
-     - int
-     - The number of permeability layers desired (>1)
    * - k_avg
      - float
-     - The arithmetic average permeability of all the layers (assuming equal thickness)
+     - The thickness weighted average permeability of all the layers - Sum(kh) / h
+   * - nlayers
+     - int
+     - The number of permeability layers desired (>1 needed unless a list of phi_h_fracs is supplied)
    * - shuffle
      - bool
      - Boolean flag to determine whether to return the permeability array in decreasing order (False), or random order (True). Default False
@@ -196,6 +196,9 @@ If B is left default, then it will be calculated. If B is explictly specified > 
    * - B
      - float
      - Beta value (B > 0). Will calculate if only lorenz variable defined
+   * - phi_h_fracs
+     - list
+     - Optional ability to specify a sorted list of phi_h fractions to get permeabilities for. If this list does not add to unity, then one additional layer permeability will be returned. The list needs to be in sorted order of best flow capacity to worst. If list adds to more than 1, it will be normalized
      
 
 Examples:
@@ -204,6 +207,9 @@ Examples:
 
     >>> rtb.lorenz_2_layers(lorenz = 0.67, nlayers = 5, k_avg = 10, shuffle = True)
     array([10.58944038,  0.29499066, 34.9323596 ,  3.21009656,  0.9731128 ])
+    
+    >>> rtb.lorenz_2_layers(lorenz = 0.67, k_avg = 10, phi_h_fracs=[0.05, 0.5])
+    array([51.72990694, 14.12556056,  0.77938749]) 
     
    
 
