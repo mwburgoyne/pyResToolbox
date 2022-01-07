@@ -37,6 +37,7 @@ Examples:
 
 .. code-block:: python
 
+    >>> from pyrestoolbox import pyrestoolbox as rtb
     >>> bw, lden, visw, cw, rsw = rtb.brine_props(p=160, degf=135, wt=1.5, ch4_sat=1.0)
     >>> print('Bw:', bw)
     >>> print('Denw:', lden)

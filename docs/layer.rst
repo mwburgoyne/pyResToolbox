@@ -44,6 +44,7 @@ Examples:
 
 .. code-block:: python
 
+    >>> from pyrestoolbox import pyrestoolbox as rtb
     >>> rtb.lorenz2b(0.75, lrnz_method = 'LANG')
     16.139518537603912
     

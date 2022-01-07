@@ -123,6 +123,7 @@ Examples:
 
 .. code-block:: python
 
+    >>> from pyrestoolbox import pyrestoolbox as rtb
     >>> rtb.gas_rate_radial(k=5, h=50, pr=2000, pwf=750, r_w=0.3, r_ext=1500, degf=180, sg = 0.75, D = 0.01, S=5)
     10269.669190157822
     
