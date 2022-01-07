@@ -266,8 +266,6 @@ With ability to generate Live Oil PVTO style table data as well
     
 .. image:: https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/img/bot_PVTO.png
     :alt: Live Oil Properties
-    
-See the  `API documentation <./docs/api.html>`_ for a complete listing and usage examples.
 
 
 Development
