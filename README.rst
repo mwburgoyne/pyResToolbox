@@ -89,7 +89,7 @@ A simple example below of estimating oil bubble point pressure.
 
 .. code-block:: python
 
-    >>> import restoolbox as rtb
+    >>> from pyrestoolbox import pyrestoolbox as rtb
     >>> rtb.oil_pbub(api=43, degf=185, rsb=2350, sg_g =0.72, pbmethod ='VALMC')
     5179.51086900132
     
