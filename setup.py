@@ -8,7 +8,7 @@ setup(
     author = 'Mark W. Burgoyne',
     author_email = 'mark.w.burgoyne@gmail.com',
     url = 'https://github.com/mwburgoyne/pyResToolbox',
-    download_url = 'download link you saved',
+    download_url = 'https://github.com/mwburgoyne/pyResToolbox/archive/refs/tags/v1.0.0.tar.gz',
     keywords = ['restoolbox', 'petroleum', 'reservoir'],
     classifiers = [],
     REQUIRED = ['numpy', 'scipy', 'pandas', 'tabulate', 'enum', 'gwr_inversion'],
