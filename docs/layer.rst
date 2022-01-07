@@ -11,7 +11,7 @@ Heteogeneity is characterized via the Lorenz coefficient, and implemented via on
 Background on the approach taken as well as the derivation for the Exponential implementation can be found in `this LinkedIn article, <https://www.linkedin.com/pulse/loving-lorenz-new-life-old-parameter-mark-burgoyne/>`_
 
 For the Langmuir formulation:
-  - At a specific cumulative Phi -> Kh = Phih * VL / (Phih + PL)
+  - At a specific cumulative Phi.h -> Kh = Phi.h * VL / (Phi.h + PL)
   - Integrating this, subtracting 0.5 and doubling -> Lorenz = (VL - PL * VL * Ln(VL) + PL * VL * Ln(PL) - 0.5) * 2
   - Where PL = 1 / Beta and VL = 1 / Beta + 1
                 
