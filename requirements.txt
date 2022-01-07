@@ -4,5 +4,6 @@ numpy
 scipy
 pandas
 tabulate
-numdifftools
+enum
 twine
+gwr_inversion
