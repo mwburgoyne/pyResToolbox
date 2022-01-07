@@ -78,7 +78,7 @@ Returns the Beta value consistent with the Lorenz coefficient given, and impleme
 
 
 Examples:
-
+    >>> from pyrestoolbox import pyrestoolbox as rtb
     >>> import matplotlib.pyplot as plt
     >>> df = rtb.rel_perm(rows=25, krtable='SGOF', krfamily='LET', kromax =1, krgmax =1, swc =0.2, sorg =0.15, Lo=2.5, Eo = 1.25, To = 1.75, Lg = 1.2, Eg = 1.5, Tg = 2.0)
     >>> plt.plot(df['Sg'], df['Krgo'], c = 'r', label='Gas')

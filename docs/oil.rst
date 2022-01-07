@@ -65,6 +65,7 @@ Calculating bubble point pressure with Standing correlation via option string, a
 
 .. code-block:: python
 
+    >>> from pyrestoolbox import pyrestoolbox as rtb
     >>> rtb.oil_pbub(api=43, degf=185, rsb=2350, sg_g = 0.72, pbmethod ='STAN')
     6406.067846808766
     

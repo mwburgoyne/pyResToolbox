@@ -92,6 +92,7 @@ Examples:
 
 .. code-block:: python
 
+    >>> from pyrestoolbox import pyrestoolbox as rtb
     >>> import matplotlib.pyplot as plt
     >>> ReDs = [1.5, 2, 3, 5, 10, 25, 1000]
     >>> tds, pds = rtb.influence_tables(ReDs=ReDs, export=True)
