@@ -198,7 +198,7 @@ If B is left default, then it will be calculated. If B is explictly specified > 
      - Beta value (B > 0). Will calculate if only lorenz variable defined
    * - phi_h_fracs
      - list
-     - Optional ability to specify a sorted list of phi_h fractions to get permeabilities for. If this list does not add to unity, then one additional layer permeability will be returned. The list needs to be in sorted order of best flow capacity to worst. If list adds to more than 1, it will be normalized
+     - Optional ability to specify a sorted list of phi_h fractions to calculate permeabilities for. If this list does not add to unity, then one additional layer permeability will be returned. The list needs to be in sorted order of best flow capacity to worst. If list adds to more than 1, it will be normalized
      
 
 Examples:
