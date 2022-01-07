@@ -23,7 +23,7 @@ VERSION = '0.1.0'
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-    'numpy', 'scipy', 'pandas', 'tabulate', 'numdifftools']
+    'numpy', 'scipy', 'pandas', 'tabulate', 'enum', 'gwr_inversion']
 
 # What packages are optional?
 EXTRAS = {
