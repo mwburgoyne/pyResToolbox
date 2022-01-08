@@ -537,7 +537,10 @@ A float or list / array can be used for poverz, returning corresponding 1-D arra
      - Critical gas temperature (deg R). Uses cmethod correlation if not specified  
    * - pc
      - float
-     - Critical gas pressure (psia). Uses cmethod correlation if not specified  
+     - Critical gas pressure (psia). Uses cmethod correlation if not specified 
+   * - rtol
+     - float
+     - relative solution tolerance as compared with abs([User P/Z - Calculated P/Z] / [User P/Z])
 
 Examples:
 
@@ -595,7 +598,10 @@ Returns gas specific gravity consistent with observed gas gradient. Calculated t
    * - pc
      - float
      - Critical gas pressure (psia). Uses cmethod correlation if not specified  
-
+   * - rtol
+     - float
+     - relative solution tolerance as compared with abs([User grad - Calculated grad] / [User grad])
+     
 Examples:
 
 .. code-block:: python
