@@ -1440,12 +1440,12 @@ def make_bot_og(pi: float, api: float, degf: float, sg_g: float, pmax: float, pb
     # Calculate rsb from pb
     if rsb_i <= 0 and pb_i > 0:  
         rsb = oil_rs_bub(degf = degf, api = api, sg_sp = sg_g, pb = pb, pbmethod=pbmethod, rsmethod=rsmethod)
-        rsb_i = rsb
+        #rsb_i = rsb
     
     # Calculate pb from rsb
     if pb_i <=0 and rsb_i > 0: 
         pb = oil_pbub(degf = degf, api = api, sg_sp = sg_g, rsb=rsb, pbmethod=pbmethod)
-        pb_i = pb
+        #pb_i = pb
 
     # Both have been defined by user. Need to work out scalar to apply to rsb to satisfy
     rsbnew = rsb
