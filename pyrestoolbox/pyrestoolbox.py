@@ -143,11 +143,11 @@ def gas_rate_radial(k: npt.ArrayLike, h: npt.ArrayLike, pr: npt.ArrayLike, pwf: 
             direction = -1 # Direction is needed because solving the quadratic with non-Darcy factor will fail if using a negative delta_mp
         delta_mp = abs(gas_dmp(p1=pwf, p2=pr, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, tc=tc, pc=pc, n2=n2, co2=co2, h2s=h2s))
     else:
-        if pr.size > 1:
+        if pr.size > 1: # Multiple Pr's
             direction = np.array([p > pwf for p in pr])   
             direction = 2*direction -1 
             delta_mp = np.absolute(np.array([gas_dmp(p1=p, p2=pwf, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, tc=tc, pc=pc, n2=n2, co2=co2, h2s=h2s)  for p in pr]))
-        else:
+        else:           # Multiple BHFP's
             direction = np.array([pr > bhfp for bhfp in pwf])   
             direction = 2*direction -1  
             delta_mp = np.absolute(np.array([gas_dmp(p1=pr, p2=bhfp, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, tc=tc, pc=pc, n2=n2, co2=co2, h2s=h2s)  for bhfp in pwf]))
@@ -229,7 +229,7 @@ def gas_tc_pc(sg: float, n2:float=0, co2:float=0, h2s:float=0, cmethod:str='PMC'
         tc: Critical gas temperature (deg R). Uses cmethod correlation if not specified
         pc: Critical gas pressure (psia). Uses cmethod correlation if not specified 
     """
-    if tc*pc > 0: # Critical properties have been user specified
+    if tc*pc > 0: # Critical properties have both been user specified
         return (tc,pc)
     cmethod = validate_methods(['cmethod'],[cmethod])
 
@@ -249,7 +249,7 @@ def gas_tc_pc(sg: float, n2:float=0, co2:float=0, h2s:float=0, cmethod:str='PMC'
         j += sum([alpha[i]*y[i]*tci[i]/pci[i] for i in range(1,4)])
         k += sum([beta[i] * y[i] * tci[i] / np.sqrt(pci[i]) for i in range(1,4)])
         ppc = (k * k / j) / j
-        #return (tpc, ppc)
+
     elif cmethod.name == 'SUT': # Sutton equations with Wichert & Aziz non-hydrocarbon corrections from monograph
         sg_hc = (sg - (n2*28.01 + co2*44.01 + h2s*34.1)/28.966)/(1-n2-co2-h2s) # Eq 3.53
         eps = 120*((co2+h2s)**0.9 - (co2+h2s)**1.6)+15*(h2s**0.5-h2s**4) # Eq 3.52c
@@ -318,7 +318,7 @@ def gas_z(p: npt.ArrayLike, sg: float, degf: float, zmethod: z_method=z_method.D
 
     def zdak(p, degf, sg, tc, pc):
         # DAK from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-        # sg relative to air, t in deg F, p in psia, n2, co2 and h2s in % (0-100)
+        # sg relative to air, t in deg F, p in psia, n2, co2 and h2s in fractions (0-1)
         
         def Eq2p7(pr, tr, rhor, a):
             z_calc = 1 + (a[1] + (a[2] / tr) + (a[3] / (tr * tr * tr)) + (a[4] / (tr * tr * tr * tr)) + (a[5] / np.power(tr, 5))) * rhor + ((a[6] + (a[7] / tr) + (a[8] / (tr * tr))) * rhor * rhor) - (a[9] * ((a[7] / tr) + (a[8] / (tr * tr))) * np.power(rhor, 5)) + (a[10] * (1 + (a[11] * rhor * rhor)) * (rhor * rhor / np.power(tr, 3)) * np.exp(-a[11] * rhor * rhor))
@@ -331,20 +331,18 @@ def gas_z(p: npt.ArrayLike, sg: float, degf: float, zmethod: z_method=z_method.D
             ps = [p]
         else:
             ps = p.tolist()
-            
+        
+        a = np.array([0, 0.3265, -1.07, -0.5339, 0.01569, -0.05165, 0.5475, -0.7361, 0.1844, 0.1056, 0.6134, 0.7210])    
+        tr = (degf + 460) / tc
+        
         for p in ps: 
             pr = p / pc
-            tr = (degf + 460) / tc
-            a = np.array([0, 0.3265, -1.07, -0.5339, 0.01569, -0.05165, 0.5475, -0.7361, 0.1844, 0.1056, 0.6134, 0.7210])
-
             # Start with Z = 1.0
             z = 1.0 
             rhor = 0.27 * pr / (tr * z) # 2.8
-            
             z2 = Eq2p7(pr, tr, rhor, a)
             rhor2 = 0.27 * pr / (tr * z2)
             error1 = z2 - z
-            #drhor1 = rhor2 - rhor
             z = z2
             
             z2 = Eq2p7(pr, tr, rhor2, a)
@@ -382,33 +380,30 @@ def gas_z(p: npt.ArrayLike, sg: float, degf: float, zmethod: z_method=z_method.D
             ps = [p]
         else:
             ps = p.tolist()
-        
+
         zout = []
+        
+        tpr = (degf + 460) / tc
+        t = 1/tpr
+        t2, t3 = t**2, t**3
+        alpha = 0.06125*t*np.exp(-1.2*(1-t)**2)
+            
         for p in ps:
             ppr = p / pc
-            tpr = (degf + 460) / tc
-            t = 1/tpr
-            alpha = 0.06125*t*np.exp(-1.2*(1-t)**2)
-            
+
             def fy(y): # Eq 3.43
-                y2 = y**2
-                y3 = y**3
-                y4 = y**4
-                t2 = t**2
-                t3 = t**3
+                y2, y3, y4 = y**2, y**3, y**4
                 x = -alpha*ppr + (y+y2+y3-y4)/(1-y)**3
                 x -= (14.76*t - 9.76*t2 + 4.58 * t3)*y2
                 x += (90.7*t - 242.2*t2 + 42.4*t3)*y**(2.18+2.82*t)
                 return x
             
             def dfydy(y): # Eq 3.44
-                t2 = t**2
                 x = (1+4*y+4*y**2-4*y**3+y**4)/(1-y)**4
-                x -= (29.52*t - 19.52*t2 + 9.16*t**3)*y
-                x += (2.18 + 2.82*t)*(90.7*t - 242.2*t2 + 42.4*t**3)*y**(1.18+2.82*t)
+                x -= (29.52*t - 19.52*t2 + 9.16*t3)*y
+                x += (2.18 + 2.82*t)*(90.7*t - 242.2*t2 + 42.4*t3)*y**(1.18+2.82*t)
                 return x
-            
-                
+
             y = 0.001
             f = fy(y)
             i = 0
@@ -645,8 +640,7 @@ def gas_grad2sg(grad: float, p: float, degf: float, zmethod: z_method=z_method.D
           n2: Molar fraction of Nitrogen. Defaults to zero if undefined 
           co2: Molar fraction of CO2. Defaults to zero if undefined  
           h2s: Molar fraction of H2S. Defaults to zero if undefined
-          sg: Gas SG relative to air, Defaults to False if undefined
-          
+          sg: Gas SG relative to air, Defaults to False if undefined          
           rtol: Relative solution tolerance. Will iterate until abs[(grad - calculation)/grad] < rtol
     """
     
