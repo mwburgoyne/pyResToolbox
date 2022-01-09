@@ -103,7 +103,13 @@ def bisect_solve(args, f, xmin, xmax, rtol):
             xmax = mid_val              # Other_wise must be lower than current mid_val case
             err_hi = err_mid
     return mid_val
-    
+
+def oil_sg(api_value: float) -> float:
+    """ Returns oil specific gravity given API value of oil
+        api_value: API value
+    """
+    return 141.5 / (api_value+131.5)
+
 def gas_rate_radial(k: npt.ArrayLike, h: npt.ArrayLike, pr: npt.ArrayLike, pwf: npt.ArrayLike, r_w: float, r_ext: float, degf: float, zmethod: z_method=z_method.DAK, cmethod: c_method=c_method.PMC, S: float = 0, D: float = 0, sg: float = 0.75, n2: float = 0, co2: float = 0, h2s: float = 0, tc: float = 0, pc: float = 0)-> np.ndarray:
     """ Returns gas rate for radial flow (mscf/day) using Darcy pseudo steady state equation & gas pseudopressure
         k: Permeability (mD)
@@ -707,7 +713,7 @@ def gas_fws_sg(sg_g: float, cgr: float, api_st: float) -> float:
      """
     # 1 mmscf separator gas basis with 379.482 scf/lb-mole
     cond_vol = cgr * 5.61458                         # cuft/mmscf surface gas
-    cond_sg = 141.4 / (api_st+131.5)
+    cond_sg = oil_sg(api_st)
     cond_mass = cond_vol*(cond_sg*62.4)              # lb
     surface_gas_moles = 1e6 / 379.482                # lb-moles
     surface_gas_mass = sg_g*28.97*surface_gas_moles  # lb
@@ -1200,7 +1206,7 @@ def oil_co(p: float, api: float,  degf: float, sg_sp: float=0, sg_g: float=0, pb
                 rs = rsb
             else:
                 rs = oil_rs(api=api, degf=degf, sg_sp=sg_sp, p=p, pb=pb, rsb=rsb, rsmethod=rsmethod, pbmethod=pbmethod)
-            sg_o = 141.4 / (api+131.5)
+            sg_o = oil_sg(api)
             bo = oil_bo(p=p, pb=pb, degf=degf, rs=rs, rsb = rsb, sg_sp=sg_sp, sg_g=sg_g, sg_o=sg_o, bomethod=bomethod, denomethod=denomethod)
             return bo
             
@@ -1303,7 +1309,7 @@ def oil_deno(p: float, degf:float, rs:float, rsb:float, sg_g: float = 0, sg_sp: 
     if api == 0: # Set api from sg_o
         api = 141.5/sg_o -131.5
     else:        # overwrite sg_o with api value
-        sg_o = 141.4 / (api+131.5)
+        sg_o = oil_sg(api)
     
     if p > pb: # Use Eq 3.20, calculating oil density from density at Pb and compressibility factor
         return fn_dic['PGTPB'](p=p, degf=degf, rs=rs, rsb = rsb, sg_g=sg_g, sg_sp=sg_sp, pb=pb, sg_o=sg_o, api=api)
@@ -1414,7 +1420,7 @@ def make_bot_og(pi: float, api: float, degf: float, sg_g: float, pmax: float, pb
     """  
     zmethod, rsmethod, cmethod, denomethod, bomethod, pbmethod = validate_methods(['zmethod', 'rsmethod', 'cmethod', 'denomethod', 'bomethod', 'pbmethod'],[zmethod, rsmethod, cmethod, denomethod, bomethod, pbmethod])
     pmin = max(pmin, 14.7)
-    sg_o = 141.4 / (api+131.5)
+    sg_o = oil_sg(api)
     rsb_frac = 1.0
     
     # If PVTO = False
