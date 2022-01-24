@@ -354,7 +354,9 @@ def gas_z(p: npt.ArrayLike, sg: float, degf: float, zmethod: z_method=z_method.D
                 return z2-z
             
             if sg < 1.725: # Gas, cutoff MW used = 50 lb/lb-mol
-                z = brentq(z_err, 0.2, 3.0)    
+                low_z = max(0.074074*pr+0.088, 0.2)
+                hi_z = min(0.13333*pr+1,3)
+                z = brentq(z_err, low_z, hi_z)    
             else: # Oil
                 mwo = sg * mw_air
                 zhigh = p*mwo / (0.4*62.42) / (R*(degf+f2r)) # Z-Factor consistent with liquid SG = 0.2
@@ -388,7 +390,10 @@ def gas_z(p: npt.ArrayLike, sg: float, degf: float, zmethod: z_method=z_method.D
             
         for p in ps:
             ppr = p / pc
-            low_y, high_y = A*ppr/3, A*ppr/0.2 # Establish limits on y consistent with Z range 0.3 - 3.0
+            low_z = max(0.074074*ppr+0.088, 0.2) # Establish reasonable range of Z solutions
+            hi_z = min(0.13333*ppr+1,3)
+            low_y, high_y = A*ppr/hi_z, A*ppr/low_z # Establish limits on y consistent with reasonable Z range
+            
             def fy(y): # Eq 3.43
                 x = (y+y**2+y**3-y**4)/(1-y)**3 - A*ppr - B*y**2 + C*y**D
                 return x
