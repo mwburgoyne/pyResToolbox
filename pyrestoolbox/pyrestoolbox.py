@@ -28,11 +28,22 @@ from tabulate import tabulate
 import sys
 from enum import Enum
 from gwr_inversion import gwr
+from scipy.optimize import minimize
+from scipy.optimize import brentq
+
+# Constants
+R = 10.731577089016                  # Universal gas constant, ft³·psia/°R·lb.mol
+psc = 14.696                         # Standard conditions pressure (psia)
+tscf = 60                            # Standard conditions temperature (deg F)
+f2r = 459.67                         # Offset to convert degrees F to degrees Rankine
+tscr = tscf + f2r                    # Standard conditions temperature (deg R)
+mw_air = 28.97                       # MW of Air
+scf_per_mol = R * tscr / psc         # scf/lb-mol (V = ZnRT/P, Z = 1, n = 1)
 
 class z_method(Enum): # Gas Z-Factor calculation model
     DAK = 0
-    LIN = 1
-    HY = 2
+    HY = 1
+    WYW = 2
     
 class c_method(Enum): # Gas critical properties calculation method
     PMC = 0
@@ -69,8 +80,6 @@ class kr_table(Enum): # Relative permeability table type
     SWOF = 0
     SGOF = 1
     SGWFN = 2
-
-#zmethod, cmethod, pbmethod, rsmethod, bomethod, uomethod, denomethod, comethod, krfamily, krtable = [0 for x in range(10)]
 
 class_dic = {'zmethod': z_method,
              'cmethod': c_method,
@@ -120,9 +129,9 @@ def gas_rate_radial(k: npt.ArrayLike, h: npt.ArrayLike, pr: npt.ArrayLike, pwf: 
         r_ext: External Reservoir Radius (ft)
         degf: Reservoir Temperature (deg F)
         zmethod: Method for calculating Z-Factor
-                 'LIN' A linearized form (a bit faster) using https://link.springer.com/article/10.1007/s13202-015-0209-3,
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
+                 'WYW' Wang, Ye & Wu (2021)
                  defaults to 'DAK' if not specified
         cmethod: Method for calculating critical properties
                'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or 
@@ -169,9 +178,9 @@ def gas_rate_linear(k: npt.ArrayLike, pr: npt.ArrayLike, pwf: npt.ArrayLike, are
         area: Net cross sectional area perpendicular to direction of flow (ft2).
         length: Length over which flow takes place (ft)
         zmethod: Method for calculating Z-Factor
-                 'LIN' A linearized form (a bit faster) using https://link.springer.com/article/10.1007/s13202-015-0209-3,
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
+                 'WYW' Wang, Ye & Wu (2021)
                  defaults to 'DAK' if not specified
         cmethod: Method for calculting critical properties
                'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or 
@@ -210,7 +219,7 @@ def gas_rate_linear(k: npt.ArrayLike, pr: npt.ArrayLike, pwf: npt.ArrayLike, are
 
 def darcy_gas(delta_mp: npt.ArrayLike, k: npt.ArrayLike, h: npt.ArrayLike, degf: float, l1: float, l2: float, S: float, D: float, radial: bool)-> np.ndarray:
     # Returns mscf/day gas rate. k (mD), h (ft), t (deg F), l1 (r_w or width)/l2 (re or length) (ft), S(Skin), D(Day/mscf)
-    tr = degf + 460
+    tr = degf + f2r
     if radial:
         a = k * h * delta_mp
         b = 1422 * tr
@@ -256,15 +265,30 @@ def gas_tc_pc(sg: float, n2:float=0, co2:float=0, h2s:float=0, cmethod:str='PMC'
         k += sum([beta[i] * y[i] * tci[i] / np.sqrt(pci[i]) for i in range(1,4)])
         ppc = (k * k / j) / j
 
-    elif cmethod.name == 'SUT': # Sutton equations with Wichert & Aziz non-hydrocarbon corrections from monograph
-        sg_hc = (sg - (n2*28.01 + co2*44.01 + h2s*34.1)/28.966)/(1-n2-co2-h2s) # Eq 3.53
-        eps = 120*((co2+h2s)**0.9 - (co2+h2s)**1.6)+15*(h2s**0.5-h2s**4) # Eq 3.52c
+    elif cmethod.name == 'SUT': # Sutton equations with Wichert & Aziz corrections
+        sg_hc = (sg - (n2*28.01 + co2*44.01 + h2s*34.1)/mw_air)/(1-n2-co2-h2s) # Eq 3.53
         ppc_hc = 756.8 - 131.0*sg_hc - 3.6*sg_hc**2 # Eq 3.47b
         tpc_hc = 169.2 + 349.5*sg_hc - 74.0*sg_hc**2 # Eq 3.47a
+        
+        # Wichert & Aziz non-hydrocarbon corrections from monograph
+        eps = 120*((co2+h2s)**0.9 - (co2+h2s)**1.6)+15*(h2s**0.5-h2s**4) # Eq 3.52c
         ppc_star = (1-n2-co2-h2s)*ppc_hc + n2*507.5 + co2*1071.0 + h2s*1306.0 # Eq 3.54a
         tpc_star = (1-n2-co2-h2s)*tpc_hc + n2*239.26 + co2*547.58 + h2s*672.35 # Eq 3.54b
         tpc = tpc_star - eps # Eq 3.52a
-        ppc = ppc_star*(tpc_star-eps)/(tpc_star + h2s*(1-h2s)*eps) # Eq. 3,52b
+        ppc = ppc_star*(tpc_star-eps)/(tpc_star + h2s*(1-h2s)*eps) # Eq. 3.52b
+        
+        # Changed to SBV mixing rules per SPE 14265
+        #yis = np.array([1-n2-co2-h2s, n2, co2, h2s])
+        #if yis[0] == 1.0:
+        #    ppc = ppc_hc
+        #    tpc = tpc_hc
+        #else:
+        #    tcs = np.array([tpc_hc, 239.26, 547.58, 672.35])
+        #    pcs = np.array([ppc_hc, 507.5, 1071.0, 1306.0])
+        #    J = np.sum(yis*tcs/pcs)/3 + 2*(np.sum(yis*np.sqrt(tcs/pcs)))**2/3  # Eq 16
+        #    K = np.sum(yis*tcs/pcs**0.5)         # Eq 17
+        #    tpc = K**2/J                         # Eq 18
+        #    ppc = tpc/J                          # Eq 19
 
     else:
         print('Incorrect cmethod specified')
@@ -283,9 +307,9 @@ def gas_z(p: npt.ArrayLike, sg: float, degf: float, zmethod: z_method=z_method.D
         pwf: BHFP (psia)
         degf: Gas Temperature (deg F)
         zmethod: Method for calculating Z-Factor
-                 'LIN' A linearized form (a bit faster) using https://link.springer.com/article/10.1007/s13202-015-0209-3,
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
+                 'WYW' Wang, Ye & Wu (2021)
                  defaults to 'DAK' if not specified
         cmethod: Method for calculting critical properties
                'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or 
@@ -302,26 +326,6 @@ def gas_z(p: npt.ArrayLike, sg: float, degf: float, zmethod: z_method=z_method.D
         
     tc, pc = gas_tc_pc(sg, n2, co2, h2s, cmethod.name, tc, pc)
        
-    # Explicit calculation of Z-Factor, 
-    # Approx half the time needed vs DAK approach below
-    def z_lin(p, degf, sg, tc, pc):
-        # https://link.springer.com/article/10.1007/s13202-015-0209-3
-        if type(p) == list:
-            p=np.array(p)
-        pr = p / pc
-        tr = (degf + 460) / tc
-        a = np.array([0, 0.317842,0.382216,-7.768354,14.290531,0.000002,-0.004693,0.096254,0.16672,0.96691,0.063069,-1.966847,21.0581,-27.0246,16.23,207.783,-488.161,176.29,1.88453,3.05921])
-        t = 1/tr
-        A = a[1]*t*np.exp(a[2]*(1-t)**2)*pr
-        B = a[3]*t+a[4]*t**2+a[5]*t**6*pr**6
-        C = a[9]+a[8]*t*pr+a[7]*t**2*pr**2+a[6]*t**3*pr**3
-        D = a[10]*t*np.exp(a[11]*(1-t)**2)
-        E = a[12]*t+a[13]*t**2+a[14]*t**3
-        F = a[15]*t+a[16]*t**2+a[17]*t**3
-        G = a[18]+a[19]*t
-        y = D*pr/((1+A**2)/C - (A**2*B/C**3))
-        return  D*pr*(1+y+y**2-y**3)/(D*pr+E*y**2-F*y**G)/(1-y)**3
-
     def zdak(p, degf, sg, tc, pc):
         # DAK from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
         # sg relative to air, t in deg F, p in psia, n2, co2 and h2s in fractions (0-1)
@@ -339,38 +343,23 @@ def gas_z(p: npt.ArrayLike, sg: float, degf: float, zmethod: z_method=z_method.D
             ps = p.tolist()
         
         a = np.array([0, 0.3265, -1.07, -0.5339, 0.01569, -0.05165, 0.5475, -0.7361, 0.1844, 0.1056, 0.6134, 0.7210])    
-        tr = (degf + 460) / tc
+        tr = (degf + f2r) / tc
         
         for p in ps: 
             pr = p / pc
-            # Start with Z = 1.0
-            z = 1.0 
-            rhor = 0.27 * pr / (tr * z) # 2.8
-            z2 = Eq2p7(pr, tr, rhor, a)
-            rhor2 = 0.27 * pr / (tr * z2)
-            error1 = z2 - z
-            z = z2
+
+            def z_err(z):
+                rhor = 0.27 * pr / (tr * z) # 2.8
+                z2 = Eq2p7(pr, tr, rhor, a)
+                return z2-z
             
-            z2 = Eq2p7(pr, tr, rhor2, a)
-            error2 = z2 - z
-            drhor2 = rhor2 - rhor
-            m = (error2 - error1) / (drhor2)
-            
-            ii = 0
-            while abs(z2 - z) > 0.0001:
-                rhor = rhor2
-                z = z2
-                error1 = error2
-                rhor2 = (m * rhor2 - error2) / m
-                z2 = Eq2p7(pr, tr, rhor2, a)
-                
-                error2 = z2 - z
-                drhor2 = rhor2 - rhor
-                m = (error2 - error1) / (drhor2)
-            
-                ii +=1
-                if ii > 100:
-                    return("100 Z iterations - halted")
+            if sg < 1.725: # Gas, cutoff MW used = 50 lb/lb-mol
+                z = brentq(z_err, 0.2, 3.0)    
+            else: # Oil
+                mwo = sg * mw_air
+                zhigh = p*mwo / (0.4*62.42) / (R*(degf+f2r)) # Z-Factor consistent with liquid SG = 0.2
+                zlow = p*mwo / (1.1*62.42) / (R*(degf+f2r))  # Z-Factor consistent with liquid SG = 1.0
+                z = brentq(z_err, zlow, zhigh) # For Oil 
             zout.append(z)
         if single_p:
             return zout[0]
@@ -379,7 +368,7 @@ def gas_z(p: npt.ArrayLike, sg: float, degf: float, zmethod: z_method=z_method.D
     
     # Hall & Yarborough
     def z_hy(p, degf, sg, tc, pc):
-        # Using implemention in Whitson Monograph Eqs 3.42 - 3.45
+        # Using implemention in "Petroleum Production Engineering, A computer assisted approach"
         single_p = False
         if p.size == 1:
             single_p = True
@@ -389,46 +378,57 @@ def gas_z(p: npt.ArrayLike, sg: float, degf: float, zmethod: z_method=z_method.D
 
         zout = []
         
-        tpr = (degf + 460) / tc
+        tpr = (degf + f2r) / tc
         t = 1/tpr
-        t2, t3 = t**2, t**3
-        alpha = 0.06125*t*np.exp(-1.2*(1-t)**2)
+        t2 = t**2
+        A = 0.06125*t*np.exp(-1.2*(1-t)**2)
+        B = t*(14.76-9.76*t+4.58*t2)
+        C = t*(90.7-242.2*t+42.4*t2)
+        D = 2.18 + 2.82*t
             
         for p in ps:
             ppr = p / pc
 
             def fy(y): # Eq 3.43
-                y2, y3, y4 = y**2, y**3, y**4
-                x = -alpha*ppr + (y+y2+y3-y4)/(1-y)**3
-                x -= (14.76*t - 9.76*t2 + 4.58 * t3)*y2
-                x += (90.7*t - 242.2*t2 + 42.4*t3)*y**(2.18+2.82*t)
+                x = (y+y**2+y**3-y**4)/(1-y)**3 - A*ppr - B*y**2 + C*y**D
                 return x
             
-            def dfydy(y): # Eq 3.44
-                x = (1+4*y+4*y**2-4*y**3+y**4)/(1-y)**4
-                x -= (29.52*t - 19.52*t2 + 9.16*t3)*y
-                x += (2.18 + 2.82*t)*(90.7*t - 242.2*t2 + 42.4*t3)*y**(1.18+2.82*t)
-                return x
+            y = brentq(fy, 1e-8, 1-1e-8)
 
-            y = 0.001
-            f = fy(y)
-            i = 0
-            while abs(f) > 1e-8:
-                i+= 1
-                y -= f*dfydy(y)
-                f = fy(y)
-                if i > 99:
-                    print('Hall & Yarborough did not converge')
-                    break
-            zout.append( alpha * ppr / y)
+            zout.append( A * ppr / y)
         if single_p:
             return zout[0]
         else:
-            return np.array(zout)
+            return np.array(zout)    
+            
+    
+    # Gas Z-Factor from Wang, Ye & Wu (2021)
+    def z_wyw(p, degf, sg, tc, pc):
+        a = [0, 256.41675,7.18202,-178.5725,182.98704,-40.74427,2.24427,47.44825,5.2852,-0.14914,271.50446,16.2694,-121.51728,167.71477,-81.73093,20.36191,-2.1177,124.64444,-6.74331,0.20897,-0.00314]
+        single_p = False
+        if p.size == 1:
+            single_p = True
+            ps = [p]
+        else:
+            ps = p.tolist()
+
+        zout = []
+        tr = (degf + f2r) / tc
+            
+        for p in ps:
+            pr = p / pc
+            numerator = a[1]+a[2]*(1+a[3]*tr+a[4]*tr**2+a[5]*tr**3+a[6]*tr**4)*pr+a[7]*pr**2+a[8]*pr**3+a[9]*pr**4
+            denominator = a[10]+a[11]*(1+a[12]*tr+a[13]*tr**2+a[14]*tr**3+a[15]*tr**4+a[16]*tr**5)*pr+a[17]*pr**2+a[18]*pr**3+a[19]*pr**4+a[20]*pr**5
+            zout.append(numerator/denominator)
+        if single_p:
+            return zout[0]
+        else:
+            return np.array(zout)   
+
         
-    zfuncs = {'LIN': z_lin,
-              'DAK': zdak, 
-               'HY': z_hy}
+    zfuncs = {'DAK': zdak, 
+              'HY': z_hy,
+              'WYW': z_wyw}
         
     return zfuncs[zmethod.name](p, degf, sg, tc, pc) 
     
@@ -440,9 +440,9 @@ def gas_ug(p: npt.ArrayLike, sg: float, degf: float, zmethod: z_method=z_method.
           sg: Gas SG relative to air
           degf: Reservoir Temperature (deg F).  
           zmethod: Method for calculating Z-Factor
-                   'LIN' A linearized form (a bit faster) using https://link.springer.com/article/10.1007/s13202-015-0209-3,
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                    'HY' Hall & Yarborough (1973)
+                   'WYW' Wang, Ye & Wu (2021)
                    defaults to 'DAK' if not specified
           cmethod: Method for calculting critical properties
                    'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or 
@@ -458,9 +458,9 @@ def gas_ug(p: npt.ArrayLike, sg: float, degf: float, zmethod: z_method=z_method.
     zmethod, cmethod = validate_methods(['zmethod', 'cmethod'],[zmethod, cmethod])
               
     zee = gas_z(p=p, sg=sg, degf=degf, zmethod = zmethod, cmethod=cmethod, tc=tc, pc=pc, n2 = n2, co2 = co2, h2s = h2s)
-    t = degf + 460
-    m = 28.97 * sg
-    rho = m * p / (t * zee * 10.732 * 62.37)
+    t = degf + f2r
+    m = mw_air * sg
+    rho = m * p / (t * zee * R * 62.37)
     b = 3.448 + (986.4 / t) + (0.01009 * m) # 2.16
     c = 2.447 - (0.2224 * b) # 2.17
     a = (9.379 + (0.01607 * m)) * np.power(t, 1.5) / (209.2 + (19.26 * m) + t) #2.15
@@ -481,9 +481,9 @@ def gas_ugz(p: npt.ArrayLike, sg: float, degf: float, zee: npt.ArrayLike)-> np.n
             print('Warning, length of pressure and z-factor arrays should be the same')
     except:
         pass
-    t = degf + 460
-    m = 28.97 * sg
-    rho = m * p / (t * zee * 10.732 * 62.37)
+    t = degf + f2r
+    m = mw_air * sg
+    rho = m * p / (t * zee * R * 62.37)
     b = 3.448 + (986.4 / t) + (0.01009 * m) # 2.16
     c = 2.447 - (0.2224 * b) # 2.17
     a = (9.379 + (0.01607 * m)) * np.power(t, 1.5) / (209.2 + (19.26 * m) + t) #2.15
@@ -508,7 +508,7 @@ def gas_cg(p: npt.ArrayLike, sg: float, degf: float, n2: float = 0, co2: float =
     p = np.asarray(p)
     tc, pc = gas_tc_pc(sg=sg, n2=n2, co2=co2, h2s=h2s, tc=tc, pc=pc, cmethod=cmethod)
     pr = p / pc
-    tr = (degf + 460) / tc
+    tr = (degf + f2r) / tc
     zee = gas_z(p=p, degf=degf, sg=sg, tc=tc, pc=pc, n2 = n2, co2 = co2, h2s = h2s)
     
     a = [0, 0.3265, -1.07, -0.5339, 0.01569, -0.05165, 0.5475, -0.7361, 0.1844, 0.1056, 0.6134, 0.7210]
@@ -524,9 +524,9 @@ def gas_cg(p: npt.ArrayLike, sg: float, degf: float, n2: float = 0, co2: float =
 def gas_bg(p: npt.ArrayLike, sg: float, degf: float, zmethod: z_method=z_method.DAK, cmethod: c_method=c_method.PMC, n2: float = 0, co2: float = 0, h2s: float = 0, tc: float = 0, pc: float = 0)-> np.ndarray:
     """ Returns Bg (gas formation volume factor) for natural gas (rcf/scf)
         zmethod: Method for calculating Z-Factor
-                 'LIN' A linearized form (a bit faster) using https://link.springer.com/article/10.1007/s13202-015-0209-3,
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
+                 'WYW' Wang, Ye & Wu (2021)
                  defaults to 'DAK' if not specified
         cmethod: Method for calculting critical properties
                  'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or 
@@ -545,15 +545,15 @@ def gas_bg(p: npt.ArrayLike, sg: float, degf: float, zmethod: z_method=z_method.
     zmethod, cmethod = validate_methods(['zmethod', 'cmethod'],[zmethod, cmethod])
             
     zee = gas_z(p=p, degf=degf, sg=sg, tc=tc, pc=pc, n2=n2, co2=co2, h2s=h2s, zmethod=zmethod, cmethod=cmethod)
-    return (zee * (degf + 460) / (p * 35.37))
+    return (zee * (degf + f2r) / (p * 35.37))
 
 def gas_den(p: npt.ArrayLike, sg: float, degf: float, zmethod: z_method=z_method.DAK, cmethod: c_method=c_method.PMC, n2: float = 0, co2: float = 0, h2s: float = 0, tc: float = 0, pc: float = 0)-> np.ndarray:
     """ Returns gas density for natural gas (lb/cuft)
         
           zmethod: Method for calculating Z-Factor
-                   'LIN' A linearized form (a bit faster) using https://link.springer.com/article/10.1007/s13202-015-0209-3,
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                    'HY' Hall & Yarborough (1973)
+                   'WYW' Wang, Ye & Wu (2021)
                    defaults to 'DAK' if not specified
           cmethod: Method for calculting critical properties
                    'sut' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or 
@@ -572,10 +572,9 @@ def gas_den(p: npt.ArrayLike, sg: float, degf: float, zmethod: z_method=z_method
     zmethod, cmethod = validate_methods(['zmethod', 'cmethod'],[zmethod, cmethod])
             
     zee = gas_z(p=p, degf=degf, sg=sg, tc=tc, pc=pc, n2=n2, co2=co2, h2s=h2s, zmethod=zmethod, cmethod=cmethod)
-    m = sg * 28.97
-    t = degf + 460
-    r = 10.732
-    rhog = p * m / (zee * r * t)
+    m = sg * mw_air
+    t = degf + f2r
+    rhog = p * m / (zee * R * t)
     return rhog
 
 def gas_ponz2p(poverz: npt.ArrayLike, sg: float, degf: float, zmethod: z_method=z_method.DAK, cmethod: c_method=c_method.PMC, n2: float = 0, co2: float = 0, h2s: float = 0, tc: float = 0, pc: float = 0, rtol: float = 1E-7)-> np.ndarray:
@@ -584,9 +583,9 @@ def gas_ponz2p(poverz: npt.ArrayLike, sg: float, degf: float, zmethod: z_method=
         poverz: Gas pressure / Z-Factor (psia)
         
         zmethod: Method for calculating Z-Factor
-                 'LIN' A linearized form (a bit faster) using https://link.springer.com/article/10.1007/s13202-015-0209-3,
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
+                 'WYW' Wang, Ye & Wu (2021)
                  defaults to 'DAK' if not specified
         cmethod: Method for calculting critical properties
                  'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or 
@@ -633,9 +632,9 @@ def gas_grad2sg(grad: float, p: float, degf: float, zmethod: z_method=z_method.D
         p: Pressure at observation (psia)
         degf: Reservoir Temperature (deg F). Defaults to False if undefined 
         zmethod: Method for calculating Z-Factor
-                 'LIN' A linearized form (a bit faster) using https://link.springer.com/article/10.1007/s13202-015-0209-3,
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
+                 'WYW' Wang, Ye & Wu (2021)
                  defaults to 'DAK' if not specified
         cmethod: Method for calculting critical properties
                  'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or 
@@ -650,15 +649,13 @@ def gas_grad2sg(grad: float, p: float, degf: float, zmethod: z_method=z_method.D
           rtol: Relative solution tolerance. Will iterate until abs[(grad - calculation)/grad] < rtol
     """
     
-    t = degf + 460
-    r = 10.732
+    t = degf + f2r
     
     def grad_err(args, sg):
         grad, p, zmethod, cmethod, tc, pc, n2, co2, h2s = args
-        m = sg * 28.97
-        
+        m = sg * mw_air
         zee = gas_z(p=p, degf=degf, sg=sg, tc=tc, pc=pc, n2=n2, co2=co2, h2s=h2s, zmethod=zmethod, cmethod=cmethod)
-        grad_calc = p * m / (zee * r * t)/144
+        grad_calc = p * m / (zee * R * t)/144
         error = (grad - grad_calc)/grad
         return error
     
@@ -675,9 +672,9 @@ def gas_dmp(p1: float, p2: float, degf: float, sg: float, zmethod: z_method=z_me
         t: Gas Temperature (deg F)
         sg: Specific gravity of  gas (relative to air)
         zmethod: Method for calculating Z-Factor
-                   'LIN' A linearized form (a bit faster) using https://link.springer.com/article/10.1007/s13202-015-0209-3,
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                    'HY' Hall & Yarborough (1973)
+                   'WYW' Wang, Ye & Wu (2021)
                    defaults to 'DAK' if not specified
         cmethod: Method for calculting critical properties
                  'sut' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or 
@@ -715,14 +712,14 @@ def gas_fws_sg(sg_g: float, cgr: float, api_st: float) -> float:
     cond_vol = cgr * 5.61458                         # cuft/mmscf surface gas
     cond_sg = oil_sg(api_st)
     cond_mass = cond_vol*(cond_sg*62.4)              # lb
-    surface_gas_moles = 1e6 / 379.482                # lb-moles
-    surface_gas_mass = sg_g*28.97*surface_gas_moles  # lb
+    surface_gas_moles = 1e6 / scf_per_mol            # lb-moles
+    surface_gas_mass = sg_g*mw_air*surface_gas_moles  # lb
     cond_mw = 240 - 2.22 * api_st                    # lb/lb-moles (Standing correlation)  
     cond_moles = cond_mass / cond_mw                 # lb-moles   
     fws_gas_mass = cond_mass + surface_gas_mass      # lb
     fws_gas_moles = cond_moles + surface_gas_moles   # lb-moles
     fws_gas_mw = fws_gas_mass / fws_gas_moles        # lb/lb-moles
-    return fws_gas_mw / 28.97
+    return fws_gas_mw / mw_air
       
 def oil_rate_radial(k: npt.ArrayLike, h: npt.ArrayLike, pr: npt.ArrayLike, pwf: npt.ArrayLike, r_w: float, r_ext: float, uo: float, bo: float, S: float=0, vogel: bool=False, pb: float=0)-> np.ndarray:
     """ Returns liquid rate for radial flow (stb/day) using Darcy pseudo steady state equation
@@ -967,7 +964,7 @@ def oil_pbub(api: float, degf: float, rsb: float, sg_g: float=0, sg_sp: float=0,
                     
     def pbub_standing(api, degf, sg_g, rsb, sg_sp) -> float: # 1.63 in 'Oil 7 Gas Properties & Correlations' - http://dx.doi.org/10.1016/B978-0-12-803437-8.00001-4
         a = 0.00091*degf - 0.0125*api
-        return 18.2*((rsb/sg_g)**0.83*10**a-1.4)+14.7 # Adding 14.7 as I suspect this is in psig
+        return 18.2*((rsb/sg_g)**0.83*10**a-1.4)+psc # Adding 14.7 as I suspect this is in psig
         
     def pbub_valko_mccain(api, degf, sg_g, rsb, sg_sp) -> float:
         if rsb <=10:
@@ -1024,7 +1021,7 @@ def oil_rs_bub(api: float, degf: float, pb: float, sg_g: float=0, sg_sp: float=0
                     
     def rsbub_standing(api, degf, pb, sg_g, sg_sp) -> float:
         a = 0.00091*degf - 0.0125*api # Eq 1.64
-        return sg_sp*(((pb-14.7)/18.2+1.4)/10**a)**(1/0.83) # Eq 1.72 - Subtracting 14.7 as suspect this pressure in psig
+        return sg_sp*(((pb-psc)/18.2+1.4)/10**a)**(1/0.83) # Eq 1.72 - Subtracting 14.7 as suspect this pressure in psig
         
     def rsbub_valko_mccain(api, degf, pb, sg_g, sg_sp) -> float:
         # Solve via iteration. First guess using Standing Rsb, then simple Newton Iterations
@@ -1117,8 +1114,8 @@ def oil_rs(api: float, degf: float, sg_sp: float, p: float, pb: float=0, rsb: fl
         # Velarde, Blasingame & McCain (1999)
         # Equations 3.8a - 3.8f
         # Estimates Rs of depleting oil from separator oil observations
-        pb=max(14.7, pb)
-        p=max(14.7, p)
+        pb=max(psc, pb)
+        p=max(psc, p)
         if sg_sp * api * rsb == 0:
             print('Missing one of the required inputs: sg_sp, api, rsb, for the Velarde, Blasingame & McCain Rs calculation')
             sys.exit()
@@ -1127,22 +1124,22 @@ def oil_rs(api: float, degf: float, sg_sp: float, p: float, pb: float=0, rsb: fl
         C = [0.725167, -1.485480, -0.164741, -0.091330, 0.047094]
 
         xs = [A, B, C]
-        a = [x[0]*sg_sp**x[1]*api**x[2]*degf**x[3]*(pb-14.7)**x[4] for x in xs]
-        pr = (p-14.7)/(pb-14.7)
+        a = [x[0]*sg_sp**x[1]*api**x[2]*degf**x[3]*(pb-psc)**x[4] for x in xs]
+        pr = (p-psc)/(pb-psc)
         rsr = a[0]*pr**a[1]+(1-a[0])*pr**a[2]
         rs = rsb * rsr
         return rs
     
     def rs_standing(api, degf, sg_sp, p, pb, rsb):
         a = 0.00091*degf - 0.0125*api # Eq 1.64
-        return sg_sp*(((p-14.7)/18.2+1.4)/10**a)**(1/0.83) # Eq 1.72 - Subtracting 14.7 as suspect this pressure in psig
+        return sg_sp*(((p-psc)/18.2+1.4)/10**a)**(1/0.83) # Eq 1.72 - Subtracting 14.7 as suspect this pressure in psig
     
     def Rs_vasquezbegs(api, degf, sg_sp, p, pb, rsb):
         sg_gs = sg_sp*(1+5.912e-5*api*degf_sep*np.log10(p_sep/114.7)) # Gas sg normalized to 100 psig separator conditions
         if api <= 30:
-            return 0.0362*sg_gs*p**1.0937*np.exp(25.7240*(api/(degf+460)))
+            return 0.0362*sg_gs*p**1.0937*np.exp(25.7240*(api/(degf+f2r)))
         else:
-            return 0.0178*sg_gs*p**1.1870*np.exp(23.9310*(api/(degf+460)))
+            return 0.0178*sg_gs*p**1.1870*np.exp(23.9310*(api/(degf+f2r)))
 
     fn_dic = {'VELAR': Rs_velarde,
               'STAN': rs_standing,
@@ -1260,9 +1257,10 @@ def oil_deno(p: float, degf:float, rs:float, rsb:float, sg_g: float = 0, sg_sp: 
 
     # Density at or below initial bubble point pressure
     def Deno_standing_white_mccainhill(p: float, degf:float, rs:float, rsb:float, sg_g: float,sg_sp: float, pb: float, sg_o:float, api:float) -> float: # (1995), Eq 3.18a - 3.18g
+        
         if sg_sp > 0:
             a = np.array([-49.8930, 85.0149, -3.70373, 0.0479818, 2.98914, -0.0356888])
-            rho_po = 52.8 - 0.01*rs # First estimate
+            rho_po = max(52.8 - 0.01*rs,20) # First estimate
             err = 1
             i = 0
             while err > 1e-8:
@@ -1278,9 +1276,11 @@ def oil_deno(p: float, degf:float, rs:float, rsb:float, sg_g: float = 0, sg_sp: 
             rho_po = (rs*sg_g+4600*sg_o)/(73.71+rs*sg_g/rhoa) # pseudoliquid density, Eq 3.18b
         
         drho_p = (0.167+16.181*10**(-0.0425*rho_po))*p/1000 - 0.01*(0.299+263*10**(-0.0603*rho_po))*(p/1000)**2 # Eq 3.19d
+        
         rho_bs = rho_po + drho_p # fake density used in calculations, Eq 3.19e
-        drho_t = (0.00302+1.505*rho_bs**-0.951)*(degf-60)**0.938-(0.0216-0.0233*10**(-0.0161*rho_bs))*(degf-60)**0.475 # Eq 3.19f
+        drho_t = (0.00302+1.505*rho_bs**-0.951)*(degf-tscf)**0.938-(0.0216-0.0233*10**(-0.0161*rho_bs))*(degf-tscf)**0.475 # Eq 3.19f
         rho_or = rho_bs - drho_t # Eq 3.19g
+        
         return rho_or
     
     def Deno_p_gt_pb(p: float, degf: float, rs: float, rsb:float, sg_g: float, sg_sp: float, pb: float, sg_o: float, api:float) -> float:
@@ -1419,7 +1419,7 @@ def make_bot_og(pi: float, api: float, degf: float, sg_g: float, pmax: float, pb
           - writes out pvto include file
     """  
     zmethod, rsmethod, cmethod, denomethod, bomethod, pbmethod = validate_methods(['zmethod', 'rsmethod', 'cmethod', 'denomethod', 'bomethod', 'pbmethod'],[zmethod, rsmethod, cmethod, denomethod, bomethod, pbmethod])
-    pmin = max(pmin, 14.7)
+    pmin = max(pmin, psc)
     sg_o = oil_sg(api)
     rsb_frac = 1.0
     
@@ -1555,7 +1555,7 @@ def make_bot_og(pi: float, api: float, degf: float, sg_g: float, pmax: float, pb
                 pass
      
     st_deno = sg_o * 62.4 # lb/cuft
-    st_deng = gas_den(p=14.7, sg=sg_sp, degf=60, zmethod=zmethod, cmethod=cmethod)
+    st_deng = gas_den(p=psc, sg=sg_sp, degf=tscf, zmethod=zmethod, cmethod=cmethod)
     bw, lden, visw, cw, rsw = brine_props(p=pi, degf=degf, wt=wt, ch4_sat=ch4_sat)
     res_denw = lden * 62.4 # lb/cuft
     res_cw = cw
@@ -1630,7 +1630,7 @@ def gas_water_content(p: float, degf: float) -> float:
         p: Water pressure (psia)
     """
     t = degf
-    content = (47484 * (np.exp(69.103501 + (-13064.76 / (t + 460)) + (-7.3037 * np.log(t + 460)) + (0.0000012856 * ((t + 460) * (t + 460))))) / (p) + (np.power(10, ((-3083.87 / (t + 460)) + 6.69449)))) * (1 - (0.00492 * 0) - (0.00017672 * (0 * 0))) / 8.32 / 42
+    content = (47484 * (np.exp(69.103501 + (-13064.76 / (t + f2r)) + (-7.3037 * np.log(t + f2r)) + (0.0000012856 * ((t + f2r) * (t + f2r))))) / (p) + (np.power(10, ((-3083.87 / (t + f2r)) + 6.69449)))) * (1 - (0.00492 * 0) - (0.00017672 * (0 * 0))) / 8.32 / 42
     return content
 
 def brine_props(p: float, degf: float, wt: float, ch4_sat: float) -> tuple:
@@ -1763,7 +1763,7 @@ def brine_props(p: float, degf: float, wt: float, ch4_sat: float) -> tuple:
     vb0_sc = 1/Rhob_scm    # vb0 at standard conditions - (Calculated by evaluating vbo at 0.1013 MPa and 15 degC)
     Bw = (((1000+m*58.4428)*vb0)+(mch4*Vmch4b))/((1000+m*58.4428)*vb0_sc)
         
-    zee_sc = gas_z(p=14.7, sg=0.5537, degf=60)
+    zee_sc = gas_z(p=psc, sg=0.5537, degf=tscf)
     vmch4g_sc =zee_sc*8.314467*(273+15)/0.1013 #  Eq 4.34
     rsw_new = mch4*vmch4g_sc/((1000+m*58.4428)*vb0_sc)
     rsw_new_oilfield = rsw_new/0.1781076    # Convert to scf/stb
