@@ -388,12 +388,12 @@ def gas_z(p: npt.ArrayLike, sg: float, degf: float, zmethod: z_method=z_method.D
             
         for p in ps:
             ppr = p / pc
-
+            low_y, high_y = A*ppr/3, A*ppr/0.2 # Establish limits on y consistent with Z range 0.3 - 3.0
             def fy(y): # Eq 3.43
                 x = (y+y**2+y**3-y**4)/(1-y)**3 - A*ppr - B*y**2 + C*y**D
                 return x
             
-            y = brentq(fy, 1e-8, 1-1e-8)
+            y = brentq(fy, low_y, high_y)
 
             zout.append( A * ppr / y)
         if single_p:
