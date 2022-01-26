@@ -34,7 +34,7 @@ Upgrade previous installations with
 
 .. code-block:: shell
 
-pip install pyrestoolbox --upgrade
+    pip install pyrestoolbox --upgrade
 
 
 Function List
