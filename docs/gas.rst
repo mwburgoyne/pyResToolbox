@@ -17,9 +17,9 @@ pyResToolBox uses class objects to track calculation options through the functio
      - z_method
      - Method for calculating gas Z-Factor. Defaults to 'DAK'. 
        Options are:
-        + 'DAK': Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-        + 'HY': Hall & Yarborough (1973)
-        + 'WYW': Wang, Ye & Wu (2021)
+        + 'DAK': Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al. - Slowest, Most Accurate
+        + 'HY': Hall & Yarborough (1973) - Second Fastest
+        + 'WYW': Wang, Ye & Wu (2021) - Fastest, Least Accurate
    * - cmethod
      - c_method
      - Method for calculating gas critical properties. Defaults to 'PMC' 
