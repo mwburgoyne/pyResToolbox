@@ -21,6 +21,7 @@ Includes functions to perform simple calculations including;
 - Creation of Corey and LET relative permeability tables in Eclipse format
 
 Changelist in v1.1:
+
 - Fix API to SG calculation (141.4 vs 141.5)
 - Added lower limit to first rho_po estimate for Oil Density with McCain method to avoid negative values with high Rs
 - Added oil_sg and oil_api functions
