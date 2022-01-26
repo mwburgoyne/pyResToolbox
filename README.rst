@@ -20,7 +20,15 @@ Includes functions to perform simple calculations including;
 - Generation of AQUTAB include file influence functions for use in ECLIPSE
 - Creation of Corey and LET relative permeability tables in Eclipse format
 
-This is the initial public release, with improvements and additions expected over time. Apologies in advance that it is only in oilfield units with no current plans to add multi-unit support.
+Changelist in v1.1:
+- Fix API to SG calculation (141.4 vs 141.5)
+- Added lower limit to first rho_po estimate for Oil Density with McCain method to avoid negative values with high Rs
+- Added oil_sg and oil_api functions
+- Modified HY Z-Factor solve algorithm to improve robustness
+- Modified DAK Z-Factor solve algorithm to improve robustness
+- Added Gas Z-Factor correlation from Wang, Ye & Wu (2021)
+- Removed 'LIN' Z-Factor method due to significant errors above 12,000 psi. Use WYW method instead if speed needed.
+
 
 Function List
 =============
@@ -58,6 +66,8 @@ Function List
 |                                                                                                   | - Estimate soln gas SG from oil                                        |
 |                                                                                                   | - Estimate SG of gas post separator                                    |
 |                                                                                                   | - Calculate weighted average surface gas SG                            |
+|                                                                                                   | - Oil API to SG                                                        |
+|                                                                                                   | - Oil SG to API                                                        |
 +---------------------------------------------------------------------------------------------------+------------------------------------------------------------------------+
 | `Brine PVT <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/water.rst>`_                | - Calculate suite of brine properties                                  |
 +---------------------------------------------------------------------------------------------------+------------------------------------------------------------------------+
