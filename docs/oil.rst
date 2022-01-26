@@ -17,7 +17,7 @@ pyResToolBox uses class objects to track calculation options through the functio
      - z_method
      - Method for calculating gas Z-Factor. Defaults to 'DAK'. 
        Options are:
-        + 'LIN': An explicit linearized form that is faster than DAK or HY `(2015) <https://link.springer.com/article/10.1007/s13202-015-0209-3>`_
+        + 'WYW': An explicit form that is faster than DAK or HY by Wang, Ye & Wu (2021)
         + 'DAK': Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
         + 'HY': Hall & Yarborough (1973)
    * - cmethod
