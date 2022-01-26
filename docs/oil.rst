@@ -110,6 +110,10 @@ Function List
      - `pyrestoolbox.sg_st_gas`_
    * - Weighted average surface gas SG
      - `pyrestoolbox.sgg_wt_avg`_  
+   * - Oil API from SG
+     - `pyrestoolbox.oil_api`_  
+   * - Oil SG from API
+     - `pyrestoolbox.oil_sg`_  
 
 pyrestoolbox.oil_ja_sg
 ======================
@@ -786,7 +790,7 @@ pyrestoolbox.sgg_wt_avg
 
 .. code-block:: python
 
-    sgg_wt_avg (sg_sp, rsp, sg_st, rst) -> float
+    sgg_wt_avg(sg_sp, rsp, sg_st, rst) -> float
 
 Calculates weighted average specific gravity of surface gas (sg_g) from separator and stock tank gas properties. Returns sg_g (Weighted average surface gas SG relative to air). From McCain Correlations book, Eq 3.4
 
@@ -816,3 +820,59 @@ Examples:
 
     >>> rtb.sgg_wt_avg (sg_sp=0.72, rsp=1000, sg_st=1.1, rst=5)
     0.7218905472636816
+
+
+pyrestoolbox.oil_api
+=======================
+
+.. code-block:: python
+
+    oil_api(sg_value) -> float
+
+Returns oil API given specific gravity value of oil
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - sg_value
+     - float
+     - Specific gravity (relative to water)
+     
+Examples:
+
+.. code-block:: python
+
+    >>> rtb.oil_api (sg_value=0.82)
+    41.0609756097561
+
+
+pyrestoolbox.oil_sg
+=======================
+
+.. code-block:: python
+
+    oil_sg(api_value) -> float
+
+Returns oil specific gravity given API value of oil
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - api_value
+     - float
+     - Oil API density
+     
+Examples:
+
+.. code-block:: python
+
+    >>> rtb.oil_sg(api_value=45)
+    0.8016997167138811
