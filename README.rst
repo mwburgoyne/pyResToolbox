@@ -30,6 +30,12 @@ Changelist in v1.1:
 - Added Gas Z-Factor correlation from Wang, Ye & Wu (2021)
 - Removed 'LIN' Z-Factor method due to significant errors above 12,000 psi. Use WYW method instead if speed needed.
 
+Upgrade previous installations with
+
+.. code-block:: shell
+
+pip install pyrestoolbox --upgrade
+
 
 Function List
 =============
