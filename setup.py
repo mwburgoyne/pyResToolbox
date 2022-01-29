@@ -1,5 +1,7 @@
 from setuptools import setup, find_packages
 #import markdown
+import importlib
+import collections
 import os
 
 ROOT = os.path.abspath(os.path.dirname(__file__))
@@ -10,7 +12,7 @@ long_description= f #markdown.markdown( f.read() )
 setup(
     name = 'pyrestoolbox',
     packages = find_packages(),
-    version = '1.1',  # Ideally should be same as your GitHub release tag varsion
+    version = '1.1.4',  # Ideally should be same as your GitHub release tag varsion
     description = 'pyResToolbox - A collection of Reservoir Engineering Utilities',
     long_description= long_description,
     long_description_content_type = 'text/markdown',
@@ -22,6 +24,11 @@ setup(
     classifiers = [],
     install_requires=[
         'requests',
-        'importlib; python_version == "2.6"'
-    ],
+        'numpy',
+        'scipy',
+        'pandas',
+        'tabulate',
+        'gwr_inversion',
+        'mpmath'
+    ]
 )
