@@ -20,6 +20,10 @@ Includes functions to perform simple calculations including;
 - Generation of AQUTAB include file influence functions for use in ECLIPSE
 - Creation of Corey and LET relative permeability tables in Eclipse format
 
+Changelist in v1.1.4:
+
+- Attempting to fix reported issue with required dependencies not installing correctly 
+
 Changelist in v1.1:
 
 - Fix API to SG calculation (141.4 vs 141.5)
