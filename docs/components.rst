@@ -60,12 +60,12 @@ Examples:
 .. code-block:: python
 
     >>> from pyrestoolbox import pyrestoolbox as rtb
-    >>> rtb.comp_library.prop('CH4', 'Pc_psia')
+    >>> rtb.comp_library.prop(comp = 'CH4', prop = 'Pc_psia')
     667.029
 
 .. code-block:: python
 
-    >>> rtb.comp_library.prop('C3', 'VTran'), rtb.comp_library.prop('C3', 'VTran', model='SRK')
+    >>> rtb.comp_library.prop(comp = 'C3', prop = 'VTran'), rtb.comp_library.prop(comp = 'C3', prop = 'VTran', model='SRK')
     (-0.06381, 0.09075)
 
 
