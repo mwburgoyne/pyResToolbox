@@ -28,7 +28,7 @@ Function List
      
      
 
-pyrestoolbox.comp_library.prop(comp, prop, model='PR79')
+pyrestoolbox.comp_library.prop
 ======================
 
 .. code-block:: python
