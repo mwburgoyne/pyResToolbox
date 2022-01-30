@@ -22,6 +22,7 @@ import sys
 from collections import Counter
 import glob
 from enum import Enum
+import pkg_resources
 
 import numpy as np
 import numpy.typing as npt
@@ -41,7 +42,6 @@ f2r = 459.67  # Offset to convert degrees F to degrees Rankine
 tscr = tscf + f2r  # Standard conditions temperature (deg R)
 mw_air = 28.97  # MW of Air
 scf_per_mol = R * tscr / psc  # scf/lb-mol (V = ZnRT/P, Z = 1, n = 1)
-
 
 class z_method(Enum):  # Gas Z-Factor calculation model
     DAK = 0
@@ -141,6 +141,13 @@ def oil_sg(api_value: float) -> float:
     return 141.5 / (api_value + 131.5)
 
 
+def oil_api(sg_value: float) -> float:
+    """ Returns oil API given specific gravity value of oil
+        sg_value: Specific gravity (relative to water)
+    """
+    return 141.5 / sg_value - 131.5
+    
+    
 def gas_rate_radial(
     k: npt.ArrayLike,
     h: npt.ArrayLike,
@@ -647,10 +654,10 @@ def gas_z(
                 mwo = sg * mw_air
                 zhigh = (
                     p * mwo / (0.4 * 62.42) / (R * (degf + f2r))
-                )  # Z-Factor consistent with liquid SG = 0.2
+                )  # Z-Factor consistent with liquid SG = 0.4
                 zlow = (
                     p * mwo / (1.1 * 62.42) / (R * (degf + f2r))
-                )  # Z-Factor consistent with liquid SG = 1.0
+                )  # Z-Factor consistent with liquid SG = 1.1
                 z = brentq(z_err, zlow, zhigh)  # For Oil
             zout.append(z)
         if single_p:
@@ -4225,3 +4232,46 @@ def influence_tables(
         text_file.close()
 
     return (tD, pDs)
+
+class component_library:
+    def __init__(self, model='PR79'):
+        path = 'component_library.xlsx'
+        filepath = pkg_resources.resource_filename(__name__, path)
+        self.df = pd.read_excel(filepath)
+        self.model=model
+        self.all_cols = ['Name','MW','Tc_R','Pc_psia','Visc_Zc','Pchor','Vc_cuft_per_lbmol']
+        self.model_cols = ['Acentric','VTran','Tb_F','SpGr']
+        self.all_dics = {}
+        self.model_dics = {}
+        self.components = self.df['Component'].tolist()
+        self.names = self.df['Name'].tolist()
+        self.property_list = self.all_cols + self.model_cols
+        # Create dictionaries for all the model agnostic properties
+        for col in self.all_cols:
+            self.all_dics[col.upper()] = dict(zip(self.df['Component'], self.df[col]))
+        # And then for all the model specific properties
+        self.models = ['PR79', 'PR77', 'SRK', 'RK']
+        for model in self.models:
+            model_dic = {}
+            for col in self.model_cols:
+                model_dic[col.upper()] = dict(zip(self.df['Component'], self.df[model+'-'+col]))
+            self.model_dics[model]=model_dic
+    
+    def prop(self, comp, prop, model='PR79'):
+        comp = comp.upper()
+        if comp not in self.components:
+            return 'Component not in Library'
+        prop = prop.upper()
+        props = [x.upper() for x in self.property_list]
+        if prop not in props:
+            return 'Property not in Library'
+        if prop in [x.upper() for x in self.all_cols]:
+            return self.all_dics[prop][comp]
+        if prop in [x.upper() for x in self.model_cols]:
+            if model.upper() not in self.models:
+                return 'Incorrect Model Name'
+            dic = self.model_dics[model.upper()]
+            return dic[prop][comp]
+        return 'Component or Property not in library'
+
+comp_library = component_library()
