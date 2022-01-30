@@ -69,9 +69,8 @@ Function List
 |                                                                                                    | - Convert Gas Gradient to SG                             |
 |                                                                                                    | - Delta Pseudopressure                                   |
 |                                                                                                    | - Gas Condensate FWS SG                                  |
-+----------------------------------------------------------------------------------------------------+----------------------------------------------------------+                                                |
++----------------------------------------------------------------------------------------------------+----------------------------------------------------------+
 | `Component Library <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/components.rst>`_    | - Return critical parameters for typical components      |
-|                                                                                                    |                                                          |
 +----------------------------------------------------------------------------------------------------+----------------------------------------------------------+
 | `Oil PVT  <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/oil.rst>`_                    | - Oil Density from MW                                    |
 |                                                                                                    | - Oil Critical Properties with Twu                       |
