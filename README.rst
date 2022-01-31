@@ -186,21 +186,46 @@ Or creating black oil table information for oil
 
     >>> results = rtb.make_bot_og(pi=4000, api=38, degf=175, sg_g=0.68, pmax=5000, pb=3900, rsb=2300, nrows=50)
     >>> df, st_deno, st_deng, res_denw, res_cw, visw, pb, rsb, rsb_frac, usat = results['bot'], results['deno'], results['deng'], results['denw'], results['cw'], results['uw'], results['pb'], results['rsb'], results['rsb_scale'], results['usat']
+    >>> 
     >>> print('Stock Tank Oil Density:', st_deno, 'lb/cuft')
     >>> print('Stock Tank Gas Density:', st_deng, 'lb/cuft')
     >>> print('Reservoir Water Density:', res_denw, 'lb/cuft')
     >>> print('Reservoir Water Compressibility:', res_cw, '1/psi')
     >>> print('Reservoir Water Viscosity:', visw,'cP')
-
+    >>> 
     >>> fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10,10))
-    >>> ax1.plot(df['Pressure (psia)'], df['Rs (scf/stb)'])
+    >>> ax1.plot(df['Pressure (psia)'], df['Rs (mscf/stb)'])
     >>> ax2.plot(df['Pressure (psia)'], df['Bo (rb/stb)'])
     >>> ax3.plot(df['Pressure (psia)'], df['uo (cP)'])
     >>> ax4.semilogy(df['Pressure (psia)'], df['Co (1/psi)'])
-    >>> ...
+    >>> 
+    >>> fig.suptitle('Black Oil Properties')
+    >>> ax1.set_title("Rs vs P")
+    >>> ax1.set_ylabel('Rs (mscf/stb)')
+    >>> ax1.set_xlabel('Pressure (psia)')
+    >>> ax1.grid('both')
+    >>> 
+    >>> ax2.set_title("Bo vs P")
+    >>> ax2.set_ylabel('Bo (rb/stb)')
+    >>> ax2.set_xlabel('Pressure (psia)')
+    >>> ax2.grid('both')
+    >>> 
+    >>> ax3.set_title("Viso vs P")
+    >>> ax3.set_xlabel('Pressure (psia)')
+    >>> ax3.set_ylabel('Viscosity (cP)')
+    >>> ax3.grid('both')
+    >>> 
+    >>> ax4.set_title("Co vs P")
+    >>> ax4.set_ylabel('Co (1/psi)')
+    >>> ax4.set_xlabel('Pressure (psia)')
+    >>> ax4.grid('both')
+    >>> 
+    >>> plt.tight_layout()
     >>> plt.show()
-    Stock Tank Oil Density: 52.05522123893805 lb/cuft
-    Stock Tank Gas Density: 0.052025361717109773 lb/cuft
+    Iteratively solving for Rsb fraction to use in order to harmonize user specified Pb and Rsb
+    
+    Stock Tank Oil Density: 52.09203539823009 lb/cuft
+    Stock Tank Gas Density: 0.052046870460837856 lb/cuft
     Reservoir Water Density: 61.40223160167964 lb/cuft
     Reservoir Water Compressibility: 2.930237693350768e-06 1/psi
     Reservoir Water Viscosity: 0.3640686136171888 cP
