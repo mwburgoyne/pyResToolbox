@@ -32,7 +32,7 @@ Returns the Beta value consistent with the Lorenz coefficient given, and impleme
      - Integer value specifying the number of table rows desired
    * - krtable
      - str or kr_table class object
-     - A string or kr_table Enum class that specifies one of three table type choices - SWOF, SGOF or SGFN. Default is 'SWOF'.
+     - A string or kr_table Enum class that specifies one of three table type choices - SWOF, SGOF or SGWFN. Default is 'SWOF'.
    * - krfamily
      - str or kr_table class object
      - A string or kr_family Enum class that specifies one of two curve function choices - COR or LET. Default is 'COR'
