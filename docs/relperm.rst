@@ -11,14 +11,13 @@ While there are many parameters, users need only define those relevant to their 
 Function returns a DataFrame of results, and optionally exports to ECLIPSE styled include file.
 
 
-pyrestoolbox.rel_perm
+pyrestoolbox.rel_perm_table
 ======================
 
 .. code-block:: python
 
-    rel_perm(rows, krtable='SWOF', krfamily='COR', kromax=1, krgmax=1, krwmax=1, swc=0, swcr=0, sorg=0, sorw=0, sgcr=0, no=1, nw=1, ng=1, Lw=1, Ew=1, Tw=1, Lo=1, Eo=1, To=1, Lg=1, Eg=1, Tg=1, export=False)-> pd.DataFrame:
-
-Returns the Beta value consistent with the Lorenz coefficient given, and implementation method selected    
+    rel_perm_table(rows, krtable='SWOF', krfamily='COR', kromax=1, krgmax=1, krwmax=1, swc=0, swcr=0, sorg=0, sorw=0, sgcr=0, no=1, nw=1, ng=1, Lw=1, Ew=1, Tw=1, Lo=1, Eo=1, To=1, Lg=1, Eg=1, Tg=1, export=False)-> pd.DataFrame:
+  
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -80,7 +79,7 @@ Returns the Beta value consistent with the Lorenz coefficient given, and impleme
 Examples:
     >>> from pyrestoolbox import pyrestoolbox as rtb
     >>> import matplotlib.pyplot as plt
-    >>> df = rtb.rel_perm(rows=25, krtable='SGOF', krfamily='LET', kromax =1, krgmax =1, swc =0.2, sorg =0.15, Lo=2.5, Eo = 1.25, To = 1.75, Lg = 1.2, Eg = 1.5, Tg = 2.0)
+    >>> df = rtb.rel_perm_table(rows=25, krtable='SGOF', krfamily='LET', kromax =1, krgmax =1, swc =0.2, sorg =0.15, Lo=2.5, Eo = 1.25, To = 1.75, Lg = 1.2, Eg = 1.5, Tg = 2.0)
     >>> plt.plot(df['Sg'], df['Krgo'], c = 'r', label='Gas')
     >>> plt.plot(df['Sg'], df['Krog'], c = 'g', label='Oil')
     >>> plt.title('SGOF Gas Oil LET Relative Permeability Curves')
@@ -95,7 +94,7 @@ Examples:
 
 .. code-block:: python
 
-    >>> df = rtb.rel_perm(rows=25, krtable='SWOF', kromax =1, krwmax =0.25, swc =0.15, swcr = 0.2, sorw =0.15, no=2.5, nw=1.5)
+    >>> df = rtb.rel_perm_table(rows=25, krtable='SWOF', kromax =1, krwmax =0.25, swc =0.15, swcr = 0.2, sorw =0.15, no=2.5, nw=1.5)
     >>> plt.plot(df['Sw'], df['Krow'], c = 'g', label='Oil')
     >>> plt.plot(df['Sw'], df['Krwo'], c = 'b', label='Water')
     >>> plt.title('SWOF Water Oil Corey Relative Permeability Curves')
