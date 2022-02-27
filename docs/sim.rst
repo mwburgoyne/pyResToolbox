@@ -21,7 +21,7 @@ Function List
      - `pyrestoolbox.simtools.rr_solver`_
      
 
-pyrestoolbox.ix_extract_problem_cells
+pyrestoolbox.simtools.ix_extract_problem_cells
 ======================
 
 .. code-block:: python
