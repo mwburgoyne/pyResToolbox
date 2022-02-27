@@ -12,13 +12,13 @@ Function List
    * - Task
      - Function
    * - Extracting cells with convergence issues from IX PRT file
-     - `pyrestoolbox.ix_extract_problem_cells`_  
+     - `pyrestoolbox.simtools.ix_extract_problem_cells`_  
    * - Solves Van Everdingin & Hurst Constant Terminal Rate solution via inverse Laplace transform and optionally writes out ECLIPSE styled AQUTAB include file
-     - `pyrestoolbox.influence_tables`_
+     - `pyrestoolbox.simtools.influence_tables`_
    * - Performs a recursive ECLIPSE deck zip/check for all INCLUDE files
-     - `pyrestoolbox.zip_check_ecl`_
+     - `pyrestoolbox.simtools.zip_check_ecl`_
    * - Solves the Rachford Rice equation
-     - `pyrestoolbox.rr_solver`_
+     - `pyrestoolbox.simtools.rr_solver`_
      
 
 pyrestoolbox.ix_extract_problem_cells
