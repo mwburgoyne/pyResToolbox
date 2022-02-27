@@ -21,6 +21,11 @@ Includes functions to perform simple calculations including;
 - Generation of AQUTAB include file influence functions for use in ECLIPSE
 - Creation of Corey and LET relative permeability tables in Eclipse format
 
+Changelist in 1.3.0:
+
+- Added robust Rachford Rice solver in Simulation Helpers
+- Moved relative permeability functions and simulation helpers to seperate .simtools module
+
 Changelist in v1.2.0:
 
 - Added Component Critical Property Library
@@ -51,56 +56,57 @@ Upgrade previous installations with
 Function List
 =============
 
-+----------------------------------------------------------------------------------------------------+----------------------------------------------------------+
-| `Inflow <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/inflow.rst>`_                   | - Gas Flow Rate Radial                                   |
-|                                                                                                    | - Gas Flow Rate Linear                                   |
-|                                                                                                    | - Oil Flow Rate Radial                                   |
-|                                                                                                    | - Oil Flow Rate Linear                                   |
-+----------------------------------------------------------------------------------------------------+----------------------------------------------------------+
-| `Gas PVT <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/gas.rst>`_                     | - Gas Tc & Pc Calculation                                |
-|                                                                                                    | - Gas Z-Factor Calculation                               |
-|                                                                                                    | - Gas Viscosity                                          |
-|                                                                                                    | - Gas Viscosity * Z                                      |
-|                                                                                                    | - Gas Compressibility                                    |
-|                                                                                                    | - Gas Formation Volume Factor                            |
-|                                                                                                    | - Gas Density                                            |
-|                                                                                                    | - Gas Water of Condensation                              |
-|                                                                                                    | - Convert P/Z to P                                       |
-|                                                                                                    | - Convert Gas Gradient to SG                             |
-|                                                                                                    | - Delta Pseudopressure                                   |
-|                                                                                                    | - Gas Condensate FWS SG                                  |
-+----------------------------------------------------------------------------------------------------+----------------------------------------------------------+
-| `Component Library <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/components.rst>`_    | - Return critical parameters for typical components      |
-+----------------------------------------------------------------------------------------------------+----------------------------------------------------------+
-| `Oil PVT  <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/oil.rst>`_                    | - Oil Density from MW                                    |
-|                                                                                                    | - Oil Critical Properties with Twu                       |
-|                                                                                                    | - Incrememtal GOR post Separation                        |
-|                                                                                                    | - Oil Bubble Point Pressure                              |
-|                                                                                                    | - Oil GOR at Pb                                          |
-|                                                                                                    | - Oil GOR at P                                           |
-|                                                                                                    | - Oil Compressibility                                    |
-|                                                                                                    | - Oil Density                                            |
-|                                                                                                    | - Oil Formation Volume Factor                            |
-|                                                                                                    | - Oil Viscosity                                          |
-|                                                                                                    | - Generate Black Oil Table data                          |
-|                                                                                                    | - Estimate soln gas SG from oil                          |
-|                                                                                                    | - Estimate SG of gas post separator                      |
-|                                                                                                    | - Calculate weighted average surface gas SG              |
-|                                                                                                    | - Oil API to SG                                          |
-|                                                                                                    | - Oil SG to API                                          |
-+----------------------------------------------------------------------------------------------------+----------------------------------------------------------+
-| `Brine PVT <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/water.rst>`_                 | - Calculate suite of brine properties                    |
-+----------------------------------------------------------------------------------------------------+----------------------------------------------------------+
-| `Permeability Layering <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/layer.rst>`_     | - Lorenz coefficient from Beta value                     |
-|                                                                                                    | - Lorenz coefficient from flow fraction                  |
-|                                                                                                    | - Lorenz coefficient to flow fraction                    |
-|                                                                                                    | - Lorenz coefficient to permeability array               |
-+----------------------------------------------------------------------------------------------------+----------------------------------------------------------+
-| `Simulation Helpers <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/sim.rst>`_          | - Summarize IX convergence errors from PRT file          |
-|                                                                                                    | - Create Aquifer Influence Functions                     |
-+----------------------------------------------------------------------------------------------------+----------------------------------------------------------+
-| `Relative Permeability  <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/relperm.rst>`_  | - Create sets of rel perm tables                         |
-+----------------------------------------------------------------------------------------------------+----------------------------------------------------------+
++----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
+| `Inflow <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/inflow.rst>`_                   | - Gas Flow Rate Radial                                          |
+|                                                                                                    | - Gas Flow Rate Linear                                          |
+|                                                                                                    | - Oil Flow Rate Radial                                          |
+|                                                                                                    | - Oil Flow Rate Linear                                          |
++----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
+| `Gas PVT <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/gas.rst>`_                     | - Gas Tc & Pc Calculation                                       |
+|                                                                                                    | - Gas Z-Factor Calculation                                      |
+|                                                                                                    | - Gas Viscosity                                                 |
+|                                                                                                    | - Gas Viscosity * Z                                             |
+|                                                                                                    | - Gas Compressibility                                           |
+|                                                                                                    | - Gas Formation Volume Factor                                   |
+|                                                                                                    | - Gas Density                                                   |
+|                                                                                                    | - Gas Water of Condensation                                     |
+|                                                                                                    | - Convert P/Z to P                                              |
+|                                                                                                    | - Convert Gas Gradient to SG                                    |
+|                                                                                                    | - Delta Pseudopressure                                          |
+|                                                                                                    | - Gas Condensate FWS SG                                         |
++----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
+| `Component Library <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/components.rst>`_    | - Return critical parameters for typical single components      |
++----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
+| `Oil PVT  <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/oil.rst>`_                    | - Oil Density from MW                                           |
+|                                                                                                    | - Oil Critical Properties with Twu                              |
+|                                                                                                    | - Incrememtal GOR post Separation                               |
+|                                                                                                    | - Oil Bubble Point Pressure                                     |
+|                                                                                                    | - Oil GOR at Pb                                                 |
+|                                                                                                    | - Oil GOR at P                                                  |
+|                                                                                                    | - Oil Compressibility                                           |
+|                                                                                                    | - Oil Density                                                   |
+|                                                                                                    | - Oil Formation Volume Factor                                   |
+|                                                                                                    | - Oil Viscosity                                                 |
+|                                                                                                    | - Generate Black Oil Table data                                 |
+|                                                                                                    | - Estimate soln gas SG from oil                                 |
+|                                                                                                    | - Estimate SG of gas post separator                             |
+|                                                                                                    | - Calculate weighted average surface gas SG                     |
+|                                                                                                    | - Oil API to SG                                                 |
+|                                                                                                    | - Oil SG to API                                                 |
++----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
+| `Brine PVT <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/water.rst>`_                 | - Calculate suite of brine properties                           |
++----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
+| `Permeability Layering <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/layer.rst>`_     | - Lorenz coefficient from Beta value                            |
+|                                                                                                    | - Lorenz coefficient from flow fraction                         |
+|                                                                                                    | - Lorenz coefficient to flow fraction                           |
+|                                                                                                    | - Lorenz coefficient to permeability array                      |
++----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
+| `Simulation Helpers <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/sim.rst>`_          | - Summarize IX convergence errors from PRT file                 |
+|                                                                                                    | - Create Aquifer Influence Functions                            |
+|                                                                                                    | - Perform a recursive ECLIPSE deck zip/check for INCLUDE files  |
+|                                                                                                    | - Solve Rachford Rice for user specified feed Zis and Ki's      |
+|                                                                                                    | - Create sets of rel perm tables                                |
++----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
 
 
 Getting Started
@@ -128,7 +134,7 @@ A set of Gas-Oil relative permeability curves with the LET method
 .. code-block:: python
 
     >>> import matplotlib.pyplot as plt
-    >>> df = rtb.rel_perm(rows=25, krtable='SGOF', krfamily='LET', kromax =1, krgmax =1, swc =0.2, sorg =0.15, Lo=2.5, Eo = 1.25, To = 1.75, Lg = 1.2, Eg = 1.5, Tg = 2.0)
+    >>> df = rtb.simtools.rel_perm(rows=25, krtable='SGOF', krfamily='LET', kromax =1, krgmax =1, swc =0.2, sorg =0.15, Lo=2.5, Eo = 1.25, To = 1.75, Lg = 1.2, Eg = 1.5, Tg = 2.0)
     >>> plt.plot(df['Sg'], df['Krgo'], c = 'r', label='Gas')
     >>> plt.plot(df['Sg'], df['Krog'], c = 'g', label='Oil')
     >>> plt.title('SGOF Gas Oil LET Relative Permeability Curves')
@@ -145,7 +151,7 @@ Or a set of Water-Oil relative permeability curves with the Corey method
 
 .. code-block:: python
 
-    >>> df = rtb.rel_perm(rows=25, krtable='SWOF', kromax =1, krwmax =0.25, swc =0.15, swcr = 0.2, sorw =0.15, no=2.5, nw=1.5)
+    >>> df = rtb.simtools.rel_perm(rows=25, krtable='SWOF', kromax =1, krwmax =0.25, swc =0.15, swcr = 0.2, sorw =0.15, no=2.5, nw=1.5)
     >>> plt.plot(df['Sw'], df['Krow'], c = 'g', label='Oil')
     >>> plt.plot(df['Sw'], df['Krwo'], c = 'b', label='Water')
     >>> plt.title('SWOF Water Oil Corey Relative Permeability Curves')
