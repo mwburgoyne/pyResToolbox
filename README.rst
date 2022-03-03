@@ -21,7 +21,7 @@ Includes functions to perform simple calculations including;
 - Generation of AQUTAB include file influence functions for use in ECLIPSE
 - Creation of Corey and LET relative permeability tables in Eclipse format
 
-Changelist in 1.3.0:
+Changelist in 1.3.2:
 
 - Added robust Rachford Rice solver in Simulation Helpers
 - Moved relative permeability functions and simulation helpers to seperate .simtools module
