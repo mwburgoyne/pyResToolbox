@@ -15,8 +15,8 @@ Function List
      - `pyrestoolbox.simtools.ix_extract_problem_cells`_  
    * - Solves Van Everdingin & Hurst Constant Terminal Rate solution via inverse Laplace transform and optionally writes out ECLIPSE styled AQUTAB include file
      - `pyrestoolbox.simtools.influence_tables`_
-   * - Performs a recursive ECLIPSE deck zip/check for all INCLUDE files
-     - `pyrestoolbox.simtools.zip_check_ecl`_
+   * - Performs a recursive deck zip/check for all INCLUDE files in ECL and IX files
+     - `pyrestoolbox.simtools.zip_check_sim_deck`_
    * - Solves the Rachford Rice equation
      - `pyrestoolbox.simtools.rr_solver`_
    * - Generates ECLIPSE style relative permeability tables
@@ -133,19 +133,24 @@ Examples:
     :alt: Constant Terminal Rate influence tables
 
 
-pyrestoolbox.simtools.zip_check_ecl
+pyrestoolbox.simtools.zip_check_sim_deck
 ======================
 
 .. code-block:: python
 
-    zip_check_ecl(deck, to_zip = True)
+    zip_check_sim_deck(files2scrape = [], tozip = True, console_summary = True)
 
-Performs a recursive ECLIPSE deck zip/check. 
+Performs a recursive zip/check on one or more ECL/IX decks. 
 Crawls through all INCLUDE files referenced in a deck, including an unlimited number of subdirectories and nested INCLUDE references, 
 and (a) checks that all include files exist, then optionally (b) creates a zip file of all required files.
 It does NOT zip any files that are in a higher directory than the .DATA file, but it does flag any such files so users can manually include them
 
-Prints to console list of any missing files, and if desired creates a zip archive of all files required
+If files2scrape list is specified: 
+ - No user prompt for any options will be given
+
+If files2scrape list is NOT specified: 
+ - User will be prompted to select one or more decks by their index number
+ - Optionally creates a zip archive of available associated files
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -154,18 +159,40 @@ Prints to console list of any missing files, and if desired creates a zip archiv
    * - Parameter
      - Type
      - Description
-   * - deck
-     - str
-     - ECLIPSE deck File name including extension of the base ECLIPSE data file
+   * - files2scrape
+     - list
+     - A list of file names to scrape. These must be .DATA and/or .AFI files. If no (or empty) list is passed, then user will be prompted to select one or more from the files existing in the current directory
    * - to_zip
      - bool
      - True will create a zip archive of DATA file and all associated INCLUDE files from the same directory or below. False will only return summary of whether INCLUDE files are complete.
+   * - console_summary
+     - bool
+     - True will return verbose summary to terminal. False will return only list of missing files with no terminal echo.
 
 Examples:
 
 .. code-block:: python
 
-    >>> zip_check_ecl = rtb.simtools.zip_check_ecl('FIELD_A.DATA')
+    >>> rtb.simtools.zip_check_sim_deck(['FIELD_A.DATA', 'FIELD_B.afi'], console_summary=False)
+    ['INCLUDE/GridOpts.inc', 'INCLUDE/ZCORN_COORD.GRDECL', 'EPS.ixf']
+    
+    >>> rtb.simtools.zip_check_sim_deck()
+      Index  File Name
+    -------  ------------
+          0  FIELD_A.DATA
+          1  FIELD_B.afi
+     
+    Please choose index(s) of file to parse separated by commas (0 - 1) :0,1
+    Zip or Check files? (Z/c): c
+    Scanning through: FIELD_A.DATA
+    Scanning through: FIELD_B.afi
+    
+    ****** MISSING FILES ******
+    
+    INCLUDE/GridOpts.inc from FIELD_A.DATA
+    INCLUDE/ZCORN_COORD.GRDECL from FIELD_A.DATA
+    EPS.ixf from FIELD_B.DATA
+    
 
 pyrestoolbox.simtools.rr_solver
 ======================
