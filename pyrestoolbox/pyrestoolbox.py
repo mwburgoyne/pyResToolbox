@@ -34,6 +34,9 @@ from tabulate import tabulate
 from gwr_inversion import gwr
 from mpmath import mp
 
+#import simtools.simtools as simtools
+from .simtools import simtools 
+
 # Constants
 R = 10.731577089016  # Universal gas constant, ft³·psia/°R·lb.mol
 psc = 14.696  # Standard conditions pressure (psia)
@@ -42,6 +45,7 @@ f2r = 459.67  # Offset to convert degrees F to degrees Rankine
 tscr = tscf + f2r  # Standard conditions temperature (deg R)
 mw_air = 28.97  # MW of Air
 scf_per_mol = R * tscr / psc  # scf/lb-mol (V = ZnRT/P, Z = 1, n = 1)
+
 
 class z_method(Enum):  # Gas Z-Factor calculation model
     DAK = 0
@@ -146,8 +150,8 @@ def oil_api(sg_value: float) -> float:
         sg_value: Specific gravity (relative to water)
     """
     return 141.5 / sg_value - 131.5
-    
-    
+
+
 def gas_rate_radial(
     k: npt.ArrayLike,
     h: npt.ArrayLike,
@@ -640,14 +644,14 @@ def gas_z(
                 return z2 - z
 
             if sg < 1.725:  # Gas, cutoff MW used = 50 lb/lb-mol
-                low_z = 0.106667 * pr + 0.04
-                if pr < 1.5:
-                    low_z = 0.2
-                if pr < 9:
-                    hi_z = 1.2
+                low_z = 0.106196302 * pr - 0.024351977
+                low_z = max(0.15, low_z)
+                if pr > 9.74:
+                    low_z = 0.029121 * pr + 0.726357
+                if pr < 8.79:
+                    hi_z = 0.021745 * pr + 1.144863
                 else:
-                    hi_z = 0.116667 * pr + 0.15
-                    low_z = 0.025 * pr + 0.775
+                    hi_z = 0.103725 * pr + 0.42426
 
                 z = brentq(z_err, low_z, hi_z)
             else:  # Oil
@@ -686,24 +690,24 @@ def gas_z(
         D = 2.18 + 2.82 * t
 
         for p in ps:
-            ppr = p / pc
-            low_z = 0.106667 * ppr + 0.04
-            if ppr < 1.5:
-                low_z = 0.2
-            if ppr < 9:
-                hi_z = 1.2
+            pr = p / pc
+            low_z = 0.106196302 * pr - 0.024351977
+            low_z = max(0.15, low_z)
+            if pr > 9.74:
+                low_z = 0.029121 * pr + 0.726357
+            if pr < 8.79:
+                hi_z = 0.021745 * pr + 1.144863
             else:
-                hi_z = 0.116667 * ppr + 0.15
-                low_z = 0.025 * ppr + 0.775
+                hi_z = 0.103725 * pr + 0.42426
             low_y, high_y = (
-                A * ppr / hi_z,
-                A * ppr / low_z,
+                A * pr / hi_z,
+                A * pr / low_z,
             )  # Establish limits on y consistent with reasonable Z range
 
             def fy(y):  # Eq 3.43
                 x = (
                     (y + y ** 2 + y ** 3 - y ** 4) / (1 - y) ** 3
-                    - A * ppr
+                    - A * pr
                     - B * y ** 2
                     + C * y ** D
                 )
@@ -3139,7 +3143,7 @@ def brine_props(p: float, degf: float, wt: float, ch4_sat: float) -> tuple:
         -2 * lambda_ch4Na * m - Eta_ch4Na * m * m
     )  # Eq 4.18 - Methane solubility in brine (g-mol/kg H2O)
 
-    mch4 = ch4_sat * mch4b  #    Fraction of saturated methane solubility
+    mch4 = ch4_sat * mch4b  # Fraction of saturated methane solubility
 
     dudptm = (
         u_arr[6]
@@ -3176,7 +3180,7 @@ def brine_props(p: float, degf: float, wt: float, ch4_sat: float) -> tuple:
 
     zee = gas_z(p=p, sg=0.5537, degf=degf)  # Z-Factor of pure methane
 
-    vmch4g = zee * 8.314467 * degk / Mpa  #  Eq 4.34
+    vmch4g = zee * 8.314467 * degk / Mpa  # Eq 4.34
 
     cws = -(
         (1000 + m * 58.4428) * dvbdp
@@ -3194,7 +3198,7 @@ def brine_props(p: float, degf: float, wt: float, ch4_sat: float) -> tuple:
     )
 
     zee_sc = gas_z(p=psc, sg=0.5537, degf=tscf)
-    vmch4g_sc = zee_sc * 8.314467 * (273 + 15) / 0.1013  #  Eq 4.34
+    vmch4g_sc = zee_sc * 8.314467 * (273 + 15) / 0.1013  # Eq 4.34
     rsw_new = mch4 * vmch4g_sc / ((1000 + m * 58.4428) * vb0_sc)
     rsw_new_oilfield = rsw_new / 0.1781076  # Convert to scf/stb
 
@@ -3488,759 +3492,15 @@ def lorenz_2_layers(
     return k
 
 
-def ix_extract_problem_cells(filename: str = "", silent: bool = False) -> list:
-    """
-    Processes Intersect PRT file to extract convergence issue information
-    Prints a summary of worst offenders to terminal (if silent=False), and returns a list
-    of sorted dataframes summarising all entities in final convergence row in the PRT files
-    List returned is [well_pressure_df, grid_pressure_df, sat_change_df, comp_change_df]
-    filename: If empty, will search local directory for PRT file and present list to select from if more than one exists.
-              If a filename is furnished, or only one file exists, then no selection will be presented
-    silent: False will return only the list of dataframes, with nothing echoed to the terminal
-            True will return summary of worst entities to the terminal
-    """
-
-    if filename != "":  # A Filename has been provided
-        if "PRT" not in filename.upper():
-            print("File name needs to be an IX print file with .PRT extension")
-            return
-
-    if filename == "":  # Show selection in local directory
-        prt_files = glob.glob("*.PRT", recursive=False)
-        if len(prt_files) == 0:
-            print("No .PRT files exist in this directory - Terminating script")
-            sys.exit()
-
-        if len(prt_files) > 1:
-            table = []
-            header = [
-                "Index",
-                "PRT File Name",
-            ]  # Print list of options to select from
-            for i in range(len(prt_files)):
-                table.append([i, prt_files[i]])
-            print(tabulate(table, headers=header))
-            print(" ")
-            prt_file_idx = int(
-                input(
-                    "Please choose index of PRT file to parse (0 - "
-                    + str(len(prt_files) - 1)
-                    + ") :"
-                )
-            )
-
-            if prt_file_idx not in [i for i in range(0, len(prt_files))]:
-                print(
-                    "\nIndex entered outside range permitted - Terminating script"
-                )
-                sys.exit()
-        else:
-            prt_file_idx = 0
-
-        filename = prt_files[prt_file_idx]
-
-    if not silent:
-        print("Processing " + filename + "\n")
-    file1 = open(filename, "r")
-    count = 0
-    grab_line1 = False
-    grab_line2 = False
-    max_it = 12
-    timesteps = []
-    tables = []
-
-    while True:
-        count += 1
-        line = file1.readline()  # Get next line from file
-        # if line is empty, end of file is reached
-        if (
-            "INTERSECT is a mark of Chevron Corporation, Total S.A. and Schlumberger"
-            in line
-        ):
-            ix_found = True
-        if not line:
-            break
-        if (
-            "MaxNewtons                    | Maximum number of nonlinear iterations"
-            in line
-        ):
-            line = line.split("|")
-            max_it = int(line[3])
-            continue
-        if "REPORT   Nonlinear convergence at time" in line:
-            table = []
-            timesteps.append(line.split()[5])
-            grab_line1 = True
-            continue
-        if grab_line1:
-            if "Max" in line:
-                grab_line2 = True
-                continue
-        if grab_line2:
-            if "|     |" in line:
-                tables.append(table)
-                grab_line1, grab_line2 = False, False
-                continue
-            table.append(line)
-    file1.close()
-
-    if not ix_found:
-        print("Does not appear to be a valid IX PRT file")
-        return
-
-    # Parse all the last lines in each table
-    (
-        well_pressures,
-        grid_pressures,
-        saturations,
-        compositions,
-        scales,
-        balances,
-    ) = [[] for x in range(6)]
-
-    for table in tables:
-        if len(table) == max_it:
-            line = table[-1]
-            if "*" not in line:  # If within tolerance, skip
-                continue
-            line = line.split("|")[2:-1]
-
-            if "*" in line[0]:
-                well_pressures.append(line[0].split())
-            if "*" in line[1]:
-                grid_pressures.append(line[1].split())
-            if "*" in line[2]:
-                saturations.append(line[2].split())
-            if "*" in line[3]:
-                compositions.append(line[3].split())
-            if "*" in line[4]:
-                scales.append(line[4].split())
-            if "*" in line[5]:
-                balances.append(line[5].split())
-
-    # Summarize bad actors
-    def most_frequent(List):
-        occurence_count = Counter(List)
-        return occurence_count.most_common(1)[0][0]
-
-    well_pressure_wells = [x[1] for x in well_pressures]
-    grid_pressure_locs = [x[1] for x in grid_pressures]
-    saturation_locs = [x[1] for x in saturations]
-    composition_locs = [x[1] for x in compositions]
-
-    headers = [
-        "Issue Type",
-        "Total Instances",
-        "Most Frequent Actor",
-        "Instances",
-    ]
-    data = [
-        well_pressure_wells,
-        grid_pressure_locs,
-        saturation_locs,
-        composition_locs,
-    ]
-    names = [
-        "Well Pressure Change",
-        "Grid Pressure Change",
-        "Grid Saturation Change",
-        "Grid Composition Change",
-    ]
-    dfs, table, problem_data, problem_data_count = [[] for x in range(4)]
-    for d, dat in enumerate(data):
-        if len(dat) > 0:
-            problem_data.append(most_frequent(dat))
-            problem_data_count.append(dat.count(problem_data[-1]))
-        else:
-            problem_data.append("None")
-            problem_data_count.append(0)
-        table.append(
-            [names[d], len(dat), problem_data[-1], problem_data_count[-1]]
-        )
-        dfs.append(pd.DataFrame.from_dict(Counter(dat), orient="index"))
-
-    if not silent:
-        print(tabulate(table, headers=headers), "\n")
-
-    for df in dfs:
-        try:
-            df.columns = ["Count"]
-            df.sort_values(by="Count", ascending=False, inplace=True)
-        except:
-            pass
-    return dfs
-
-
-def rel_perm(
-    rows: int,
-    krtable: kr_table = kr_table.SWOF,
-    krfamily: kr_family = kr_family.COR,
-    kromax: float = 1,
-    krgmax: float = 1,
-    krwmax: float = 1,
-    swc: float = 0,
-    swcr: float = 0,
-    sorg: float = 0,
-    sorw: float = 0,
-    sgcr: float = 0,
-    no: float = 1,
-    nw: float = 1,
-    ng: float = 1,
-    Lw: float = 1,
-    Ew: float = 1,
-    Tw: float = 1,
-    Lo: float = 1,
-    Eo: float = 1,
-    To: float = 1,
-    Lg: float = 1,
-    Eg: float = 1,
-    Tg: float = 1,
-    export: bool = False,
-) -> pd.DataFrame:
-    """ Returns ECLIPSE styled relative permeability tables
-        Users need only define parameters relevant to their table / family selection
-        rows: Integer value specifying the number of table rows desired
-        krtable: A string or kr_table Enum class that specifies one of three table type choices;
-                   SWOF: Water / Oil table
-                   SGOF: Gas / Oil table
-                   SGFN: Gas / Water table
-        krfamily: A string or kr_family Enum class that specifies one of two curve function choices;
-                   COR: Corey Curve function
-                   LET: LET Relative permeability function
-        kromax: Max Kr relative to oil. Default value = 1
-        krgmax: Max Kr relative to gas. Default value = 1
-        krwmax: Max Kr relative to water. Default value = 1
-        swc: Minimum water saturation. Default value = 0
-        swcr: Maximum water saturation for imobile water. Default value = 0
-        sorg: Maximum oil saturation relative to gas for imobile oil. Default value = 0
-        sorw: Maximum oil saturation relative to water for imobile oil. Default value = 0
-        sgcr: Maximum gas saturation relative to water for imobile gas. Default value = 0
-        no, nw, ng: Corey exponents to oil, water and gas respectively. Default values = 1
-        Lw, Ew, Tw: LET exponents to water. Default values = 1
-        Lo, Eo, To: LET exponents to oil. Default values = 1
-        Lg, Eg, Tg: LET exponents to gas. Default values = 1
-        export: Boolean value that controls whether an include file with same name as krtable is created. Default: False
-    """
-
-    if type(krtable) == str:
-        try:
-            krtable = kr_table[krtable.upper()]
-        except:
-            print("Incorrect table type specified")
-            sys.exit()
-    if type(krfamily) == str:
-        try:
-            krfamily = kr_family[krfamily.upper()]
-        except:
-            print("Incorrect krfamily specified")
-            sys.exit()
-
-    def kr_SWOF(
-        rows: int,
-        krtable: kr_table = kr_table.SWOF,
-        krfamily: kr_family = kr_family.COR,
-        kromax: float = 1,
-        krgmax: float = 1,
-        krwmax: float = 1,
-        swc: float = 0,
-        swcr: float = 0,
-        sorg: float = 0,
-        sorw: float = 0,
-        sgcr: float = 0,
-        no: float = 1,
-        nw: float = 1,
-        ng: float = 1,
-        Lw: float = 1,
-        Ew: float = 1,
-        Tw: float = 1,
-        Lo: float = 1,
-        Eo: float = 1,
-        To: float = 1,
-        Lg: float = 1,
-        Eg: float = 1,
-        Tg: float = 1,
-    ) -> pd.DataFrame:
-
-        if no * nw <= 0:  # Not enough information for Corey curves
-            corey_info = False
-        else:
-            corey_info = True
-        if (
-            Lw * Ew * Tw * Lo * Eo * To <= 0
-        ):  # Not enough information for LET curves
-            let_info = False
-        else:
-            let_info = True
-
-        ndiv = rows
-        if swcr > swc:
-            ndiv -= 2
-        if sorw > 0:
-            ndiv -= 1
-        ndiv = min(ndiv, rows - 1)
-
-        sw_eps = [swc, swcr, 1 - sorw, 1]
-        swn = np.arange(0, 1, 1 / ndiv)
-        sw = swn * (1 - swcr - sorw) + swcr
-        sw = list(sw) + sw_eps
-        sw = list(set(sw))
-        sw.sort()
-        sw = np.array(sw)
-
-        # Assign water relative permeabilities
-        swn = (sw - swcr) / (1 - swcr - sorw)
-        swn = np.clip(swn, 0, 1)
-
-        if krfamily.name == "COR":
-            if not corey_info:
-                print(
-                    "Not enough information for SWOF Corey Curves. Check if no and nw are defined"
-                )
-                return
-            krw = krwmax * swn ** nw
-            if sorw > 0:
-                krw[-1] = 1
-        if krfamily.name == "LET":
-            if not let_info:
-                print(
-                    "Not enough information for SWOF LET Curves. Check if Lw, Ew, Tw, Lo, Eo & To are defined"
-                )
-                return
-            krw = (
-                krwmax
-                * ((swn) ** Lw)
-                / (1 + ((swn) ** Lw) + (Ew * ((1 - swn) ** Tw)) - 1)
-            )
-            if sorw > 0:
-                krw[-1] = 1
-
-        # Assign oil relative permeabilities
-        swn = (sw - swc) / (1 - swc - sorw)
-        swn = np.clip(swn, 0, 1)
-        if krfamily.name == "COR":
-            kro = kromax * (1 - swn) ** no
-        if krfamily.name == "LET":
-            kro = (
-                kromax
-                * ((1 - swn) ** Lo)
-                / (1 + ((1 - swn) ** Lo) + (Eo * (swn ** To)) - 1)
-            )
-
-        kr_df = pd.DataFrame()
-        kr_df["Sw"] = sw
-        kr_df["Krwo"] = krw
-        kr_df["Krow"] = kro
-        if export:
-            df = kr_df.set_index("Sw")
-            headings = ["-- Sw", "Krwo", "Krow"]
-            fileout = "SWOF\n" + tabulate(df, headings) + "\n/"
-            with open("SWOF.INC", "w") as text_file:
-                text_file.write(fileout)
-        return kr_df
-
-    def kr_SGOF(
-        rows: int,
-        krtable: kr_table = kr_table.SWOF,
-        krfamily: kr_family = kr_family.COR,
-        kromax: float = 1,
-        krgmax: float = 1,
-        krwmax: float = 1,
-        swc: float = 0,
-        swcr: float = 0,
-        sorg: float = 0,
-        sorw: float = 0,
-        sgcr: float = 0,
-        no: float = 1,
-        nw: float = 1,
-        ng: float = 1,
-        Lw: float = 1,
-        Ew: float = 1,
-        Tw: float = 1,
-        Lo: float = 1,
-        Eo: float = 1,
-        To: float = 1,
-        Lg: float = 1,
-        Eg: float = 1,
-        Tg: float = 1,
-    ) -> pd.DataFrame:
-
-        if not no * ng:  # Not enough information for Corey curves
-            corey_info = False
-        else:
-            corey_info = True
-        if (
-            not Lg * Eg * Tg * Lo * Eo * To
-        ):  # Not enough information for LET curves
-            let_info = False
-        else:
-            let_info = True
-
-        ndiv = rows
-        if sgcr > 0:
-            ndiv -= 2
-        if sorg > 0:
-            ndiv -= 1
-        ndiv = min(ndiv, rows - 1)
-
-        sg_eps = [0, 1 - swc - sorg]
-        sgn = np.arange(0, 1 + 1 / ndiv, 1 / ndiv)
-        sg = sgn * (1 - swc - sorg)
-        sg = list(sg) + sg_eps
-        sg = list(set(sg))
-        sg.sort()
-        sg = np.array(sg)
-
-        # Assign gas relative permeabilities
-        sgn = sg / (1 - swc - sorg)
-        sgn = np.clip(sgn, 0, 1)
-        if krfamily.name == "COR":
-            if not corey_info:
-                print(
-                    "Not enough information for SGOF Corey Curves. Check if no and ng are defined"
-                )
-                return
-            krg = krgmax * sgn ** ng
-        if krfamily.name == "LET":
-            if not let_info:
-                print(
-                    "Not enough information for SGOF LET Curves. Check if Lg, Eg, Tg, Lo, Eo & To are defined"
-                )
-                return
-            krg = (
-                krgmax
-                * ((sgn) ** Lg)
-                / (1 + ((sgn) ** Lg) + (Eg * ((1 - sgn) ** Tg)) - 1)
-            )
-
-        # Assign oil relative permeabilities
-        if krfamily.name == "COR":
-            kro = kromax * (1 - sgn) ** no
-        if krfamily.name == "LET":
-            kro = (
-                kromax
-                * ((1 - sgn) ** Lo)
-                / (1 + ((1 - sgn) ** Lo) + (Eo * (sgn ** To)) - 1)
-            )
-
-        kr_df = pd.DataFrame()
-        kr_df["Sg"] = sg
-        kr_df["Krgo"] = krg
-        kr_df["Krog"] = kro
-        if export:
-            headings = ["-- Sg", "Krgo", "Krog"]
-            df = kr_df.set_index("Sg")
-            fileout = "SGOF\n" + tabulate(df, headings) + "\n/"
-            with open("SGOF.INC", "w") as text_file:
-                text_file.write(fileout)
-        return kr_df
-
-    def kr_SGWFN(
-        rows: int,
-        krtable: kr_table = kr_table.SWOF,
-        krfamily: kr_family = kr_family.COR,
-        kromax: float = 1,
-        krgmax: float = 1,
-        krwmax: float = 1,
-        swc: float = 0,
-        swcr: float = 0,
-        sorg: float = 0,
-        sorw: float = 0,
-        sgcr: float = 0,
-        no: float = 1,
-        nw: float = 1,
-        ng: float = 1,
-        Lw: float = 1,
-        Ew: float = 1,
-        Tw: float = 1,
-        Lo: float = 1,
-        Eo: float = 1,
-        To: float = 1,
-        Lg: float = 1,
-        Eg: float = 1,
-        Tg: float = 1,
-    ) -> pd.DataFrame:
-        if ng * nw <= 0:  # Not enough information for Corey curves
-            corey_info = False
-        else:
-            corey_info = True
-        if (
-            Lw * Ew * Tw * Lg * Eg * Tg <= 0
-        ):  # Not enough information for LET curves
-            let_info = False
-        else:
-            let_info = True
-
-        ndiv = rows
-        if sgcr > 0:
-            ndiv -= 1
-        ndiv = min(ndiv, rows - 1)
-
-        sg_eps = [0, sgcr, 1 - swc]
-        ndiv = rows - 1
-        sgn = np.arange(0, 1, 1 / ndiv)
-        sg = sgn * (1 - swc - sgcr) + sgcr
-        sg = list(sg) + sg_eps
-        sg = list(set(sg))
-        sg.sort()
-        sg = np.array(sg)
-
-        # Assign gas relative permeabilities
-        sgn = (sg - sgcr) / (1 - swc - sgcr)
-        sgn = np.clip(sgn, 0, 1)
-        if krfamily.name == "COR":
-            if not corey_info:
-                print(
-                    "Not enough information for SGWFN Corey Curves. Check if nw and ng are defined"
-                )
-                return
-            krg = krgmax * sgn ** ng
-        if krfamily.name == "LET":
-            if not let_info:
-                print(
-                    "Not enough information for SGWFN LET Curves. Check if Lg, Eg, Tg, Lw, Ew & Tw are defined"
-                )
-                return
-            krg = (
-                krgmax
-                * ((sgn) ** Lg)
-                / (1 + ((sgn) ** Lg) + (Eg * ((1 - sgn) ** Tg)) - 1)
-            )
-
-        # Assign water relative permeabilities
-        sgn = (sg) / (1 - swc)
-        sgn = np.clip(sgn, 0, 1)
-        if krfamily.name == "COR":
-            krw = krwmax * (1 - sgn) ** nw
-        if krfamily.name == "LET":
-            krw = (
-                krwmax
-                * ((1 - sgn) ** Lw)
-                / (1 + ((1 - sgn) ** Lw) + (Ew * (sgn ** Tw)) - 1)
-            )
-
-        kr_df = pd.DataFrame()
-        kr_df["Sg"] = sg
-        kr_df["Krgw"] = krg
-        kr_df["Krwg"] = krw
-        if export:
-            df = kr_df.set_index("Sg")
-            headings = ["-- Sg", "Krgw", "Krwg"]
-            fileout = "SGWFN\n" + tabulate(df, headings) + "\n/"
-            with open("SGWFN.INC", "w") as text_file:
-                text_file.write(fileout)
-        return kr_df
-
-    # Consistency checks
-    fail = False
-    swcr = max(swc, swcr)
-    if sorg + sgcr + swc >= 1:
-        print("sorg+sgcr+swc must be less than 1")
-        fail = True
-    if sorg + sgcr + swc >= 1:
-        print("sorg+sgcr+swc must be less than 1")
-        fail = True
-    if sorw + swcr >= 1:
-        print("sorw+swcr must be less than 1")
-        fail = True
-    if fail:
-        print("Saturation consistency check failure: Check your inputs")
-        sys.exit()
-
-    if krtable.name == "SWOF":
-        return kr_SWOF(
-            rows,
-            krtable,
-            krfamily,
-            kromax,
-            krgmax,
-            krwmax,
-            swc,
-            swcr,
-            sorg,
-            sorw,
-            sgcr,
-            no,
-            nw,
-            ng,
-            Lw,
-            Ew,
-            Tw,
-            Lo,
-            Eo,
-            To,
-            Lg,
-            Eg,
-            Tg,
-        )
-    if krtable.name == "SGOF":
-        return kr_SGOF(
-            rows,
-            krtable,
-            krfamily,
-            kromax,
-            krgmax,
-            krwmax,
-            swc,
-            swcr,
-            sorg,
-            sorw,
-            sgcr,
-            no,
-            nw,
-            ng,
-            Lw,
-            Ew,
-            Tw,
-            Lo,
-            Eo,
-            To,
-            Lg,
-            Eg,
-            Tg,
-        )
-    if krtable.name == "SGWFN":
-        return kr_SGWFN(
-            rows,
-            krtable,
-            krfamily,
-            kromax,
-            krgmax,
-            krwmax,
-            swc,
-            swcr,
-            sorg,
-            sorw,
-            sgcr,
-            no,
-            nw,
-            ng,
-            Lw,
-            Ew,
-            Tw,
-            Lo,
-            Eo,
-            To,
-            Lg,
-            Eg,
-            Tg,
-        )
-    print("Check that you have specified table type as SWOF, SGOF or SGWFN")
-    sys.exit()
-
-
-def influence_tables(
-    ReDs: list,
-    min_td: float = 0.01,
-    max_td: float = 200,
-    n_incr: int = 20,
-    M: int = 8,
-    export: bool = False,
-) -> tuple:
-    """ Returns a tuple of;
-           1. Dimensionless time list
-           2. list of lists of dimensionless pressures at each dimensionless time for each dimensionless radius
-        and optionally writes out ECLIPSE styled AQUTAB include file
-        Solves Van Everdingin & Hurst Constant Terminal Rate solution via inverse Laplace transform
-        Note: This will take ~5 seconds per 20 points to generate
-
-        ReDs: A list of dimensionless radii > 1.0
-        min_td: Minimum dimensionless time. Default = 0.01
-        max_td: Maximum dimensionless time. Dfeault = 200
-        n_incr: Number of increments to split dimensionless time into (log transformed), Default = 20
-        M: Laplace invesrion accuracy. Higher = more accurate, but more time. Generally 6-12 is good range. Default = 8
-        export: Boolean value that controls whether an include file with 'INFLUENCE.INC' name is created. Default: False
-    """
-
-    # Eq 16 from SPE 81428
-    #def laplace_Qs(s: float, ReD: float):
-    #    x = mp.sqrt(s)
-    #    # pre-calculate duplicated bessel functions for greater efficiency
-    #    i1sReD = mp.besseli(1, x * ReD)
-    #    k1sReD = mp.besselk(1, x * ReD)
-    #    numerator = i1sReD * mp.besselk(1, x) - k1sReD * mp.besseli(1, x)
-    #    denominator = s ** 1.5 * (
-    #        k1sReD * mp.besseli(0, x) + i1sReD * mp.besselk(0, x)
-    #    )
-    #    return numerator / denominator
-
-    # Eq 23 from SPE 81428
-    def laplace_Ps(s: float, ReD: float):
-        x = mp.sqrt(s)
-        # pre-calculate duplicated bessel function for greater efficiency
-        i1sReD = mp.besseli(1, x * ReD)
-        k1sReD = mp.besselk(1, x * ReD)
-        numerator = k1sReD * mp.besseli(0, x) + i1sReD * mp.besselk(0, x)
-        denominator = s ** 1.5 * (
-            i1sReD * mp.besselk(1, x) - k1sReD * mp.besseli(1, x)
-        )
-        return numerator / denominator
-
-    dtD = np.log(max_td / min_td) / n_incr
-    tD = [np.exp(x * dtD + np.log(min_td)) for x in range(n_incr + 1)]
-    tD = np.array(tD)
-
-    pDs = []
-    for ReD in ReDs:
-        print("Calculating ReD = " + str(ReD))
-        pDs.append(gwr(lambda s: laplace_Ps(s, ReD), tD, M))
-
-    if export:
-        inc_out = "---------------------------------------\n"
-        inc_out += "AQUTAB\n"
-        inc_out += "---------------------------------------\n"
-        inc_out += "-- Aquifer Influence Tables...\n"
-        inc_out += "--  Based on original work by \n"
-        inc_out += "--       Van Everdingin & Hurst\n"
-        inc_out += "--\n"
-        inc_out += "-- Implemented via Inverse Laplace\n"
-        inc_out += "-- transform by pyrestoolbox\n"
-        inc_out += "---------------------------------------\n"
-        inc_out += "--\n"
-
-        header = ["--", "Table #", "re/rw"]
-        table = [["--", 1, "Infinity"]]
-        for i, ReD in enumerate(ReDs):
-            table.append(["--", i + 2, ReD])
-        inc_out += tabulate(table, headers=header) + "\n"
-        inc_out += "--\n"
-        inc_out += "---------------------------------------\n"
-        inc_out += "---- Table #1\n"
-        inc_out += "----\n"
-        inc_out += "---- Internal Eclipse Table for\n"
-        inc_out += "---- Infinite Acting Aquifer\n"
-        inc_out += "----\n"
-
-        for i, ReD in enumerate(ReDs):
-            inc_out += "---------------------------------------\n"
-            inc_out += "----  Table #" + str(i + 2) + "\n"
-            inc_out += "----\n"
-            inc_out += (
-                "----  re/rw = " + str(ReD) + ", No flow outer boundary\n"
-            )
-            header = ["--", "Table #", "re/rw"]
-            table = [["--", "tD", "pD"]]
-            for j, td in enumerate(tD):
-                table.append(["", td, float(pDs[i][j])])
-            inc_out += tabulate(table, headers=header) + "\n"
-            inc_out += "/\n"
-        inc_out += "---------------------------------------\n"
-        inc_out += "-- End of AQUTAB Include File\n"
-        inc_out += "---------------------------------------\n"
-
-        text_file = open("INFLUENCE.INC", "w")
-        text_file.write(inc_out)
-        text_file.close()
-
-    return (tD, pDs)
-
 class component_library:
     def __init__(self, model='PR79'):
         path = 'component_library.xlsx'
         filepath = pkg_resources.resource_filename(__name__, path)
         self.df = pd.read_excel(filepath)
-        self.model=model
-        self.all_cols = ['Name','MW','Tc_R','Pc_psia','Visc_Zc','Pchor','Vc_cuft_per_lbmol']
-        self.model_cols = ['Acentric','VTran','Tb_F','SpGr']
+        self.model = model
+        self.all_cols = ['Name', 'MW', 'Tc_R', 'Pc_psia',
+                         'Visc_Zc', 'Pchor', 'Vc_cuft_per_lbmol']
+        self.model_cols = ['Acentric', 'VTran', 'Tb_F', 'SpGr']
         self.all_dics = {}
         self.model_dics = {}
         self.components = self.df['Component'].tolist()
@@ -4248,30 +3508,36 @@ class component_library:
         self.property_list = self.all_cols + self.model_cols
         # Create dictionaries for all the model agnostic properties
         for col in self.all_cols:
-            self.all_dics[col.upper()] = dict(zip(self.df['Component'], self.df[col]))
+            self.all_dics[col.upper()] = dict(
+                zip(self.df['Component'], self.df[col]))
         # And then for all the model specific properties
         self.models = ['PR79', 'PR77', 'SRK', 'RK']
         for model in self.models:
             model_dic = {}
             for col in self.model_cols:
-                model_dic[col.upper()] = dict(zip(self.df['Component'], self.df[model+'-'+col]))
-            self.model_dics[model]=model_dic
-    
+                model_dic[col.upper()] = dict(
+                    zip(self.df['Component'], self.df[model+'-'+col]))
+            self.model_dics[model] = model_dic
+
     def prop(self, comp, prop, model='PR79'):
         comp = comp.upper()
         if comp not in self.components:
             return 'Component not in Library'
         prop = prop.upper()
         props = [x.upper() for x in self.property_list]
+        if model.upper() not in self.models:
+            return 'Incorrect Model Name'
+        dic = self.model_dics[model.upper()]
+        if prop == 'ALL':
+            return [self.all_dics[p.upper()][comp] for p in self.all_cols]+[dic[p.upper()][comp] for p in self.model_cols]
+        props = [x.upper() for x in self.property_list]
         if prop not in props:
             return 'Property not in Library'
         if prop in [x.upper() for x in self.all_cols]:
             return self.all_dics[prop][comp]
         if prop in [x.upper() for x in self.model_cols]:
-            if model.upper() not in self.models:
-                return 'Incorrect Model Name'
-            dic = self.model_dics[model.upper()]
             return dic[prop][comp]
         return 'Component or Property not in library'
+
 
 comp_library = component_library()
