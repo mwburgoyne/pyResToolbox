@@ -13,7 +13,7 @@ setup(
     name = 'pyrestoolbox',
     packages = find_packages(),
     include_package_data=True,
-    version = '1.2.0',  # Ideally should be same as your GitHub release tag varsion
+    version = '1.3.4',  # Ideally should be same as your GitHub release tag varsion
     description = 'pyResToolbox - A collection of Reservoir Engineering Utilities',
     long_description= long_description,
     long_description_content_type = 'text/markdown',
@@ -29,6 +29,7 @@ setup(
         'pandas',
         'tabulate',
         'gwr_inversion',
-        'mpmath'
+        'mpmath',
+        'openpyxl'
     ]
 )

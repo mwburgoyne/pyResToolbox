@@ -21,10 +21,16 @@ Includes functions to perform simple calculations including;
 - Generation of AQUTAB include file influence functions for use in ECLIPSE
 - Creation of Corey and LET relative permeability tables in Eclipse format
 
+Changelist in 1.3.4:
+
+- Extend ECL deck zip/check function to handle IX formatted decks, and support zipping multiple decks at once.
+
+
 Changelist in 1.3.2:
 
 - Added robust Rachford Rice solver in Simulation Helpers
 - Moved relative permeability functions and simulation helpers to seperate .simtools module
+
 
 Changelist in v1.2.0:
 
@@ -103,7 +109,7 @@ Function List
 +----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
 | `Simulation Helpers <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/sim.rst>`_          | - Summarize IX convergence errors from PRT file                 |
 |                                                                                                    | - Create Aquifer Influence Functions                            |
-|                                                                                                    | - Perform a recursive ECLIPSE deck zip/check for INCLUDE files  |
+|                                                                                                    | - Perform recursive ECL or IX deck zip/check for INCLUDE files  |
 |                                                                                                    | - Solve Rachford Rice for user specified feed Zis and Ki's      |
 |                                                                                                    | - Create sets of rel perm tables                                |
 +----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
