@@ -21,6 +21,11 @@ Includes functions to perform simple calculations including;
 - Generation of AQUTAB include file influence functions for use in ECLIPSE
 - Creation of Corey and LET relative permeability tables in Eclipse format
 
+Changelist in 1.3.5:
+
+- Fix bug in ECL deck zip/check recursion
+
+
 Changelist in 1.3.4:
 
 - Extend ECL deck zip/check function to handle IX formatted decks, and support zipping multiple decks at once.
