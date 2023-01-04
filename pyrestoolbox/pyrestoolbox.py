@@ -1,3 +1,6 @@
+ï»¿#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+
 """
     pyResToolbox - A collection of Reservoir Engineering Utilities
               Copyright (C) 2022, Mark Burgoyne
@@ -38,7 +41,7 @@ from mpmath import mp
 from .simtools import simtools 
 
 # Constants
-R = 10.731577089016  # Universal gas constant, ft³·psia/°R·lb.mol
+R = 10.731577089016  # Universal gas constant, ftÂ³Â·psia/Â°RÂ·lb.mol
 psc = 14.696  # Standard conditions pressure (psia)
 tscf = 60  # Standard conditions temperature (deg F)
 f2r = 459.67  # Offset to convert degrees F to degrees Rankine
@@ -715,7 +718,7 @@ def gas_z(
 
             y = brentq(fy, low_y, high_y)
 
-            zout.append(A * ppr / y)
+            zout.append(A * pr / y)
         if single_p:
             return zout[0]
         else:
@@ -744,7 +747,7 @@ def gas_z(
             124.64444,
             -6.74331,
             0.20897,
-            -0.00314,
+            -0.00314
         ]
         single_p = False
         if p.size == 1:
@@ -2866,7 +2869,7 @@ def make_bot_og(
     df["uw (cP)"] = visws
 
     if export:
-        df.to_excel("bot.xlsx")
+        df.to_excel("bot.xlsx", engine="openpyxl")
         pvdg = df[["Pressure (psia)", "Bg (rb/mscf", "ug (cP)"]]
         pvdg = pvdg.set_index("Pressure (psia)")
         headers = ["-- P (psia)", "Bg (rb/mscf", "ug (cP)"]
@@ -3496,7 +3499,7 @@ class component_library:
     def __init__(self, model='PR79'):
         path = 'component_library.xlsx'
         filepath = pkg_resources.resource_filename(__name__, path)
-        self.df = pd.read_excel(filepath)
+        self.df = pd.read_excel(filepath, engine="openpyxl")
         self.model = model
         self.all_cols = ['Name', 'MW', 'Tc_R', 'Pc_psia',
                          'Visc_Zc', 'Pchor', 'Vc_cuft_per_lbmol']
