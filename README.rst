@@ -21,6 +21,10 @@ Includes functions to perform simple calculations including;
 - Generation of AQUTAB include file influence functions for use in ECLIPSE
 - Creation of Corey and LET relative permeability tables in Eclipse format
 
+Changelist in 1.3.9:
+
+- Tweaks to speed DAK and Hall & Yarborough Z-Factor calculations
+
 Changelist in 1.3.8:
 
 - Fix bug in Hall & Yarborough Z-Factor algorithm
