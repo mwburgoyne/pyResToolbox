@@ -4,24 +4,29 @@ CO2 Saturated Brine PVT
 
 Returns a class object with calculated CO2 saturated brine property attributes with the following methods
 
-Property                       Source
------------------------------  --------------------------------------------------------------------------------------------
-Mutual Solubility between      N. Spycher & K. Pruess (2010), modified SRK Cubic EOS method
-CO2 and Brine
-Pure Brine Density             Spivey et al. (modified),
-                               per "Petroleum Reservoir Fluid Property Correlations", (McCain, Spivey & Lenn: Chapter 4)
-CO2 Corrected Brine Density    Molar volume of dissolved CO2 estimated with Garcia (2001) equation, used with xCO2 calculated 
-                               from Spycher & Pruess, and CO2-free brine density from Spivey et al to calculate insitu density
-Pure Brine viscosity           Mao-Duan (2009) approach for pure brine viscosity
-CO2 Corrected Brine Viscosity  "Viscosity Models and Effects of Dissolved CO2", Islam-Carlson (2012)
-                               to adjust the pure brine viscosity for xCO2 calculated from Spycher & Pruess
+.. list-table:: Inputs
+   :widths: 20 40
+   :header-rows: 1
 
+   * - Property
+     - Source
+   * - Mutual Solubility between CO2 and Brine
+     - N. Spycher & K. Pruess (2010), modified SRK Cubic EOS method
+   * - Pure Brine Density
+     - Spivey et al. (modified), per "Petroleum Reservoir Fluid Property Correlations", (McCain, Spivey & Lenn: Chapter 4)
+   * - CO2 Corrected Brine Density
+     - Molar volume of dissolved CO2 estimated with Garcia (2001) equation, used with xCO2 calculated from Spycher & Pruess, and CO2-free brine density from Spivey et al to calculate insitu density
+   * - Pure Brine viscosity
+     - Mao-Duan (2009).
+   * - CO2 Corrected Brine Viscosity
+     - "Viscosity Models and Effects of Dissolved CO2", Islam-Carlson (2012) to adjust the pure brine viscosity for xCO2 calculated from Spycher & Pruess.     
+     
 pyrestoolbox.CO2_Brine_Mixture
 ======================
 
 .. code-block:: python
 
-    CO2_Brine_Mixture(pres, temp, ppm = 0, metric = True) -> tuple
+    CO2_Brine_Mixture(pres, temp, ppm = 0, metric = True) -> class
 
 .. list-table:: Inputs
    :widths: 10 15 40
