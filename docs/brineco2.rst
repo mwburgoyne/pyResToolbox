@@ -89,14 +89,18 @@ pyrestoolbox.CO2_Brine_Mixture
 Examples:
 
 Usage example for 5000 psia x 275 deg F and 3% NaCl brine:
+
 .. code-block:: python
 
     >>> from pyrestoolbox import pyrestoolbox as rtb
     >>> mix = rtb.CO2_Brine_Mixture(pres = 5000, temp = 275, ppm = 30000, metric = False)
     >>> mix.bw  # Returns [CO2 Saturated Brine Bw, Pure Brine Bw]
     [1.1085535365828796, 1.0543051557116332]
+    >>> mix.x  # Returns molar fractions in aqueous phase [xCO2, xH2O]
+    array([0.02431431, 0.96633611])
     
 Usage example for 175 Bara x 85 degC and 0% NaCl brine:
+
 .. code-block:: python
 
     >>> mix = rtb.CO2_Brine_Mixture(pres = 175, temp = 85)
