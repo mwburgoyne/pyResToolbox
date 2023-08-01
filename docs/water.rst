@@ -1,8 +1,8 @@
 ===================================
-Brine PVT
+Methane Saturated Brine PVT
 ===================================
 
-Calculates Brine properties from modified Spivey Correlation per McCain Petroleum Reservoir Fluid Properties pg 160. Includes effect of user specified salt concentration and degree of methane satuartion.
+Calculates Brine properties from modified Spivey Correlation per McCain Petroleum Reservoir Fluid Properties pg 160. Includes effect of user specified salt concentration and degree of methane saturation.
 
 Returns tuple of (Bw (rb/stb), Density (sg), viscosity (cP), Compressibility (1/psi), Rw GOR (scf/stb))
 
@@ -49,3 +49,4 @@ Examples:
     Visw: 0.4993957925685796
     Cw: 0.00015465633691558178
     Rsw: 1.2549011339427625
+
