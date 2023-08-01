@@ -20,6 +20,13 @@ Includes functions to perform simple calculations including;
 - Extract problem cells information from Intesect (IX) print files
 - Generation of AQUTAB include file influence functions for use in ECLIPSE
 - Creation of Corey and LET relative permeability tables in Eclipse format
+- Calculation of Methane and CO2 saturated brine properties
+
+
+Changelist in 1.4.0:
+
+- Introduced CO2 saturated brine calculations using Spycher & Pruess modified SRK EOS method
+- Rectified an error introduced in Gas Z-Factor calculations due to errant indentation
 
 Changelist in 1.3.9:
 
@@ -113,7 +120,9 @@ Function List
 |                                                                                                    | - Oil API to SG                                                 |
 |                                                                                                    | - Oil SG to API                                                 |
 +----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `Brine PVT <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/water.rst>`_                 | - Calculate suite of brine properties                           |
+| `CH4 Saturated Brine PVT <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/water.rst>`_   | - Calculate suite of methane saturated brine properties         |
++----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
+| `CO2 Saturated Brine PVT <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/brineco2.rst>`_| - Calculate suite of CO2 saturated brine properties             |
 +----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
 | `Permeability Layering <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/layer.rst>`_     | - Lorenz coefficient from Beta value                            |
 |                                                                                                    | - Lorenz coefficient from flow fraction                         |
