@@ -5,13 +5,13 @@ CO2 Saturated Brine PVT
 Returns a class object with calculated CO2 saturated brine property attributes with the following methods
 
 .. list-table:: Inputs
-   :widths: 20 40
+   :widths: 30 40
    :header-rows: 1
 
    * - Property
      - Source
    * - Mutual Solubility between CO2 and Brine
-     - N. Spycher & K. Pruess (2010), modified SRK Cubic EOS method
+     - Spycher & Pruess (2010), modified SRK Cubic EOS method
    * - Pure Brine Density
      - Spivey et al. (modified), per "Petroleum Reservoir Fluid Property Correlations", (McCain, Spivey & Lenn: Chapter 4)
    * - CO2 Corrected Brine Density
