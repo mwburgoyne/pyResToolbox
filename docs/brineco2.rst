@@ -86,6 +86,19 @@ pyrestoolbox.CO2_Brine_Mixture
      - (1/Bar or 1/psi)
      - Brine undersaturated compressibility 
 
+.. list-table:: Optional class functions
+   :widths: 25 40
+   :header-rows: 1
+
+   * - Function
+     - Description
+   * - .ezrokhi(lower_degC, upper_degC)
+     - Calculate Ezrokhi coefficients for effects of dissolved CO2 on brine density and viscosity
+
+Calculates and populates the following additional attributes;
+.EzrokhiDenA : List of A_CO2's for equation Ai(T) = A[0] + A[1] * degC + A[2] * degC**2, for Ezrokhi density adjustment
+.EzrokhiVisB : List of B_CO2's for equation Bi(T) = B[0] + B[1] * degC + B[2] * degC**2, for Ezrokhi viscosity adjustment
+                
 Examples:
 
 Usage example for 5000 psia x 275 deg F and 3% NaCl brine:
@@ -106,3 +119,6 @@ Usage example for 175 Bara x 85 degC and 0% NaCl brine:
     >>> mix = rtb.CO2_Brine_Mixture(pres = 175, temp = 85)
     >>> mix.Rs  # Returns sm3 dissolved CO2 / sm3 Brine
     24.502168045494223   
+    >>> mix.ezrokhi(lower_degC = 70, upper_degC = 140)
+    >>> mix.EzrokhiDenA, mix.EzrokhiVisB
+    ([0.05812057460992598, 0.0007985131535236179, -5.863680161690182e-06], [0.7819371846535907, 0, 0])
