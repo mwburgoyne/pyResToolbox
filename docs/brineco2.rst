@@ -96,7 +96,9 @@ pyrestoolbox.CO2_Brine_Mixture
      - Calculate Ezrokhi coefficients for effects of dissolved CO2 on brine density and viscosity
 
 Calculates and populates the following additional attributes;
+
 .EzrokhiDenA : List of A_CO2's for equation Ai(T) = A[0] + A[1] * degC + A[2] * degC**2, for Ezrokhi density adjustment
+
 .EzrokhiVisB : List of B_CO2's for equation Bi(T) = B[0] + B[1] * degC + B[2] * degC**2, for Ezrokhi viscosity adjustment
                 
 Examples:
