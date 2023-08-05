@@ -22,6 +22,13 @@ Includes functions to perform simple calculations including;
 - Creation of Corey and LET relative permeability tables in Eclipse format
 - Calculation of Methane and CO2 saturated brine properties
 
+Changelist in 1.4.2:
+
+- Corrected CO2 solubility calculations when two roots in CO2 liquid phase
+
+Changelist in 1.4.1:
+
+- Added calculation of Ezrokhi coefficients for brine density and viscosity with dissolved CO2
 
 Changelist in 1.4.0:
 
