@@ -43,7 +43,7 @@ pyrestoolbox.CO2_Brine_Mixture
      - Temperature (deg C or deg F)
    * - ppm
      - float
-     - Parts per million (Wt) NaCl in the brine (1% by Wt = 10,000 ppm)
+     - Parts per million (Wt) NaCl equivalent in brine (1% NaCl equivalent by Wt = 10,000 ppm)
    * - metric
      - Boolean
      - If true, treats input pressure & temperature as metric, otherwise treats as Field units.
