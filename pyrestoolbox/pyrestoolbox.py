@@ -127,16 +127,12 @@ def bisect_solve(args, f, xmin, xmax, rtol):
         if iternum > 99:
             print("Could not solve via bisection")
             sys.exit()
-        if (
-            err_hi * err_mid < 0
-        ):  # Solution point must be higher than current mid_val case
+        if (err_hi * err_mid < 0):  # Solution point must be higher than current mid_val case
             xmin = mid_val
             err_lo = err_mid
             mid_val = (mid_val + xmax) / 2
         else:
-            xmax = (
-                mid_val  # Other_wise must be lower than current mid_val case
-            )
+            xmax = mid_val  # Other_wise must be lower than current mid_val case
             err_hi = err_mid
     return mid_val
 
@@ -216,9 +212,7 @@ def gas_rate_radial(
     direction = 1
     if pr.size + pwf.size == 2:  # Single set of pressures
         if pr < pwf:
-            direction = (
-                -1
-            )  # Direction is needed because solving the quadratic with non-Darcy factor will fail if using a negative delta_mp
+            direction = -1  # Direction is needed because solving the quadratic with non-Darcy factor will fail if using a negative delta_mp
         delta_mp = abs(
             gas_dmp(
                 p1=pwf,
@@ -427,12 +421,8 @@ def darcy_gas(
         a = k * h * delta_mp
         b = 1422 * tr
         c = np.log(l2 / l1) - 0.75 + S
-        if (
-            D > 1e-9
-        ):  # Solve analytically for rate with non-Darcy factor by rearranging into root of a quadratic equation.
-            return (np.sqrt(4 * a * b * D + (b * b * c * c)) - (b * c)) / (
-                2 * b * D
-            )
+        if D > 1e-9:  # Solve analytically for rate with non-Darcy factor by rearranging into root of a quadratic equation.
+            return (np.sqrt(4 * a * b * D + (b * b * c * c)) - (b * c)) / (2 * b * D)
     else:
         a = k * h * l1 * delta_mp
         b = 2 * np.pi * 1422 * tr
@@ -846,20 +836,7 @@ def gas_cg(
     tr = (degf + f2r) / tc
     zee = gas_z(p=p, degf=degf, sg=sg, tc=tc, pc=pc, n2=n2, co2=co2, h2s=h2s)
 
-    a = [
-        0,
-        0.3265,
-        -1.07,
-        -0.5339,
-        0.01569,
-        -0.05165,
-        0.5475,
-        -0.7361,
-        0.1844,
-        0.1056,
-        0.6134,
-        0.7210,
-    ]
+    a = [0, 0.3265, -1.07, -0.5339, 0.01569, -0.05165, 0.5475, -0.7361, 0.1844, 0.1056, 0.6134, 0.7210]
     rhor = 0.27 * pr / (tr * zee)
     dzdrho = (
         a[1]
@@ -1836,7 +1813,7 @@ def oil_rs(
         pb: Original bubble point pressure of oil (psia)
         rsb: Oil solution gas volume at bubblepoint pressure (scf/stb) <-- Required for Velarde, Blasingame & McCain
         rsmethod: A string or pb_method Enum class that specifies one of following calculation choices;
-                   VELAR: Velarde, Blasingame & McCain (1999) - Default
+                   VELAR: Velarde, Blasingame & McCain (1997) - Default
                    STAN: Standing Correlation (1947), using form from https://www.sciencedirect.com/science/article/pii/B9780128034378000014
                    VASBG: Vasquez & Beggs Correlation (1984)
         pbmethod: A string or pb_method Enum class that specifies one of following calculation choices;
@@ -1870,7 +1847,6 @@ def oil_rs(
     def Rs_velarde(
         api, degf, sg_sp, p, pb, rsb
     ):  # Velarde, Blasingame & McCain (1997)
-        # Velarde, Blasingame & McCain (1999)
         # Equations 3.8a - 3.8f
         # Estimates Rs of depleting oil from separator oil observations
         pb = max(psc, pb)
@@ -2153,7 +2129,7 @@ def oil_deno(
         sg_o: Stock tank oil specific gravity (SG relative to water). If undefined will calculate from api
         api: Stock tank oil density (deg API). If undefined will calculate from sg_o. If both defined api value will prevail
         denomethod: A string or deno_method Enum class that specifies one of following calculation choices;
-                   SWMH: Standing, White, McCain-Hill (1995) - Default
+                   SWMH: Standing, Witte, McCain-Hill (1995) - Default
     """
     sg_g, sg_sp = check_sgs(sg_g=sg_g, sg_sp=sg_sp)
 
@@ -2339,7 +2315,7 @@ def oil_bo(
                    STAN: Standing Correlation
                    MCAIN: McCain approach, calculating from densities
         denomethod: A string or deno_method Enum class that specifies one of following calculation choices;
-                   SWMH: Standing, White, McCain-Hill (1995) - Default
+                   SWMH: Standing, Witte, McCain-Hill (1995) - Default
     """
     sg_g, sg_sp = check_sgs(sg_g=sg_g, sg_sp=sg_sp)
     denomethod, bomethod = validate_methods(
@@ -3480,24 +3456,23 @@ comp_library = component_library()
 
 EPS = 1e-8
 
-#--Unit Conversion Constants--------------------------------------------
-BAR2PSI = 14.5037738
-RGASCON = 83.1447      #--Units of bar.cm3/(mol.K)
-CEL2KEL = 273.15
-CONMOLA = 55.508       #--1000/Mw-Water [Molality Conversion Factor]
+#--Mole Weights ----------------------
+MWSAL = 58.4428        # Mole Weight of Salt (NaCl)
+MWWAT = 18.01528       # Mole Weight of Pure Water
+MWCO2 = 44.01          # Mole Weight of CO2
 
-PSTND = 1.01325        #-- Standard Pressure (bar)
-TSTND = 288.706        #-- Standard Temperature (Kelvin)
-  
-#--Mole Weights & Densities at Standard Conditions----------------------
-MWSAL = 58.4428        #-- Mole Weight of Salt (NaCl)
-MWWAT = 18.01528       #-- Mole Weight of Pure Water
-MWCO2 = 44.01          #-- Mole Weight of CO2
-  
-VMCO2S = 23690.5       #-- Molar Volume of CO2 at STP [cm3/gmol]
-RHOCO2S = 0.00185771   #-- Density CO2 at STP [gm/cm3]
-DENW = 998.98          #-- Freshwater density at standard conditions [kg/m3]
-KGMOL2SM3 = 23.545     #-- sm3 CO2 per kg-mol at 60 deg F and 1 atm (from PhazeComp run to get definitive value, where zCO2 = 0.99388)
+#--Unit Conversions & Constants--------------------------------------------
+BAR2PSI = 14.5037738
+RGASCON = 83.1447      # Units of bar.cm3/(mol.K)
+CEL2KEL = 273.15       # deg K at 0 degC
+CONMOLA = 1000 / MWWAT # Moles in 1000kg Water [Molality Conversion Factor]
+PSTND = 1.01325        # Standard Pressure (bar)
+TSTND = 288.706        # Standard Temperature (Kelvin)
+VMCO2S = 23690.5       # Molar Volume of CO2 at STP [cm3/gmol]
+RHOCO2S = 0.00185771   # Density CO2 at STP [gm/cm3]
+DENW = 998.98          # Freshwater density at standard conditions [kg/m3]
+KGMOL2SM3 = 23.545     # sm3 CO2 per kg-mol at 60 deg F and 1 atm (from PhazeComp run to get definitive value, where zCO2 = 0.99388)
+BBL2CUFT = 5.614583333 # cuft in a bbl
 
 #============================================================================
 #    ***  Mutual solubilities between CO2 and Brine - Calculated with  ***
@@ -3528,6 +3503,7 @@ class CO2_Brine_Mixture():
                 temp: Temperature (deg C / deg F)
                 ppm: NaCL equivalent weight concentration in brine in parts NaCl per million parts of brine (default zero, Wt% = 100 * ppm / 1E6 )
                 metric: Boolean operator that determines units assumed for input, and return calculated (default True)
+                cw_sat: Boolean operator that determines whether to calculate saturated brine compressibility, doubling calculations required (default False)
     
             Returns object with following calculated properties:
                 .x       : Mole fractions of CO2 and H2O in aqueous phase [xCO2, xH2O]
@@ -3538,32 +3514,26 @@ class CO2_Brine_Mixture():
                 .bVis    : Brine viscosity (cP)   [CO2 Saturated, Pure Brine, Freshwater]
                 .bVisblty: CO2 Saturated brine viscosibility (1/Bar or 1/psi)
                 .bw      : Brine formation volume factor (rm3/smr / rb/stb) [CO2 Saturated, Pure Brine, Freshwater]
-                .Rs      : CO2 Saturated Brine solution gas ratio (sm3/sm3 or scf/stb)
-                .Cf_usat : Brine undersaturated compressibility (1/Bar or 1/psi)
-            
-            Additional function available to calculate Ezrokhi coefficients for effects of dissolved CO2 on brine density and viscosity
-                .ezrokhi(lower_degC, upper_degC)
-            
-                Calculates and populates the following additional attributes;
-                .EzrokhiDenA : List of A_CO2's for equation Ai(T) = A[0] + A[1] * degC + A[2] * degC**2, for Ezrokhi density adjustment
-                .EzrokhiVisB : List of B_CO2's for equation Bi(T) = B[0] + B[1] * degC + B[2] * degC**2, for Ezrokhi viscosity adjustment
-                
+                .Rs      : CO2 Saturated Brine solution gas ratio (sm3/sm3 or scf/stb), relative to standard conditions
+                .Cf_usat : Brine undersaturated compressibility (1/Bar or 1/psi). The compressibility with constant Rs
+                .Cf_sat  : Brine saturated compressibility (1/Bar or 1/psi). The compressibility with reducing Rs under depletion
+                            
             Usage example for 5000 psia x 275 deg F and 3% NaCl brine:
                 mix = rtb.CO2_Brine_Mixture(pres = 5000, temp = 275, ppm = 30000, metric = False)
                 mix.bw  # Returns [CO2 Saturated Brine Bw, Pure Brine Bw, Pure Water Bw]
-                >> [1.1085314570560894, 1.0543030222442868, 1.0542061329225914]
+                >> [1.1085795290443725, 1.0543051245909865, 1.0542061001251017]
                 
                 mix.x  # Returns [xCO2, xBrine]
-                >> [0.02431431, 0.96633611]
+                >> array([0.02431245, 0.95743175])
                 
             Usage example for 175 Bara x 85 degC and 0% NaCl brine:
                 mix = rtb.CO2_Brine_Mixture(pres = 175, temp = 85)
                 mix.Rs  # Returns sm3 dissolved CO2 / sm3 Brine
-                >> 24.508587608952276
+                >> 24.742923469934272
                 
            
     """
-    def __init__(self, pres, temp, ppm = 0, metric = True):
+    def __init__(self, pres, temp, ppm = 0, metric = True, cw_sat = False):
         self.metric = metric              # Units. FIELD or METRIC
         self.ppm = ppm                    # Parts (by wt) NaCl added to 1E6 parts of water
         self.tKel = None                  # Deg K
@@ -3579,12 +3549,12 @@ class CO2_Brine_Mixture():
         self.A = None
         self.Bprime = None
         self.xSalt = None                 # Mole fraction salt in aqueous mixture
-        self.molaL = None                 #--Brine Molality (gmol/kg)
-        self.MolarVol = None              #--Molar Volumes from RK-EOS (cm3/gmol)
+        self.molaL = None                 # Brine Molality (gmol/kg)
+        self.MolarVol = None              # Molar Volumes from RK-EOS (cm3/gmol)
         self.GASZ = None                  # Vapor phase Z-Factor
-        self.MwGas = None                 #--Mole weight  [gm/gmol]
-        self.MwBrine = None               #--Mole weight of CO2 free brine (gm/gmol)
-        self.rhoGas = None                #--Density of Gas Mixture (gm/cm3)
+        self.MwGas = None                 # Mole weight  [gm/gmol]
+        self.MwBrine = None               # Mole weight of CO2 free brine (gm/gmol)
+        self.rhoGas = None                # Density of Gas Mixture (gm/cm3)
         self.aMix = None                  # RK-EOS A_mix parameter
         self.aij = None                   # RK-EOS aij
         self.kij = None                   # RK-EOS kij
@@ -3595,15 +3565,18 @@ class CO2_Brine_Mixture():
         self.bVis = None                  # Brine viscosity (cP)  [CO2 Saturated, CO2 Free]
         self.bVisblty = None              # CO2 laden viscosibility (1/Bar or 1/psi) (at pressures above Psat)
         self.bw = None                    # Brine formation volume factor (res vol/std vol) [CO2 Saturated, CO2 Free]
-        self.Rs = None                    # Solution gwr CO2 (sm3/sm3 or scf/stb brine)
-        self.Cf_usat = None               # Undersaturated brine compressibility (1/Bar or 1/psi)
+        self.Rs = None                    # Solution gwr CO2 (sm3/sm3 or scf/stb brine) relative to standard conditions
+        self.Cf_usat = None               # Undersaturated brine compressibility (1/Bar or 1/psi). Compressibility without changing Rs
+        self.Cf_sat = None                # Saturated brine compressibility (1/Bar or 1/psi). Compressibility with changing Rs
         self.CO2_sat = False              # Flag to determine if in P-T range for saturated liquid CO2 K values
         self.repeat = False               # Flag to trigger repeat of calculations depending on whether CO2 is saturated liquid phase
-        self.EzrokhiDenA = None           # Ezrokhi coefficient array for density (to be calculated with ezrokhi() function)
-        self.EzrokhiVisB = None           # Ezrokhi coefficient array for viscosity (to be calculated with ezrokhi() function)
-
-        xSalt = (ppm / MWSAL) / ((ppm / MWSAL) + (1000000 - ppm) / MWWAT) # Mole fraction of salt in pure brine (note, this is not the same as self.xSalt used in EOS calculations as those are actually xNa + xCl, ie double the NaCl species mole fraction)
-        self.MwBrine = xSalt * MWSAL + (1 - xSalt) * MWWAT
+        #self.EzrokhiDenA = None           # Ezrokhi coefficient array for density (to be calculated with ezrokhi() function)
+        #self.EzrokhiVisB = None           # Ezrokhi coefficient array for viscosity (to be calculated with ezrokhi() function)
+        self.Rs_STD = None                # Dissolved CO2 remaining at standard conditions (sm3/sm3)
+        self.ppm_sat = None               # Maximum ppm Salt at specified temperature
+        
+        xNaCl = (ppm / MWSAL) / ((ppm / MWSAL) + (1000000 - ppm) / MWWAT) # Mole fraction of salt in pure brine (note, this is not the same as self.xSalt used in EOS calculations as those are actually xNa + xCl, ie double the NaCl species mole fraction)
+        self.MwBrine = xNaCl * MWSAL + (1 - xNaCl) * MWWAT
         
         if self.metric:
             self.pBar = pres              # Pressure (Bar)
@@ -3613,56 +3586,107 @@ class CO2_Brine_Mixture():
             self.degC = (temp - 32)/1.8   # Temperature (degF -> deg C)
         self.tKel = self.degC + CEL2KEL
         
+        # Calculate maximum salt concentration
+        self.ppm_sat = round(262180 + 72 * self.degC + 1.06 * self.degC**2,0)  # Eq 9.1 from Whitson Phase Monograph
+        
         #if self.degC <= 31:
         #    # Below saturated CO2 pressure equation emprically fit to data at https://www.ohio.edu/mechanical/thermo/property_tables/CO2/CO2_TempSat1.html
         #    if self.pBar >= 10**-15.90106469 * self.tKel**7.157992919: # Above CO2 Psat 
         #        self.CO2_sat = True
+        
+        self.std_conditions_rs()          # Estimate Rs remain at standard conditions
+        
+        if cw_sat: # Determine properties at 0.5 Bar less pressure first, so that we can calculate saturated compressibility
+            dP = 0.5
+            self.pBar += dP
+            self.co2BrineSolubility()         # Calculate mutual solubilities
+            self.brine()                      # Calculate Brine properties 
+            
+            # Will ignore water in the vapor phase for compressibility calcs
+            bw1 = self.bw[0]
+            Rs1 = self.Rs # Ignore residual gas saturation, since we are looking at deltas, so they will cancel
+            self.pBar -= dP
 
         self.co2BrineSolubility()         # Calculate mutual solubilities
-        self.brine()                      # Calculate Brine properties            
+        self.brine()                      # Calculate Brine properties       
+        
+        if cw_sat:
+            bw2 = self.bw[0]
+            Rs2 = self.Rs
+            Bg = PSTND * self.GASZ * self.tKel / (TSTND * self.pBar)  # rm3/sm3 or rcf/scf
+            
+            dBwdP = (bw1 - bw2) / dP
+            dRsdP = (Rs1 - Rs2) / dP
+            if not self.metric:
+                dRsdP /= BBL2CUFT  # Convert scf/stb to scf/scf = rm3/rm3
+                
+            self.Cf_sat = (1 / bw2)  *(-dBwdP + dRsdP * Bg)
+            
+            if not self.metric:
+                self.Cf_sat /= BAR2PSI
+
     
-    def ezrokhi(self, lower_degC, upper_degC):
-        # Function to regress on Ezrokhi coefficients for the mixture over the temperature range
-        # Will return arrays Ai and Bi for density and viscosity impact of dissolved CO2 in brine respectively
-        # Uses given sample pressure
+    # Estimate residual Rs at standard conditions so that we dont have to repeat all Spycher calculations 
+    # Rs at 1.01325 Bar and 288.706K was calculated over the ppm range of 0 - 290,000, and fit to the following
+    # Equation by M. Burgoyne (Oct 2023), to offset the Spycher Rs to deliver zero Rs at standard conditions (equivalent to lab measurements)
+    def std_conditions_rs(self):
+        A, B, C, D = 0.1084E+03, -0.4573E+01, 0.7247E-06, -0.1433E+00
+        # Equation of form: Y = A*EXP(B*EXP(C*X))+D <--- Gompertz + c
+        self.Rs_STD = A * np.exp(B * np.exp(C * self.ppm)) + D
+    
+    # Ezrokhi functionality removed due to (a) not needed with full brine definitions and (b) some concern  as to how
+    # IX is actually implementing subsequent density etc calculations (const CO2 molar volume which is incorrect).
+    # Accordingly I've removed the functionality below in this script
+    
+        # Additional function available to calculate Ezrokhi coefficients for effects of dissolved CO2 on brine density and viscosity
+        # .ezrokhi(lower_degC, upper_degC)
+        #
+        # Calculates and populates the following additional attributes;
+        # .EzrokhiDenA : List of A_CO2's for equation Ai(T) = A[0] + A[1] * degC + A[2] * degC**2, for Ezrokhi density adjustment
+        # .EzrokhiVisB : List of B_CO2's for equation Bi(T) = B[0] + B[1] * degC + B[2] * degC**2, for Ezrokhi viscosity adjustment
         
-        # Ensure reversed temperatures, or cases with same upper & lower values don't fall over
-        if lower_degC <= upper_degC: 
-            lower_degC, upper_degC = min(lower_degC, upper_degC), max(lower_degC, upper_degC)
-            lower_degC -= 10
-            lower_degC = max(10, lower_degC) # Ensure doesn't get below 10 deg C
-            upper_degC += 10
-        
-        
-        temps = np.linspace(lower_degC, upper_degC)
-        As, Bs = [], []
-        
-        # Grab the original temperature before doing calculations over range for Ezrokhi
-        original_degc = self.degC 
-        
-        for temp in temps:
-            self.degC = temp
-            self.co2BrineSolubility()
-            wt_co2 = self.x[0] * MWCO2 / (self.x[0] * MWCO2 + self.x[1] * self.MwBrine) # Weight fraction of dissolved CO2
-            results = brine_props(self.pBar, temp, self.ppm, self.x[0], self.MwBrine)
-            bDen, bVis, bVisblty, bw, Rs, Cf_usat = results
-            As.append(np.log10(bDen[0]/bDen[1])/wt_co2)  # Corrections relative to CO2 free brine
-            Bs.append(np.log10(bVis[0]/bVis[1])/wt_co2)  # Corrections relative to CO2 free brine
-        
-        # Because of the form of the Akand W. Islam and Eric S. Carlson viscosity adjustment, 
-        # the Ezrokhi B coefficient for viscosity will be a constant value for a given xCO2
-        self.EzrokhiVisB = [Bs[0], 0, 0]
-        
-        # Fit density data to quadratic form
-        z = np.polyfit(temps, np.array(As), 2)
-        # Numpy fits coefficients in reverse order to what is expected for Ezrokhi equation as follows
-        # Ai = ao + a1 * T + a2 * T**2
-        z = list(z)[::-1]  # Reverse order of fitted coefficients
-        self.EzrokhiDenA = z 
-        
-        # And reset to original temperature & recalculate
-        self.degC = original_degc
-        self.co2BrineSolubility()
+        #def ezrokhi(self, lower_degC, upper_degC):
+        #    # Function to regress on Ezrokhi coefficients for the mixture over the temperature range
+        #    # Will return arrays Ai and Bi for density and viscosity impact of dissolved CO2 in brine respectively
+        #    # Uses given sample pressure
+        #    
+        #    # Ensure reversed temperatures, or cases with same upper & lower values don't fall over
+        #    if lower_degC <= upper_degC: 
+        #        lower_degC, upper_degC = min(lower_degC, upper_degC), max(lower_degC, upper_degC)
+        #        lower_degC -= 10
+        #        lower_degC = max(10, lower_degC) # Ensure doesn't get below 10 deg C
+        #        upper_degC += 10
+        #    
+        #    
+        #    temps = np.linspace(lower_degC, upper_degC)
+        #    As, Bs = [], []
+        #    
+        #    # Grab the original temperature before doing calculations over range for Ezrokhi
+        #    original_degc = self.degC 
+        #    
+        #    for temp in temps:
+        #        self.degC = temp
+        #        self.co2BrineSolubility()
+        #        wt_co2 = self.x[0] * MWCO2 / (self.x[0] * MWCO2 + self.x[1] * self.MwBrine) # Weight fraction of dissolved CO2
+        #        results = brine_props(self.pBar, temp, self.ppm, self.x[0], self.MwBrine)
+        #        bDen, bVis, bVisblty, bw, Rs, Cf_usat = results
+        #        As.append(np.log10(bDen[0]/bDen[1])/wt_co2)  # Corrections relative to CO2 free brine
+        #        Bs.append(np.log10(bVis[0]/bVis[1])/wt_co2)  # Corrections relative to CO2 free brine
+        #    
+        #    # Because of the form of the Akand W. Islam and Eric S. Carlson viscosity adjustment, 
+        #    # the Ezrokhi B coefficient for viscosity will be a constant value for a given xCO2
+        #    self.EzrokhiVisB = [Bs[0], 0, 0]
+        #    
+        #    # Fit density data to quadratic form
+        #    z = np.polyfit(temps, np.array(As), 2)
+        #    # Numpy fits coefficients in reverse order to what is expected for Ezrokhi equation as follows
+        #    # Ai = ao + a1 * T + a2 * T**2
+        #    z = list(z)[::-1]  # Reverse order of fitted coefficients
+        #    self.EzrokhiDenA = z 
+        #    
+        #    # And reset to original temperature & recalculate
+        #    self.degC = original_degc
+        #    self.co2BrineSolubility()
     
     def calc_type(self):
         # == Figure out which calculation method to employ ==========================
@@ -4124,216 +4148,217 @@ class CO2_Brine_Mixture():
         self.MwGas = self.mixMolar(self.y[0], MWCO2, MWWAT)   #--Mole weight  [gm/gmol]
         self.rhoGas = self.MwGas / self.MolarVol              #--Density of Gas Mixture [gm/cm3]
         self.GASZ = self.MolarVol * self.pRT
-
         
     def brine(self):
-        results = brine_props(self.pBar, self.degC, self.ppm, self.x[0], self.MwBrine)
+        results = self.brine_props_co2(self.pBar, self.degC, self.ppm, self.x[0], self.MwBrine)
         self.bDen, self.bVis, self.bVisblty, self.bw, self.Rs, self.Cf_usat = results
-        self.bVisblty = max(1e-9, self.bVisblty)
+        self.Rs -= self.Rs_STD                        # Subtract dissolved CO2 remaining at standard conditions. Note that this is AFTER density and Bw calculations have been conducted
+        self.Rs = max(0, self.Rs)
+        self.bVisblty = max(1e-12, self.bVisblty)
         
         if not self.metric:
             self.bVisblty = self.bVisblty / BAR2PSI   # CO2 laden viscosibility (1/psi) (at pressures above Psat)
-            self.Rs = self.Rs * 35.3147 / 6.28981     # Solution gwr CO2 (scf/stb brine)
+            self.Rs = self.Rs * BBL2CUFT              # Solution GWR CO2 (scf/stb brine)
             self.Cf_usat = self.Cf_usat / BAR2PSI     # Undersaturated brine compressibility (1/psi)
         
-def brine_props(pBar, degc, ppm, xCO2, MwB):
-    """ Calculates CO2 saturated Brine properties
-        1. Pure Brine Density:            Spivey et al. (modified)
-        2. Pure Brine viscosity:          Mao-Duan (2009)
-        3. CO2 Corrected Brine Density:   Garcia (2001)
-        4. CO2 Corrected Brine Viscosity: Islam-Carlson (2012)
+    def brine_props_co2(self, pBar, degc, ppm, xCO2, MwB):
+        """ Calculates CO2 saturated Brine properties
+            1. Pure Brine Density:            Spivey et al. (modified)
+            2. Pure Brine viscosity:          Mao-Duan (2009)
+            3. CO2 Corrected Brine Density:   Garcia (2001)
+            4. CO2 Corrected Brine Viscosity: Islam-Carlson (2012)
+            
+            pBar: Pressure (Bar)
+            degc: Temperature (deg C)
+            ppm: Salt weight parts per million brine weight parts
+            xCO2: Mole fraction CO2 in brine at pBar
+            MwB: MW CO2 free Brine
+            
+            [sg_CO2_Brine, sg_brine], [cP_CO2_brine, cP_brine], viscosblty, [bw, brine_res_vol], rs, c_usat)
+            
+            Returns tuple of;
+             - Brine Density (gm/cm3) [CO2 Saturated Brine, CO2 Free Brine, Pure Water]
+             - viscosity (cP)         [CO2 Saturated Brine, CO2 Free Brine, Pure Water]
+             - viscosibility (1/psi))
+             - Formation volume factor (res vol/ std vol)  [CO2 Saturated Brine, CO2 Free Brine, Pure Water]
+             - Brine compressibility as pressure increases with no change to CO2 saturation (1/Bar)
+             - Brine compressibility as pressure decreases with reducing CO2 saturation (1/Bar)
+             - Brine solution gas ratio (sm3 CO2 / sm3 brine)
+        """
+        MwG = MWCO2
+    
+        wt = ppm / 10000                  # Wt % (0 - 100)
+        m = (1000 * (wt / 100) / (MWSAL * (1 - (wt / 100))))  # Molar concentration of NaCl from wt % in gram mol/kg 
         
-        pBar: Pressure (Bar)
-        degc: Temperature (deg C)
-        ppm: Salt weight parts per million brine weight parts
-        xCO2: Mole fraction CO2 in brine at pBar
-        MwB: MW CO2 free Brine
+        Mpa = pBar * 0.1                    # Pressure in mPa
+        tKel = degc + CEL2KEL               # Temperature in deg K
         
-        [sg_CO2_Brine, sg_brine], [cP_CO2_brine, cP_brine], viscosblty, [bw, brine_res_vol], rs, c_usat)
+        def Eq41(t, input_array):  # From McCain Petroleum Reservoir Fluid Properties
+            t2 = t / 100
+            return (input_array[1] * t2 ** 2 + input_array[2] * t2 + input_array[3]) / (input_array[4] * t2 ** 2 + input_array[5] * t2 + 1)
+    
+        # Table 4-6 Coefficients
+        rhow_t70_arr = [0, -0.127213, 0.645486, 1.03265, -0.070291, 0.639589]
+        Ewt_arr = [0, 4.221, -3.478, 6.221, 0.5182, -0.4405]
+        Fwt_arr = [0, -11.403, 29.932, 27.952, 0.20684, 0.3768]
         
-        Returns tuple of;
-         - Brine Density (gm/cm3) [CO2 Saturated Brine, CO2 Free Brine, Pure Water]
-         - viscosity (cP)         [CO2 Saturated Brine, CO2 Free Brine, Pure Water]
-         - viscosibility (1/psi))
-         - Formation volume factor (res vol/ std vol)  [CO2 Saturated Brine, CO2 Free Brine, Pure Water]
-         - Brine compressibility as pressure increases with no change to CO2 saturation (1/Bar)
-         - Brine compressibility as pressure decreases with reducing CO2 saturation (1/Bar)
-         - Brine solution gas ratio (sm3 CO2 / sm3 brine)
-    """
-    MwG = MWCO2
+        # Table 4-7 Coefficients
+        Dm2t_arr = [0, -0.00011149, 0.000175105, -0.00043766, 0, 0]
+        Dm32t_arr = [0, -0.0008878, -0.0001388, -0.00296318, 0, 0.51103]
+        Dm1t_arr = [0, 0.0021466, 0.012427, 0.042648, -0.081009, 0.525417]
+        Dm12t_arr = [0, 0.0002356, -0.0003636, -0.0002278, 0, 0]
+        
+        # Table 4-8 Coefficients
+        Emt_arr = [0, 0, 0, 0.1249, 0, 0]
+        Fm32t_arr = [0, -0.617, -0.747, -0.4339, 0, 10.26]
+        Fm1t_arr = [0, 0, 9.917, 5.1128, 0, 3.892]
+        Fm12t_arr = [0, 0.0365, -0.0369, 0, 0, 0]
+        
+        # Table 4-14 Mao-Duan Coefficients
+        d = [0, 2885310, -11072.577, -9.0834095, 0.030925651, -0.0000274071, -1928385.1, 5621.6046, 13.82725, -0.047609523, 0.000035545041]
+        
+        # Table 4-14 Mao-Duan Coefficients
+        a = [-0.21319213, 0.0013651589, -0.0000012191756]
+        b = [0.069161945, -0.00027292263, 0.0000002085244]
+        c = [-0.0025988855, 0.0000077989227]
+        
+        # Density of pure water at the reference pressure of 70 MPa, ?w(T, 70 MPa), in g/cm3,
+        rhow_t70 = Eq41(degc, rhow_t70_arr)                 # Step 1
+        
+        Ewt, Fwt = Eq41(degc, Ewt_arr), Eq41(degc, Fwt_arr) # Step 2
+        
+        Dm2t = Eq41(degc, Dm2t_arr)                         # Step 4
+        Dm32t = Eq41(degc, Dm32t_arr)
+        Dm1t = Eq41(degc, Dm1t_arr)
+        Dm12t = Eq41(degc, Dm12t_arr)
+        
+        Emt = Eq41(degc, Emt_arr)
+        Fm32t = Eq41(degc, Fm32t_arr)
+        Fm1t = Eq41(degc, Fm1t_arr)
+        Fm12t = Eq41(degc, Fm12t_arr)
+        
+        # -- CO2-Free Brine Density (gm/cm3)
+        def brine_denw(Mpa):
+            # cw(T, p), in MPa–1, of pure water at temperature T and pressure p,
+            cwtp = (1 / 70) * (1 / (Ewt * (Mpa / 70) + Fwt))        # Eq 4.2
+    
+            #Density of pure water at temperature T and pressure p.
+            Iwt70 = (1 / Ewt) * np.log(abs(Ewt + Fwt))              # Eq 4.3
+            Iwtp = (1 / Ewt) * np.log(abs(Ewt * (Mpa / 70) + Fwt))  # Eq 4.4
+            rhowtp = rhow_t70 * np.exp(Iwtp - Iwt70)                # Eq 4.5
+            
+            # Density of brine at temperature T and the reference pressure of 70 MPa
+            rhobt70 = (rhow_t70 + Dm2t * m **2 + Dm32t * m ** 1.5 + Dm1t * m + Dm12t * m ** 0.5)  # Eq 4.6
+            
+            # Brine compressibility coefficients Eb(T,m) and Fb(T,m) from equations (4.7) and (4.8).
+            Ebtm = Ewt + Emt * m                                                                  # Eq 4.7
+            Fbtm = Fwt + Fm32t * m ** 1.5 + Fm1t * m + Fm12t * m ** 0.5                           # Eq 4.8
+            
+            # Return methane-free brine density as well as fresh water density in g/cm3
+            cbtpm = (1 / 70) * (1 / (Ebtm * (Mpa / 70) + Fbtm))                                   # Eq 4.9 (Step 6)
+            Ibt70 = (1 / Ebtm) * np.log(abs(Ebtm + Fbtm))                                         # Eq 4.10 (Step 7)
+            Ibtpm = (1 / Ebtm) * np.log(abs(Ebtm * (Mpa / 70) + Fbtm))                            # Eq 4.11
+            return rhobt70 * np.exp(Ibtpm - Ibt70), rhowtp                                        # Eq 4.12
+        
+        # -- CO2 free brine viscosity Mao-Duan (2009) + fresh water viscosity
+        def vis_brine(Mpa, rhowtp):
+            
+            #-- Viscosity of pure water - Eq 4.41 - 4.42
+            lnuw_tp = sum([d[i] * np.power(tKel, (i - 3)) for i in range(1, 6)])
+            lnuw_tp += sum([rhowtp * (d[i] * np.power(tKel, (i - 8))) for i in range(6, 11)])
+            uw_tp = np.exp(lnuw_tp)
+    
+            #-- Calculate relative viscosity of brine.    Eq 4.43 - 4.47
+            AA = a[0] + a[1] * tKel + a[2] * tKel * tKel 
+            BB = b[0] + b[1] * tKel + b[2] * tKel * tKel
+            CC = c[0] + c[1] * tKel
+            lnur_tm = AA * m + BB * m ** 2 + CC * m ** 3
+            ur_tm = np.exp(lnur_tm)
+            
+            # And then brine viscosity in Pa.s, converted to cP
+            return (ur_tm * uw_tp * 1000, uw_tp*1000)  # cP - Eq 4.48
+        
+        def partMolVol(degK):
+            #  Partial Molar Volume of dissolved CO2: Garcia Eq (3)
+            tC = degK - 273.15
+            return 37.51 + tC * (-0.09585 + tC * (0.000874 - tC * 0.0000005044))
+        
+        # -- Correcting brine density for dissolved CO2, JE Garcia, LBNL Report# 49023, Oct 2011, "Density of Aqueous Solutions of CO2"
+        def garciaDensity(rhoBRnoCO2, tKel, pBar, ppm, xCO2, MwB, MwG):
+            xNotCO2 = 1.0 - xCO2                         #--Brine (H20+Salt) Mole Fraction
+            xRat = xCO2 / xNotCO2                        #--Mole Fraction Ratio, Gas/Brine
+            mRat = MwG / MwB                             #--Mole Weight Ratio  , Gas/Brine
+            vPhi = partMolVol(tKel)                      #--Apparent Molar Volume of Dissolved CO2
+            return (1.0 + mRat * xRat) / (vPhi * xRat / MwB + 1.0 / rhoBRnoCO2) # --Equation 18 of Garcia paper
+        
+        # Correct CO2 free brine viscosity for dissolved CO2
+        # Using approach from "Viscosity Models and Effects of Dissolved CO2", Akand W. Islam and Eric S. Carlson (Jul 2012), Energy Fuels 2012, 26, 8, 5330–5336, https://doi.org/10.1021/ef3006228
+        def co2_vis_brine(cP_brine, xCO2):
+            # Uses CO2 free brine viscosity (cP) and mole fraction CO2 in brine (xCO2), and returns cP
+            return cP_brine * (1 + 4.65 * xCO2**1.0134)
+    
+        # Density and viscosity at specified pressure & temperature (No CO2)
+        sg_brine, rhowtp = brine_denw(Mpa)                        # rhowtp is density of pure water
+        cP_brine, cP_freshwater = vis_brine(Mpa, rhowtp)
+        
+        # Correct for CO2 content
+        sg_CO2_Brine = garciaDensity(sg_brine, tKel, pBar, ppm, xCO2, MwB, MwG)
+        cP_CO2_brine = co2_vis_brine(cP_brine, xCO2)
+        
+        # Revaluate at +1 bar for viscosibility calculations
+        # Use unchanged xCO2, as viscosibility typically used to characterized UNDERsaturated viscosity behaviour
+        sg_brine_, rhowtp_ = brine_denw(Mpa + 0.1)
+        cP_brine_, cP_freshwater_ = vis_brine(Mpa + 0.1, rhowtp_)
+        sg_CO2_Brine_ = garciaDensity(sg_brine_, tKel, pBar + 1, ppm, xCO2, MwB, MwG)
+        cP_CO2_brine_ = co2_vis_brine(cP_brine_, xCO2)
+        
+        # -- Numerically calculate viscosibility from Mao-Duan (2009) base viscosity with Garcia correction for CO2
+        dvdpsi = (cP_CO2_brine_ - cP_CO2_brine)  #-- d[Viscosity/dp [cP/bar]
+        viscosblty = dvdpsi * 2 / (cP_CO2_brine + cP_CO2_brine_)  # (1/bar)
+        
+        # Re-evaluate at reservoir temperature and 1 atmosphere (Rhob_atm)
+        Rhob_atm, rhowtp_atm_ = brine_denw(PSTND/10)
 
-    wt = ppm / 10000                  # Wt % (0 - 100)
-    m = (1000 * (wt / 100) / (MWSAL * (1 - (wt / 100))))  # Molar concentration of NaCl from wt % in gram mol/kg 
-    
-    Mpa = pBar * 0.1                    # Pressure in mPa
-    tKel = degc + CEL2KEL               # Temperature in deg K
-    
-    def Eq41(t, input_array):  # From McCain Petroleum Reservoir Fluid Properties
-        t2 = t / 100
-        return (input_array[1] * t2 ** 2 + input_array[2] * t2 + input_array[3]) / (input_array[4] * t2 ** 2 + input_array[5] * t2 + 1)
-
-    # Table 4-6 Coefficients
-    rhow_t70_arr = [0, -0.127213, 0.645486, 1.03265, -0.070291, 0.639589]
-    Ewt_arr = [0, 4.221, -3.478, 6.221, 0.5182, -0.4405]
-    Fwt_arr = [0, -11.403, 29.932, 27.952, 0.20684, 0.3768]
-    
-    # Table 4-7 Coefficients
-    Dm2t_arr = [0, -0.00011149, 0.000175105, -0.00043766, 0, 0]
-    Dm32t_arr = [0, -0.0008878, -0.0001388, -0.00296318, 0, 0.51103]
-    Dm1t_arr = [0, 0.0021466, 0.012427, 0.042648, -0.081009, 0.525417]
-    Dm12t_arr = [0, 0.0002356, -0.0003636, -0.0002278, 0, 0]
-    
-    # Table 4-8 Coefficients
-    Emt_arr = [0, 0, 0, 0.1249, 0, 0]
-    Fm32t_arr = [0, -0.617, -0.747, -0.4339, 0, 10.26]
-    Fm1t_arr = [0, 0, 9.917, 5.1128, 0, 3.892]
-    Fm12t_arr = [0, 0.0365, -0.0369, 0, 0, 0]
-    
-    # Table 4-14 Mao-Duan Coefficients
-    d = [0, 2885310, -11072.577, -9.0834095, 0.030925651, -0.0000274071, -1928385.1, 5621.6046, 13.82725, -0.047609523, 0.000035545041]
-    
-    # Table 4-14 Mao-Duan Coefficients
-    a = [-0.21319213, 0.0013651589, -0.0000012191756]
-    b = [0.069161945, -0.00027292263, 0.0000002085244]
-    c = [-0.0025988855, 0.0000077989227]
-    
-    # Density of pure water at the reference pressure of 70 MPa, ?w(T, 70 MPa), in g/cm3,
-    rhow_t70 = Eq41(degc, rhow_t70_arr)                 # Step 1
-    
-    Ewt, Fwt = Eq41(degc, Ewt_arr), Eq41(degc, Fwt_arr) # Step 2
-    
-    Dm2t = Eq41(degc, Dm2t_arr)                         # Step 4
-    Dm32t = Eq41(degc, Dm32t_arr)
-    Dm1t = Eq41(degc, Dm1t_arr)
-    Dm12t = Eq41(degc, Dm12t_arr)
-    
-    Emt = Eq41(degc, Emt_arr)
-    Fm32t = Eq41(degc, Fm32t_arr)
-    Fm1t = Eq41(degc, Fm1t_arr)
-    Fm12t = Eq41(degc, Fm12t_arr)
-    
-    # -- CO2-Free Brine Density (gm/cm3)
-    def brine_denw(Mpa):
-        # cw(T, p), in MPa–1, of pure water at temperature T and pressure p,
-        cwtp = (1 / 70) * (1 / (Ewt * (Mpa / 70) + Fwt))        # Eq 4.2
-
-        #Density of pure water at temperature T and pressure p.
-        Iwt70 = (1 / Ewt) * np.log(abs(Ewt + Fwt))              # Eq 4.3
-        Iwtp = (1 / Ewt) * np.log(abs(Ewt * (Mpa / 70) + Fwt))  # Eq 4.4
-        rhowtp = rhow_t70 * np.exp(Iwtp - Iwt70)                # Eq 4.5
+        # Re-evaluate at standard conditions
+        degc = (60 - 32)/1.8 # 60 deg F
+        rhow_t70 = Eq41(degc, rhow_t70_arr)
+        Ewt = Eq41(degc, Ewt_arr)
+        Fwt = Eq41(degc, Fwt_arr)
+        Dm2t = Eq41(degc, Dm2t_arr)
+        Dm32t = Eq41(degc, Dm32t_arr)
+        Dm1t = Eq41(degc, Dm1t_arr)
+        Dm12t = Eq41(degc, Dm12t_arr)
+        Emt = Eq41(degc, Emt_arr)
+        Fm32t = Eq41(degc, Fm32t_arr)
+        Fm1t = Eq41(degc, Fm1t_arr)
+        Fm12t = Eq41(degc, Fm12t_arr)
         
-        # Density of brine at temperature T and the reference pressure of 70 MPa
-        rhobt70 = (rhow_t70 + Dm2t * m **2 + Dm32t * m ** 1.5 + Dm1t * m + Dm12t * m ** 0.5)  # Eq 4.6
+        # -- CO2-Free Brine & Freshwater Density at standard conditions (gm/cm3)
+        sg_SC_Brine, rhowSC = brine_denw(PSTND/10)
         
-        # Brine compressibility coefficients Eb(T,m) and Fb(T,m) from equations (4.7) and (4.8).
-        Ebtm = Ewt + Emt * m                                                                  # Eq 4.7
-        Fbtm = Fwt + Fm32t * m ** 1.5 + Fm1t * m + Fm12t * m ** 0.5                           # Eq 4.8
+        # Calculate mass of 1 sm3 of brine without CO2
+        brine_mass = sg_SC_Brine * DENW              # kg brine / sm3 (No CO2)
+        brine_moles = brine_mass / MwB               # kg Moles of brine per sm3
         
-        # Return methane-free brine density as well as fresh water density in g/cm3
-        cbtpm = (1 / 70) * (1 / (Ebtm * (Mpa / 70) + Fbtm))                                   # Eq 4.9 (Step 6)
-        Ibt70 = (1 / Ebtm) * np.log(abs(Ebtm + Fbtm))                                         # Eq 4.10 (Step 7)
-        Ibtpm = (1 / Ebtm) * np.log(abs(Ebtm * (Mpa / 70) + Fbtm))                            # Eq 4.11
-        return rhobt70 * np.exp(Ibtpm - Ibt70), rhowtp                                        # Eq 4.12
-    
-    # -- CO2 free brine viscosity Mao-Duan (2009) + fresh water viscosity
-    def vis_brine(Mpa, rhowtp):
+        # Calculate mass of 1 sm3 of fresh water at reservoir conditions
+        water_mass = rhowtp * DENW                   # kg water / sm3 (Freshwater)
         
-        #-- Viscosity of pure water - Eq 4.41 - 4.42
-        lnuw_tp = sum([d[i] * np.power(tKel, (i - 3)) for i in range(1, 6)])
-        lnuw_tp += sum([rhowtp * (d[i] * np.power(tKel, (i - 8))) for i in range(6, 11)])
-        uw_tp = np.exp(lnuw_tp)
-
-        #-- Calculate relative viscosity of brine.    Eq 4.43 - 4.47
-        AA = a[0] + a[1] * tKel + a[2] * tKel * tKel 
-        BB = b[0] + b[1] * tKel + b[2] * tKel * tKel
-        CC = c[0] + c[1] * tKel
-        lnur_tm = AA * m + BB * m ** 2 + CC * m ** 3
-        ur_tm = np.exp(lnur_tm)
+        # Calculate volume at standard conditions of that much freshwater mass
+        sc_volume_freshwater = water_mass / DENW / rhowSC # m3 freshwater
+        bw_freshwater = 1/sc_volume_freshwater
         
-        # And then brine viscosity in Pa.s, converted to cP
-        return (ur_tm * uw_tp * 1000, uw_tp*1000)  # cP - Eq 4.48
-    
-    def partMolVol(degK):
-        #  Partial Molar Volume of dissolved CO2: Garcia Eq (3)
-        tC = degK - 273.15
-        return 37.51 + tC * (-0.09585 + tC * (0.000874 - tC * 0.0000005044))
-    
-    # -- Correcting brine density for dissolved CO2, JE Garcia, LBNL Report# 49023, Oct 2011, "Density of Aqueous Solutions of CO2"
-    def garciaDensity(rhoBRnoCO2, tKel, pBar, ppm, xCO2, MwB, MwG):
-        xNotCO2 = 1.0 - xCO2                         #--Brine (H20+Salt) Mole Fraction
-        xRat = xCO2 / xNotCO2                        #--Mole Fraction Ratio, Gas/Brine
-        mRat = MwG / MwB                             #--Mole Weight Ratio  , Gas/Brine
-        vPhi = partMolVol(tKel)                      #--Apparent Molar Volume of Dissolved CO2
-        return (1.0 + mRat * xRat) / (vPhi * xRat / MwB + 1.0 / rhoBRnoCO2) # --Equation 18 of Garcia paper
-    
-    # Correct CO2 free brine viscosity for dissolved CO2
-    # Using approach from "Viscosity Models and Effects of Dissolved CO2", Akand W. Islam and Eric S. Carlson (Jul 2012), Energy Fuels 2012, 26, 8, 5330–5336, https://doi.org/10.1021/ef3006228
-    def co2_vis_brine(cP_brine, xCO2):
-        # Uses CO2 free brine viscosity (cP) and mole fraction CO2 in brine (xCO2), and returns cP
-        return cP_brine * (1 + 4.65 * xCO2**1.0134)
-
-    # Density and viscosity at specified pressure & temperature (No CO2)
-    sg_brine, rhowtp = brine_denw(Mpa)                        # rhowtp is density of pure water
-    cP_brine, cP_freshwater = vis_brine(Mpa, rhowtp)
-    
-    # Correct for CO2 content
-    sg_CO2_Brine = garciaDensity(sg_brine, tKel, pBar, ppm, xCO2, MwB, MwG)
-    cP_CO2_brine = co2_vis_brine(cP_brine, xCO2)
-    
-    # Revaluate at +1 bar for viscosibility calculations
-    # Use unchanged xCO2, as viscosibility typically used to characterized UNDERsaturated viscosity behaviour
-    sg_brine_, rhowtp_ = brine_denw(Mpa + 0.1)
-    cP_brine_, cP_freshwater_ = vis_brine(Mpa + 0.1, rhowtp_)
-    sg_CO2_Brine_ = garciaDensity(sg_brine_, tKel, pBar + 1, ppm, xCO2, MwB, MwG)
-    cP_CO2_brine_ = co2_vis_brine(cP_brine_, xCO2)
-    
-    # -- Numerically calculate viscosibility from Mao-Duan (2009) base viscosity with Garcia correction for CO2
-    dvdpsi = (cP_CO2_brine_ - cP_CO2_brine)  #-- d[Viscosity/dp [cP/bar]
-    viscosblty = dvdpsi * 2 / (cP_CO2_brine + cP_CO2_brine_)  # (1/bar)
-    
-    # Re-evaluate at reservoir temperature and 1 atmosphere (Rhob_atm)
-    Rhob_atm, rhowtp_atm_ = brine_denw(PSTND/10)
-
-    # Re-evaluate at standard conditions
-    degc = (60 - 32)/1.8 # 60 deg F
-    rhow_t70 = Eq41(degc, rhow_t70_arr)
-    Ewt = Eq41(degc, Ewt_arr)
-    Fwt = Eq41(degc, Fwt_arr)
-    Dm2t = Eq41(degc, Dm2t_arr)
-    Dm32t = Eq41(degc, Dm32t_arr)
-    Dm1t = Eq41(degc, Dm1t_arr)
-    Dm12t = Eq41(degc, Dm12t_arr)
-    Emt = Eq41(degc, Emt_arr)
-    Fm32t = Eq41(degc, Fm32t_arr)
-    Fm1t = Eq41(degc, Fm1t_arr)
-    Fm12t = Eq41(degc, Fm12t_arr)
-    
-    # -- CO2-Free Brine & Freshwater Density at standard conditions (gm/cm3)
-    sg_SC_Brine, rhowSC = brine_denw(PSTND/10)
-    
-    # Calculate mass of 1 sm3 of brine without CO2
-    brine_mass = sg_SC_Brine * DENW              # kg brine / sm3 (No CO2)
-    brine_moles = brine_mass / MwB               # kg Moles of brine per sm3
-    
-    # Calculate mass of 1 sm3 of fresh water at reservoir conditions
-    water_mass = rhowtp * DENW                   # kg water / sm3 (Freshwater)
-    
-    # Calculate volume at standard conditions of that much freshwater mass
-    sc_volume_freshwater = water_mass / DENW / rhowSC # m3 freshwater
-    bw_freshwater = 1/sc_volume_freshwater
-    
-    # Rearrange: xCO2 = co2_moles / (co2_moles + brine_moles)
-    co2_moles = brine_moles * xCO2 / (1 - xCO2)    # kg Moles of dissolved CO2 per sm3
-    
-    co2_mass = co2_moles * MWCO2                   # kg co2 / sm3 brine
-    rs = KGMOL2SM3 * co2_moles                     # sm3 CO2 per sm3 Brine (23.545 m3/kgmol at 60 deg F and 1 atm)
-    brine_res_vol = brine_mass / (sg_brine * DENW) # reservoir volume of brine (res m3 No CO2)
-    
-    # Total mass of brine and CO2, divided by density will yield FVF
-    tot_mass = co2_mass + brine_mass
-    bw = tot_mass / (sg_CO2_Brine * DENW)
-    
-    # Undersaturated compressibility = 1/V dV/dP
-    c_usat = 1 - sg_CO2_Brine / sg_CO2_Brine_ # 1/Bar    
-    
-    return ([sg_CO2_Brine, sg_brine, rhowtp], [cP_CO2_brine, cP_brine, cP_freshwater], viscosblty, [bw, brine_res_vol, bw_freshwater], rs, c_usat)
+        # Rearrange: xCO2 = co2_moles / (co2_moles + brine_moles)
+        co2_moles = brine_moles * xCO2 / (1 - xCO2)    # kg Moles of dissolved CO2 per sm3
+        
+        co2_mass = co2_moles * MWCO2                   # kg co2 / sm3 brine
+        rs = KGMOL2SM3 * co2_moles                     # sm3 CO2 per sm3 Brine (23.545 m3/kgmol at 60 deg F and 1 atm)
+        brine_res_vol = brine_mass / (sg_brine * DENW) # reservoir volume of brine (res m3 No CO2)
+        
+        # Total mass of brine and CO2, divided by density will yield FVF
+        tot_mass = co2_mass + brine_mass
+        bw = tot_mass / (sg_CO2_Brine * DENW)
+        
+        # Undersaturated compressibility = 1/V dV/dP
+        c_usat = 1 - sg_CO2_Brine / sg_CO2_Brine_ # 1/Bar    
+        
+        return ([sg_CO2_Brine, sg_brine, rhowtp], [cP_CO2_brine, cP_brine, cP_freshwater], viscosblty, [bw, brine_res_vol, bw_freshwater], rs, c_usat)
