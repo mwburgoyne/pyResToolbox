@@ -54,6 +54,7 @@ class z_method(Enum):  # Gas Z-Factor calculation model
     DAK = 0
     HY = 1
     WYW = 2
+    PR = 3
 
 
 class c_method(Enum):  # Gas critical properties calculation method
@@ -182,6 +183,7 @@ def gas_rate_radial(
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
                  'WYW' Wang, Ye & Wu (2021)
+                 'PR' Tuned single component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
                  defaults to 'DAK' if not specified
         cmethod: Method for calculating critical properties
                'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
@@ -306,6 +308,7 @@ def gas_rate_linear(
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
                  'WYW' Wang, Ye & Wu (2021)
+                 'PR' Tuned single component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
                  defaults to 'DAK' if not specified
         cmethod: Method for calculting critical properties
                'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
@@ -554,6 +557,7 @@ def gas_z(
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
                  'WYW' Wang, Ye & Wu (2021)
+                 'PR' Tuned single component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
                  defaults to 'DAK' if not specified
         cmethod: Method for calculting critical properties
                'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
@@ -635,7 +639,7 @@ def gas_z(
             niter = 0
             minppr = min_ppr(tr)
             
-            if abs(pr - minppr) > 0.05: # If Ppr is further from calculated minimum Ppr than 0.05, use Netwon solver
+            if abs(pr - minppr) > 0.05: # If Ppr is further from calculated minimum Ppr than 0.05, use Newton solver
                 newton_solve = True
             else:
                 newton_solve = False    # Else, use bisection solver, and setup Z bounds to search within
@@ -643,7 +647,7 @@ def gas_z(
                 bounds = (minz - 0.02, minz + 0.02)
     
             if newton_solve:
-                midz = min(max(0.1, z_wyw(pr, tr)),3) # First guess using explict calculation method
+                midz = min(max(0.1, z_pr([pr], tr)),3) # First guess using explicit calculation method
                 mid_err = 1
                 while abs(mid_err) > tol and niter < 100:
                     midz, mid_err = new_dak_z(midz, pr, tr)
@@ -706,7 +710,60 @@ def gas_z(
         else:
             return zs
 
-    zfuncs = {"DAK": zdak, "HY": z_hy, "WYW": z_wyw}
+    def z_pr(pprs, tr):
+        
+        # Analytic solution for maximum real root of cubic polynomial
+        # a[0] * Z^3 + a[1]*Z^2 + a[2]*Z + a[3] = 0
+        def max_root(a):
+            p = (3 * a[2]- a[1]**2)/3
+            q = (2 * a[1]**3 - 9 * a[1] * a[2] + 27 * a[3])/27
+            root_diagnostic = q**2/4 + p**3/27
+
+            if root_diagnostic < 0:
+                m = 2*np.sqrt(-p/3)
+                qpm = 3*q/p/m
+                theta1 = np.arccos(qpm)/3
+                roots = np.array([m*np.cos(theta1), m*np.cos(theta1+4*np.pi/3), m*np.cos(theta1+2*np.pi/3)])
+                Zs = roots - a[1] / 3
+            else:
+                P = (-q/2 + np.sqrt(root_diagnostic))
+                if P >= 0:
+                    P = P **(1/3)
+                else:
+                    P = -(-P)**(1/3)
+            
+                Q = (-q/2 - np.sqrt(root_diagnostic))
+                if Q >=0:
+                    Q = Q **(1/3)
+                else:
+                    Q = -(-Q)**(1/3)
+                Zs = np.array([P + Q]) - a[1] / 3
+            return max(Zs)
+    
+        w, s = -0.048964, -0.394899
+        m = 0.37464 + 1.54226 * w - 0.26992 * w**2
+        alpha = (1 + m * (1 - np.sqrt(tr)))**2    
+        
+        zout = []
+        for pr in pprs:
+            A = 0.429188 * alpha * pr / tr**2
+            B = 0.0692551 * pr / tr
+    
+            # Coefficients of Cubic: a[0] * Z^3 + a[1]*Z^2 + a[2]*Z + a[3] = 0
+            a = [1, -(1 - B), A - 3 * B**2 - 2 * B, -(A * B - B**2 - B**3)]  
+            zout.append(max_root(a) - s * B) # Volume translated Z          
+                
+        if single_p:
+            return zout[0]
+        else:
+            return np.array(zout)
+            
+        if single_p:
+            return float(zs)
+        else:
+            return zs
+            
+    zfuncs = {"DAK": zdak, "HY": z_hy, "WYW": z_wyw, "PR": z_pr}
 
     return zfuncs[zmethod.name](pprs, tr)
 
@@ -733,6 +790,7 @@ def gas_ug(
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                    'HY' Hall & Yarborough (1973)
                    'WYW' Wang, Ye & Wu (2021)
+                   'PR' Tuned single component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
                    defaults to 'DAK' if not specified
           cmethod: Method for calculting critical properties
                    'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
@@ -878,6 +936,7 @@ def gas_bg(
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
                  'WYW' Wang, Ye & Wu (2021)
+                 'PR' Tuned single component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
                  defaults to 'DAK' if not specified
         cmethod: Method for calculting critical properties
                  'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
@@ -930,6 +989,7 @@ def gas_den(
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                    'HY' Hall & Yarborough (1973)
                    'WYW' Wang, Ye & Wu (2021)
+                   'PR' Tuned single component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
                    defaults to 'DAK' if not specified
           cmethod: Method for calculting critical properties
                    'sut' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
@@ -988,6 +1048,7 @@ def gas_ponz2p(
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
                  'WYW' Wang, Ye & Wu (2021)
+                 'PR' Tuned single component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
                  defaults to 'DAK' if not specified
         cmethod: Method for calculting critical properties
                  'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
@@ -1064,6 +1125,7 @@ def gas_grad2sg(
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
                  'WYW' Wang, Ye & Wu (2021)
+                 'PR' Tuned single component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
                  defaults to 'DAK' if not specified
         cmethod: Method for calculting critical properties
                  'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
@@ -1130,6 +1192,7 @@ def gas_dmp(
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                    'HY' Hall & Yarborough (1973)
                    'WYW' Wang, Ye & Wu (2021)
+                   'PR' Tuned single component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
                    defaults to 'DAK' if not specified
         cmethod: Method for calculting critical properties
                  'sut' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
