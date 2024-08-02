@@ -1,0 +1,168 @@
+Metadata-Version: 2.1
+Name: pyrestoolbox
+Version: 1.9.3.1
+Summary: pyResToolbox - A collection of Reservoir Engineering Utilities
+Home-page: https://github.com/mwburgoyne/pyResToolbox
+Author: Mark W. Burgoyne
+Author-email: mark.w.burgoyne@gmail.com
+Keywords: restoolbox,petroleum,reservoir
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+Classifier: Operating System :: OS Independent
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: requests
+Requires-Dist: numpy
+Requires-Dist: scipy
+Requires-Dist: pandas
+Requires-Dist: tabulate
+Requires-Dist: gwr_inversion
+Requires-Dist: mpmath
+Requires-Dist: openpyxl
+Requires-Dist: setuptools
+
+`pyrestoolbox`
+==============
+
+\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\--
+A collection of Reservoir Engineering Utilities
+\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\--
+
+This set of functions focuses on those that the author uses often while
+crafting programming solutions. These are the scripts that are often
+copy/pasted from previous work - sometimes slightly modified - resulting
+in a trail of slightly different versions over the years. Some attempt
+has been made here to make this implementation flexible enough such that
+it can be relied on as-is going forward.
+
+Note: Version 2.x now refactors functions into different modules, requiring seperate imports
+
+Includes functions to perform simple calculations including;
+
+-   Inflow for oil and gas
+-   PVT Calculations for oil
+-   PVT calculation for gas
+-   Return critical parameters for typical components
+-   Creation of Black Oil Table information
+-   Creation of layered permeability distribution consistent with a
+    Lorenz heterogeneity factor
+-   Extract problem cells information from Intesect (IX) print files
+-   Generation of AQUTAB include file influence functions for use in
+    ECLIPSE
+-   Creation of Corey and LET relative permeability tables in Eclipse
+    format
+-   Calculation of Methane and CO2 saturated brine properties
+
+Apologies in advance that it is only in oilfield
+units with no current plans to add universal multi-unit support.
+
+Changelist in 2.0.0:
+- Modified the new Z-Factor method, 'PR', now a tuned five component Peng Robinson method that is fast and stable and able to handle up to 100% of CO2, H2S, N2 or H2 as well as natural gas. Viscosities are calculated with a tuned LBC model.
+- Refactored all code to split into modules for ease of future maintenance
+
+Changelist in 1.4.4:
+- Added in new Z-Factor method, 'PR', which is a tuned single component Peng Robinson method that is fast and stable 
+
+
+Changelist in 1.4.2:
+- Corrected CO2 solubility calculations when two roots in CO2 liquid phase
+
+Changelist in 1.4.1:
+- Added calculation of Ezrokhi coefficients for brine density and viscosity with dissolved CO2
+
+Changelist in 1.4.0:
+- Introduced CO2 saturated brine calculations using Spycher & Pruess modified SRK EOS method
+- Rectified an error introduced in Gas Z-Factor calculations due to errant indentation
+
+Changelist in 1.3.9:
+- Tweaks to speed DAK and Hall & Yarborough Z-Factor calculations
+
+Changelist in 1.3.8:
+- Fix bug in Hall & Yarborough Z-Factor calculation
+
+Changelist in 1.3.5:
+- Fix bug in ECL deck zip/check recursion
+
+Changelist in 1.3.4:
+- Extend ECL deck zip/check function to handle IX formatted decks, and support zipping multiple decks at once.
+
+Changelist in 1.3.2:
+- Added robust Rachford Rice solver in Simulation Helpers
+- Moved relative permeability functions and simulation helpers to seperate .simtools module
+
+Changelist in 1.2.0
+- Added Component Critical Property Library
+
+Changelist in v1.1.4:
+- Attempting to fix reported issue with required dependencies not installing correctly
+
+Changelist in v1.1:
+- Fix API to SG calculation (141.4 vs 141.5)
+- Added lower limit to first rho_po estimate for Oil Density with McCain method to avoid negative values with high Rs
+- Added oil_sg and oil_api functions
+- Modified HY Z-Factor solve algorithm to improve robustness
+- Modified DAK Z-Factor solve algorithm to improve robustness
+- Added Gas Z-Factor correlation from Wang, Ye & Wu (2021)
+- Removed 'LIN' Z-Factor method due to significant errors above 12,000 psi. Use WYW method instead if speed needed.
+
+Head to the project site for more information & documentation;
+https://github.com/mwburgoyne/pyResToolbox
+
+Start by importing the package;
+from pyrestoolbox import pyrestoolbox as rtb
+
+Function List includes
+-------------
+
+-   Gas Flow Rate Radial    
+-   Gas Flow Rate Linear    
+-   Oil Flow Rate Radial    
+-   Oil Flow Rate Linear    
+----------------------------
+-   Gas Tc & Pc Calculation 
+-   Gas Z-Factor            
+    Calculation             
+-   Gas Viscosity           
+-   Gas Viscosity \* Z      
+-   Gas Compressibility     
+-   Gas Formation Volume Factor                  
+-   Gas Density             
+-   Gas Water of Condensation            
+-   Convert P/Z to P        
+-   Convert Gas Gradient to SG                      
+-   Delta Pseudopressure    
+-   Gas Condensate FWS SG   
+----------------------------
+-   Component Critical Properties Library
+----------------------------
+-   Oil Density from MW     
+-   Oil Critical Properties with Twu                
+-   Incrememtal GOR post Separation              
+-   Oil Bubble Point Pressure                
+-   Oil GOR at Pb           
+-   Oil GOR at P            
+-   Oil Compressibility     
+-   Oil Density             
+-   Oil Formation Volume Factor                  
+-   Oil Viscosity           
+-   Generate Black Oil Table data              
+-   Estimate soln gas SG from oil                
+-   Estimate SG of gas post separator               
+-   Calculate weighted average surface gas SG  
+-   Oil API to SG              
+-   Oil SG to API
+----------------------------
+-   Calculate suite of methane saturated brine properties  
+-   Calculate suite of CO2 saturated brine properties   
+----------------------------
+-   Lorenz coefficient from Beta value                   
+-   Lorenz coefficient from flow fraction                
+-   Lorenz coefficient to flow fraction                
+-   Lorenz coefficient to permeability array      
+----------------------------
+-   Summarize IX convergence errors from PRT file                
+-   Create Aquifer Influence Functions     
+-   Solve Rachford Rice for user specified feed Zis and Ki's 
+-   Create sets of rel perm tables                  
+                            
+   

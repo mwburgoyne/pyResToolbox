@@ -9,6 +9,8 @@ A collection of Reservoir Engineering Utilities
 This set of functions focuses on those that the author uses often while crafting programming solutions. 
 These are the scripts that are often copy/pasted from previous work - sometimes slightly modified - resulting in a trail of slightly different versions over the years. Some attempt has been made here to make this implementation flexible enough such that it can be relied on as-is going forward.
 
+Note: Version 2.x now refactors functions into different modules, requiring seperate imports
+
 Includes functions to perform simple calculations including;
 
 - Inflow for oil and gas
@@ -31,16 +33,11 @@ Upgrade previous installations with
     pip install pyrestoolbox --upgrade
 
 
-Function List
+Module List
 =============
 
 +----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `Inflow <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/inflow.rst>`_                   | - Gas Flow Rate Radial                                          |
-|                                                                                                    | - Gas Flow Rate Linear                                          |
-|                                                                                                    | - Oil Flow Rate Radial                                          |
-|                                                                                                    | - Oil Flow Rate Linear                                          |
-+----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `Gas PVT <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/gas.rst>`_                     | - Gas Tc & Pc Calculation                                       |
+| `gas <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/gas.rst>`_                         | - Gas Tc & Pc Calculation                                       |
 |                                                                                                    | - Gas Z-Factor Calculation                                      |
 |                                                                                                    | - Gas Viscosity                                                 |
 |                                                                                                    | - Gas Viscosity * Z                                             |
@@ -52,10 +49,10 @@ Function List
 |                                                                                                    | - Convert Gas Gradient to SG                                    |
 |                                                                                                    | - Delta Pseudopressure                                          |
 |                                                                                                    | - Gas Condensate FWS SG                                         |
+|                                                                                                    | - Gas Flow Rate Radial                                          |
+|                                                                                                    | - Gas Flow Rate Linear                                          |
 +----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `Component Library <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/components.rst>`_    | - Return critical parameters for typical single components      |
-+----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `Oil PVT  <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/oil.rst>`_                    | - Oil Density from MW                                           |
+| `oil <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/oil.rst>`_                         | - Oil Density from MW                                           |
 |                                                                                                    | - Oil Critical Properties with Twu                              |
 |                                                                                                    | - Incrememtal GOR post Separation                               |
 |                                                                                                    | - Oil Bubble Point Pressure                                     |
@@ -71,17 +68,20 @@ Function List
 |                                                                                                    | - Calculate weighted average surface gas SG                     |
 |                                                                                                    | - Oil API to SG                                                 |
 |                                                                                                    | - Oil SG to API                                                 |
+|                                                                                                    | - Oil Flow Rate Radial                                          |
+|                                                                                                    | - Oil Flow Rate Linear                                          |
 +----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `CH4 Saturated Brine PVT <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/water.rst>`_   | - Calculate suite of methane saturated brine properties         |
+| `library <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/library.rst>`_                 | - Return critical parameters for typical single components      |
 +----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `CO2 Saturated Brine PVT <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/brineco2.rst>`_| - Calculate suite of CO2 saturated brine properties             |
+| `brine <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/brine.rst>`_                     | - Calculate suite of brine properties with variable methane     |
+|                                                                                                    | - Calculate suite of CO2 saturated brine properties             |
 +----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `Permeability Layering <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/layer.rst>`_     | - Lorenz coefficient from Beta value                            |
+| `layer <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/layer.rst>`_                     | - Lorenz coefficient from Beta value                            |
 |                                                                                                    | - Lorenz coefficient from flow fraction                         |
 |                                                                                                    | - Lorenz coefficient to flow fraction                           |
 |                                                                                                    | - Lorenz coefficient to permeability array                      |
 +----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `Simulation Helpers <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/sim.rst>`_          | - Summarize IX convergence errors from PRT file                 |
+| `simtools <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/simtools.rst>`_               | - Summarize IX convergence errors from PRT file                 |
 |                                                                                                    | - Create Aquifer Influence Functions                            |
 |                                                                                                    | - Perform recursive ECL or IX deck zip/check for INCLUDE files  |
 |                                                                                                    | - Solve Rachford Rice for user specified feed Zis and Ki's      |
@@ -105,8 +105,8 @@ A simple example below of estimating oil bubble point pressure.
 
 .. code-block:: python
 
-    >>> from pyrestoolbox import pyrestoolbox as rtb
-    >>> rtb.oil_pbub(api=43, degf=185, rsb=2350, sg_g =0.72, pbmethod ='VALMC')
+    >>> from pyrestoolbox import oil
+    >>> oil.oil_pbub(api=43, degf=185, rsb=2350, sg_g =0.72, pbmethod ='VALMC')
     5179.51086900132
     
 A set of Gas-Oil relative permeability curves with the LET method
@@ -114,7 +114,8 @@ A set of Gas-Oil relative permeability curves with the LET method
 .. code-block:: python
 
     >>> import matplotlib.pyplot as plt
-    >>> df = rtb.simtools.rel_perm(rows=25, krtable='SGOF', krfamily='LET', kromax =1, krgmax =1, swc =0.2, sorg =0.15, Lo=2.5, Eo = 1.25, To = 1.75, Lg = 1.2, Eg = 1.5, Tg = 2.0)
+    >>> from pyrestoolbox import simtools 
+    >>> df = simtools.rel_perm(rows=25, krtable='SGOF', krfamily='LET', kromax =1, krgmax =1, swc =0.2, sorg =0.15, Lo=2.5, Eo = 1.25, To = 1.75, Lg = 1.2, Eg = 1.5, Tg = 2.0)
     >>> plt.plot(df['Sg'], df['Krgo'], c = 'r', label='Gas')
     >>> plt.plot(df['Sg'], df['Krog'], c = 'g', label='Oil')
     >>> plt.title('SGOF Gas Oil LET Relative Permeability Curves')
@@ -131,7 +132,7 @@ Or a set of Water-Oil relative permeability curves with the Corey method
 
 .. code-block:: python
 
-    >>> df = rtb.simtools.rel_perm(rows=25, krtable='SWOF', kromax =1, krwmax =0.25, swc =0.15, swcr = 0.2, sorw =0.15, no=2.5, nw=1.5)
+    >>> df = simtools.rel_perm(rows=25, krtable='SWOF', kromax =1, krwmax =0.25, swc =0.15, swcr = 0.2, sorw =0.15, no=2.5, nw=1.5)
     >>> plt.plot(df['Sw'], df['Krow'], c = 'g', label='Oil')
     >>> plt.plot(df['Sw'], df['Krwo'], c = 'b', label='Water')
     >>> plt.title('SWOF Water Oil Corey Relative Permeability Curves')
@@ -149,7 +150,7 @@ A set of dimensionless pressures for the constant terminal rate Van Everdingin &
 .. code-block:: python
 
     >>> ReDs = [1.5, 2, 3, 5, 10, 25, 1000]
-    >>> tds, pds = rtb.influence_tables(ReDs=ReDs, export=True)
+    >>> tds, pds = simtools.influence_tables(ReDs=ReDs, export=True)
     >>> 
     >>> for p, pd in enumerate(pds):
     >>>     plt.plot(tds, pd, label = str(ReDs[p]))
@@ -170,7 +171,7 @@ Or creating black oil table information for oil
 
 .. code-block:: python
 
-    >>> results = rtb.make_bot_og(pi=4000, api=38, degf=175, sg_g=0.68, pmax=5000, pb=3900, rsb=2300, nrows=50)
+    >>> results = oil.make_bot_og(pi=4000, api=38, degf=175, sg_g=0.68, pmax=5000, pb=3900, rsb=2300, nrows=50)
     >>> df, st_deno, st_deng, res_denw, res_cw, visw, pb, rsb, rsb_frac, usat = results['bot'], results['deno'], results['deng'], results['denw'], results['cw'], results['uw'], results['pb'], results['rsb'], results['rsb_scale'], results['usat']
     >>> 
     >>> print('Stock Tank Oil Density:', st_deno, 'lb/cuft')
@@ -239,7 +240,7 @@ With ability to generate Live Oil PVTO style table data as well
 .. code-block:: python
 
     >>> pb = 4500
-    >>> results = rtb.make_bot_og(pvto=True, pi=4000, api=38, degf=175, sg_g=0.68, pmax=5500, pb=pb, nrows=25, export=True)
+    >>> results = oil.make_bot_og(pvto=True, pi=4000, api=38, degf=175, sg_g=0.68, pmax=5500, pb=pb, nrows=25, export=True)
     >>> df, st_deno, st_deng, res_denw, res_cw, visw, pb, rsb, rsb_frac, usat = results['bot'], results['deno'], results['deng'], results['denw'], results['cw'], results['uw'], results['pb'], results['rsb'], results['rsb_scale'], results['usat']
     >>> 
     >>> if len(usat) == 0:

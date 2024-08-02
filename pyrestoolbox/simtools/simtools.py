@@ -1,3 +1,6 @@
+ï»¿#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+
 """
     pyResToolbox - A collection of Reservoir Engineering Utilities
               Copyright (C) 2022, Mark Burgoyne
@@ -27,11 +30,10 @@ import os
 from os.path import exists
 import zipfile
 
+from typing import Union
 import numpy as np
 import numpy.typing as npt
-from scipy.integrate import quad
-from scipy.optimize import brentq
-#from scipy.optimize import minimize
+
 import pandas as pd
 from tabulate import tabulate
 from gwr_inversion import gwr
@@ -51,14 +53,6 @@ class kr_table(Enum):  # Relative permeability table type
     SGOF = 1
     SGWFN = 2
     
-# Constants
-R = 10.731577089016  # Universal gas constant, ft³·psia/°R·lb.mol
-psc = 14.696  # Standard conditions pressure (psia)
-tscf = 60  # Standard conditions temperature (deg F)
-f2r = 459.67  # Offset to convert degrees F to degrees Rankine
-tscr = tscf + f2r  # Standard conditions temperature (deg R)
-mw_air = 28.97  # MW of Air
-scf_per_mol = R * tscr / psc  # scf/lb-mol (V = ZnRT/P, Z = 1, n = 1)
 
 def ix_extract_problem_cells(filename: str = "", silent: bool = False) -> list:
     """
@@ -890,15 +884,15 @@ def zip_check_sim_deck(files2scrape = [], tozip = True, console_summary = True):
         # Load file into list
         try:
             lines = list(tuple(open(files2scrape[nscraped], 'r')))
-
         except:
             if not exists(files2scrape[nscraped]):
-                missing.append(files2scrape[nscraped])
-                missing_parents.append(parent_filenames[nscraped])
-                nscraped += 1
-                got_next = True
-                if len(files2scrape) == nscraped:
-                    got_all = True
+                if files2scrape[nscraped] not in missing:
+                    missing.append(files2scrape[nscraped])
+                    missing_parents.append(parent_filenames[nscraped])
+            nscraped += 1
+            got_next = True
+            if len(files2scrape) == nscraped:
+                got_all = True
             continue
 
         for line in lines:
@@ -910,46 +904,36 @@ def zip_check_sim_deck(files2scrape = [], tozip = True, console_summary = True):
                 continue
             if line.upper()[:7]=='INCLUDE':
                 get_include = True
-                if '{' in line and 'TYPE' in line.upper(): # Must be IX file
-                    line = line.split('{')[0] # Remove trailing information for IX
-                    line = line.split()[1] # Get filename
-                    line = line.replace('"','') # Remove double inverted commas
-                    line=line.strip()
-                    if line not in files2scrape:
-                        files2scrape.append(line)   
-                        parent_filenames.append(files2scrape[nscraped])
-                        if '..' in line:
-                            higher_dir = True
-                    get_include = False
-                continue
+
             if get_include:
-                try:
-                    line = line.split('--')[0] # Remove trailing comments in ECL
-                except:
-                    pass
-                line = line.strip() # Remove trailing spaces that may remain after removing trailing comments
-                    
-                if '/' in line: # A data line - grab it
-                    idx = line.rfind('/') # Find index of last '/' instance 
-                    line = line[:idx]
-                    line = line.replace('"','') # Remove double inverted commas
-                    line = line.replace("'",'') # Remove single inverted commas
-                    line = line.strip() # Remove leading and trailing spaces
                 
-                    if line not in files2scrape:
-                        files2scrape.append(line)   
-                        parent_filenames.append(files2scrape[nscraped])
-                        if '..' in line:
-                            higher_dir = True
+                # Remove any trailing comments that might give false negatives
+                line = line.split('--')[0]
+                line = line.split('#')[0]
+                
+                line = line.replace('"',"'") # Remove double inverted commas, replace with single commas
+                if '.' not in line and "'" not in line: # Filename not in this line
+                    continue
+                
+                include_file = line.split("'")[1] # Get filename
+                include_file=include_file.strip()
+                if include_file not in files2scrape:
+                    files2scrape.append(include_file)   
+                    parent_filenames.append(files2scrape[nscraped])
+                    if '..' in include_file:
+                        higher_dir = True
                 get_include = False
+                continue
+ 
         got_next = True
                 
         # Finished scraping a file - are there any left?
+        nscraped += 1
         if len(files2scrape) == nscraped:
             got_all = True
             continue
             
-        nscraped += 1
+        
         
     if len(missing)>0:
         if console_summary:
@@ -1009,11 +993,17 @@ def zip_check_sim_deck(files2scrape = [], tozip = True, console_summary = True):
         return missing
     else:
         return
-                
-    
-            
+
+def ensure_numpy_array(data):
+    if isinstance(data, list):
+        return np.array(data)
+    elif isinstance(data, np.ndarray):
+        return data
+    else:
+        raise ValueError("Input is neither a list nor a numpy array.")
+                               
 def rr_solver(
-    zi: np.ndarray, ki: np.ndarray
+    zi: Union[npt.ArrayLike, list], ki: Union[npt.ArrayLike, list]
 ) -> Tuple[int, np.ndarray, np.ndarray, float, float]:
     """
     Solves for the root of the Rachford-Rice equation using a method that 
@@ -1031,6 +1021,8 @@ def rr_solver(
     V: Vapor molar fraction (float)
     L: Liquid molar fraction (float)
     """
+    zi = ensure_numpy_array(zi)
+    ki = ensure_numpy_array(ki)
     
     zi = zi/np.sum(zi) # Normalize feed compositions
     
@@ -1086,14 +1078,14 @@ def rr_solver(
         if N_it > MAX_ITR:
             break
     
-    ui = -zi*ci*b/(1+b*(phi_min-ci)) # Eq 27b 
-    phi = (1+b*phi_min)/b            # Rearranged Eq 14b
+    ui = -zi*ci*b/(1+b*(phi_min-ci))    # Eq 27b 
+    phi = (1+b*phi_min)/b               # Rearranged Eq 14b
     
     if near_vapor:
         L = phi
         V = 1 - L
         yi = ui
-        xi = ki_hat * ui         # Eq 28
+        xi = ki_hat * ui                # Eq 28
         
     else:
         V = phi
