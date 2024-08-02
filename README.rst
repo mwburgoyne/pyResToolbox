@@ -37,7 +37,7 @@ Module List
 =============
 
 +----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `gas <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/gas.rst>`_                         | - Gas Tc & Pc Calculation                                       |
+| `gas <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/gas.rst>`_            | - Gas Tc & Pc Calculation                                       |
 |                                                                                                    | - Gas Z-Factor Calculation                                      |
 |                                                                                                    | - Gas Viscosity                                                 |
 |                                                                                                    | - Gas Viscosity * Z                                             |
@@ -52,7 +52,7 @@ Module List
 |                                                                                                    | - Gas Flow Rate Radial                                          |
 |                                                                                                    | - Gas Flow Rate Linear                                          |
 +----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `oil <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/oil.rst>`_                         | - Oil Density from MW                                           |
+| `oil <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/oil.rst>`_            | - Oil Density from MW                                           |
 |                                                                                                    | - Oil Critical Properties with Twu                              |
 |                                                                                                    | - Incrememtal GOR post Separation                               |
 |                                                                                                    | - Oil Bubble Point Pressure                                     |
@@ -71,17 +71,17 @@ Module List
 |                                                                                                    | - Oil Flow Rate Radial                                          |
 |                                                                                                    | - Oil Flow Rate Linear                                          |
 +----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `library <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/library.rst>`_                 | - Return critical parameters for typical single components      |
+| `library <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/library.rst>`_    | - Return critical parameters for typical single components      |
 +----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `brine <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/brine.rst>`_                     | - Calculate suite of brine properties with variable methane     |
+| `brine <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/brine.rst>`_        | - Calculate suite of brine properties with variable methane     |
 |                                                                                                    | - Calculate suite of CO2 saturated brine properties             |
 +----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `layer <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/layer.rst>`_                     | - Lorenz coefficient from Beta value                            |
+| `layer <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/layer.rst>`_        | - Lorenz coefficient from Beta value                            |
 |                                                                                                    | - Lorenz coefficient from flow fraction                         |
 |                                                                                                    | - Lorenz coefficient to flow fraction                           |
 |                                                                                                    | - Lorenz coefficient to permeability array                      |
 +----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `simtools <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/simtools.rst>`_               | - Summarize IX convergence errors from PRT file                 |
+| `simtools <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/simtools.rst>`_  | - Summarize IX convergence errors from PRT file                 |
 |                                                                                                    | - Create Aquifer Influence Functions                            |
 |                                                                                                    | - Perform recursive ECL or IX deck zip/check for INCLUDE files  |
 |                                                                                                    | - Solve Rachford Rice for user specified feed Zis and Ki's      |
