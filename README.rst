@@ -15,7 +15,7 @@ Includes functions to perform simple calculations including;
 
 - Inflow for oil and gas
 - PVT Calculations for oil
-- PVT calculation for gas
+- PVT calculation for gas, including up to 100% inerts for CO2, H2S, N2 and H2
 - Return critical parameters for typical components
 - Creation of Black Oil Table information
 - Creation of layered permeability distribution consistent with a Lorenze heterogeneity factor
