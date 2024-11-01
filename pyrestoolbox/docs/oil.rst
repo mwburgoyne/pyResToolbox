@@ -20,12 +20,14 @@ pyResToolBox uses class objects to track calculation options through the functio
         + 'DAK': Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al. - Slowest, Most Accurate
         + 'HY': Hall & Yarborough (1973) - Second Fastest
         + 'WYW': Wang, Ye & Wu (2021) - Fastest, Least Accurate
+        + 'BUR': Fast, can handle 100% inerts and Hydrogen. Tuned 5 component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
    * - cmethod
      - c_method
      - Method for calculating gas critical properties. Defaults to 'PMC' 
        Options are:
         + 'SUT': Sutton with Wichert & Aziz non-hydrocarbon corrections
         + 'PMC': Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
+        + 'BUR': Burgoyne method (2024). If h2 > 0, or the 'BUR' method is used for Z-Factor then 'BUR' will automatically be used
    * - pbmethod
      - pb_method
      - Method for calculating bubble point pressure of oil. Defaults to 'VELAR'. 
@@ -38,8 +40,8 @@ pyResToolBox uses class objects to track calculation options through the functio
      - Method for calculating solution gas-oil ratio. Defaults to 'VELAR'
        Options are:
         + 'VELAR': Velarde, Blasingame & McCain (1999)
-        + 'STAN': Standing Correlation (1947), using form from 
-        + 'VASBG': Vasquez & Beggs Correlation (1984)
+        + 'STAN': Standing Correlation (1947)
+        + 'VALMC': Valko-McCain Correlation (2003) - Only for oil_rs_bub (Rs at Pb)
    * - comethod
      - co_method
      - Method for calculating oil compressibility. Defaults to 'EXPLT'.  

@@ -47,7 +47,7 @@ pyrestoolbox.brine.brine_props
      - Temperature (deg F)
    * - wt
      - float
-     - Salt weight% in the brine (0-100)
+     - Salt weight% in the brine (0 - 100)
    * - ch4_sat
      - float
      - Degree of methane saturation (0 - 1). 0 = No Methane, 1 = 100% Methane saturated

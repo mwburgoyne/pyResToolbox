@@ -38,6 +38,12 @@ from pyrestoolbox.validate import validate_methods
 import pyrestoolbox.gas as gas
 import pyrestoolbox.brine as brine
 
+def get_real_part(value):
+    if isinstance(value, complex):
+        return value.real
+    else:
+        return value
+
 def oil_sg(api_value: float) -> float:
     """ Returns oil specific gravity given API value of oil
         api_value: API value
@@ -153,8 +159,8 @@ def oil_ja_sg(mw: float, ja: float) -> float:
 
 def oil_twu_props(
     mw: float, ja: float = 0, sg: float = 0, damp: float = 1
-) -> tuple:
-    """ Returns tuple of sg, tb (degR), tc (DegR), pc (psia), Vc (ft3/lb-mol) using method from Twu (1984) correlations for petroleum liquids
+) -> Tuple:
+    """ Returns Tuple of sg, tb (degR), tc (DegR), pc (psia), Vc (ft3/lb-mol) using method from Twu (1984) correlations for petroleum liquids
         Modified with damping factor proposed by A. Zick between 0 (paraffin) and 1 (original Twu)
         Returns sg, tb (R), tc (R), pc (psia), vc (ft3/lbmol)
 
@@ -474,8 +480,11 @@ def oil_pbub(
         )  # Adding 14.7 as I suspect this is in psig
 
     def pbub_valko_mccain(api, degf, sg_g, rsb, sg_sp) -> float:
-        if rsb <= 10:
-            return pbub_velarde(api, degf, sg_g, 0, sg_sp)
+        extrap = False
+        rsb2 = rsb
+        if rsb <= 1: # Extrapolate to 14.696 psia at zero GOR
+            extrap = True
+            rsb = 1
         var = [np.log(rsb), api, sg_sp, degf]
         C = [
             [-5.48, 1.27, 4.51, -0.7835],
@@ -483,19 +492,31 @@ def oil_pbub(
             [0.281, 4.36e-4, 8.39, -1.22e-5],
             [-0.0206, -4.76e-6, -2.34, 1.03e-8],
         ]
-        Zn = [sum([C[i][n] * var[n] ** i for i in range(4)]) for n in range(4)]
+        Zn = [sum([C[i][n] * var[n] ** i for i in range(4)]) for n in range(4)] # Eq 2-1
         Z = sum(Zn)
-        lnpb = 7.475 + 0.713 * Z + 0.0075 * Z ** 2
-        return np.exp(lnpb)
+        lnpb = 7.475 + 0.713 * Z + 0.0075 * Z ** 2 
+        pb = np.exp(lnpb)
+        
+        if extrap:
+            slope = (pb - 14.696)/(1 - 0)
+            intercept = pb - 1*slope
+            pb = slope * rsb2 + intercept
+
+        return pb
 
     def pbub_velarde(api, degf, sg_g, rsb, sg_sp) -> float:
         x = 0.013098 * degf ** 0.282372 - 8.2e-6 * api ** 2.176124
+        
+        rsb_lim = (0.740152 / (sg_sp ** -0.161488 * 10 ** x))**(1/0.081465) # If Rsb < than this value, then the term inside the pbp brackets of pbp goes negative and causes imaginary numbers when raised to a power
+        if rsb < rsb_lim+1e-6:
+            rsb = rsb_lim+1e-6
+            
         pbp = (
             1091.47
             * (rsb ** 0.081465 * sg_sp ** -0.161488 * 10 ** x - 0.740152)
-            ** 5.354891
+            ** 5.354891 # psig
         )
-        return pbp
+        return pbp+psc # psia
 
     fn_dic = {
         "STAN": pbub_standing,
@@ -550,33 +571,15 @@ def oil_rs_bub(
         # Solve via iteration. First guess using Velarde Rsb, then simple Newton Iterations
         old_rsb = rsbub_velarde(api, degf, pb, sg_g, sg_sp)
         standing = False
-        if old_rsb < 10:
-            return old_rsb
-        old_pbcalc = oil_pbub(
-            degf=degf, api=api, sg_sp=sg_sp, rsb=old_rsb, pbmethod=pbmethod
-        )
+
+        old_pbcalc = oil_pbub(degf=degf, api=api, sg_sp=sg_sp, rsb=old_rsb, pbmethod=pbmethod)
         old_err = old_pbcalc - pb
         new_rsb = old_rsb * pb / old_pbcalc
         i = 0
         new_err = 1000
         while abs(new_err) > 1e-5:
             i += 1
-            if new_rsb > 10:
-                new_pbcalc = oil_pbub(
-                    degf=degf,
-                    api=api,
-                    sg_sp=sg_sp,
-                    rsb=new_rsb,
-                    pbmethod=pbmethod,
-                )
-            else:
-                new_pbcalc = oil_pbub(
-                    degf=degf,
-                    api=api,
-                    sg_sp=sg_sp,
-                    rsb=new_rsb,
-                    pbmethod="STAN",
-                )
+            new_pbcalc = oil_pbub(degf=degf,api=api,sg_sp=sg_sp,rsb=new_rsb,pbmethod=pbmethod)
             new_err = new_pbcalc - pb
             
             error_slope = (new_rsb - old_rsb) / (new_err - old_err)
@@ -587,19 +590,25 @@ def oil_rs_bub(
             new_rsb = intcpt
                 
             #print('perr, pb_calc, rs_calc', new_err, new_pbcalc, new_rsb)
-            if (i > 100):  # At low rsb VALMC will not converge, use Velarde instead
-                return rsbub_velarde(api, degf, pb, sg_g, sg_sp)
+            if (i > 100):  
+                print("Problem iterating to rsbub with Valko McCain")
+                return new_rsb
         return new_rsb
 
     def rsbub_velarde(api, degf, pb, sg_g, sg_sp) -> float:
-        #print('Velarde')
-        x = 0.013098 * degf ** 0.282372 - 8.2e-6 * api ** 2.176124
-        rsb = (
-            0.270811 * sg_sp ** (10093 / 62500) * pb ** 0.186745 * 10 ** (-x)
-            + 92519 * sg_sp ** (10093 / 62500) * 2 ** (-x - 3) * 5 ** (-x - 6)
-        ) ** (200000 / 16293)
-        #print(api, degf, pb, sg_g, sg_sp, rsb)
-        return max(rsb, 0)
+        x = 0.013098 * degf ** 0.282372 - (8.2e-6 * api ** 2.176124) # Eq 14 
+        
+        # Note that the Velarde approach predicts increasing Pbub with rs falling below 1 scf/stb, so below this we will linearly extrapolate to zero instead
+        p_1scfstb = 1091.47*(sg_sp**-0.161488 * 10**x - 0.740152)**5.354891 # Eq 13
+        psig = pb - 14.696        
+        
+        if psig >= p_1scfstb:
+            rsb = (-10**(-x)* sg_sp**(0.161488) *(-(psig/1091.47)**(1/5.354891) - 0.740152))**(1/0.081465) # Rearranged Eq 13
+        else:
+            slope = (1-0)/(p_1scfstb - 0)
+            intercept = 1 - slope * p_1scfstb
+            rsb = slope * psig + intercept
+        return rsb
 
     fn_dic = {
         "STAN": rsbub_standing,
@@ -637,7 +646,7 @@ def oil_rs(
         rsmethod: A string or pb_method Enum class that specifies one of following calculation choices;
                    VELAR: Velarde, Blasingame & McCain (1997) - Default
                    STAN: Standing Correlation (1947), using form from https://www.sciencedirect.com/science/article/pii/B9780128034378000014
-                   VASBG: Vasquez & Beggs Correlation (1984)
+                   VALMC: Valko-McCain Correlation (2003)
         pbmethod: A string or pb_method Enum class that specifies one of following calculation choices;
                    STAN: Standing Correlation (1947)
                    VALMC: Valko-McCain Correlation (2003) - https://www.sciencedirect.com/science/article/abs/pii/S0920410502003194
@@ -655,8 +664,6 @@ def oil_rs(
             api=api, degf=degf, rsb=rsb, sg_sp=sg_sp, pbmethod=pbmethod
         )
     if rsb <= 0:  # Calculate rsb
-        #print('Calculating Rsb')
-        #print(api, degf, pb, sg_sp)
         rsb = oil_rs_bub(
             api=api,
             degf=degf,
@@ -664,10 +671,11 @@ def oil_rs(
             sg_sp=sg_sp,
             rsmethod=rsmethod,
         )
+        rsb =get_real_part(rsb)
         
     #print(rsb)
     
-    if p > pb:
+    if p >= pb:
         return rsb
 
     def Rs_velarde(
@@ -697,9 +705,9 @@ def oil_rs(
             for x in xs
         ]
         pr = (p - psc) / (pb - psc)
-        rsr = a[0] * pr ** a[1] + (1 - a[0]) * pr ** a[2]
+        rsr = a[0] * (pr - psc) ** a[1] + (1 - a[0]) * (pr - psc) ** a[2] # Eq 3 from Velarde & Blasingame
         rs = rsb * rsr
-        return rs
+        return get_real_part(rs)
 
     def rs_standing(api, degf, sg_sp, p, pb, rsb):
         a = 0.00091 * degf - 0.0125 * api  # Eq 1.64
@@ -707,29 +715,37 @@ def oil_rs(
             1 / 0.83
         )  # Eq 1.72 - Subtracting 14.7 as suspect this pressure in psig
 
-    def Rs_vasquezbegs(api, degf, sg_sp, p, pb, rsb):
-        sg_gs = sg_sp * (
-            1 + 5.912e-5 * api * degf_sep * np.log10(p_sep / 114.7)
-        )  # Gas sg normalized to 100 psig separator conditions
-        if api <= 30:
-            return (
-                0.0362
-                * sg_gs
-                * p ** 1.0937
-                * np.exp(25.7240 * (api / (degf + degF2R)))
-            )
-        else:
-            return (
-                0.0178
-                * sg_gs
-                * p ** 1.1870
-                * np.exp(23.9310 * (api / (degf + degF2R)))
-            )
+    def rs_valko_mccain(api, degf, sg_sp, p, pb, rsb):
+        rsb_valko = oil_rs_bub(api, degf, pb, sg_g, sg_sp, rsmethod = 'VALMC') # Rsb from Valko-McCain approach
+        rs_scaler = rsb / rsb_valko # Scalar to adjust calculated Valko McCain Rs back to be in line with teh supplied Rsb
+        return rs_scaler * oil_rs_bub(api, degf, p, sg_g, sg_sp, rsmethod = 'VALMC')
+            
+        
+                
+    #def Rs_vasquezbegs(api, degf, sg_sp, p, pb, rsb):
+    #    sg_gs = sg_sp * (
+    #        1 + 5.912e-5 * api * degf_sep * np.log10(p_sep / 114.7)
+    #    )  # Gas sg normalized to 100 psig separator conditions
+    #    if api <= 30:
+    #        return (
+    #            0.0362
+    #            * sg_gs
+    #            * p ** 1.0937
+    #            * np.exp(25.7240 * (api / (degf + degF2R)))
+    #        )
+    #    else:
+    #        return (
+    #            0.0178
+    #            * sg_gs
+    #            * p ** 1.1870
+    #            * np.exp(23.9310 * (api / (degf + degF2R)))
+    #        )
 
     fn_dic = {
         "VELAR": Rs_velarde,
         "STAN": rs_standing,
-        "VASBG": Rs_vasquezbegs,
+        #"VASBG": Rs_vasquezbegs,
+        "VALMC": rs_valko_mccain,
     }
 
     return fn_dic[rsmethod.name](
@@ -742,7 +758,7 @@ def check_sgs(
     rst: float = 5,
     rsp: float = 1000,
     sg_st: float = 1.15,
-) -> tuple:
+) -> Tuple:
     """ Function used to impute sg_g or sg_sp when one or the other is zero
         sg_g: The weighted average surface-gas specific gravity (sep gas + gas evolved from liquid after separation)
         sg_sp: Separator specific gas gravity

@@ -39,9 +39,9 @@ from pyrestoolbox.shared_fns import convert_to_numpy, process_input
 from pyrestoolbox.validate import validate_methods
 from pyrestoolbox.constants import R, psc, tsc, degF2R, tscr, scf_per_mol, CUFTperBBL, WDEN, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2
 
-def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0) -> tuple:
+def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0) -> Tuple:
     """ Calculates Brine properties from modified Spivey Correlation per McCain Petroleum Reservoir Fluid Properties pg 160
-        Returns tuple of (Bw (rb/stb), Density (sg), viscosity (cP), Compressibility (1/psi), Rw GOR (scf/stb))
+        Returns Tuple of (Bw (rb/stb), Density (sg), viscosity (cP), Compressibility (1/psi), Rw GOR (scf/stb))
         p: Pressure (psia)
         degf: Temperature (deg F)
         wt: Salt wt% (0-100)
@@ -865,7 +865,7 @@ class CO2_Brine_Mixture():
                 degC: Temperature (deg C)
                 ppm: NaCL equivalent concentration in brine (wt salt per million weight of brine)
     
-            Returns tuple of:
+            Returns Tuple of:
                 xCO2: Mole fraction CO2 in brine at pBar
                 yH2O: Mole fraction H2O in CO2 rich gas
                 rhoGas: CO2 rich gas density (gm/cm3)
@@ -1051,7 +1051,7 @@ class CO2_Brine_Mixture():
             
             [sg_CO2_Brine, sg_brine], [cP_CO2_brine, cP_brine], viscosblty, [bw, brine_res_vol], rs, c_usat)
             
-            Returns tuple of;
+            Returns Tuple of;
              - Brine Density (gm/cm3) [CO2 Saturated Brine, CO2 Free Brine, Pure Water]
              - viscosity (cP)         [CO2 Saturated Brine, CO2 Free Brine, Pure Water]
              - viscosibility (1/psi))

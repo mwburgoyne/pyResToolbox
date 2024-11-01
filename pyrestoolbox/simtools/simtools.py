@@ -30,7 +30,7 @@ import os
 from os.path import exists
 import zipfile
 
-from typing import Union
+from typing import Union, List, Tuple
 import numpy as np
 import numpy.typing as npt
 
@@ -38,7 +38,6 @@ import pandas as pd
 from tabulate import tabulate
 from gwr_inversion import gwr
 from mpmath import mp
-from typing import Tuple
 
 EPS_T = 1e-15
 MAX_ITR = 100
@@ -703,8 +702,8 @@ def influence_tables(
     n_incr: int = 20,
     M: int = 8,
     export: bool = False,
-) -> tuple:
-    """ Returns a tuple of;
+) -> Tuple:
+    """ Returns a Tuple of;
            1. Dimensionless time list
            2. list of lists of dimensionless pressures at each dimensionless time for each dimensionless radius
         and optionally writes out ECLIPSE styled AQUTAB include file
@@ -883,7 +882,7 @@ def zip_check_sim_deck(files2scrape = [], tozip = True, console_summary = True):
                     
         # Load file into list
         try:
-            lines = list(tuple(open(files2scrape[nscraped], 'r')))
+            lines = list(Tuple(open(files2scrape[nscraped], 'r')))
         except:
             if not exists(files2scrape[nscraped]):
                 if files2scrape[nscraped] not in missing:

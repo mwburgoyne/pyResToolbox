@@ -24,7 +24,7 @@
 from enum import Enum
 import numpy as np
 import numpy.typing as npt
-from typing import Union, List
+from typing import Union, List, Tuple
 
 def bisect_solve(args, f, xmin, xmax, rtol):
     err_hi = f(args, xmax)
@@ -53,7 +53,7 @@ def convert_to_numpy(input_data):
         # Input is already a numpy array, just return it
         return input_data
     else:
-        # Convert list, tuple, scalar, or other types to numpy array
+        # Convert list, Tuple, scalar, or other types to numpy array
         # Ensuring even scalars become arrays with one element
         return np.atleast_1d(input_data)
         
