@@ -42,7 +42,7 @@ class pb_method(Enum):  # Bubble point calculation method
 class rs_method(Enum):  # Oil solution gas calculation method
     VELAR = 0
     STAN = 1
-    VASBG = 2
+    VALMC = 2
 
 class bo_method(Enum):  # Oil FVF calculation method
     MCAIN = 0

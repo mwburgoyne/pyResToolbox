@@ -31,7 +31,7 @@ import numpy as np
 import numpy.typing as npt
 from scipy.integrate import quad
 from scipy.optimize import brentq
-from typing import Union, List
+from typing import Union, List, Tuple
 
 import pandas as pd
 from tabulate import tabulate
@@ -337,8 +337,8 @@ def gas_tc_pc(
     cmethod: str = "PMC",
     tc: float = 0,
     pc: float = 0,
-) -> tuple:
-    """ Returns a tuple of critical temperature (deg R) and critical pressure (psia) for hydrocarbon gas
+) -> Tuple:
+    """ Returns a Tuple of critical temperature (deg R) and critical pressure (psia) for hydrocarbon gas
         For SUT and PMC, this returns an equivalent set of critical parameters for the mixture
         For BUR, this returns critical parameters for the pure hydrocarbon gas alone
         sg: Specific gravity of reservoir gas (relative to air)
@@ -414,15 +414,14 @@ def gas_tc_pc(
         )  # Eq. 3.52b
 
     elif (cmethod.name == "BUR"): 
-        def _compute_hydrocarbon_critical_properties(hydrocarbon_specific_gravity: float) -> tuple[float, float]:
-            v1, v2, v3 = 8.02982E-05, 0.056591187, 0.767839091
-            Offset, Pl, Vl = 11.1719738, 183.6060878, 2657.114838
+        def _compute_hydrocarbon_critical_properties(hydrocarbon_specific_gravity: float) -> Tuple[float, float]:
+            v1, v2, v3 = 0.000229975, 0.186415901, 2.470903632
+            offset, pl, vl = -0.032901049, 42.6061669, 3007.108548
             hydrocarbon_molecular_weight = MW_AIR * hydrocarbon_specific_gravity
-            critical_temperature = (hydrocarbon_molecular_weight + Offset)*Vl / (hydrocarbon_molecular_weight + Offset + Pl)
-            critical_volume = v1 * hydrocarbon_molecular_weight ** 2 + v2 * hydrocarbon_molecular_weight + v3
-            critical_pressure = 0.3074 * R * critical_temperature / critical_volume
-            
-            return critical_temperature, critical_pressure
+            vc_on_zc = v1 * hydrocarbon_molecular_weight**2 + v2*hydrocarbon_molecular_weight + v3
+            tpc_hc = (offset + vc_on_zc) * vl / (offset + vc_on_zc + pl) 
+            ppc_hc = tpc_hc * R / vc_on_zc
+            return tpc_hc, ppc_hc
             
         if co2 + h2s + n2 + h2 < 1.0: # If not 100% Inerts, then calculate hydrocarbon MW
             hydrocarbon_specific_gravity = (sg - (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2) / MW_AIR) / (1 - co2 - h2s - n2 - h2)
@@ -627,13 +626,14 @@ def gas_z(
     mws = np.array([44.01, 34.082, 28.014, 2.016, 0])
     tcs = np.array([547.416, 672.120, 227.160, 47.430, 1]) # H2 Tc has been modified
     pcs = np.array([1069.51, 1299.97, 492.84, 187.5300, 1])
-    ACF = np.array([0.12256, 0.04916, 0.037, -0.21700, -0.04289])
-    VSHIFT = np.array([-0.27593, -0.22896, -0.21066, -0.32400, -0.19322])
+    ACF = np.array([0.12256, 0.04916, 0.037, -0.21700, -0.03899])
+    VSHIFT = np.array([-0.27593, -0.22896, -0.21066, -0.32400, -0.19076])
     OmegaA = np.array([0.427705, 0.436743, 0.457236, 0.457236, 0.457236])
     OmegaB = np.array([0.0696460, 0.0724373, 0.0777961, 0.0777961, 0.0777961]) 
-    VCVIS = np.array([1.43577, 1.45077, 1.33582, 0.75793, 0]) # cuft/lbmol 
+    VCVIS = np.array([1.43561, 1.45060, 1.33564, 0.75787, 0]) # cuft/lbmol    
         
     # Burgoyne tuned Peng Robinson EOS
+    # More information about formulation and applicability can be found here; https://github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor
     def z_bur(psias, degf):
         degR = degf + degF2R
 
@@ -678,15 +678,15 @@ def gas_z(
             # Hydrocarbon-Inert BIPS (Regressed to Wichert & Synthetic GERG Data)
             # BIP = intcpt + degR_slope/degR + mw_slope * hc_mw
             #                      CO2      H2S        N2        H2 
-            intcpts = np.array([0.412165, 0.294137, 0.530108, 0.829713])
-            mw_slopes = np.array([-0.0029403, -0.00454259, -0.00455426, 0.00874856])
-            degR_slopes = np.array([-161.595, -66.1275, -230.797, -481.019])
-            
+            intcpts = np.array([0.386557, 0.267007, 0.486589, 0.776917])
+            mw_slopes = np.array([-0.00219806, -0.00396541, -0.00316789, 0.0106061])
+            degR_slopes = np.array([-158.333, -58.611, -226.239, -474.283])
+
             hc_bips = list(intcpts + degR_slopes/degR + mw_slopes * hc_mw)
             
             # Inert:Inert BIP Pairs
             #            CO2:H2S       CO2:N2     H2S:N2    CO2:H2  H2S:H2  N2:H2
-            inert_bips = [0.0567332, -0.205067, -0.212124, 0.648344, 0.65, 0.36917]
+            inert_bips = [0.0600319, -0.229807, -0.18346, 0.646796, 0.65, 0.369087]
             bips = np.array(hc_bips + inert_bips)
             bip_pairs = [(0, 4), (1, 4), (2, 4), (3, 4), (0, 1), (0, 2), (1, 2), (0, 3), (1, 3), (2, 3)]  
             bip_matrix = np.zeros((5, 5))
@@ -702,8 +702,8 @@ def gas_z(
         
         z = np.array([co2, h2s, n2, h2, 1 - co2 - h2s - n2 - h2])
         
-        if tc * pc == 0:  # Critical properties have not been user specified
-            tc_peng, pc_peng = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod = 'BUR')
+        #if tc * pc == 0:  # Critical properties have not been user specified
+        #    tc_peng, pc_peng = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod = 'BUR')
         
         tcs[-1], pcs[-1] = tc, pc # Hydrocarbon Tc and Pc from SG using Burgoyne correlation
         trs = degR / tcs
@@ -797,12 +797,12 @@ def gas_ug(
     mws = np.array([44.01, 34.082, 28.014, 2.016, 0])
     tcs = np.array([547.416, 672.120, 227.160, 47.430, 1]) # H2 Tc has been modified
     pcs = np.array([1069.51, 1299.97, 492.84, 187.5300, 1])
-    ACF = np.array([0.12256, 0.04916, 0.037, -0.21700, -0.04289])
-    VSHIFT = np.array([-0.27593, -0.22896, -0.21066, -0.32400, -0.19322])
+    ACF = np.array([0.12256, 0.04916, 0.037, -0.21700, -0.03899])
+    VSHIFT = np.array([-0.27593, -0.22896, -0.21066, -0.32400, -0.19076])
     OmegaA = np.array([0.427705, 0.436743, 0.457236, 0.457236, 0.457236])
     OmegaB = np.array([0.0696460, 0.0724373, 0.0777961, 0.0777961, 0.0777961]) 
-    VCVIS = np.array([1.43577, 1.45077, 1.33582, 0.75793, 0]) # cuft/lbmol 
-    
+    VCVIS = np.array([1.43561, 1.45060, 1.33564, 0.75787, 0]) # cuft/lbmol    
+
     # From https://wiki.whitson.com/bopvt/visc_correlations/
     def lbc(Z, degf, psia, sg, co2=0.0, h2s=0.0, n2=0.0, h2 = 0.0):
         if co2 + h2s + n2 + h2 > 1 or co2 < 0 or h2s < 0 or n2 < 0 or h2 < 0:
@@ -819,7 +819,7 @@ def gas_ug(
         hc_gas_mw = sg_hc * MW_AIR
             
         def vcvis_hc(mw): # Returns hydrocarbon gas VcVis for LBC viscosity calculations   
-            return  0.057687137 * mw + 0.481279091 # ft3/lbmol         
+            return  0.0575566259767157 *  mw + 0.484309090909092 # ft3/lbmol      
                                                                        
         mws[-1]  = hc_gas_mw       
         tcs[-1], pcs[-1] = gas_tc_pc(hc_gas_mw/MW_AIR, cmethod = 'BUR')
@@ -846,7 +846,7 @@ def gas_ug(
             sqrt_mws = np.sqrt(mws)
             return np.sum(zi * ui * sqrt_mws)/np.sum(zi * sqrt_mws)
     
-        a = [0.1023, 0.023364, 0.058533, -3.88277e-02,  9.14211e-03] # P3 and P4 have been modified
+        a = [0.1023, 0.023364, 0.058533, -0.038819, 0.00913902] # P3 and P4 have been modified
         # Calculate the viscosity of the mixture using the Lorenz-Bray-Clark method.
         rhoc = 1/np.sum(VCVIS*zi)
         Tc = tcs * 5/9    # (deg K)
@@ -1102,7 +1102,6 @@ def gas_ponz2p(
 def gas_grad2sg(
     grad: float,
     p: float,
-    sg: float,
     degf: float,
     zmethod: z_method = z_method.DAK,
     cmethod: c_method = c_method.PMC,
@@ -1119,7 +1118,6 @@ def gas_grad2sg(
 
         grad: Observed gas gradient (psi/ft)
         p: Pressure at observation (psia)
-        sg: Gas SG relative to air
         degf: Reservoir Temperature (deg F). Defaults to False if undefined
         zmethod: Method for calculating Z-Factor
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
@@ -1143,7 +1141,7 @@ def gas_grad2sg(
 
     degR = degf + degF2R
 
-    def grad_err(args, sg):
+    def grad_err(sg, args):
         grad, p, zmethod, cmethod, tc, pc, co2, h2s, n2, h2 = args
         m = sg * MW_AIR
         zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc)
