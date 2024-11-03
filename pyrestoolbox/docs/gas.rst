@@ -71,10 +71,8 @@ Function List
      - `pyrestoolbox.gas.gas_tc_pc`_  
    * - Gas Z-Factor Calculation
      - `pyrestoolbox.gas.gas_z`_
-   * - Gas Viscosity
+   * - Gas Viscosity or Viscosity * Z product
      - `pyrestoolbox.gas.gas_ug`_
-   * - Gas Viscosity * Z
-     - `pyrestoolbox.gas.gas_ugz`_
    * - Gas Compressibility
      - `pyrestoolbox.gas.gas_cg`_
    * - Gas Formation Volume Factor
@@ -212,16 +210,32 @@ Examples:
     
     >>> gas.gas_z(p=[1000, 2000], sg=0.75, degf=160, cmethod='SUT', n2 = 0.02, co2 = 0.17)
     array([0.91920553, 0.87196032])
+ 
+ def gas_ug(
+    p: npt.ArrayLike,
+    sg: float,
+    degf: float,
+    zmethod: z_method = z_method.DAK,
+    cmethod: c_method = c_method.PMC,
+    co2: float = 0,
+    h2s: float = 0,
+    n2: float = 0,
+    h2: float = 0,
+    tc: float = 0,
+    pc: float = 0,
+    zee: float = 0,
+    ugz = False
     
 pyrestoolbox.gas.gas_ug
 ===================
 
 .. code-block:: python
 
-    gas_ug(p, sg, degf, zmethod ='DAK', cmethod = 'PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0) -> float or np.array
+    gas_ug(p, sg, degf, zmethod ='DAK', cmethod = 'PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, zee = 0, ugz = False) -> float or np.array
 
-Returns gas viscosity (cP) using Lee, Gonzalez & Eakin (1966) correlation. 
+Returns gas viscosity (cP) using Lee, Gonzalez & Eakin (1966) correlation unless the 'BUR' method for Z-Factor is selected in which case a tuned LBC method is used. 
 A float or list / array can be used for p, returning corresponding 1-D array of gas viscosities. The cmethod will be used to calculate critical gas parameters unless tc and/or pc are explicitly set to be non-zero. This option enables users to use pre-calculate gas critical properties and so avoid repeated duplicated critical property calculations when compute time is an issue
+Furnishing a positive value for zee means it will be used instead of calculating Z, and setting ugz to True will return the viscosity * Z product instead of viscosity alone
 
 
 .. list-table:: Inputs
