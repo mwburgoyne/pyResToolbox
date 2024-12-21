@@ -1,3 +1,14 @@
+Changelist in 2.1.2:
+
+- Fixed bug in implementation of Velarde, Blasingame & McCain Oil Rs calculation.
+
+
+Changelist in 2.1.0:
+
+- Fixed variable Typing issue that caused problems with Python 3.9 and older.
+- Added reference to the Burgoyne ('BUR') methods for gas Z-Factor and critical property correlation
+
+
 Changelist in 2.0.0:
 
 - Modified the new Z-Factor method, 'BUR', now a tuned five component Peng Robinson method that is fast and stable and able to handle up to 100% of CO2, H2S, N2 or H2 as well as natural gas. Viscosities are calculated with a tuned LBC model.
