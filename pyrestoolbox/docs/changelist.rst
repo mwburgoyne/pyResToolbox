@@ -1,3 +1,8 @@
+Changelist in 2.1.3:
+
+- Updated viscosity parameters for BUR method.
+
+
 Changelist in 2.1.2:
 
 - Fixed bug in implementation of Velarde, Blasingame & McCain Oil Rs calculation.
