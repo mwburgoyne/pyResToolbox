@@ -12,7 +12,7 @@ with open(os.path.join(ROOT, 'README.md'), 'r', encoding='utf-8') as f:
 setup(
     name='pyrestoolbox',
     include_package_data=True,
-    version='2.1',  # Ideally should be same as your GitHub release tag version
+    version='2.1.3',  # Ideally should be same as your GitHub release tag version
     packages=find_packages(),
     description='pyResToolbox - A collection of Reservoir Engineering Utilities',
     long_description=long_description,
