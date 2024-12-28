@@ -36,7 +36,7 @@ from typing import Union, List, Tuple
 import pandas as pd
 from tabulate import tabulate
 from pyrestoolbox.classes import z_method, c_method, pb_method, rs_method, bo_method, uo_method, deno_method, co_method, kr_family, kr_table, class_dic
-from pyrestoolbox.shared_fns import convert_to_numpy, process_input, check_2_inputs, bisect_solve
+from pyrestoolbox.shared_fns import convert_to_numpy, process_output, check_2_inputs, bisect_solve
 from pyrestoolbox.validate import validate_methods
 from pyrestoolbox.constants import R, psc, tsc, degF2R, tscr, scf_per_mol, CUFTperBBL, WDEN, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2
 
@@ -478,8 +478,8 @@ def gas_z(
         tc: Critical gas temperature (deg R). Uses cmethod correlation if not specified
         pc: Critical gas pressure (psia). Uses cmethod correlation if not specified
     """
-    p = convert_to_numpy(p)
-    single_p = (len(p) == 1)
+    p, is_list = convert_to_numpy(p)
+
     if h2 > 0:
         cmethod = 'BUR' # The Burgoyne PR EOS method is the only one that can handle Hydrogen
         zmethod = 'BUR' 
@@ -576,7 +576,7 @@ def gas_z(
         
         zout = [z_dak_calc(pr, tr) for pr in pprs]
             
-        return process_input(zout)
+        return process_output(zout, is_list)
 
     # Hall & Yarborough
     def z_hy(pprs, tr):
@@ -607,7 +607,7 @@ def gas_z(
                 yi = y
             zout.append(a * pr / y)
      
-        return process_input(zout)
+        return process_output(zout, is_list)
 
     # Wang, Ye & Wu, 2021, 0.2 < Ppr < 30, 1.05 < tpr < 3.0
     # "An accurate correlation for calculating natural gas compressibility factors under a wide range of pressure conditions"
@@ -617,11 +617,7 @@ def gas_z(
         numerators = a[1] + a[2] * (1 + a[3] * tr + a[4] * tr ** 2 + a[5] * tr ** 3 + a[6] * tr ** 4) * pprs + a[7] * pprs ** 2 + a[8] * pprs ** 3 + a[9] * pprs ** 4
         denominators = a[10] + a[11] * (1 + a[12] * tr + a[13] * tr ** 2 + a[14] * tr ** 3 + a[15] * tr ** 4 + a[16] * tr ** 5) * pprs + a[17] * pprs ** 2 + a[18] * pprs ** 3 + a[19] * pprs ** 4 + a[20] * pprs ** 5
         zout = numerators/denominators
-        zout = np.asarray(zout)
-        if zout.size == 1:
-            return process_input(np.array([zout]))
-        else:
-            return process_input(zout)
+        return process_output(zout, is_list)
 
     mws = np.array([44.01, 34.082, 28.014, 2.016, 0])
     tcs = np.array([547.416, 672.120, 227.160, 47.430, 1]) # H2 Tc has been modified
@@ -630,7 +626,7 @@ def gas_z(
     VSHIFT = np.array([-0.27593, -0.22896, -0.21066, -0.32400, -0.19076])
     OmegaA = np.array([0.427705, 0.436743, 0.457236, 0.457236, 0.457236])
     OmegaB = np.array([0.0696460, 0.0724373, 0.0777961, 0.0777961, 0.0777961]) 
-    VCVIS = np.array([1.43561, 1.45060, 1.33564, 0.75787, 0]) # cuft/lbmol    
+    VCVIS = np.array([1.46020, 1.46460, 1.35422, 0.67967, 0]) # cuft/lbmol    
         
     # Burgoyne tuned Peng Robinson EOS
     # More information about formulation and applicability can be found here; https://github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor
@@ -722,7 +718,7 @@ def gas_z(
             # Coefficients of Cubic: a[0] * Z**3 + a[1]*Z**2 + a[2]*Z + a[3] = 0
             a = [1, -(1 - B), A - 3 * B**2 - 2 * B, -(A * B - B**2 - B**3)]
             zout.append(cubic_root(a, flag = 1) - np.sum(z * VSHIFT * Bi)) # Volume translated Z 
-        return process_input(zout) 
+        return process_output(zout, is_list) 
 
     zfuncs = {"DAK": zdak, "HY": z_hy, "WYW": z_wyw, "BUR": z_bur}
 
@@ -773,8 +769,8 @@ def gas_ug(
           zee: Gas Z-Factor. If undefined, will trigger Z-Factor calculation.
           ugz: Boolean flag that if True returns ugZ instead of ug
     """
-    p = convert_to_numpy(p)
-    zee = convert_to_numpy(zee)
+    p, is_list = convert_to_numpy(p)
+    zee, _ = convert_to_numpy(zee)
     
     if h2 > 0:
         cmethod = 'BUR' # The Burgoyne PR EOS method is the only one that can handle Hydrogen
@@ -801,7 +797,7 @@ def gas_ug(
     VSHIFT = np.array([-0.27593, -0.22896, -0.21066, -0.32400, -0.19076])
     OmegaA = np.array([0.427705, 0.436743, 0.457236, 0.457236, 0.457236])
     OmegaB = np.array([0.0696460, 0.0724373, 0.0777961, 0.0777961, 0.0777961]) 
-    VCVIS = np.array([1.43561, 1.45060, 1.33564, 0.75787, 0]) # cuft/lbmol    
+    VCVIS = np.array([1.46020, 1.46460, 1.35422, 0.67967, 0]) # cuft/lbmol    
 
     # From https://wiki.whitson.com/bopvt/visc_correlations/
     def lbc(Z, degf, psia, sg, co2=0.0, h2s=0.0, n2=0.0, h2 = 0.0):
@@ -819,7 +815,7 @@ def gas_ug(
         hc_gas_mw = sg_hc * MW_AIR
             
         def vcvis_hc(mw): # Returns hydrocarbon gas VcVis for LBC viscosity calculations   
-            return  0.0575566259767157 *  mw + 0.484309090909092 # ft3/lbmol      
+            return  0.057511062 *  mw + 0.478400158 # ft3/lbmol      
                                                                        
         mws[-1]  = hc_gas_mw       
         tcs[-1], pcs[-1] = gas_tc_pc(hc_gas_mw/MW_AIR, cmethod = 'BUR')
@@ -846,7 +842,7 @@ def gas_ug(
             sqrt_mws = np.sqrt(mws)
             return np.sum(zi * ui * sqrt_mws)/np.sum(zi * sqrt_mws)
     
-        a = [0.1023, 0.023364, 0.058533, -0.038819, 0.00913902] # P3 and P4 have been modified
+        a = [0.1023, 0.023364, 0.058533, -3.92835e-02,  9.28591e-03] # P3 and P4 have been modified
         # Calculate the viscosity of the mixture using the Lorenz-Bray-Clark method.
         rhoc = 1/np.sum(VCVIS*zi)
         Tc = tcs * 5/9    # (deg K)
@@ -858,22 +854,22 @@ def gas_ug(
         lhs = a[0] + a[1]*rhor + a[2]*rhor**2 + a[3]*rhor**3 + a[4]*rhor**4
         ui = stiel_thodos(degR, mws)
         vis = (lhs**4 - 1e-4)/eta + u0(zi, ui, mws, Z)
-        return process_input(vis)  
+        return process_output(vis, is_list)  
         
     if zmethod.name != 'BUR':
         b = 3.448 + (986.4 / t) + (0.01009 * m)  # 2.16
         c = 2.447 - (0.2224 * b)  # 2.17
         a = ((9.379 + (0.01607 * m)) * np.power(t, 1.5) / (209.2 + (19.26 * m) + t))  # 2.15
-        ug = process_input(a * 0.0001 * np.exp(b * np.power(rho, c)))  # 2.14
+        ug = process_output(a * 0.0001 * np.exp(b * np.power(rho, c)), is_list)  # 2.14
     else:
         ug = []
         for psia in p:
             ug.append(lbc(zee, degf, psia, sg, co2, h2s, n2, h2))
-        ug = process_input(ug)
+        ug = process_output(ug, is_list)
     if ugz:
-        return process_input(ug * zee)
+        return process_output(ug * zee, is_list)
     else:
-        return process_input(ug)
+        return process_output(ug, is_list)
 
 def gas_cg(
     p: npt.ArrayLike,
@@ -919,7 +915,7 @@ def gas_cg(
         
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
-    p = convert_to_numpy(p)
+    p, is_list = convert_to_numpy(p)
     tc, pc = gas_tc_pc(sg=sg, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc, cmethod=cmethod)
         
     pr = p / pc
@@ -931,7 +927,7 @@ def gas_cg(
     vol1 = zee1*R*degR/p
     vol2 = zee2*R*degR/(p+1)
     
-    return process_input((vol1 - vol2)/((vol1 + vol2)/2)) # 1/psi
+    return process_output((vol1 - vol2)/((vol1 + vol2)/2), is_list) # 1/psi
 
 def gas_bg(
     p: npt.ArrayLike,
@@ -968,7 +964,7 @@ def gas_bg(
           tc: Critical gas temperature (deg R). Calculates using cmethod if not specified
           pc: Critical gas pressure (psia). Calculates using cmethod if not specified          
     """
-    p = convert_to_numpy(p)
+    p, is_list = convert_to_numpy(p)
     if h2 > 0:
         cmethod = 'BUR' # The Burgoyne PR EOS method is the only one that can handle Hydrogen
         zmethod = 'BUR' 
@@ -977,7 +973,7 @@ def gas_bg(
 
     zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc)
     degR = (degf + degF2R)
-    return process_input(zee * degR / (p * (tsc + degF2R) / psc))
+    return process_output(zee * degR / (p * (tsc + degF2R) / psc), is_list)
 
 def gas_sg(hc_mw: float, co2: float, h2s: float, n2: float, h2: float)  -> float:
     """ Returns sg of gas mixture """
@@ -1018,8 +1014,8 @@ def gas_den(
           tc: Critical gas temperature (deg R). Calculates using cmethod if not specified
           pc: Critical gas pressure (psia). Calculates using cmethod if not specified         
     """
-    p = convert_to_numpy(p)
-    single_p = (len(p) == 1)
+    p, is_list = convert_to_numpy(p)
+
     if h2 > 0:
         cmethod = 'BUR' # The Burgoyne PR EOS method is the only one that can handle Hydrogen
         zmethod = 'BUR' 
@@ -1029,10 +1025,19 @@ def gas_den(
     zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc)
     
     m = sg * MW_AIR
+    
+    if co2 == 1:
+        m = 44.01
+    if h2s == 1:
+        m = 34.082
+    if n2 == 1:
+        m = 28.014
+    if h2 == 1:
+        m = 2.016
     degR = degf + degF2R
     rhog = p * m / (zee * R * degR)
         
-    return process_input(rhog)
+    return process_output(rhog, is_list)
 
 def gas_ponz2p(
     poverz: npt.ArrayLike,
@@ -1084,20 +1089,14 @@ def gas_ponz2p(
         zee = zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc)
         return (p - (ponz * zee)) / p
 
-    poverz = np.asarray(poverz)
-    single_p = False
-    if poverz.size == 1:
-        single_p = True
-        poverz = [poverz]
-    else:
-        poverz = poverz.tolist()
+    poverz, is_list = convert_to_numpy(poverz)
 
     p = []
     for ponz in poverz:
         args = (ponz, sg, degf, zmethod, cmethod, tc, pc, co2, h2s, n2, h2)
         p.append(bisect_solve(args, PonZ2P_err, ponz * 0.1, ponz * 5, rtol))
 
-    return process_input(p)
+    return process_output(p, is_list)
 
 def gas_grad2sg(
     grad: float,
