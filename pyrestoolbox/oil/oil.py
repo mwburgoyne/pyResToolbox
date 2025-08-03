@@ -31,6 +31,7 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 from tabulate import tabulate
+from typing import Union, List, Tuple
 
 from pyrestoolbox.constants import R, psc, tsc, degF2R, tscr, MW_AIR, scf_per_mol, CUFTperBBL, WDEN
 from pyrestoolbox.classes import z_method, c_method, pb_method, rs_method, bo_method, uo_method, deno_method, co_method, kr_family, kr_table, class_dic
@@ -448,7 +449,7 @@ def oil_pbub(
         pbmethod: A string or pb_method Enum class that specifies one of following calculation choices;
                    STAN: Standing Correlation (1947)
                    VALMC: Valko-McCain Correlation (2003) - https://www.sciencedirect.com/science/article/abs/pii/S0920410502003194
-                   VELAR: Velarde, Blasingame & McCain (1997) - Default
+                   VELAR: Velarde, Blasingame & McCain (1997)
     """
     sg_g, sg_sp = check_sgs(sg_g=sg_g, sg_sp=sg_sp)
 
@@ -562,7 +563,7 @@ def oil_rs_bub(
     def rsbub_standing(api, degf, pb, sg_g, sg_sp) -> float:
         #print('Standing')
         a = 0.00091 * degf - 0.0125 * api  # Eq 1.64
-        return sg_sp * (((pb - psc) / 18.2 + 1.4) / 10 ** a) ** (
+        return sg_g * (((pb - psc) / 18.2 + 1.4) / 10 ** a) ** (
             1 / 0.83
         )  # Eq 1.72 - Subtracting 14.7 as suspect this pressure in psig
 
@@ -616,7 +617,7 @@ def oil_rs_bub(
         "VELAR": rsbub_velarde,
     }
     
-    rsbub = fn_dic[pbmethod.name](
+    rsbub = fn_dic[rsmethod.name](
         api=api, degf=degf, pb=pb, sg_g=sg_g, sg_sp=sg_sp
     )
     if np.isnan(rsbub):
@@ -671,7 +672,7 @@ def oil_rs(
             sg_sp=sg_sp,
             rsmethod=rsmethod,
         )
-        rsb =get_real_part(rsb)
+        rsb = get_real_part(rsb)
         
     #print(rsb)
     
@@ -705,22 +706,21 @@ def oil_rs(
             for x in xs
         ]
         pr = (p - psc) / (pb - psc)
-        rsr = a[0] * (pr - psc) ** a[1] + (1 - a[0]) * (pr - psc) ** a[2] # Eq 3 from Velarde & Blasingame
+        rsr = a[0] * pr ** a[1] + (1 - a[0]) * pr ** a[2] # Eq 3 from Velarde & Blasingame
         rs = rsb * rsr
         return get_real_part(rs)
 
     def rs_standing(api, degf, sg_sp, p, pb, rsb):
         a = 0.00091 * degf - 0.0125 * api  # Eq 1.64
-        return sg_sp * (((p - psc) / 18.2 + 1.4) / 10 ** a) ** (
+        return sg_g * (((p - psc) / 18.2 + 1.4) / 10 ** a) ** (
             1 / 0.83
         )  # Eq 1.72 - Subtracting 14.7 as suspect this pressure in psig
 
     def rs_valko_mccain(api, degf, sg_sp, p, pb, rsb):
         rsb_valko = oil_rs_bub(api, degf, pb, sg_g, sg_sp, rsmethod = 'VALMC') # Rsb from Valko-McCain approach
-        rs_scaler = rsb / rsb_valko # Scalar to adjust calculated Valko McCain Rs back to be in line with teh supplied Rsb
+        rs_scaler = rsb / rsb_valko # Scalar to adjust calculated Valko McCain Rs back to be in line with the supplied Rsb
         return rs_scaler * oil_rs_bub(api, degf, p, sg_g, sg_sp, rsmethod = 'VALMC')
             
-        
                 
     #def Rs_vasquezbegs(api, degf, sg_sp, p, pb, rsb):
     #    sg_gs = sg_sp * (
@@ -769,6 +769,8 @@ def check_sgs(
             sg_st: Gas sg evolved from post separartor liquid (rel air)
 
     """
+    
+    
     if sg_g > 0 and sg_sp > 0:
         return sg_g, sg_sp
     if sg_g <= 0 and sg_sp > 0:  # Estimate sg_g from sg_sp
@@ -1012,7 +1014,7 @@ def oil_deno(
                 )  # Eq 3.18c
                 new_rho_po = (rs * sg_sp + 4600 * sg_o) / (
                     73.71 + rs * sg_sp / rhoa
-                )  # pseudoliquid density, Eq 3.18b. Note equation in origiganl paper uses sg_sp rather than sg_g as in book.
+                )  # pseudoliquid density, Eq 3.18b. Note equation in original paper uses sg_sp rather than sg_g as in book.
                 err = abs(rho_po - new_rho_po)
                 rho_po = new_rho_po
                 if i > 100:
