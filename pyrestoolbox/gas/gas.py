@@ -413,15 +413,35 @@ def gas_tc_pc(
             ppc_star * (tpc_star - eps) / (tpc_star + h2s * (1 - h2s) * eps)
         )  # Eq. 3.52b
 
+
     elif (cmethod.name == "BUR"): 
-        def _compute_hydrocarbon_critical_properties(hydrocarbon_specific_gravity: float) -> Tuple[float, float]:
-            v1, v2, v3 = 0.000229975, 0.186415901, 2.470903632
-            offset, pl, vl = -0.032901049, 42.6061669, 3007.108548
-            hydrocarbon_molecular_weight = MW_AIR * hydrocarbon_specific_gravity
-            vc_on_zc = v1 * hydrocarbon_molecular_weight**2 + v2*hydrocarbon_molecular_weight + v3
-            tpc_hc = (offset + vc_on_zc) * vl / (offset + vc_on_zc + pl) 
-            ppc_hc = tpc_hc * R / vc_on_zc
-            return tpc_hc, ppc_hc
+        def tc_ag(x):
+            a, b, c = 2695.14765, 274.341701, 343.008
+            return a * x / (b + x) + c
+        
+        def tc_gc(x):
+            a, b, c = 1098.10948, 101.529237, 343.008
+            return a * x / (b + x) + c
+        
+        def pc_fn(x, vc_slope, tc_p):
+            vc_on_zc = vc_slope * x + 5.518525872412144
+            return R * tc_p / vc_on_zc
+        
+        def pseudo_critical(sg_hc, AG = False):
+            """
+            Calculates pseudo-critical temperature and pressure for the pseudo-hydrocarbon component.
+            - Uses custom linear fits for gas condensates (AG = False) and associated gas (AG = True) (Burgoyne, 2025).
+            - These relations are derived from property fitting and may differ from literature.
+            """
+            x = max(0, MW_AIR * sg_hc - 16.0425)
+            if AG:
+                tpc_hc = tc_ag(x)
+                vc_slope = 0.177497835
+            else:
+                tpc_hc = tc_gc(x)
+                vc_slope = 0.170931432
+            ppc_hc = pc_fn(x, vc_slope, tpc_hc)
+            return tpc_hc, ppc_hc   
             
         if co2 + h2s + n2 + h2 < 1.0: # If not 100% Inerts, then calculate hydrocarbon MW
             hydrocarbon_specific_gravity = (sg - (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2) / MW_AIR) / (1 - co2 - h2s - n2 - h2)
@@ -430,7 +450,7 @@ def gas_tc_pc(
         hydrocarbon_specific_gravity = np.max([0.553779772, hydrocarbon_specific_gravity])  # Methane is lower limit
         
         hydrocarbon_molecular_weight = hydrocarbon_specific_gravity * MW_AIR
-        tpc, ppc = (_compute_hydrocarbon_critical_properties(hydrocarbon_specific_gravity))
+        tpc, ppc = pseudo_critical(hydrocarbon_specific_gravity)
 
     else:
         print("Incorrect cmethod specified")
@@ -478,6 +498,7 @@ def gas_z(
         tc: Critical gas temperature (deg R). Uses cmethod correlation if not specified
         pc: Critical gas pressure (psia). Uses cmethod correlation if not specified
     """
+    tolerance = 1e-6
     p, is_list = convert_to_numpy(p)
 
     if h2 > 0:
@@ -501,78 +522,49 @@ def gas_z(
     tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc)
     tr = (degf + degF2R) / tc
     pprs = np.array(p/pc)
-    
+            
     def zdak(pprs, tr):
         # DAK from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
         # sg relative to air, t in deg F, p in psia, n2, co2 and h2s in fractions (0-1)
         
-        tr2, tr3 = tr**2, tr**3
-        a = np.array([0,0.3265,-1.07,-0.5339,0.01569,-0.05165,0.5475,-0.7361,0.1844,0.1056,0.6134,0.7210])
-        c1 = a[1]+(a[2]/tr) + (a[3]/tr3) + (a[4]/tr**4) + (a[5]/tr**5)
-        c2 = a[6] + (a[7]/tr) + (a[8]/tr2)
-        c3 = a[9] * ((a[7]/tr) + (a[8]/tr2))
-    
-        # Unpublished empirical fit of reduced pressure at minimum DAK-Z as a function of 
-        # reduced Temperature over Tpr range 1.03 - 4.0
-        # By Mark Burgoyne, July 2023
-        def min_ppr(tpr): #  N. 127:   Y = A/X+B*EXP(C*X)+D <-- Hyp + exp + c
-            if tpr > 3.43:
-                return 0.0
-            if tpr < 1.03:
-                return 1.2625075898234461
-            A, B, C, D = 0.2283E+02, -.1359E+03, -.2188E+01, -.6614E+01
-            minppr = A/tpr+B*np.exp(C*tpr)+D
-            return minppr
-            
-        # Unpublished empirical fit of minimum DAK-Z values as a function of 
-        # reduced Temperature over Tpr range 1.03 - 4.0
-        # By Mark Burgoyne, July 2023
-        def fit_minz(tpr): # N. 149:   Y = (A+X)/(B+C*X**2)+D <--- Straight line / parabola + c
-            if tpr > 3.43:
-                return 1.0
-            A, B, C, D = -.1556E+01, 0.8930E-01, 0.8043E+00, 0.8019E+00
-            minzs = (A+tpr)/(B+C*tpr**2)+D 
-            return minzs
-    
-        def new_dak_z(z, pr, tr):
-            rhor = 0.27 * pr / (tr * z)  # 2.8
-            c4 = a[10] * (1 + a[11] * rhor**2) * (rhor**2/tr3) * np.exp(-a[11] * rhor**2)
-            err = fz(z, rhor, c4)
-            return z - err/fz_burime(z, rhor, c4), err # Returns updated guess for Z, as well as the error
+        def z_dak_calc(pr, tr):
+            """Core function to calculate Z-factor for a single Ppr and Tpr."""
+            # Coefficients
+            A1, A2, A3, A4, A5 = 0.3265, -1.0700, -0.5339, 0.01569, -0.05165
+            A6, A7, A8, A9, A10, A11 = 0.5475, -0.7361, 0.1844, 0.1056, 0.6134, 0.7210
         
-        def fz(z, rhor, c4):                          # The DAK Error function
-            return z - (1 + c1*rhor + c2*rhor**2 - c3 * rhor**5 + c4)
-    
-        def fz_burime(z, rhor, c4):                    # Derivative of the DAK Error function
-            return 1 + c1*rhor/z + (2*c2*rhor**2/z) - (5*c3*rhor**5/z) + 2*a[10]*rhor**2/(z*tr3)*(1+a[11]*rhor**2 - (a[11]*rhor**2)**2)*np.exp(-a[11]*rhor**2)
+            R1 = A1 + A2 / tr + A3 / tr**3 + A4 / tr**4 + A5 / tr**5
+            R2 = 0.27 * pr / tr
+            R3 = A6 + A7 / tr + A8 / tr**2
+            R4 = A9 * (A7 / tr + A8 / tr**2)
+            R5 = A10 / tr**3
         
-        def z_err(z, *args):
-            pr = args[0]
-            rhor = 0.27 * pr / (tr * z)  # 2.8
-            c4 = a[10] * (1 + a[11] * rhor**2) * (rhor**2/tr3) * np.exp(-a[11] * rhor**2)
-            z2 = (1 + c1*rhor + c2*rhor**2 - c3 * rhor**5 + c4)
-            return z2 - z        
-            
-        def z_dak_calc(pr, tr, tol = 1e-6):
-            niter = 0
-            minppr = min_ppr(tr)
-            
-            if abs(pr - minppr) > 0.05: # If Ppr is further from calculated minimum Ppr than 0.05, use Newton solver
-                newton_solve = True
-            else:
-                newton_solve = False    # Else, use bisection solver, and setup Z bounds to search within
-                minz = fit_minz(tr)
-                bounds = (minz - 0.02, minz + 0.02)
-    
-            if newton_solve:
-                midz = min(max(0.1, z_bur([pr*pc], tr*tc-degF2R)),3) # First guess using explicit calculation method
-                mid_err = 1
-                while abs(mid_err) > tol and niter < 100:
-                    midz, mid_err = new_dak_z(midz, pr, tr)
-                    niter += 1
-            else:
-                midz = brentq(z_err, bounds[0], bounds[1], args=(pr))  
-            return midz
+            def F(rhor):
+                return (R1 * rhor - R2 / rhor + R3 * rhor**2 - R4 * rhor**5 +
+                        R5 * rhor**2 * (1 + A11 * rhor**2) * np.exp(-A11 * rhor**2) + 1)
+        
+            def Fprime(rhor):
+                return (R1 + R2 / rhor**2 + 2 * R3 * rhor - 5 * R4 * rhor**4 +
+                        2 * R5 * rhor * np.exp(-A11 * rhor**2) *
+                        ((1 + 2 * A11 * rhor**3) - A11 * rhor**2 * (1 + A11 * rhor**2)))
+        
+            # Initial guess for rhor
+            rhork = 0.27 * pr / tr
+        
+            # Iterative calculation of rhor
+            for i in range(100):
+                f_val = F(rhork)
+                f_prime_val = Fprime(rhork)
+                if abs(f_val) < tolerance:
+                    break
+                rhork1 = rhork - f_val / f_prime_val
+                if abs(rhork - rhork1) < tolerance:
+                    rhork = rhork1
+                    break
+                rhork = rhork1
+        
+            z = 0.27 * pr / (rhork * tr)
+            return z    
         
         zout = [z_dak_calc(pr, tr) for pr in pprs]
             
@@ -623,10 +615,10 @@ def gas_z(
     tcs = np.array([547.416, 672.120, 227.160, 47.430, 1]) # H2 Tc has been modified
     pcs = np.array([1069.51, 1299.97, 492.84, 187.5300, 1])
     ACF = np.array([0.12256, 0.04916, 0.037, -0.21700, -0.03899])
-    VSHIFT = np.array([-0.27593, -0.22896, -0.21066, -0.32400, -0.19076])
-    OmegaA = np.array([0.427705, 0.436743, 0.457236, 0.457236, 0.457236])
-    OmegaB = np.array([0.0696460, 0.0724373, 0.0777961, 0.0777961, 0.0777961]) 
-    VCVIS = np.array([1.46020, 1.46460, 1.35422, 0.67967, 0]) # cuft/lbmol    
+    VSHIFT = np.array([-0.27607, -0.22901, -0.21066, -0.36270, -0.19076])
+    OmegaA = np.array([0.427671, 0.436725, 0.457236, 0.457236, 0.457236])
+    OmegaB = np.array([0.0696397, 0.0724345, 0.0777961, 0.0777961, 0.0777961]) 
+    VCVIS = np.array([1.46352, 1.46808, 1.35526, 0.68473,  0.0]) # cuft/lbmol    
         
     # Burgoyne tuned Peng Robinson EOS
     # More information about formulation and applicability can be found here; https://github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor
@@ -667,35 +659,46 @@ def gas_z(
             if flag == 1:       # Return maximum root
                 return max(Zs)
             return Zs           # Return all roots
-                            
-        def calc_bips(hc_mw, degf):                                                                     
-            degR = degf + degF2R  
-            
-            # Hydrocarbon-Inert BIPS (Regressed to Wichert & Synthetic GERG Data)
-            # BIP = intcpt + degR_slope/degR + mw_slope * hc_mw
-            #                      CO2      H2S        N2        H2 
-            intcpts = np.array([0.386557, 0.267007, 0.486589, 0.776917])
-            mw_slopes = np.array([-0.00219806, -0.00396541, -0.00316789, 0.0106061])
-            degR_slopes = np.array([-158.333, -58.611, -226.239, -474.283])
 
-            hc_bips = list(intcpts + degR_slopes/degR + mw_slopes * hc_mw)
+        def calc_bips(degf, tpc_hc):
+            """
+            Temperature-dependent Binary Interaction Parameters (BIPs) for all pairs,
+            with analytic first and second T-derivatives for use in PR analytic derivatives.
+            - Fitted forms: constant + slope/Tr, Tr based on component crit temp.
+            - Returns: kij, dkij_dT, d2kij_dT2 (all NxN)
+            - Tuned to experimental VLE data Burgoyne, 2025
+            """
+            degR = degf + degF2R
+            components = ['CO2', 'H2S', 'N2', 'H2', 'Gas']
+            bip_parameters = {
+                ("Gas", "CO2"): {"constant": -0.145561 ,  "Tr_slope": 0.276572 ,  "tc": tpc_hc  },
+                ("Gas", "H2S"): {"constant": 0.16852   ,  "Tr_slope": -0.122378,  "tc": tpc_hc  },
+                ("Gas", "N2"):  {"constant": -0.108    ,  "Tr_slope": 0.0605506,  "tc": tpc_hc  },
+                ("Gas", "H2"):  {"constant": -0.0620119,  "Tr_slope": 0.0427873,  "tc": tpc_hc  },
+                ("CO2", "H2S"): {"constant": 0.248638  ,  "Tr_slope": -0.138185,  "tc": 547.416 },
+                ("CO2", "N2"):  {"constant": -0.25     ,  "Tr_slope": 0.11602  ,  "tc": 547.416 },
+                ("CO2", "H2"):  {"constant": -0.247153 ,  "Tr_slope": 0.16377  ,  "tc": 547.416 },
+                ("H2S", "N2"):  {"constant": -0.204414 ,  "Tr_slope": 0.234417 ,  "tc": 672.12  },
+                ("H2S", "H2"):  {"constant": 0         ,  "Tr_slope": 0        ,  "tc": 672.12  },
+                ("N2",  "H2"):  {"constant": -0.166253 ,  "Tr_slope": 0.0788129,  "tc": 227.16  },
+            }
+            def lookup_key(i, j):
+                return (i, j) if (i, j) in bip_parameters else (j, i)
+            n = len(components)
+            kij = np.zeros((n, n))
+            for i, ci in enumerate(components):
+                for j, cj in enumerate(components):
+                    if ci == cj:
+                        kij[i, j] = 0.0
+                    else:
+                        params = bip_parameters[lookup_key(ci, cj)]
+                        tc = params["tc"]
+                        const = params["constant"]
+                        slope = params["Tr_slope"]
+                        Tr = degR / tc
+                        kij[i, j] = const + slope / Tr
+            return kij
             
-            # Inert:Inert BIP Pairs
-            #            CO2:H2S       CO2:N2     H2S:N2    CO2:H2  H2S:H2  N2:H2
-            inert_bips = [0.0600319, -0.229807, -0.18346, 0.646796, 0.65, 0.369087]
-            bips = np.array(hc_bips + inert_bips)
-            bip_pairs = [(0, 4), (1, 4), (2, 4), (3, 4), (0, 1), (0, 2), (1, 2), (0, 3), (1, 3), (2, 3)]  
-            bip_matrix = np.zeros((5, 5))
-            
-            for i in range(5):
-                for j in range(5):
-                    for p, pair in enumerate(bip_pairs):
-                        if (i, j) == pair:
-                            bip_matrix[i, j] = bips[p]
-                            bip_matrix[j, i] = bips[p]
-                            continue
-            return bip_matrix
-        
         z = np.array([co2, h2s, n2, h2, 1 - co2 - h2s - n2 - h2])
         
         #if tc * pc == 0:  # Critical properties have not been user specified
@@ -707,7 +710,7 @@ def gas_z(
         m = 0.37464 + 1.54226 * ACF - 0.26992 * ACF**2
         alpha = (1 + m * (1 - np.sqrt(trs)))**2    
         
-        kij = calc_bips(mw_hc, degf)
+        kij = calc_bips(degf, tc)
         
         zout = []
         for psia in psias:
@@ -718,8 +721,9 @@ def gas_z(
             # Coefficients of Cubic: a[0] * Z**3 + a[1]*Z**2 + a[2]*Z + a[3] = 0
             a = [1, -(1 - B), A - 3 * B**2 - 2 * B, -(A * B - B**2 - B**3)]
             zout.append(cubic_root(a, flag = 1) - np.sum(z * VSHIFT * Bi)) # Volume translated Z 
+        
         return process_output(zout, is_list) 
-
+        
     zfuncs = {"DAK": zdak, "HY": z_hy, "WYW": z_wyw, "BUR": z_bur}
 
     if zmethod.name == 'BUR':
@@ -794,11 +798,11 @@ def gas_ug(
     tcs = np.array([547.416, 672.120, 227.160, 47.430, 1]) # H2 Tc has been modified
     pcs = np.array([1069.51, 1299.97, 492.84, 187.5300, 1])
     ACF = np.array([0.12256, 0.04916, 0.037, -0.21700, -0.03899])
-    VSHIFT = np.array([-0.27593, -0.22896, -0.21066, -0.32400, -0.19076])
-    OmegaA = np.array([0.427705, 0.436743, 0.457236, 0.457236, 0.457236])
-    OmegaB = np.array([0.0696460, 0.0724373, 0.0777961, 0.0777961, 0.0777961]) 
-    VCVIS = np.array([1.46020, 1.46460, 1.35422, 0.67967, 0]) # cuft/lbmol    
-
+    VSHIFT = np.array([-0.27607, -0.22901, -0.21066, -0.36270, -0.19076])
+    OmegaA = np.array([0.427671, 0.436725, 0.457236, 0.457236, 0.457236])
+    OmegaB = np.array([0.0696397, 0.0724345, 0.0777961, 0.0777961, 0.0777961]) 
+    VCVIS = np.array([1.46352, 1.46808, 1.35526, 0.68473,  0.0]) # cuft/lbmol            
+        
     # From https://wiki.whitson.com/bopvt/visc_correlations/
     def lbc(Z, degf, psia, sg, co2=0.0, h2s=0.0, n2=0.0, h2 = 0.0):
         if co2 + h2s + n2 + h2 > 1 or co2 < 0 or h2s < 0 or n2 < 0 or h2 < 0:
@@ -815,7 +819,8 @@ def gas_ug(
         hc_gas_mw = sg_hc * MW_AIR
             
         def vcvis_hc(mw): # Returns hydrocarbon gas VcVis for LBC viscosity calculations   
-            return  0.057511062 *  mw + 0.478400158 # ft3/lbmol      
+            return  0.0576710 * (mw - 16.0425) + 1.44383 # ft3/lbmol      
+       
                                                                        
         mws[-1]  = hc_gas_mw       
         tcs[-1], pcs[-1] = gas_tc_pc(hc_gas_mw/MW_AIR, cmethod = 'BUR')
@@ -842,7 +847,7 @@ def gas_ug(
             sqrt_mws = np.sqrt(mws)
             return np.sum(zi * ui * sqrt_mws)/np.sum(zi * sqrt_mws)
     
-        a = [0.1023, 0.023364, 0.058533, -3.92835e-02,  9.28591e-03] # P3 and P4 have been modified
+        a = [0.1023, 0.023364, 0.058533, -0.0392852, 0.00926279] # P3 and P4 have been modified
         # Calculate the viscosity of the mixture using the Lorenz-Bray-Clark method.
         rhoc = 1/np.sum(VCVIS*zi)
         Tc = tcs * 5/9    # (deg K)
