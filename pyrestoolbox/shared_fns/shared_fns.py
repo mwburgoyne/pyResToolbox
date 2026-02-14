@@ -36,8 +36,7 @@ def bisect_solve(args, f, xmin, xmax, rtol):
         err_mid = f(args, mid_val)
         iternum += 1
         if iternum > 99:
-            print("Could not solve via bisection")
-            sys.exit()
+            raise RuntimeError("bisect_solve: failed to converge after 99 iterations")
         if (err_hi * err_mid < 0):  # Solution point must be higher than current mid_val case
             xmin = mid_val
             err_lo = err_mid
@@ -49,25 +48,24 @@ def bisect_solve(args, f, xmin, xmax, rtol):
     
 def convert_to_numpy(input_data):
     # Convert input data to a numpy array ensuring it is always sizeable
-    if isinstance(input_data, np.ndarray):
-        # Input is already a numpy array, just return it
-        return input_data
+    if isinstance(input_data, (np.ndarray, list, tuple)):
+        return np.atleast_1d(input_data), True
     else:
-        # Convert list, Tuple, scalar, or other types to numpy array
-        # Ensuring even scalars become arrays with one element
-        return np.atleast_1d(input_data)
-        
-def process_input(input_data):
+        # Scalar input
+        return np.atleast_1d(input_data), False
+
+                
+def process_output(input_data, is_list):
     # Check if input_data is a numpy array
     if isinstance(input_data, np.ndarray):
-        if input_data.size == 1:
+        if not is_list:
             # Return the single element if it's a single-element array
             return input_data.item()
         else:
             # Return the array itself if it's larger
             return input_data
     elif isinstance(input_data, list):
-        if len(input_data) == 1:
+        if not is_list:
             # If it's a single-element list, return the element
             return input_data[0]
         else:
@@ -75,17 +73,14 @@ def process_input(input_data):
             return np.array(input_data)
     else:
         # If it's a single value (not in a list or array), return it directly
-        return input_data
+        return float(input_data)
         
 def check_2_inputs(x: Union[float, List[float]], y: Union[float, List[float]]) -> bool:
-    """ Check inputs that need to be matched, either both float or both lists of same length"""
-    # Check if both are floats
-    if isinstance(x, float) and isinstance(y, float):
+    """ Check inputs that need to be matched, either both float or both lists/arrays of same length"""
+    # Check if both are scalars
+    if isinstance(x, (int, float)) and isinstance(y, (int, float)):
         return True
-    # Check if both are lists of floats
-    elif isinstance(x, list) and isinstance(y, list):
-        if all(isinstance(item, float) for item in x) and all(isinstance(item, float) for item in y):
-            # Check if lists have the same length
-            return len(x) == len(y)
-    # If neither condition is met, return False
+    # Check if both are arrays or lists of same length
+    if isinstance(x, (list, np.ndarray)) and isinstance(y, (list, np.ndarray)):
+        return len(x) == len(y)
     return False

@@ -21,16 +21,13 @@
           Contact author at mark.w.burgoyne@gmail.com
 """
 
-import sys
 from collections import Counter
 import glob
-from enum import Enum
-import pkg_resources
 import os
 from os.path import exists
 import zipfile
 
-from typing import Union, List, Tuple
+from typing import Union, Tuple
 import numpy as np
 import numpy.typing as npt
 
@@ -39,19 +36,11 @@ from tabulate import tabulate
 from gwr_inversion import gwr
 from mpmath import mp
 
+from pyrestoolbox.classes import kr_family, kr_table
+
 EPS_T = 1e-15
 MAX_ITR = 100
 
-class kr_family(Enum):  # Relative permeability family type
-    COR = 0
-    LET = 1
-
-
-class kr_table(Enum):  # Relative permeability table type
-    SWOF = 0
-    SGOF = 1
-    SGWFN = 2
-    
 
 def ix_extract_problem_cells(filename: str = "", silent: bool = False) -> list:
     """
@@ -73,8 +62,7 @@ def ix_extract_problem_cells(filename: str = "", silent: bool = False) -> list:
     if filename == "":  # Show selection in local directory
         prt_files = glob.glob("*.PRT", recursive=False)
         if len(prt_files) == 0:
-            print("No .PRT files exist in this directory - Terminating script")
-            sys.exit()
+            raise FileNotFoundError("No .PRT files exist in this directory")
 
         if len(prt_files) > 1:
             table = []
@@ -95,10 +83,7 @@ def ix_extract_problem_cells(filename: str = "", silent: bool = False) -> list:
             )
 
             if prt_file_idx not in [i for i in range(0, len(prt_files))]:
-                print(
-                    "\nIndex entered outside range permitted - Terminating script"
-                )
-                sys.exit()
+                raise ValueError("Index entered outside range permitted")
         else:
             prt_file_idx = 0
 
@@ -106,7 +91,7 @@ def ix_extract_problem_cells(filename: str = "", silent: bool = False) -> list:
 
     if not silent:
         print("Processing " + filename + "\n")
-    file1 = open(filename, "r")
+    file1 = open(filename, "r")  # Kept open for line-by-line reading; closed below
     count = 0
     grab_line1 = False
     grab_line2 = False
@@ -231,7 +216,7 @@ def ix_extract_problem_cells(filename: str = "", silent: bool = False) -> list:
         try:
             df.columns = ["Count"]
             df.sort_values(by="Count", ascending=False, inplace=True)
-        except:
+        except (ValueError, KeyError):
             pass
     return dfs
 
@@ -312,18 +297,16 @@ def rel_perm_table(
         export: Boolean value that controls whether an include file with same name as krtable is created. Default: False
     """
 
-    if type(krtable) == str:
+    if isinstance(krtable, str):
         try:
             krtable = kr_table[krtable.upper()]
-        except:
-            print("Incorrect table type specified")
-            sys.exit()
-    if type(krfamily) == str:
+        except KeyError:
+            raise ValueError(f"Incorrect table type specified: '{krtable}'")
+    if isinstance(krfamily, str):
         try:
             krfamily = kr_family[krfamily.upper()]
-        except:
-            print("Incorrect krfamily specified")
-            sys.exit()
+        except KeyError:
+            raise ValueError(f"Incorrect krfamily specified: '{krfamily}'")
 
     def kr_SWOF(
         rows: int,
@@ -611,8 +594,7 @@ def rel_perm_table(
         print("sorw+swcr must be less than 1")
         fail = True
     if fail:
-        print("Saturation consistency check failure: Check your inputs")
-        sys.exit()
+        raise ValueError("Saturation consistency check failure: Check your inputs")
 
     if krtable.name == "SWOF":
         return kr_SWOF(
@@ -692,8 +674,7 @@ def rel_perm_table(
             Eg,
             Tg,
         )
-    print("Check that you have specified table type as SWOF, SGOF or SGWFN")
-    sys.exit()
+    raise ValueError("Check that you have specified table type as SWOF, SGOF or SGWFN")
 
 def influence_tables(
     ReDs: list,
@@ -797,9 +778,8 @@ def influence_tables(
         inc_out += "-- End of AQUTAB Include File\n"
         inc_out += "---------------------------------------\n"
 
-        text_file = open("INFLUENCE.INC", "w")
-        text_file.write(inc_out)
-        text_file.close()
+        with open("INFLUENCE.INC", "w") as text_file:
+            text_file.write(inc_out)
 
     return (tD, pDs)
 
@@ -833,8 +813,7 @@ def zip_check_sim_deck(files2scrape = [], tozip = True, console_summary = True):
         input_files = list(set(input_files)) # In case duplicated file names due to checking upper and lower case
         
         if len(input_files) == 0:
-            print( 'No '+mask+' files exist in this directory - Terminating script')
-            sys.exit()
+            raise FileNotFoundError('No '+mask+' files exist in this directory')
     
         print(' ')
         
@@ -850,9 +829,7 @@ def zip_check_sim_deck(files2scrape = [], tozip = True, console_summary = True):
         file_idxs = [int(x) for x in file_idx.split(',')]
     
         if not all(item in [i for i in range(0, len(input_files))] for item in file_idxs):
-            print(' ')
-            print( 'Index entered outside range permitted - Terminating script')
-            sys.exit()
+            raise ValueError('Index entered outside range permitted')
         
         in_files =  [input_files[x] for x in file_idxs]
         return in_files
@@ -962,7 +939,7 @@ def zip_check_sim_deck(files2scrape = [], tozip = True, console_summary = True):
             if console_summary:
                 cont = input('Continue to zip even with missing files? (Y/n): ')
                 if cont.upper() =='N':
-                    sys.exit()
+                    raise RuntimeError("Zip aborted by user due to missing files")
         lista_files = files2scrape
         dotindex = ''.join(lista_files[0]).rindex('.')
         zipname = lista_files[0][:dotindex]+'.zip'

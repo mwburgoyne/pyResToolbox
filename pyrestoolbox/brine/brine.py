@@ -21,23 +21,36 @@
           Contact author at mark.w.burgoyne@gmail.com
 """
 
-import sys
-from collections import Counter
-import glob
-from enum import Enum
-import pkg_resources
-
 import numpy as np
 import numpy.typing as npt
 
-import pandas as pd
-from tabulate import tabulate
+from typing import Tuple
 
 import pyrestoolbox.gas as gas # Needed for Z-Factor
 from pyrestoolbox.classes import z_method, c_method, pb_method, rs_method, bo_method, uo_method, deno_method, co_method, kr_family, kr_table, class_dic
-from pyrestoolbox.shared_fns import convert_to_numpy, process_input
+from pyrestoolbox.shared_fns import convert_to_numpy, process_output
 from pyrestoolbox.validate import validate_methods
 from pyrestoolbox.constants import R, psc, tsc, degF2R, tscr, scf_per_mol, CUFTperBBL, WDEN, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2
+
+def _Eq41(t, input_array):
+    """Eq 4.1 from McCain Petroleum Reservoir Fluid Properties"""
+    t2 = t / 100
+    return (
+        input_array[1] * t2 ** 2 + input_array[2] * t2 + input_array[3]
+    ) / (input_array[4] * t2 ** 2 + input_array[5] * t2 + 1)
+
+# Spivey coefficient tables (shared by brine_props and brine_props_co2)
+_RHOW_T70_ARR = [0, -0.127213, 0.645486, 1.03265, -0.070291, 0.639589]
+_EWT_ARR = [0, 4.221, -3.478, 6.221, 0.5182, -0.4405]
+_FWT_ARR = [0, -11.403, 29.932, 27.952, 0.20684, 0.3768]
+_DM2T_ARR = [0, -0.00011149, 0.000175105, -0.00043766, 0, 0]
+_DM32T_ARR = [0, -0.0008878, -0.0001388, -0.00296318, 0, 0.51103]
+_DM1T_ARR = [0, 0.0021466, 0.012427, 0.042648, -0.081009, 0.525417]
+_DM12T_ARR = [0, 0.0002356, -0.0003636, -0.0002278, 0, 0]
+_EMT_ARR = [0, 0, 0, 0.1249, 0, 0]
+_FM32T_ARR = [0, -0.617, -0.747, -0.4339, 0, 10.26]
+_FM1T_ARR = [0, 0, 9.917, 5.1128, 0, 3.892]
+_FM12T_ARR = [0, 0.0365, -0.0369, 0, 0, 0]
 
 def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0) -> Tuple:
     """ Calculates Brine properties from modified Spivey Correlation per McCain Petroleum Reservoir Fluid Properties pg 160
@@ -47,12 +60,7 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0) -> Tuple:
         wt: Salt wt% (0-100)
         ch4_sat: Degree of methane saturation (0 - 1)
     """
-
-    def Eq41(t, input_array):  # From McCain Petroleum Reservoir Fluid Properties
-        t2 = t / 100
-        return (
-            input_array[1] * t2 ** 2 + input_array[2] * t2 + input_array[3]
-        ) / (input_array[4] * t2 ** 2 + input_array[5] * t2 + 1)
+    Eq41 = _Eq41
 
     Mpa = p * 0.00689476  # Pressure in mPa
     degc = (degf - 32) / 1.8  # Temperature in deg C
@@ -61,17 +69,17 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0) -> Tuple:
         1000 * (wt / 100) / (58.4428 * (1 - (wt / 100)))
     )  # Molar concentration of NaCl from wt % in gram mol/kg water
 
-    rhow_t70_arr = [0, -0.127213, 0.645486, 1.03265, -0.070291, 0.639589]
-    Ewt_arr = [0, 4.221, -3.478, 6.221, 0.5182, -0.4405]
-    Fwt_arr = [0, -11.403, 29.932, 27.952, 0.20684, 0.3768]
-    Dm2t_arr = [0, -0.00011149, 0.000175105, -0.00043766, 0, 0]
-    Dm32t_arr = [0, -0.0008878, -0.0001388, -0.00296318, 0, 0.51103]
-    Dm1t_arr = [0, 0.0021466, 0.012427, 0.042648, -0.081009, 0.525417]
-    Dm12t_arr = [0, 0.0002356, -0.0003636, -0.0002278, 0, 0]
-    Emt_arr = [0, 0, 0, 0.1249, 0, 0]
-    Fm32t_arr = [0, -0.617, -0.747, -0.4339, 0, 10.26]
-    Fm1t_arr = [0, 0, 9.917, 5.1128, 0, 3.892]
-    Fm12t_arr = [0, 0.0365, -0.0369, 0, 0, 0]
+    rhow_t70_arr = _RHOW_T70_ARR
+    Ewt_arr = _EWT_ARR
+    Fwt_arr = _FWT_ARR
+    Dm2t_arr = _DM2T_ARR
+    Dm32t_arr = _DM32T_ARR
+    Dm1t_arr = _DM1T_ARR
+    Dm12t_arr = _DM12T_ARR
+    Emt_arr = _EMT_ARR
+    Fm32t_arr = _FM32T_ARR
+    Fm1t_arr = _FM1T_ARR
+    Fm12t_arr = _FM12T_ARR
 
     rhow_t70 = Eq41(degc, rhow_t70_arr)
     Ewt = Eq41(degc, Ewt_arr)
@@ -170,7 +178,7 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0) -> Tuple:
 
     try:
         mch4w = np.exp(A_t * np.power(np.log(Mpa - vap_pressure), 2) + B_t * np.log(Mpa - vap_pressure) + C_t)  # Eq 4.15
-    except:
+    except (ValueError, FloatingPointError):
         mch4w = 0
     
     u_arr = [
@@ -351,9 +359,9 @@ BBL2CUFT = 5.614583333 # cuft in a bbl
 
 #============================================================================
 #    ***  Mutual solubilities between CO2 and Brine - Calculated with  ***
-#  A Phase-Partitioning Model for CO2–Brine Mixtures at Elevated Temperatures 
+#  A Phase-Partitioning Model for CO2ï¿½Brine Mixtures at Elevated Temperatures 
 #  and Pressures: Application to CO2-Enhanced Geothermal Systems
-#  Nicolas Spycher & Karsten Pruess, Transp Porous Med (2010) 82:173–196
+#  Nicolas Spycher & Karsten Pruess, Transp Porous Med (2010) 82:173ï¿½196
 #  DOI 10.1007/s11242-009-9425-y
 #============================================================================
 
@@ -851,9 +859,9 @@ class CO2_Brine_Mixture():
         self.Bprime = B
     
     #============================================================================
-    #  A Phase-Partitioning Model for CO2–Brine Mixtures at Elevated Temperatures 
+    #  A Phase-Partitioning Model for CO2ï¿½Brine Mixtures at Elevated Temperatures 
     #  and Pressures: Application to CO2-Enhanced Geothermal Systems
-    #  Nicolas Spycher & Karsten Pruess, Transp Porous Med (2010) 82:173–196
+    #  Nicolas Spycher & Karsten Pruess, Transp Porous Med (2010) 82:173ï¿½196
     #  DOI 10.1007/s11242-009-9425-y
     #============================================================================
     
@@ -1068,26 +1076,18 @@ class CO2_Brine_Mixture():
         Mpa = pBar * 0.1                    # Pressure in mPa
         tKel = degc + CEL2KEL               # Temperature in deg K
         
-        def Eq41(t, input_array):  # From McCain Petroleum Reservoir Fluid Properties
-            t2 = t / 100
-            return (input_array[1] * t2 ** 2 + input_array[2] * t2 + input_array[3]) / (input_array[4] * t2 ** 2 + input_array[5] * t2 + 1)
-    
-        # Table 4-6 Coefficients
-        rhow_t70_arr = [0, -0.127213, 0.645486, 1.03265, -0.070291, 0.639589]
-        Ewt_arr = [0, 4.221, -3.478, 6.221, 0.5182, -0.4405]
-        Fwt_arr = [0, -11.403, 29.932, 27.952, 0.20684, 0.3768]
-        
-        # Table 4-7 Coefficients
-        Dm2t_arr = [0, -0.00011149, 0.000175105, -0.00043766, 0, 0]
-        Dm32t_arr = [0, -0.0008878, -0.0001388, -0.00296318, 0, 0.51103]
-        Dm1t_arr = [0, 0.0021466, 0.012427, 0.042648, -0.081009, 0.525417]
-        Dm12t_arr = [0, 0.0002356, -0.0003636, -0.0002278, 0, 0]
-        
-        # Table 4-8 Coefficients
-        Emt_arr = [0, 0, 0, 0.1249, 0, 0]
-        Fm32t_arr = [0, -0.617, -0.747, -0.4339, 0, 10.26]
-        Fm1t_arr = [0, 0, 9.917, 5.1128, 0, 3.892]
-        Fm12t_arr = [0, 0.0365, -0.0369, 0, 0, 0]
+        Eq41 = _Eq41
+        rhow_t70_arr = _RHOW_T70_ARR
+        Ewt_arr = _EWT_ARR
+        Fwt_arr = _FWT_ARR
+        Dm2t_arr = _DM2T_ARR
+        Dm32t_arr = _DM32T_ARR
+        Dm1t_arr = _DM1T_ARR
+        Dm12t_arr = _DM12T_ARR
+        Emt_arr = _EMT_ARR
+        Fm32t_arr = _FM32T_ARR
+        Fm1t_arr = _FM1T_ARR
+        Fm12t_arr = _FM12T_ARR
         
         # Table 4-14 Mao-Duan Coefficients
         d = [0, 2885310, -11072.577, -9.0834095, 0.030925651, -0.0000274071, -1928385.1, 5621.6046, 13.82725, -0.047609523, 0.000035545041]
@@ -1114,7 +1114,7 @@ class CO2_Brine_Mixture():
         
         # -- CO2-Free Brine Density (gm/cm3)
         def brine_denw(Mpa):
-            # cw(T, p), in MPa–1, of pure water at temperature T and pressure p,
+            # cw(T, p), in MPaï¿½1, of pure water at temperature T and pressure p,
             cwtp = (1 / 70) * (1 / (Ewt * (Mpa / 70) + Fwt))        # Eq 4.2
     
             #Density of pure water at temperature T and pressure p.
@@ -1167,7 +1167,7 @@ class CO2_Brine_Mixture():
             return (1.0 + mRat * xRat) / (vPhi * xRat / MwB + 1.0 / rhoBRnoCO2) # --Equation 18 of Garcia paper
         
         # Correct CO2 free brine viscosity for dissolved CO2
-        # Using approach from "Viscosity Models and Effects of Dissolved CO2", Akand W. Islam and Eric S. Carlson (Jul 2012), Energy Fuels 2012, 26, 8, 5330–5336, https://doi.org/10.1021/ef3006228
+        # Using approach from "Viscosity Models and Effects of Dissolved CO2", Akand W. Islam and Eric S. Carlson (Jul 2012), Energy Fuels 2012, 26, 8, 5330ï¿½5336, https://doi.org/10.1021/ef3006228
         def co2_vis_brine(cP_brine, xCO2):
             # Uses CO2 free brine viscosity (cP) and mole fraction CO2 in brine (xCO2), and returns cP
             return cP_brine * (1 + 4.65 * xCO2**1.0134)
