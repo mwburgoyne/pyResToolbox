@@ -457,7 +457,7 @@ def gas_tc_pc(
 _BNS_MWS = np.array([44.01, 34.082, 28.014, 2.016, 0])
 _BNS_TCS = np.array([547.416, 672.120, 227.160, 47.430, 1])  # H2 Tc has been modified
 _BNS_PCS = np.array([1069.51, 1299.97, 492.84, 187.5300, 1])
-_BNS_ACF = np.array([0.12256, 0.04916, 0.037, -0.21700, -0.03899])
+_BNS_ACF = np.array([0.12253, 0.04909, 0.037, -0.21700, -0.03899])
 _BNS_VSHIFT = np.array([-0.27607, -0.22901, -0.21066, -0.36270, -0.19076])
 _BNS_OMEGAA = np.array([0.427671, 0.436725, 0.457236, 0.457236, 0.457236])
 _BNS_OMEGAB = np.array([0.0696397, 0.0724345, 0.0777961, 0.0777961, 0.0777961])
@@ -656,7 +656,7 @@ def gas_z(
                 return max(Zs)
             return Zs           # Return all roots
 
-        def calc_bips(degf, tpc_hc):
+        def calc_bips(degR, tpc_hc):
             """
             Temperature-dependent Binary Interaction Parameters (BIPs) for all pairs,
             with analytic first and second T-derivatives for use in PR analytic derivatives.
@@ -664,7 +664,6 @@ def gas_z(
             - Returns: kij, dkij_dT, d2kij_dT2 (all NxN)
             - Tuned to experimental VLE data Burgoyne, 2025
             """
-            degR = degf + degF2R
             components = ['CO2', 'H2S', 'N2', 'H2', 'Gas']
             bip_parameters = {
                 ("Gas", "CO2"): {"constant": -0.145561 ,  "Tr_slope": 0.276572 ,  "tc": tpc_hc  },
@@ -706,7 +705,7 @@ def gas_z(
         m = 0.37464 + 1.54226 * ACF - 0.26992 * ACF**2
         alpha = (1 + m * (1 - np.sqrt(trs)))**2    
         
-        kij = calc_bips(degf, tc)
+        kij = calc_bips(degR, tc)
         
         zout = []
         for psia in psias:
@@ -722,8 +721,8 @@ def gas_z(
         
     zfuncs = {"DAK": zdak, "HY": z_hy, "WYW": z_wyw, "BUR": z_bur}
 
-    if zmethod.name == 'BNS':
-        return zfuncs[zmethod.name](p, degf)
+    if zmethod.name in ('BNS', 'BUR'):
+        return zfuncs["BUR"](p, degf)
     else:
         return zfuncs[zmethod.name](pprs, tr)
 
@@ -853,15 +852,15 @@ def gas_ug(
         vis = (lhs**4 - 1e-4)/eta + u0(zi, ui, mws, Z)
         return process_output(vis, is_list)  
         
-    if zmethod.name != 'BNS':
+    if zmethod.name not in ('BNS', 'BUR'):
         b = 3.448 + (986.4 / t) + (0.01009 * m)  # 2.16
         c = 2.447 - (0.2224 * b)  # 2.17
         a = ((9.379 + (0.01607 * m)) * np.power(t, 1.5) / (209.2 + (19.26 * m) + t))  # 2.15
         ug = process_output(a * 0.0001 * np.exp(b * np.power(rho, c)), is_list)  # 2.14
     else:
         ug = []
-        for psia in p:
-            ug.append(lbc(zee, degf, psia, sg, co2, h2s, n2, h2))
+        for i, psia in enumerate(p):
+            ug.append(lbc(zee[i], degf, psia, sg, co2, h2s, n2, h2))
         ug = process_output(ug, is_list)
     if ugz:
         return process_output(ug * zee, is_list)
