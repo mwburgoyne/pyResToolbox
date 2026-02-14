@@ -28,11 +28,13 @@ class z_method(Enum):  # Gas Z-Factor calculation model
     HY = 1
     WYW = 2
     BUR = 3
+    BNS = 3
 
 class c_method(Enum):  # Gas critical properties calculation method
     PMC = 0
     SUT = 1
     BUR = 2
+    BNS = 3
 
 class pb_method(Enum):  # Bubble point calculation method
     STAN = 0

@@ -21,20 +21,12 @@
           Contact author at mark.w.burgoyne@gmail.com
 """
 
-import sys
-from collections import Counter
-import glob
-from enum import Enum
-import pkg_resources
-
 import numpy as np
 import numpy.typing as npt
 from scipy.integrate import quad
-from scipy.optimize import brentq
-from typing import Union, List, Tuple
+from typing import Tuple
 
 import pandas as pd
-from tabulate import tabulate
 from pyrestoolbox.classes import z_method, c_method, pb_method, rs_method, bo_method, uo_method, deno_method, co_method, kr_family, kr_table, class_dic
 from pyrestoolbox.shared_fns import convert_to_numpy, process_output, check_2_inputs, bisect_solve
 from pyrestoolbox.validate import validate_methods
@@ -72,12 +64,12 @@ def gas_rate_radial(
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
                  'WYW' Wang, Ye & Wu (2021)
-                 'BUR' Tuned 5 component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
-                 defaults to 'DAK' if not specified, or to 'BUR' if h2 mole fraction is specified
+                 'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
+                 defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
         cmethod: Method for calculating critical properties
                'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
                'PMC' for Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-               'BUR' for Burgoyne method (2024). If h2 > 0, then 'BUR' will be used
+               'BNS' for Burgoyne, Nielsen and Stanko method (2025). If h2 > 0, then 'BNS' will be used
                Defaults to 'PMC'
                 S: Skin. Defaults to zero if undefined
         D: Non Darcy Skin Factor (day/mscf). Defaults to zero if undefined
@@ -85,7 +77,7 @@ def gas_rate_radial(
         co2: Molar fraction of CO2. Defaults to zero if undefined
         h2s: Molar fraction of H2S. Defaults to zero if undefined
         n2: Molar fraction of Nitrogen. Defaults to zero if undefined
-        h2: Molar fraction of Hydrogen. Defaults to zero if undefined. If > 0, will change zmethod to 'BUR'
+        h2: Molar fraction of Hydrogen. Defaults to zero if undefined. If > 0, will change zmethod to 'BNS'
         tc: Critical gas temperature (deg R). Uses cmethod correlation if not specified
         pc: Critical gas pressure (psia). Uses cmethod correlation if not specified
     """
@@ -97,8 +89,8 @@ def gas_rate_radial(
     )
     
     if h2 > 0:
-        cmethod = 'BUR' # The Burgoyne PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BUR'  
+        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
+        zmethod = 'BNS'  
     
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
@@ -201,12 +193,12 @@ def gas_rate_linear(
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
                  'WYW' Wang, Ye & Wu (2021)
-                 'BUR' Tuned 5 component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
-                 defaults to 'DAK' if not specified, or to 'BUR' if h2 mole fraction is specified
+                 'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
+                 defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
         cmethod: Method for calculting critical properties
                'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
                'PMC' for Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-               'BUR' for Burgoyne method (2024). If h2 > 0, then 'BUR' will be used
+               'BNS' for Burgoyne, Nielsen and Stanko method (2025). If h2 > 0, then 'BNS' will be used
                Defaults to 'PMC' if not specified
                 sg: Gas SG relative to air, Defaults to 0.75 if not specified
         degf: Reservoir Temperature (deg F).
@@ -224,8 +216,8 @@ def gas_rate_linear(
         np.asarray(pwf),
     )
     if h2 > 0:
-        cmethod = 'BUR' # The Burgoyne PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BUR'  
+        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
+        zmethod = 'BNS'  
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
     tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc)
@@ -323,7 +315,7 @@ def darcy_gas(
             return (np.sqrt(4 * a * b * D + (b * b * c * c)) - (b * c)) / (2 * b * D)
     else:
         a = k * h * l1 * delta_mp
-        b = 2 * np.pi * 1422 * tr
+        b = 1422 * tr
         c = l2
     # Else, ignore non-Darcy skin
     return a / (b * c)
@@ -348,7 +340,7 @@ def gas_tc_pc(
         h2: Molar fraction of Hydrogen. Defaults to zero if undefined
         cmethod: 'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, 
                  'PMC' for Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-                 'BUR' for Burgoyne method (2024). If h2 > 0, then 'BUR' will be used
+                 'BNS' for Burgoyne, Nielsen and Stanko method (2025). If h2 > 0, then 'BNS' will be used
         tc: Critical gas temperature (deg R). Uses cmethod correlation if not specified
         pc: Critical gas pressure (psia). Uses cmethod correlation if not specified
     """
@@ -356,7 +348,7 @@ def gas_tc_pc(
         return (tc, pc)
     
     if h2 > 0:
-        cmethod = 'BUR' # The Burgoyne PR EOS method is the only one that can handle Hydrogen
+        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
     
     cmethod = validate_methods(["cmethod"], [cmethod])
 
@@ -414,7 +406,7 @@ def gas_tc_pc(
         )  # Eq. 3.52b
 
 
-    elif (cmethod.name == "BUR"): 
+    elif cmethod.name in ("BUR", "BNS"):
         def tc_ag(x):
             a, b, c = 2695.14765, 274.341701, 343.008
             return a * x / (b + x) + c
@@ -453,8 +445,7 @@ def gas_tc_pc(
         tpc, ppc = pseudo_critical(hydrocarbon_specific_gravity)
 
     else:
-        print("Incorrect cmethod specified")
-        sys.exit()
+        raise ValueError("Incorrect cmethod specified")
 
     if tc > 0:
         tpc = tc
@@ -462,6 +453,16 @@ def gas_tc_pc(
         ppc = pc
     return (tpc, ppc)
         
+# EOS parameters for BNS Peng-Robinson model (shared by gas_z and gas_ug)
+_BNS_MWS = np.array([44.01, 34.082, 28.014, 2.016, 0])
+_BNS_TCS = np.array([547.416, 672.120, 227.160, 47.430, 1])  # H2 Tc has been modified
+_BNS_PCS = np.array([1069.51, 1299.97, 492.84, 187.5300, 1])
+_BNS_ACF = np.array([0.12256, 0.04916, 0.037, -0.21700, -0.03899])
+_BNS_VSHIFT = np.array([-0.27607, -0.22901, -0.21066, -0.36270, -0.19076])
+_BNS_OMEGAA = np.array([0.427671, 0.436725, 0.457236, 0.457236, 0.457236])
+_BNS_OMEGAB = np.array([0.0696397, 0.0724345, 0.0777961, 0.0777961, 0.0777961])
+_BNS_VCVIS = np.array([1.46352, 1.46808, 1.35526, 0.68473, 0.0])  # cuft/lbmol
+
 def gas_z(
     p: npt.ArrayLike,
     sg: float,
@@ -484,12 +485,12 @@ def gas_z(
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
                  'WYW' Wang, Ye & Wu (2021)
-                 'BUR' Tuned 5 component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
-                 defaults to 'DAK' if not specified, or to 'BUR' if h2 mole fraction is specified
+                 'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
+                 defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
         cmethod: Method for calculting critical properties
                'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
                'PMC' for Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-               'BUR' for Burgoyne method (2024). If h2 > 0, then 'BUR' will be used
+               'BNS' for Burgoyne, Nielsen and Stanko method (2025). If h2 > 0, then 'BNS' will be used
                Defaults to 'PMC'
         co2: Molar fraction of CO2. Defaults to zero if undefined
         h2s: Molar fraction of H2S. Defaults to zero if undefined
@@ -502,12 +503,12 @@ def gas_z(
     p, is_list = convert_to_numpy(p)
 
     if h2 > 0:
-        cmethod = 'BUR' # The Burgoyne PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BUR' 
-    elif cmethod == 'BUR':
-        zmethod = 'BUR'
-    elif zmethod == 'BUR':
-        cmethod='BUR'    
+        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
+        zmethod = 'BNS' 
+    elif cmethod == 'BNS':
+        zmethod = 'BNS'
+    elif zmethod == 'BNS':
+        cmethod='BNS'    
         
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
@@ -611,16 +612,11 @@ def gas_z(
         zout = numerators/denominators
         return process_output(zout, is_list)
 
-    mws = np.array([44.01, 34.082, 28.014, 2.016, 0])
-    tcs = np.array([547.416, 672.120, 227.160, 47.430, 1]) # H2 Tc has been modified
-    pcs = np.array([1069.51, 1299.97, 492.84, 187.5300, 1])
-    ACF = np.array([0.12256, 0.04916, 0.037, -0.21700, -0.03899])
-    VSHIFT = np.array([-0.27607, -0.22901, -0.21066, -0.36270, -0.19076])
-    OmegaA = np.array([0.427671, 0.436725, 0.457236, 0.457236, 0.457236])
-    OmegaB = np.array([0.0696397, 0.0724345, 0.0777961, 0.0777961, 0.0777961]) 
-    VCVIS = np.array([1.46352, 1.46808, 1.35526, 0.68473,  0.0]) # cuft/lbmol    
-        
-    # Burgoyne tuned Peng Robinson EOS
+    mws, tcs, pcs = _BNS_MWS.copy(), _BNS_TCS.copy(), _BNS_PCS.copy()
+    ACF, VSHIFT = _BNS_ACF, _BNS_VSHIFT
+    OmegaA, OmegaB, VCVIS = _BNS_OMEGAA, _BNS_OMEGAB, _BNS_VCVIS
+
+    # BNS tuned Peng Robinson EOS
     # More information about formulation and applicability can be found here; https://github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor
     def z_bur(psias, degf):
         degR = degf + degF2R
@@ -702,9 +698,9 @@ def gas_z(
         z = np.array([co2, h2s, n2, h2, 1 - co2 - h2s - n2 - h2])
         
         #if tc * pc == 0:  # Critical properties have not been user specified
-        #    tc_peng, pc_peng = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod = 'BUR')
+        #    tc_peng, pc_peng = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod = 'BNS')
         
-        tcs[-1], pcs[-1] = tc, pc # Hydrocarbon Tc and Pc from SG using Burgoyne correlation
+        tcs[-1], pcs[-1] = tc, pc # Hydrocarbon Tc and Pc from SG using BNS correlation
         trs = degR / tcs
         
         m = 0.37464 + 1.54226 * ACF - 0.26992 * ACF**2
@@ -726,7 +722,7 @@ def gas_z(
         
     zfuncs = {"DAK": zdak, "HY": z_hy, "WYW": z_wyw, "BUR": z_bur}
 
-    if zmethod.name == 'BUR':
+    if zmethod.name == 'BNS':
         return zfuncs[zmethod.name](p, degf)
     else:
         return zfuncs[zmethod.name](pprs, tr)
@@ -748,7 +744,7 @@ def gas_ug(
 ) -> np.ndarray:
     """ Returns Gas Viscosity (cP) or Gas Viscosity * Z-Factor
         Uses Lee, Gonzalez & Eakin (1966) Correlation using equations 2.14-2.17 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-        Except if 'BUR' Z-Factor method chosen, in which case tuned LBC viscosity model will be used instead
+        Except if 'BNS' Z-Factor method chosen, in which case tuned LBC viscosity model will be used instead
 
           p: Gas pressure (psia)
           sg: Gas SG relative to air
@@ -757,12 +753,12 @@ def gas_ug(
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                    'HY' Hall & Yarborough (1973)
                    'WYW' Wang, Ye & Wu (2021)
-                   'BUR' Tuned 5 component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
-                    defaults to 'DAK' if not specified, or to 'BUR' if h2 mole fraction is specified
+                   'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
+                    defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
           cmethod: Method for calculting critical properties
                    'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
                    'PMC' for Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-                   'BUR' for Burgoyne method (2024). If h2 > 0, then 'BUR' will be used
+                   'BNS' for Burgoyne, Nielsen and Stanko method (2025). If h2 > 0, then 'BNS' will be used
                    Defaults to 'PMC'
           co2: Molar fraction of CO2. Defaults to zero if undefined
           h2s: Molar fraction of H2S. Defaults to zero if undefined
@@ -773,35 +769,31 @@ def gas_ug(
           zee: Gas Z-Factor. If undefined, will trigger Z-Factor calculation.
           ugz: Boolean flag that if True returns ugZ instead of ug
     """
+    zee_provided = not (isinstance(zee, (int, float, bool)) and not zee)
     p, is_list = convert_to_numpy(p)
     zee, _ = convert_to_numpy(zee)
-    
+
     if h2 > 0:
-        cmethod = 'BUR' # The Burgoyne PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BUR' 
-    elif cmethod == 'BUR':
-        zmethod = 'BUR'
-    elif zmethod == 'BUR':
-        cmethod='BUR'   
-        
+        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
+        zmethod = 'BNS'
+    elif cmethod == 'BNS':
+        zmethod = 'BNS'
+    elif zmethod == 'BNS':
+        cmethod='BNS'
+
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
-    
+
     t = degf + degF2R
     m = MW_AIR * sg
-    
-    if not check_2_inputs(zee, p): # Need to calculate Z-Factors if not same length / type as p
+
+    if not zee_provided or not check_2_inputs(zee, p): # Need to calculate Z-Factors if not same length / type as p
          zee = gas_z(p, sg, degf, zmethod, cmethod, co2, h2s, n2, h2, tc, pc)
     
     rho = m * p / (t * zee * R * 62.37)
     
-    mws = np.array([44.01, 34.082, 28.014, 2.016, 0])
-    tcs = np.array([547.416, 672.120, 227.160, 47.430, 1]) # H2 Tc has been modified
-    pcs = np.array([1069.51, 1299.97, 492.84, 187.5300, 1])
-    ACF = np.array([0.12256, 0.04916, 0.037, -0.21700, -0.03899])
-    VSHIFT = np.array([-0.27607, -0.22901, -0.21066, -0.36270, -0.19076])
-    OmegaA = np.array([0.427671, 0.436725, 0.457236, 0.457236, 0.457236])
-    OmegaB = np.array([0.0696397, 0.0724345, 0.0777961, 0.0777961, 0.0777961]) 
-    VCVIS = np.array([1.46352, 1.46808, 1.35526, 0.68473,  0.0]) # cuft/lbmol            
+    mws, tcs, pcs = _BNS_MWS.copy(), _BNS_TCS.copy(), _BNS_PCS.copy()
+    ACF, VSHIFT = _BNS_ACF, _BNS_VSHIFT
+    OmegaA, OmegaB, VCVIS = _BNS_OMEGAA, _BNS_OMEGAB, _BNS_VCVIS
         
     # From https://wiki.whitson.com/bopvt/visc_correlations/
     def lbc(Z, degf, psia, sg, co2=0.0, h2s=0.0, n2=0.0, h2 = 0.0):
@@ -823,7 +815,7 @@ def gas_ug(
        
                                                                        
         mws[-1]  = hc_gas_mw       
-        tcs[-1], pcs[-1] = gas_tc_pc(hc_gas_mw/MW_AIR, cmethod = 'BUR')
+        tcs[-1], pcs[-1] = gas_tc_pc(hc_gas_mw/MW_AIR, cmethod = 'BNS')
         
         VCVIS[-1] = vcvis_hc(hc_gas_mw)
         degR = degf + degF2R
@@ -861,7 +853,7 @@ def gas_ug(
         vis = (lhs**4 - 1e-4)/eta + u0(zi, ui, mws, Z)
         return process_output(vis, is_list)  
         
-    if zmethod.name != 'BUR':
+    if zmethod.name != 'BNS':
         b = 3.448 + (986.4 / t) + (0.01009 * m)  # 2.16
         c = 2.447 - (0.2224 * b)  # 2.17
         a = ((9.379 + (0.01607 * m)) * np.power(t, 1.5) / (209.2 + (19.26 * m) + t))  # 2.15
@@ -891,7 +883,7 @@ def gas_cg(
 ) -> np.ndarray:
     """ Returns gas compressibility (1/psi) using the 'DAK' Dranchuk & Abou-Kassem (1975) Z-Factor &
         Critical property correlation values if not explicitly specified
-        If h2 > 0, will use the 'BUR' Z-Factor method
+        If h2 > 0, will use the 'BNS' Z-Factor method
         p: Gas pressure (psia)
         sg: Gas SG relative to air. Defaults to False if undefined
         pwf: BHFP (psia)
@@ -906,17 +898,17 @@ def gas_cg(
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                    'HY' Hall & Yarborough (1973)
                    'WYW' Wang, Ye & Wu (2021)
-                   'BUR' Tuned 5 component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
-                    defaults to 'DAK' if not specified, or to 'BUR' if h2 mole fraction is specified
+                   'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
+                    defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
         cmethod: Method for calculating Tc and Pc
                  'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
                  'PMC' for Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-                 'BUR' for Burgoyne method (2024). If h2 > 0, then 'BUR' will be used
+                 'BNS' for Burgoyne, Nielsen and Stanko method (2025). If h2 > 0, then 'BNS' will be used
                  Defaults to 'PMC
     """
     if h2 > 0:
-        cmethod = 'BUR' # The Burgoyne PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BUR' 
+        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
+        zmethod = 'BNS' 
         
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
@@ -955,12 +947,12 @@ def gas_bg(
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
                  'WYW' Wang, Ye & Wu (2021)
-                 'BUR' Tuned 5 component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
-                 defaults to 'DAK' if not specified, or to 'BUR' if h2 mole fraction is specified
+                 'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
+                 defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
         cmethod: Method for calculting critical properties
                  'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
                  'PMC' for Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-                 'BUR' for Burgoyne method (2024). If h2 > 0, then 'BUR' will be used
+                 'BNS' for Burgoyne, Nielsen and Stanko method (2025). If h2 > 0, then 'BNS' will be used
                  Defaults to 'PMC'
           co2: Molar fraction of CO2. Defaults to zero if undefined
           h2s: Molar fraction of H2S. Defaults to zero if undefined
@@ -971,8 +963,8 @@ def gas_bg(
     """
     p, is_list = convert_to_numpy(p)
     if h2 > 0:
-        cmethod = 'BUR' # The Burgoyne PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BUR' 
+        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
+        zmethod = 'BNS' 
         
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
@@ -1005,12 +997,12 @@ def gas_den(
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                    'HY' Hall & Yarborough (1973)
                    'WYW' Wang, Ye & Wu (2021)
-                   'BUR' Tuned 5 component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
-                   defaults to 'DAK' if not specified, or to 'BUR' if h2 mole fraction is specified
+                   'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
+                   defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
           cmethod: Method for calculting critical properties
                    'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
                    'PMC' for Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-                   'BUR' for Burgoyne method (2024). If h2 > 0, then 'BUR' will be used
+                   'BNS' for Burgoyne, Nielsen and Stanko method (2025). If h2 > 0, then 'BNS' will be used
                    Defaults to 'PMC'
           co2: Molar fraction of CO2. Defaults to zero if undefined
           h2s: Molar fraction of H2S. Defaults to zero if undefined
@@ -1022,8 +1014,8 @@ def gas_den(
     p, is_list = convert_to_numpy(p)
 
     if h2 > 0:
-        cmethod = 'BUR' # The Burgoyne PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BUR' 
+        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
+        zmethod = 'BNS' 
         
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
@@ -1067,12 +1059,12 @@ def gas_ponz2p(
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
                  'WYW' Wang, Ye & Wu (2021)
-                 'BUR' Tuned 5 component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
-                 defaults to 'DAK' if not specified, or to 'BUR' if h2 mole fraction is specified
+                 'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
+                 defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
         cmethod: Method for calculting critical properties
                  'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
                  'PMC' for Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-                 'BUR' for Burgoyne method (2024). If h2 > 0, then 'BUR' will be used
+                 'BNS' for Burgoyne, Nielsen and Stanko method (2025). If h2 > 0, then 'BNS' will be used
                  Defaults to 'PMC'
           co2: Molar fraction of CO2. Defaults to zero if undefined
           h2s: Molar fraction of H2S. Defaults to zero if undefined
@@ -1084,8 +1076,8 @@ def gas_ponz2p(
     """
     
     if h2 > 0:
-        cmethod = 'BUR' # The Burgoyne PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BUR' 
+        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
+        zmethod = 'BNS' 
         
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
@@ -1127,12 +1119,12 @@ def gas_grad2sg(
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
                  'WYW' Wang, Ye & Wu (2021)
-                 'BUR' Tuned 5 component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
-                 defaults to 'DAK' if not specified, or to 'BUR' if h2 mole fraction is specified
+                 'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
+                 defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
         cmethod: Method for calculting critical properties
                  'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
                  'PMC' for Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-                 'BUR' for Burgoyne method (2024). If h2 > 0, then 'BUR' will be used
+                 'BNS' for Burgoyne, Nielsen and Stanko method (2025). If h2 > 0, then 'BNS' will be used
                  Defaults to 'PMC'
           co2: Molar fraction of CO2. Defaults to zero if undefined
           h2s: Molar fraction of H2S. Defaults to zero if undefined
@@ -1145,7 +1137,7 @@ def gas_grad2sg(
 
     degR = degf + degF2R
 
-    def grad_err(sg, args):
+    def grad_err(args, sg):
         grad, p, zmethod, cmethod, tc, pc, co2, h2s, n2, h2 = args
         m = sg * MW_AIR
         zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc)
@@ -1154,8 +1146,8 @@ def gas_grad2sg(
         return error
 
     if h2 > 0:
-        cmethod = 'BUR' # The Burgoyne PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BUR' 
+        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
+        zmethod = 'BNS' 
         
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
@@ -1186,12 +1178,12 @@ def gas_dmp(
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                    'HY' Hall & Yarborough (1973)
                    'WYW' Wang, Ye & Wu (2021)
-                   'BUR' Tuned 5 component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
-                   defaults to 'DAK' if not specified, or to 'BUR' if h2 mole fraction is specified
+                   'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
+                   defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
         cmethod: Method for calculting critical properties
                  'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
                  'PMC' for Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-                 'BUR' for Burgoyne method (2024). If h2 > 0, then 'BUR' will be used
+                 'BNS' for Burgoyne, Nielsen and Stanko method (2025). If h2 > 0, then 'BNS' will be used
                  Defaults to 'PMC'
         co2: Molar fraction of CO2. Defaults to zero if undefined
         h2s: Molar fraction of H2S. Defaults to zero if undefined
@@ -1201,8 +1193,8 @@ def gas_dmp(
         pc: Critical gas pressure (psia). Calculates using cmethod if not specified
     """
     if h2 > 0:
-        cmethod = 'BUR' # The Burgoyne PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BUR' 
+        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
+        zmethod = 'BNS' 
         
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
     
@@ -1230,7 +1222,7 @@ def gas_fws_sg(sg_g: float, cgr: float, api_st: float) -> float:
      """
     # 1 mmscf separator gas basis with 379.482 scf/lb-mole
     cond_vol = cgr * CUFTperBBL  # cuft/mmscf surface gas
-    cond_sg = oil_sg(api_st)
+    cond_sg = 141.5 / (api_st + 131.5)
     cond_mass = cond_vol * (cond_sg * WDEN)  # lb
     surface_gas_moles = 1e6 / scf_per_mol  # lb-moles
     surface_gas_mass = sg_g * MW_AIR * surface_gas_moles  # lb
@@ -1241,11 +1233,12 @@ def gas_fws_sg(sg_g: float, cgr: float, api_st: float) -> float:
     fws_gas_mw = fws_gas_mass / fws_gas_moles  # lb/lb-moles
     return fws_gas_mw / MW_AIR
 
-def gas_water_content(p: float, degf: float) -> float:
+def gas_water_content(p: float, degf: float, salinity: float = 0) -> float:
     """ Returns saturated volume of water vapor in natural gas (stb/mmscf)
         From 'PVT and Phase Behaviour Of Petroleum Reservoir Fluids' by Ali Danesh
         degf: Water Temperature (deg F)
         p: Water pressure (psia)
+        salinity: Water salinity (wt% NaCl). Defaults to 0 (freshwater)
     """
     t = degf
     content = (
@@ -1262,7 +1255,7 @@ def gas_water_content(p: float, degf: float) -> float:
             / (p)
             + (np.power(10, ((-3083.87 / (t + degF2R)) + 6.69449)))
         )
-        * (1 - (0.00492 * 0) - (0.00017672 * (0 * 0)))
+        * (1 - (0.00492 * salinity) - (0.00017672 * (salinity * salinity)))
         / 8.32
         / 42
     )

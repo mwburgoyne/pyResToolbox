@@ -25,7 +25,8 @@ import sys
 from collections import Counter
 import glob
 from enum import Enum
-import pkg_resources
+from importlib.resources import files
+from typing import Union, List, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -36,7 +37,8 @@ from tabulate import tabulate
 class component_library:
     def __init__(self, model='PR79'):
         path = 'component_library.xlsx'
-        filepath = pkg_resources.resource_filename(__name__, path)
+        #filepath = pkg_resources.resource_filename(__name__, path)
+        filepath = str(files(__name__).joinpath(path))
         self.df = pd.read_excel(filepath, engine="openpyxl")
         self.model = model
         self.all_cols = ['Name', 'MW', 'Tc_R', 'Pc_psia',

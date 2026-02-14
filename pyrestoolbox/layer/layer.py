@@ -21,16 +21,8 @@
           Contact author at mark.w.burgoyne@gmail.com
 """
 
-import sys
-from collections import Counter
-import glob
-from enum import Enum
-import pkg_resources
-
 import numpy as np
 import numpy.typing as npt
-import pandas as pd
-from tabulate import tabulate
 
 from pyrestoolbox.shared_fns import bisect_solve
 
@@ -47,8 +39,7 @@ def lorenz2b(lorenz: float, lrnz_method: str = "EXP") -> float:
     """
     method = lrnz_method.upper()
     if method != "EXP" and method != "LANG":
-        print('Method must be "LANG" or "EXP"')
-        sys.exit()
+        raise ValueError('Method must be "LANG" or "EXP"')
 
     if lorenz < 0.000333:
         B = 2 / 1000
@@ -184,8 +175,7 @@ def lorenz_2_flow_frac(
 
     method = lrnz_method.upper()
     if B < 0 and lorenz < 0:
-        print("Must define either B or lorenz parameters")
-        sys.exit()
+        raise ValueError("Must define either B or lorenz parameters")
 
     if B < 0:  # Need to calculate B
         B = lorenz2b(lorenz=lorenz, lrnz_method=lrnz_method)

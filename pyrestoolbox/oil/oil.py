@@ -21,17 +21,11 @@
           Contact author at mark.w.burgoyne@gmail.com
 """
 
-import sys
-from collections import Counter
-import glob
-from enum import Enum
-import pkg_resources
-
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 from tabulate import tabulate
-from typing import Union, List, Tuple
+from typing import Tuple
 
 from pyrestoolbox.constants import R, psc, tsc, degF2R, tscr, MW_AIR, scf_per_mol, CUFTperBBL, WDEN
 from pyrestoolbox.classes import z_method, c_method, pb_method, rs_method, bo_method, uo_method, deno_method, co_method, kr_family, kr_table, class_dic
@@ -457,20 +451,14 @@ def oil_pbub(
 
     if pbmethod.name == "STAN":
         if rsb * api * sg_g * degf == 0:
-            print(
-                "Need valid values for rs, api, sg_g for Standing Pb calculation"
+            raise ValueError(
+                "Need valid values for rs, api, sg_g and degf for Standing Pb calculation"
             )
-            print(
-                "Need valid values for rs, api, sg_g and degf for Standing or Velarde Pb calculation"
-            )
-            sys.exit()
     else:
         if rsb * api * sg_sp * degf == 0:
-            #print(rsb, api, sg_sp, degf)
-            print(
+            raise ValueError(
                 "Need valid values for rsb, api, sg_sp and degf for Velarde or Valko McCain Pb calculation"
             )
-            sys.exit()
 
     def pbub_standing(
         api, degf, sg_g, rsb, sg_sp
@@ -653,12 +641,11 @@ def oil_rs(
                    VALMC: Valko-McCain Correlation (2003) - https://www.sciencedirect.com/science/article/abs/pii/S0920410502003194
                    VELAR: Velarde, Blasingame & McCain (1997) - Default
     """
-    #print(pbmethod, rsmethod)
     pbmethod, rsmethod = validate_methods(
         ["pbmethod", "rsmethod"], [pbmethod, rsmethod]
     )
-    
-    #print(sg_g, sg_sp, api, rsb)
+
+    sg_g, sg_sp = check_sgs(sg_g=0, sg_sp=sg_sp)
 
     if pb <= 0:  # Calculate Pb
         pb = oil_pbub(
@@ -688,10 +675,9 @@ def oil_rs(
         p = max(psc, p)
 
         if sg_sp * api * rsb == 0:
-            print(
+            raise ValueError(
                 "Missing one of the required inputs: sg_sp, api, rsb, for the Velarde, Blasingame & McCain Rs calculation"
             )
-            sys.exit()
         A = [9.73e-7, 1.672608, 0.929870, 0.247235, 1.056052]
         B = [0.022339, -1.004750, 0.337711, 0.132795, 0.302065]
         C = [0.725167, -1.485480, -0.164741, -0.091330, 0.047094]
@@ -908,16 +894,17 @@ def oil_co(
                 pbmethod=pbmethod,
             )
 
-        if p > 15.7:
-            if p < pb - 0.5 or p > pb + 0.5:
-                dbodp = calc_dbodp(p + 0.5) - calc_dbodp(p - 0.5)
-                drsdp = calc_drsdp(p + 0.5) - calc_drsdp(p - 0.5)
-            else:
-                dbodp = calc_dbodp(p) - calc_dbodp(p - 1)
-                drsdp = calc_drsdp(p) - calc_drsdp(p - 1)
+        dp = max(0.5, p * 0.001)  # Relative step size for numerical derivative
+        if p > pb - dp and p < pb + dp:
+            # Near bubble point, use one-sided derivative to avoid crossing Pb
+            dbodp = calc_dbodp(p) - calc_dbodp(p - dp)
+            drsdp = calc_drsdp(p) - calc_drsdp(p - dp)
+        elif p > dp:
+            dbodp = calc_dbodp(p + dp) - calc_dbodp(p - dp)
+            drsdp = calc_drsdp(p + dp) - calc_drsdp(p - dp)
         else:
-            dbodp = calc_dbodp(p + 1) - calc_dbodp(p)
-            drsdp = calc_drsdp(p + 1) - calc_drsdp(p)
+            dbodp = calc_dbodp(p + dp) - calc_dbodp(p)
+            drsdp = calc_drsdp(p + dp) - calc_drsdp(p)
 
         if p > pb:
             drsdp = 0
@@ -977,10 +964,9 @@ def oil_deno(
     denomethod = validate_methods(["denomethod"], [denomethod])
 
     if sg_g == 0 and sg_sp == 0:
-        print(
+        raise ValueError(
             "Must define at least one of sg_g and sg_sp for density calculation"
         )
-        sys.exit()
 
     # Density at or below initial bubble point pressure
     def Deno_standing_white_mccainhill(
@@ -1094,8 +1080,7 @@ def oil_deno(
     }  # Pressure greater than Pb
 
     if api == 0 and sg_o == 0:
-        print("Must supply either sg_o or api")
-        sys.exit()
+        raise ValueError("Must supply either sg_o or api")
 
     if api == 0:  # Set api from sg_o
         api = 141.5 / sg_o - 131.5
@@ -1376,10 +1361,9 @@ def make_bot_og(
                 err = abs(pb - pbcalc)
                 i += 1
                 if i > 100:
-                    print(
+                    raise RuntimeError(
                         "Could not solve Pb & Rsb for these combination of inputs"
                     )
-                    sys.exit()
             rsb_frac = (
                 rsb_i / rsbnew
             )  # Ratio of rsb needed to satisfy rsb defined by user at pb vs that needed to calculate Pb
@@ -1435,10 +1419,9 @@ def make_bot_og(
             err = rs_at_pbi - rsb
             i += 1
             if i > 100:
-                print(
+                raise RuntimeError(
                     "Could not solve Pb & Rsb for these combination of inputs"
                 )
-                sys.exit()
         rsb_frac = rsb_frac_new
         
     pmax = max(pb, pmax)
@@ -1584,7 +1567,7 @@ def make_bot_og(
                         for pusat in usat_p[-1]
                     ]
                 )
-            except:
+            except (ValueError, IndexError, ZeroDivisionError):
                 pass
 
     st_deno = sg_o * WDEN  # lb/cuft
@@ -1660,7 +1643,7 @@ def make_bot_og(
                                     " ",
                                 ]
                             )
-                except:
+                except (IndexError, KeyError):
                     pass
             pvto_out += tabulate(table, headers)
             pvto_out += "\n/"
