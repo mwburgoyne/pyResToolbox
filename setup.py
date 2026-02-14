@@ -12,7 +12,7 @@ with open(os.path.join(ROOT, 'README.md'), 'r', encoding='utf-8') as f:
 setup(
     name='pyrestoolbox',
     include_package_data=True,
-    version='2.1.4',  # Ideally should be same as your GitHub release tag version
+    version='2.2',  # Ideally should be same as your GitHub release tag version
     packages=find_packages(),
     description='pyResToolbox - A collection of Reservoir Engineering Utilities',
     license="GNU General Public License v3 or later (GPLv3+)",
@@ -24,14 +24,12 @@ setup(
     keywords=['restoolbox', 'petroleum', 'reservoir'],
     classifiers=[],
     install_requires=[
-        'requests',
         'numpy',
         'scipy',
         'pandas',
         'tabulate',
         'gwr_inversion',
         'mpmath',
-        'openpyxl',
-        'setuptools'
+        'openpyxl'
     ]
 )
