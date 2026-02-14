@@ -285,6 +285,78 @@ def test_gas_bg_list_input():
     assert isinstance(bg, np.ndarray)
     assert len(bg) == 3
 
+# =============================================================================
+# BNS implementation validation (against reference bns.py from SPE-229932-MS)
+# Reference values computed from github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor
+# =============================================================================
+
+def test_bns_z_pure_gas():
+    """BNS Z-factor for pure hydrocarbon gas should match reference implementation"""
+    z = gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='BNS', cmethod='BNS')
+    assert abs(z - 0.8457226741) < 1e-6, f"BNS Z={z}, expected 0.8457 (reference)"
+
+def test_bns_z_with_co2():
+    """BNS Z-factor with CO2 impurity should match reference"""
+    z = gas.gas_z(p=2000, sg=0.8, degf=200, zmethod='BNS', cmethod='BNS', co2=0.05)
+    assert abs(z - 0.8338808668) < 1e-6, f"BNS Z={z}, expected 0.8339 (reference)"
+
+def test_bns_z_with_mixed_impurities():
+    """BNS Z-factor with CO2+H2S+N2 should match reference"""
+    z = gas.gas_z(p=2000, sg=0.8, degf=200, zmethod='BNS', cmethod='BNS', co2=0.05, h2s=0.03, n2=0.02)
+    assert abs(z - 0.8409252043) < 1e-6, f"BNS Z={z}, expected 0.8409 (reference)"
+
+def test_bns_z_with_h2():
+    """BNS Z-factor with hydrogen should match reference"""
+    z = gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='BNS', cmethod='BNS', h2=0.1)
+    assert abs(z - 0.8582347790) < 1e-6, f"BNS Z={z}, expected 0.8582 (reference)"
+
+def test_bns_z_high_pressure():
+    """BNS Z-factor at high pressure should match reference"""
+    z = gas.gas_z(p=8000, sg=0.75, degf=200, zmethod='BNS', cmethod='BNS')
+    assert abs(z - 1.2547712914) < 1e-6, f"BNS Z={z}, expected 1.2548 (reference)"
+
+def test_bns_z_array_pressures():
+    """BNS Z-factor should work correctly with array of pressures"""
+    pressures = np.array([500, 2000, 8000])
+    z = gas.gas_z(p=pressures, sg=0.75, degf=200, zmethod='BNS', cmethod='BNS')
+    assert isinstance(z, np.ndarray)
+    assert len(z) == 3
+    # Verify each value matches scalar call
+    for i, p in enumerate(pressures):
+        z_scalar = gas.gas_z(p=p, sg=0.75, degf=200, zmethod='BNS', cmethod='BNS')
+        assert abs(z[i] - z_scalar) < 1e-10, f"Array vs scalar mismatch at p={p}"
+
+def test_bns_viscosity_pure_gas():
+    """BNS LBC viscosity for pure gas should match reference"""
+    ug = gas.gas_ug(p=2000, sg=0.75, degf=200, zmethod='BNS', cmethod='BNS')
+    assert abs(ug - 0.0172603874) < 1e-6, f"BNS ug={ug}, expected 0.01726 (reference)"
+
+def test_bns_viscosity_with_h2():
+    """BNS LBC viscosity with hydrogen should match reference"""
+    ug = gas.gas_ug(p=2000, sg=0.75, degf=200, zmethod='BNS', cmethod='BNS', h2=0.1)
+    assert abs(ug - 0.0168458688) < 1e-6, f"BNS ug={ug}, expected 0.01685 (reference)"
+
+def test_bns_viscosity_array_pressures():
+    """BNS viscosity should return per-pressure results, not use wrong Z"""
+    pressures = np.array([500, 2000, 8000])
+    ug = gas.gas_ug(p=pressures, sg=0.75, degf=200, zmethod='BNS', cmethod='BNS')
+    assert isinstance(ug, np.ndarray)
+    assert len(ug) == 3
+    # Verify each matches scalar call (catches bug where full Z array was passed to LBC)
+    for i, p in enumerate(pressures):
+        ug_scalar = gas.gas_ug(p=p, sg=0.75, degf=200, zmethod='BNS', cmethod='BNS')
+        assert abs(ug[i] - ug_scalar) < 1e-10, f"Array vs scalar viscosity mismatch at p={p}"
+
+def test_gas_water_content_salinity():
+    """Water content should decrease with salinity"""
+    wc_fresh = gas.gas_water_content(p=2000, degf=200, salinity=0)
+    wc_saline = gas.gas_water_content(p=2000, degf=200, salinity=10)
+    assert wc_saline < wc_fresh, f"Saline ({wc_saline}) should be less than fresh ({wc_fresh})"
+    # Salinity correction factor at 10 wt%: 1 - 0.00492*10 - 0.00017672*100 = 0.93308
+    expected_ratio = 1 - 0.00492 * 10 - 0.00017672 * 100
+    actual_ratio = wc_saline / wc_fresh
+    assert abs(actual_ratio - expected_ratio) < 0.001, f"Salinity correction ratio {actual_ratio} != {expected_ratio}"
+
 if __name__ == '__main__':
     print("=" * 70)
     print("GAS MODULE VALIDATION TESTS")
