@@ -38,7 +38,7 @@ class component_library:
     def __init__(self, model='PR79'):
         path = 'component_library.xlsx'
         #filepath = pkg_resources.resource_filename(__name__, path)
-        filepath = str(files(__name__).joinpath(path))
+        filepath = str(files('pyrestoolbox.library').joinpath(path))
         self.df = pd.read_excel(filepath, engine="openpyxl")
         self.model = model
         self.all_cols = ['Name', 'MW', 'Tc_R', 'Pc_psia',
@@ -83,3 +83,11 @@ class component_library:
         return 'Component or Property not in library'
 
 comp_library = component_library()
+
+# Module-level convenience aliases matching documented API
+prop = comp_library.prop
+components = comp_library.components
+names = comp_library.names
+property_list = comp_library.property_list
+models = comp_library.models
+df = comp_library.df

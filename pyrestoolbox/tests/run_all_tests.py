@@ -60,6 +60,7 @@ def main():
         ('test_brine.py', 'Brine Module'),
         ('test_layer.py', 'Layer Module'),
         ('test_simtools.py', 'SimTools Module'),
+        ('test_doc_examples.py', 'Documentation Examples'),
     ]
 
     total_passed = 0

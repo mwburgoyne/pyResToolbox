@@ -65,7 +65,7 @@ Examples:
 
 .. code-block:: python
 
-    >>> library.prop(comp = 'C3', prop = 'VTran'), rtb.comp_library.prop(comp = 'C3', prop = 'VTran', model='SRK')
+    >>> library.prop(comp = 'C3', prop = 'VTran'), library.prop(comp = 'C3', prop = 'VTran', model='SRK')
     (-0.06381, 0.09075)
 
 
@@ -158,5 +158,5 @@ Example:
 
     >>> library.df
 
-.. image:: https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/img/properties_df.png
+.. image:: img/properties_df.png
     :alt: DataFrame of Component Library data

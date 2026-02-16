@@ -1,0 +1,556 @@
+#!/usr/bin/env python3
+"""
+Tests for every documented code example in the RST documentation files.
+Ensures that documented API calls actually work and return expected results.
+Run with: PYTHONPATH=/home/mark/projects python3 -m pytest tests/test_doc_examples.py -v
+Or standalone: PYTHONPATH=/home/mark/projects python3 tests/test_doc_examples.py
+"""
+
+import sys
+import os
+import numpy as np
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+import pyrestoolbox.gas as gas
+import pyrestoolbox.oil as oil
+import pyrestoolbox.brine as brine
+import pyrestoolbox.layer as layer
+import pyrestoolbox.simtools as simtools
+import pyrestoolbox.library as library
+
+RTOL = 1e-4  # Relative tolerance for floating point comparisons
+
+# =============================================================================
+# Gas Module Documentation Examples (docs/gas.rst)
+# =============================================================================
+
+def test_doc_gas_z_dak_pmc():
+    """gas.rst: gas_z with DAK/PMC for sg=0.68"""
+    result = gas.gas_z(p=2350, sg=0.68, degf=180, zmethod='DAK', cmethod='PMC')
+    assert isinstance(result, float)
+    assert abs(result - 0.8785399927100872) / 0.8785399927100872 < RTOL
+
+def test_doc_gas_z_bur_co2():
+    """gas.rst: gas_z for pure CO2 with BUR method"""
+    result = gas.gas_z(p=2350, sg=0.68, degf=180, co2=1.0, zmethod='BUR', cmethod='BUR')
+    assert isinstance(result, float)
+    assert abs(result - 0.5258309021348752) / 0.5258309021348752 < RTOL
+
+def test_doc_gas_sg():
+    """gas.rst: gas_sg for mixture with H2"""
+    result = gas.gas_sg(hc_mw=19.0, co2=0.05, h2s=0.10, n2=0, h2=0.20)
+    assert isinstance(result, float)
+    assert abs(result - 0.6338246461857093) / 0.6338246461857093 < RTOL
+
+def test_doc_gas_z_bur_mixture():
+    """gas.rst: gas_z BUR for complex mixture"""
+    gsg = gas.gas_sg(hc_mw=19.0, co2=0.05, h2s=0.10, n2=0, h2=0.20)
+    result = gas.gas_z(p=2350, sg=gsg, degf=180, co2=0.05, h2s=0.10, n2=0, h2=0.20, zmethod='BUR', cmethod='BUR')
+    assert isinstance(result, float)
+    assert abs(result - 0.9048153036714465) / 0.9048153036714465 < RTOL
+
+def test_doc_gas_tc_pc_pmc():
+    """gas.rst: gas_tc_pc with PMC defaults"""
+    tc, pc = gas.gas_tc_pc(sg=0.7, co2=0.15)
+    assert abs(tc - 363.9387708314338) / 363.9387708314338 < RTOL
+    assert abs(pc - 738.3190067714969) / 738.3190067714969 < RTOL
+
+def test_doc_gas_tc_pc_sut_fixed_tc():
+    """gas.rst: gas_tc_pc with SUT and fixed tc"""
+    tc, pc = gas.gas_tc_pc(sg=0.7, co2=0.15, tc=365, cmethod='SUT')
+    assert tc == 365  # Should be returned unchanged
+    assert abs(pc - 709.2356299485114) / 709.2356299485114 < RTOL
+
+def test_doc_gas_z_n2_co2():
+    """gas.rst: gas_z with N2 and CO2"""
+    result = gas.gas_z(p=1000, sg=0.75, degf=160, n2=0.02, co2=0.17)
+    assert isinstance(result, float)
+    assert abs(result - 0.9138558878125714) / 0.9138558878125714 < RTOL
+
+def test_doc_gas_z_hy():
+    """gas.rst: gas_z with HY method"""
+    result = gas.gas_z(p=1000, sg=0.75, degf=160, n2=0.02, co2=0.17, zmethod='HY')
+    assert isinstance(result, float)
+    assert abs(result - 0.9142136711443208) / 0.9142136711443208 < RTOL
+
+def test_doc_gas_z_sut_array():
+    """gas.rst: gas_z array with SUT"""
+    result = gas.gas_z(p=[1000, 2000], sg=0.75, degf=160, cmethod='SUT', n2=0.02, co2=0.17)
+    assert isinstance(result, np.ndarray)
+    assert len(result) == 2
+    expected = np.array([0.91900003, 0.87160514])
+    np.testing.assert_allclose(result, expected, rtol=RTOL)
+
+def test_doc_gas_ug_hy_sut():
+    """gas.rst: gas_ug with HY/SUT"""
+    result = gas.gas_ug(p=1000, sg=0.75, degf=180, zmethod='HY', cmethod='SUT')
+    assert isinstance(result, float)
+    assert abs(result - 0.014118890100250796) / 0.014118890100250796 < RTOL
+
+def test_doc_gas_ug_default():
+    """gas.rst: gas_ug with defaults"""
+    result = gas.gas_ug(p=1000, sg=0.75, degf=180)
+    assert isinstance(result, float)
+    assert abs(result - 0.014110092961853301) / 0.014110092961853301 < RTOL
+
+def test_doc_gas_cg_scalar():
+    """gas.rst: gas_cg scalar"""
+    result = gas.gas_cg(p=2000, sg=0.68, degf=120, co2=0.05)
+    assert isinstance(result, float)
+    assert abs(result - 0.0005374854430839333) / 0.0005374854430839333 < RTOL
+
+def test_doc_gas_cg_array():
+    """gas.rst: gas_cg array"""
+    result = gas.gas_cg(p=np.array([1000, 2000]), sg=0.68, degf=120, co2=0.05)
+    assert isinstance(result, np.ndarray)
+    expected = np.array([0.00110369, 0.00053749])
+    np.testing.assert_allclose(result, expected, rtol=RTOL)
+
+def test_doc_gas_bg_scalar():
+    """gas.rst: gas_bg scalar"""
+    result = gas.gas_bg(p=3000, sg=0.78, degf=240)
+    assert isinstance(result, float)
+    assert abs(result - 0.005927563975073749) / 0.005927563975073749 < RTOL
+
+def test_doc_gas_bg_array_inverse():
+    """gas.rst: 1/gas_bg array"""
+    result = 1 / gas.gas_bg(p=[3000, 5000], sg=0.78, degf=240)
+    assert isinstance(result, np.ndarray)
+    expected = np.array([168.70336688, 249.54573283])
+    np.testing.assert_allclose(result, expected, rtol=RTOL)
+
+def test_doc_gas_den():
+    """gas.rst: gas_den with impurities"""
+    result = gas.gas_den(p=2000, sg=0.75, degf=150, zmethod='HY', cmethod='SUT', n2=0.02, co2=0.15, h2s=0.02)
+    assert isinstance(result, float)
+    assert abs(result - 7.736656004563576) / 7.736656004563576 < RTOL
+
+def test_doc_gas_water_content():
+    """gas.rst: gas_water_content"""
+    result = gas.gas_water_content(p=1500, degf=165)
+    assert isinstance(result, float)
+    assert abs(result - 0.6474226409378979) / 0.6474226409378979 < RTOL
+
+def test_doc_gas_ponz2p_scalar():
+    """gas.rst: gas_ponz2p scalar"""
+    result = gas.gas_ponz2p(poverz=2500, sg=0.75, degf=165)
+    assert isinstance(result, float)
+    assert abs(result - 2081.5489292144775) / 2081.5489292144775 < RTOL
+
+def test_doc_gas_ponz2p_array():
+    """gas.rst: gas_ponz2p array"""
+    result = gas.gas_ponz2p(poverz=[2500, 5000], sg=0.75, degf=165)
+    assert isinstance(result, np.ndarray)
+    expected = np.array([2081.54892921, 4856.97983205])
+    np.testing.assert_allclose(result, expected, rtol=RTOL)
+
+def test_doc_gas_grad2sg():
+    """gas.rst: gas_grad2sg"""
+    result = gas.gas_grad2sg(grad=0.0657, p=2500, degf=175)
+    assert isinstance(result, float)
+    assert abs(result - 0.7495803994806547) / 0.7495803994806547 < RTOL
+
+def test_doc_gas_dmp_positive():
+    """gas.rst: gas_dmp positive (p1 < p2)"""
+    result = gas.gas_dmp(p1=1000, p2=2000, degf=185, sg=0.78, zmethod='HY', cmethod='SUT', n2=0.05, co2=0.1, h2s=0.02)
+    assert isinstance(result, float)
+    assert result > 0
+    assert abs(result - 213690308.9907268) / 213690308.9907268 < RTOL
+
+def test_doc_gas_dmp_negative():
+    """gas.rst: gas_dmp negative (p1 > p2) with fixed tc/pc"""
+    result = gas.gas_dmp(p1=2000, p2=1000, degf=185, sg=0.78, tc=371, pc=682)
+    assert isinstance(result, float)
+    assert result < 0
+    assert abs(result - (-213713909.36339885)) / 213713909.36339885 < RTOL
+
+def test_doc_gas_fws_sg():
+    """gas.rst: gas_fws_sg"""
+    result = gas.gas_fws_sg(sg_g=0.855, cgr=30, api_st=53)
+    assert isinstance(result, float)
+    assert abs(result - 0.937116010334538) / 0.937116010334538 < RTOL
+
+def test_doc_gas_rate_radial_scalar():
+    """gas.rst: gas_rate_radial scalar"""
+    result = gas.gas_rate_radial(k=5, h=50, pr=2000, pwf=750, r_w=0.3, r_ext=1500, degf=180, sg=0.75, D=0.01, S=5)
+    assert isinstance(result, float)
+    assert abs(result - 2078.9101970773477) / 2078.9101970773477 < RTOL
+
+def test_doc_gas_rate_radial_array():
+    """gas.rst: gas_rate_radial array"""
+    result = gas.gas_rate_radial(k=1, h=50, pr=[2000, 1000], pwf=750, r_w=0.3, r_ext=1500, degf=180, sg=0.75, D=0.01, S=5)
+    assert isinstance(result, np.ndarray)
+    expected = np.array([704.29202227, 135.05317439])
+    np.testing.assert_allclose(result, expected, rtol=RTOL)
+
+def test_doc_gas_rate_linear_scalar():
+    """gas.rst: gas_rate_linear scalar"""
+    result = gas.gas_rate_linear(k=0.1, area=50, length=200, pr=2000, pwf=250, degf=180, sg=0.8)
+    assert isinstance(result, float)
+    assert abs(result - 8.202200317597859) / 8.202200317597859 < RTOL
+
+def test_doc_gas_rate_linear_array():
+    """gas.rst: gas_rate_linear array"""
+    result = gas.gas_rate_linear(k=0.1, area=50, length=200, pr=[2000, 1000, 500], pwf=250, degf=180, sg=0.8)
+    assert isinstance(result, np.ndarray)
+    expected = np.array([8.20220032, 2.10691337, 0.42685002])
+    np.testing.assert_allclose(result, expected, rtol=RTOL)
+
+# =============================================================================
+# Oil Module Documentation Examples (docs/oil.rst)
+# =============================================================================
+
+def test_doc_oil_ja_sg():
+    """oil.rst: oil_ja_sg"""
+    result = oil.oil_ja_sg(mw=150, ja=0.5)
+    assert isinstance(result, float)
+    assert abs(result - 0.8583666666666667) / 0.8583666666666667 < RTOL
+
+def test_doc_oil_twu_props():
+    """oil.rst: oil_twu_props"""
+    result = oil.oil_twu_props(mw=225, ja=0.5)
+    assert isinstance(result, tuple)
+    assert len(result) == 5
+    expected = (0.8954444444444445, 1068.3961103813851, 1422.4620493584146, 264.23402773211745, 13.498328588856445)
+    for r, e in zip(result, expected):
+        assert abs(float(r) - e) / abs(e) < RTOL
+
+def test_doc_oil_rs_st():
+    """oil.rst: oil_rs_st"""
+    result = oil.oil_rs_st(psp=114.7, degf_sp=80, api=38)
+    assert isinstance(result, float)
+    assert abs(result - 4.176458005559282) / 4.176458005559282 < RTOL
+
+def test_doc_oil_pbub_valmc():
+    """oil.rst: oil_pbub with VALMC default"""
+    result = oil.oil_pbub(api=43, degf=185, rsb=2350, sg_g=0.72)
+    assert isinstance(result, float)
+    assert abs(result - 5199.2406069808885) / 5199.2406069808885 < RTOL
+
+def test_doc_oil_pbub_stan():
+    """oil.rst: oil_pbub with Standing via sg_sp"""
+    result = oil.oil_pbub(api=43, degf=185, rsb=2350, sg_sp=0.72, pbmethod='STAN')
+    assert isinstance(result, float)
+    assert abs(result - 6390.281894698239) / 6390.281894698239 < RTOL
+
+def test_doc_oil_pbub_class_object():
+    """oil.rst: oil_pbub using class object"""
+    result = oil.oil_pbub(api=43, degf=185, rsb=2350, sg_g=0.72, pbmethod=oil.pb_method.STAN)
+    assert isinstance(result, float)
+    assert result > 0
+
+def test_doc_oil_rs_bub():
+    """oil.rst: oil_rs_bub"""
+    result = oil.oil_rs_bub(api=43, degf=185, pb=5179.5, sg_sp=0.72)
+    assert isinstance(result, float)
+    assert abs(result - 1872.666133282599) / 1872.666133282599 < RTOL
+
+def test_doc_oil_rs_with_pb_rsb():
+    """oil.rst: oil_rs with both pb and rsb"""
+    result = oil.oil_rs(api=43, degf=185, sg_sp=0.72, p=3000, pb=5179.5, rsb=2370)
+    assert isinstance(result, float)
+    assert abs(result - 1017.9424383646037) / 1017.9424383646037 < RTOL
+
+def test_doc_oil_rs_with_rsb_only():
+    """oil.rst: oil_rs with rsb only"""
+    result = oil.oil_rs(api=43, degf=185, sg_sp=0.72, p=3000, rsb=2370)
+    assert isinstance(result, float)
+    assert abs(result - 1010.0669567201218) / 1010.0669567201218 < RTOL
+
+def test_doc_oil_rs_with_pb_only():
+    """oil.rst: oil_rs with pb only"""
+    result = oil.oil_rs(api=43, degf=185, sg_sp=0.72, p=3000, pb=5180)
+    assert isinstance(result, float)
+    assert abs(result - 804.2857187814161) / 804.2857187814161 < RTOL
+
+def test_doc_oil_rs_stan():
+    """oil.rst: oil_rs with Standing method"""
+    result = oil.oil_rs(api=43, degf=185, sg_sp=0.72, p=3000, pb=5180, rsmethod='STAN')
+    assert isinstance(result, float)
+    assert abs(result - 947.1133546937306) / 947.1133546937306 < RTOL
+
+def test_doc_oil_co_above_pb():
+    """oil.rst: oil_co above bubble point"""
+    result = oil.oil_co(p=4500, api=47, degf=180, sg_sp=0.72, rsb=2750)
+    assert isinstance(result, float)
+    assert abs(result - 0.0007587726853322233) / 0.0007587726853322233 < RTOL
+
+def test_doc_oil_co_below_pb():
+    """oil.rst: oil_co below bubble point"""
+    result = oil.oil_co(p=2000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945)
+    assert isinstance(result, float)
+    assert abs(result - 0.0009245540028053584) / 0.0009245540028053584 < RTOL
+
+def test_doc_oil_deno():
+    """oil.rst: oil_deno"""
+    result = oil.oil_deno(p=2000, degf=165, rs=1000, rsb=2000, sg_g=0.72, api=38)
+    assert isinstance(result, float)
+    assert abs(result - 40.98349866963842) / 40.98349866963842 < RTOL
+
+def test_doc_oil_bo_mcain():
+    """oil.rst: oil_bo with McCain default"""
+    result = oil.oil_bo(p=2000, pb=3000, degf=165, rs=1000, rsb=2000, sg_o=0.8, sg_g=0.68)
+    assert isinstance(result, float)
+    assert abs(result - 1.5075107735318138) / 1.5075107735318138 < RTOL
+
+def test_doc_oil_bo_stan():
+    """oil.rst: oil_bo with Standing"""
+    result = oil.oil_bo(p=2000, pb=3000, degf=165, rs=1000, rsb=2000, sg_o=0.8, sg_g=0.68, bomethod='STAN')
+    assert isinstance(result, float)
+    assert abs(result - 1.5393786735904431) / 1.5393786735904431 < RTOL
+
+def test_doc_oil_viso():
+    """oil.rst: oil_viso"""
+    result = oil.oil_viso(p=2000, api=38, degf=165, pb=3500, rs=1000)
+    assert isinstance(result, float)
+    assert abs(result - 0.416858469042502) / 0.416858469042502 < RTOL
+
+def test_doc_sg_evolved_gas():
+    """oil.rst: sg_evolved_gas"""
+    result = oil.sg_evolved_gas(p=2000, degf=185, rsb=2370, api=43, sg_sp=0.72)
+    assert isinstance(result, float)
+    assert abs(result - 0.7872810977386344) / 0.7872810977386344 < RTOL
+
+def test_doc_sg_st_gas():
+    """oil.rst: sg_st_gas"""
+    result = oil.sg_st_gas(114.7, rsp=1500, api=42, sg_sp=0.72, degf_sp=80)
+    assert isinstance(result, float)
+    assert abs(result - 1.1923932340625523) / 1.1923932340625523 < RTOL
+
+def test_doc_sgg_wt_avg():
+    """oil.rst: sgg_wt_avg"""
+    result = oil.sgg_wt_avg(sg_sp=0.72, rsp=1000, sg_st=1.1, rst=5)
+    assert isinstance(result, float)
+    assert abs(result - 0.7218905472636816) / 0.7218905472636816 < RTOL
+
+def test_doc_oil_api():
+    """oil.rst: oil_api"""
+    result = oil.oil_api(sg_value=0.82)
+    assert isinstance(result, float)
+    assert abs(result - 41.0609756097561) / 41.0609756097561 < RTOL
+
+def test_doc_oil_sg():
+    """oil.rst: oil_sg"""
+    result = oil.oil_sg(api_value=45)
+    assert isinstance(result, float)
+    assert abs(result - 0.8016997167138811) / 0.8016997167138811 < RTOL
+
+def test_doc_oil_rate_radial_scalar():
+    """oil.rst: oil_rate_radial scalar with Vogel"""
+    result = oil.oil_rate_radial(k=20, h=20, pr=1500, pwf=250, r_w=0.3, r_ext=1500, uo=0.8, bo=1.4, vogel=True, pb=1800)
+    assert isinstance(result, float)
+    assert abs(result - 213.8147848023242) / 213.8147848023242 < RTOL
+
+def test_doc_oil_rate_radial_array():
+    """oil.rst: oil_rate_radial array with Vogel"""
+    result = oil.oil_rate_radial(k=20, h=20, pr=[1500, 2000], pwf=250, r_w=0.3, r_ext=1500, uo=0.8, bo=1.4, vogel=True, pb=1800)
+    assert isinstance(result, np.ndarray)
+    expected = np.array([213.8147848, 376.58731835])
+    np.testing.assert_allclose(result, expected, rtol=RTOL)
+
+def test_doc_oil_rate_linear_scalar():
+    """oil.rst: oil_rate_linear scalar"""
+    result = oil.oil_rate_linear(k=0.1, area=15000, pr=3000, pwf=500, length=500, uo=0.4, bo=1.5)
+    assert isinstance(result, float)
+    assert abs(result - 14.08521246363274) / 14.08521246363274 < RTOL
+
+def test_doc_oil_rate_linear_array():
+    """oil.rst: oil_rate_linear array"""
+    result = oil.oil_rate_linear(k=[0.1, 1, 5, 10], area=15000, pr=3000, pwf=500, length=500, uo=0.4, bo=1.5)
+    assert isinstance(result, np.ndarray)
+    expected = np.array([14.08521246, 140.85212464, 704.26062318, 1408.52124636])
+    np.testing.assert_allclose(result, expected, rtol=RTOL)
+
+def test_doc_make_bot_og():
+    """oil.rst: make_bot_og returns correct structure"""
+    results = oil.make_bot_og(pvto=False, pi=4000, api=38, degf=175, sg_g=0.68, pmax=5500, pb=4500, nrows=10, export=False)
+    assert isinstance(results, dict)
+    for key in ['bot', 'deno', 'deng', 'denw', 'cw', 'uw', 'pb', 'rsb', 'rsb_scale', 'usat']:
+        assert key in results, f"Missing key: {key}"
+    assert results['pb'] == 4500
+    assert results['bot'].shape[0] == 10
+
+# =============================================================================
+# Brine Module Documentation Examples (docs/brine.rst)
+# =============================================================================
+
+def test_doc_brine_props():
+    """brine.rst: brine_props"""
+    bw, lsg, visw, cw, rsw = brine.brine_props(p=160, degf=135, wt=1.5, ch4_sat=1.0)
+    assert abs(bw - 1.0151710978322923) / 1.0151710978322923 < RTOL
+    assert abs(lsg - 0.9950036658248123) / 0.9950036658248123 < RTOL
+    assert abs(visw - 0.4993957925685823) / 0.4993957925685823 < RTOL
+    assert abs(cw - 0.00015465242842085548) / 0.00015465242842085548 < RTOL
+    assert abs(rsw - 1.2548933067431638) / 1.2548933067431638 < RTOL
+
+def test_doc_co2_brine_field():
+    """brine.rst: CO2_Brine_Mixture field units"""
+    mix = brine.CO2_Brine_Mixture(pres=5000, temp=275, ppm=30000, metric=False)
+    assert isinstance(mix.bw, list)
+    assert len(mix.bw) == 3
+    assert abs(float(mix.bw[0]) - 1.108579075130017) / 1.108579075130017 < RTOL
+    assert isinstance(mix.x, np.ndarray)
+    assert abs(mix.x[0] - 0.02431225) / 0.02431225 < RTOL
+
+def test_doc_co2_brine_metric():
+    """brine.rst: CO2_Brine_Mixture metric units"""
+    mix = brine.CO2_Brine_Mixture(pres=175, temp=85)
+    assert abs(mix.Rs - 24.742717860296057) / 24.742717860296057 < RTOL
+
+def test_doc_make_pvtw_table():
+    """brine.rst: make_pvtw_table"""
+    result = brine.make_pvtw_table(pi=3000, degf=200, wt=0, ch4_sat=0)
+    assert isinstance(result, dict)
+    for key in ['table', 'pref', 'bw_ref', 'cw_ref', 'visw_ref', 'rsw_ref', 'den_ref']:
+        assert key in result, f"Missing key: {key}"
+    assert abs(result['bw_ref'] - 1.0275744009507692) / 1.0275744009507692 < RTOL
+
+# =============================================================================
+# Layer Module Documentation Examples (docs/layer.rst)
+# =============================================================================
+
+def test_doc_lorenz2b_lang():
+    """layer.rst: lorenz2b with Langmuir"""
+    result = layer.lorenz2b(0.75, lrnz_method='LANG')
+    assert abs(result - 16.139518537603912) / 16.139518537603912 < RTOL
+
+def test_doc_lorenz2b_exp():
+    """layer.rst: lorenz2b with Exponential default"""
+    result = layer.lorenz2b(0.75)
+    assert abs(result - 7.978108090962671) / 7.978108090962671 < RTOL
+
+def test_doc_lorenzfromb_lang():
+    """layer.rst: lorenzfromb with Langmuir"""
+    result = layer.lorenzfromb(16.139518537603912, lrnz_method='LANG')
+    assert abs(result - 0.750000182307895) / 0.750000182307895 < RTOL
+
+def test_doc_lorenzfromb_exp():
+    """layer.rst: lorenzfromb with Exponential default"""
+    result = layer.lorenzfromb(7.978108090962671)
+    assert abs(result - 0.7500000108799212) / 0.7500000108799212 < RTOL
+
+def test_doc_lorenz_from_flow_fraction():
+    """layer.rst: lorenz_from_flow_fraction"""
+    result = layer.lorenz_from_flow_fraction(kh_frac=0.6, phih_frac=0.15)
+    assert abs(result - 0.6759312029093838) / 0.6759312029093838 < RTOL
+
+def test_doc_lorenz_2_flow_frac():
+    """layer.rst: lorenz_2_flow_frac"""
+    result = layer.lorenz_2_flow_frac(lorenz=0.6759312029093838, phih_frac=0.15)
+    assert abs(result - 0.6000001346893536) / 0.6000001346893536 < RTOL
+
+def test_doc_lorenz_2_layers_nlayers():
+    """layer.rst: lorenz_2_layers with nlayers"""
+    result = layer.lorenz_2_layers(lorenz=0.67, nlayers=5, k_avg=10, shuffle=False)
+    assert isinstance(result, np.ndarray)
+    assert len(result) == 5
+    # With shuffle=False, should be sorted descending
+    assert all(result[i] >= result[i+1] for i in range(len(result)-1))
+    # Average should be close to 10
+    assert abs(np.mean(result) - 10) / 10 < 0.01
+    expected = np.array([34.9323596, 10.58944038, 3.21009656, 0.9731128, 0.29499066])
+    np.testing.assert_allclose(result, expected, rtol=RTOL)
+
+def test_doc_lorenz_2_layers_phi_h_fracs():
+    """layer.rst: lorenz_2_layers with phi_h_fracs"""
+    result = layer.lorenz_2_layers(lorenz=0.67, k_avg=10, phi_h_fracs=[0.05, 0.5])
+    assert isinstance(result, np.ndarray)
+    assert len(result) == 3
+    expected = np.array([51.72990694, 14.12556056, 0.77938749])
+    np.testing.assert_allclose(result, expected, rtol=RTOL)
+
+# =============================================================================
+# SimTools Module Documentation Examples (docs/simtools.rst)
+# =============================================================================
+
+def test_doc_rel_perm_table_sgof():
+    """simtools.rst: rel_perm_table SGOF with LET"""
+    df = simtools.rel_perm_table(rows=25, krtable='SGOF', krfamily='LET', kromax=1, krgmax=1, swc=0.2, sorg=0.15, Lo=2.5, Eo=1.25, To=1.75, Lg=1.2, Eg=1.5, Tg=2.0)
+    assert 'Sg' in df.columns
+    assert 'Krgo' in df.columns
+    assert 'Krog' in df.columns
+    assert df.shape[0] >= 25
+
+def test_doc_rel_perm_table_swof():
+    """simtools.rst: rel_perm_table SWOF with Corey"""
+    df = simtools.rel_perm_table(rows=25, krtable='SWOF', kromax=1, krwmax=0.25, swc=0.15, swcr=0.2, sorw=0.15, no=2.5, nw=1.5)
+    assert 'Sw' in df.columns
+    assert 'Krwo' in df.columns
+    assert 'Krow' in df.columns
+    assert df.shape[0] == 25
+
+def test_doc_rr_solver():
+    """simtools.rst: rr_solver"""
+    n_it, yi, xi, V, L = simtools.rr_solver(zi=np.array([0.7, 0.15, 0.1, 0.05]), ki=np.array([50, 5, 0.5, 0.01]))
+    assert n_it == 6
+    assert abs(V - 0.9440279802330239) / 0.9440279802330239 < RTOL
+    assert abs(L - 0.05597201976697608) / 0.05597201976697608 < RTOL
+    expected_yi = np.array([0.7406252, 0.1570315, 0.09469948, 0.00764382])
+    expected_xi = np.array([0.0148125, 0.0314063, 0.18939896, 0.76438224])
+    np.testing.assert_allclose(yi, expected_yi, rtol=RTOL)
+    np.testing.assert_allclose(xi, expected_xi, rtol=RTOL)
+
+# =============================================================================
+# Library Module Documentation Examples (docs/library.rst)
+# =============================================================================
+
+def test_doc_library_prop_pc():
+    """library.rst: library.prop for CH4 Pc_psia"""
+    result = library.prop(comp='CH4', prop='Pc_psia')
+    assert result == 667.029
+
+def test_doc_library_prop_vtran_pr79():
+    """library.rst: library.prop for C3 VTran PR79"""
+    result = library.prop(comp='C3', prop='VTran')
+    assert result == -0.06381
+
+def test_doc_library_prop_vtran_srk():
+    """library.rst: library.prop for C3 VTran SRK"""
+    result = library.prop(comp='C3', prop='VTran', model='SRK')
+    assert result == 0.09075
+
+def test_doc_library_components():
+    """library.rst: library.components is a list with CH4"""
+    assert isinstance(library.components, list)
+    assert 'CH4' in library.components
+
+def test_doc_library_property_list():
+    """library.rst: library.property_list"""
+    assert isinstance(library.property_list, list)
+    assert 'MW' in library.property_list
+    assert 'Tc_R' in library.property_list
+    assert 'Pc_psia' in library.property_list
+
+def test_doc_library_models():
+    """library.rst: library.models"""
+    assert library.models == ['PR79', 'PR77', 'SRK', 'RK']
+
+
+# =============================================================================
+# Main runner
+# =============================================================================
+
+if __name__ == '__main__':
+    import traceback
+    tests = [(k, v) for k, v in sorted(globals().items()) if k.startswith('test_') and callable(v)]
+    passed = failed = 0
+    errors = []
+    for name, func in tests:
+        try:
+            func()
+            passed += 1
+            print(f"  PASS: {name}")
+        except Exception as e:
+            failed += 1
+            errors.append((name, str(e)))
+            print(f"  FAIL: {name}")
+            print(f"        {e}")
+            traceback.print_exc()
+
+    print(f"\n{'='*60}")
+    print(f"TOTAL: {passed} passed, {failed} failed out of {passed + failed}")
+    if errors:
+        print(f"\nFailed tests:")
+        for name, msg in errors:
+            print(f"  - {name}: {msg}")
+    print("="*60)

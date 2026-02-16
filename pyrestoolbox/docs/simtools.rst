@@ -52,7 +52,8 @@ Examples:
 
 .. code-block:: python
 
-    >>> results = rtb.simtools.ix_extract_problem_cells()
+    >>> from pyrestoolbox import simtools
+    >>> results = simtools.ix_extract_problem_cells()
     >>> wells, grid_pres, grid_sat, grid_comp = results
     >>> grid_sat
     Processing TEST.PRT
@@ -64,7 +65,7 @@ Examples:
     Grid Saturation Change                 310  32,121,24                       13
     Grid Composition Change               1627  35,212,25                      544 
     
-.. image:: https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/img/grid_sat_df.png
+.. image:: img/grid_sat_df.png
     :alt: DSorted ataFrame of grid blocks with saturation related convergence issues    
     
     
@@ -112,10 +113,10 @@ Examples:
 
 .. code-block:: python
 
-    >>> from pyrestoolbox import pyrestoolbox as rtb
+    >>> from pyrestoolbox import simtools
     >>> import matplotlib.pyplot as plt
     >>> ReDs = [1.5, 2, 3, 5, 10, 25, 1000]
-    >>> tds, pds = rtb.simtools.influence_tables(ReDs=ReDs, export=True)
+    >>> tds, pds = simtools.influence_tables(ReDs=ReDs, export=True)
     >>> 
     >>> for p, pd in enumerate(pds):
     >>>     plt.plot(tds, pd, label = str(ReDs[p]))
@@ -129,7 +130,7 @@ Examples:
     >>> plt.title('Constant Terminal Rate Solution')
     >>> plt.show()
 
-.. image:: https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/img/influence.png
+.. image:: img/influence.png
     :alt: Constant Terminal Rate influence tables
 
 
@@ -173,10 +174,10 @@ Examples:
 
 .. code-block:: python
 
-    >>> rtb.simtools.zip_check_sim_deck(['FIELD_A.DATA', 'FIELD_B.afi'], console_summary=False)
+    >>> simtools.zip_check_sim_deck(['FIELD_A.DATA', 'FIELD_B.afi'], console_summary=False)
     ['INCLUDE/GridOpts.inc', 'INCLUDE/ZCORN_COORD.GRDECL', 'EPS.ixf']
     
-    >>> rtb.simtools.zip_check_sim_deck()
+    >>> simtools.zip_check_sim_deck()
       Index  File Name
     -------  ------------
           0  FIELD_A.DATA
@@ -247,7 +248,7 @@ Examples:
 
 .. code-block:: python
 
-    >>> rtb.simtools.rr_solver(zi =np.array([0.7, 0.15, 0.1, 0.05]), ki = np.array([50, 5, 0.5, 0.01]))
+    >>> simtools.rr_solver(zi =np.array([0.7, 0.15, 0.1, 0.05]), ki = np.array([50, 5, 0.5, 0.01]))
     (6,
     array([0.7406252 , 0.1570315 , 0.09469948, 0.00764382]),
     array([0.0148125 , 0.0314063 , 0.18939896, 0.76438224]),
@@ -342,9 +343,12 @@ pyrestoolbox.simtools.rel_perm_table
           
           
 Examples:
-    >>> from pyrestoolbox import pyrestoolbox as rtb
+
+.. code-block:: python
+
+    >>> from pyrestoolbox import simtools
     >>> import matplotlib.pyplot as plt
-    >>> df = rtb.simtools.rel_perm_table(rows=25, krtable='SGOF', krfamily='LET', kromax =1, krgmax =1, swc =0.2, sorg =0.15, Lo=2.5, Eo = 1.25, To = 1.75, Lg = 1.2, Eg = 1.5, Tg = 2.0)
+    >>> df = simtools.rel_perm_table(rows=25, krtable='SGOF', krfamily='LET', kromax =1, krgmax =1, swc =0.2, sorg =0.15, Lo=2.5, Eo = 1.25, To = 1.75, Lg = 1.2, Eg = 1.5, Tg = 2.0)
     >>> plt.plot(df['Sg'], df['Krgo'], c = 'r', label='Gas')
     >>> plt.plot(df['Sg'], df['Krog'], c = 'g', label='Oil')
     >>> plt.title('SGOF Gas Oil LET Relative Permeability Curves')
@@ -354,12 +358,12 @@ Examples:
     >>> plt.grid('both')
     >>> plt.plot()
 
-.. image:: https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/img/sgof.png
+.. image:: img/sgof.png
     :alt: SGOF Relative Permeability Curves
 
 .. code-block:: python
 
-    >>> df = rtb.simtools.rel_perm_table(rows=25, krtable='SWOF', kromax =1, krwmax =0.25, swc =0.15, swcr = 0.2, sorw =0.15, no=2.5, nw=1.5)
+    >>> df = simtools.rel_perm_table(rows=25, krtable='SWOF', kromax =1, krwmax =0.25, swc =0.15, swcr = 0.2, sorw =0.15, no=2.5, nw=1.5)
     >>> plt.plot(df['Sw'], df['Krow'], c = 'g', label='Oil')
     >>> plt.plot(df['Sw'], df['Krwo'], c = 'b', label='Water')
     >>> plt.title('SWOF Water Oil Corey Relative Permeability Curves')
@@ -369,7 +373,7 @@ Examples:
     >>> plt.grid('both')
     >>> plt.plot()
     
-.. image:: https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/img/swof.png
+.. image:: img/swof.png
     :alt: SWOF Relative Permeability Curves
     
    

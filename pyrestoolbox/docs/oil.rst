@@ -57,7 +57,7 @@ pyResToolBox uses class objects to track calculation options through the functio
      - Method for calculating oil formation volume factor. Defaults to 'MCAIN'
        Options are:
         + 'STAN': Standing Correlation
-        + 'MCAIN': McCain approach, calculating from densities – Default
+        + 'MCAIN': McCain approach, calculating from densities ï¿½ Default
 
 Users can specify which calculation method to use either by passing an option string, or a class object to any given function. The implementation of class objects should make it easier to program in an IDE that supports type hinting
 
@@ -148,7 +148,7 @@ Examples:
 
 .. code-block:: python
 
-    >>> oil.ja_sg(mw=150, ja=0.5)
+    >>> oil.oil_ja_sg(mw=150, ja=0.5)
     0.8583666666666667
 
 pyrestoolbox.oil.oil_twu_props
@@ -239,7 +239,7 @@ pyrestoolbox.oil.oil_pbub
 
 .. code-block:: python
 
-    pbub(api, degf, rsb, sg_g =0, sg_sp =0, pbmethod ='VALMC') -> float
+    oil_pbub(api, degf, rsb, sg_g =0, sg_sp =0, pbmethod ='VALMC') -> float
 
 Returns bubble point pressure (psia) calculated with different correlations. 
 At least one of sg_g and sg_sp must be supplied. This function will make simple assumption to estimate missing gas sg if only one is provided.
@@ -344,15 +344,15 @@ Returns solution gas oil ratio (scf/stb) calculated with different correlations.
    * - degf
      - float
      - Oil Temperature (deg F)
-   * - sg_g
+   * - sg_sp
      - float
-     - Weighted average specific gravity of surface gas, inclusive of gas evolved after separation (relative to air).   
+     - Separator gas gravity (relative to air).
    * - p
      - float
-     - Pressure (psia). 
+     - Pressure (psia).
    * - pb
      - float
-     - Original bubble point pressure (psia) 
+     - Original bubble point pressure (psia)
    * - rsb
      - float
      - Original solution GOR at original bubble point pressure (scf/stb)
@@ -367,7 +367,7 @@ Examples:
 
 .. code-block:: python
 
-    >>> oil.oil_rs(api = 43, degf = 185, sg_sp =0 .72, p = 3000, pb = 5179.5, rsb = 2370)
+    >>> oil.oil_rs(api = 43, degf = 185, sg_sp=0.72, p = 3000, pb = 5179.5, rsb = 2370)
     1017.9424240354475
     
     >>> oil.oil_rs(api=43, degf=185, sg_sp=0.72, p=3000, rsb =2370)
@@ -610,7 +610,7 @@ pyrestoolbox.oil.make_bot_og
 
 .. code-block:: python
 
-    make_bot_og(pi, api, degf, sg_g, pmax, pb =0, rsb =0, pmin =14.7, nrows = 20, wt =0, ch4_sat =0, comethod='EXPLT', zmethod='DAK', rsmethod='VELAR', cmethod'PMC', denomethod='SWMH', bomethod='MCAIN', pbmethod='VALMC', export=False) -> tuple
+    make_bot_og(pi, api, degf, sg_g, pmax, pb =0, rsb =0, pmin =14.7, nrows = 20, wt =0, ch4_sat =0, comethod='EXPLT', zmethod='DAK', rsmethod='VELAR', cmethod='PMC', denomethod='SWMH', bomethod='MCAIN', pbmethod='VALMC', export=False) -> tuple
 
 Creates data required for Oil-Gas-Water black oil tables. Returns dictionary of results, with index:
  - bot: Pandas table of blackoil data (for PVTO == False), or Saturated properties to pmax (if PVTO == True)
@@ -709,7 +709,7 @@ Examples:
     >>> results = oil.make_bot_og(pvto=False, pi=4000, api=38, degf=175, sg_g=0.68, pmax=5500, pb=4500, nrows=10, export=True)
     >>> df, st_deno, st_deng, res_denw, res_cw, visw, pb, rsb, rsb_frac, usat = results['bot'], results['deno'], results['deng'], results['denw'], results['cw'], results['uw'], results['pb'], results['rsb'], results['rsb_scale'], results['usat']
     >>> df
-.. image:: https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/img/bot_img.png
+.. image:: img/bot_img.png
     :alt: Black Oil Table DataFrame
 
 pyrestoolbox.oil.sg_evolved_gas
@@ -749,9 +749,8 @@ Examples:
 
 .. code-block:: python
 
-    >>> oil.sg_st_gas(114.7, rsp=1500, api=42, sg_sp=0.72, degf_sp=80)
-    1.1923932340625523 
-    
+    >>> oil.sg_evolved_gas(p=2000, degf=185, rsb=2370, api=43, sg_sp=0.72)
+    0.7872810977386344
 
 pyrestoolbox.oil.sg_st_gas
 =======================
@@ -891,7 +890,7 @@ pyrestoolbox.oil.oil_rate_radial
     oil_rate_radial(k, h, pr, pwf, r_w, r_ext, uo, bo, S = 0, vogel = False, pb = 0) -> float or np.array
 
 Returns liquid rate (stb/day) for radial flow using Darcy pseudo steady state equation with optional Vogel correction.
-Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D array of rates. Using more than one input array – while not prohibited - will not return expected results 
+Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D array of rates. Using more than one input array ï¿½ while not prohibited - will not return expected results 
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -952,7 +951,7 @@ pyrestoolbox.oil.oil_rate_linear
     oil_rate_linear(k, pr, pwf, area, length, uo, bo, vogel = False, pb = 0) -> float or np.array
 
 Returns liquid rate (stb/day) for linear flow using Darcy steady state equation with optional Vogel correction.
-Arrays can be used for any one of k, pr, pwf or area, returning corresponding 1-D array of rates. Using more than one input array – while not prohibited - will not return expected results 
+Arrays can be used for any one of k, pr, pwf or area, returning corresponding 1-D array of rates. Using more than one input array ï¿½ while not prohibited - will not return expected results 
 
 .. list-table:: Inputs
    :widths: 10 15 40
