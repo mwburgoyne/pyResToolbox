@@ -1,3 +1,8 @@
+Changelist in 2.2:
+
+- Bugfixes.
+
+
 Changelist in 2.1.3:
 
 - Updated viscosity parameters for BUR method.
