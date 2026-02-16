@@ -23,12 +23,14 @@
 
 import numpy as np
 import numpy.typing as npt
+import pandas as pd
 
 from typing import Tuple
+from tabulate import tabulate
 
 import pyrestoolbox.gas as gas # Needed for Z-Factor
 from pyrestoolbox.classes import z_method, c_method, pb_method, rs_method, bo_method, uo_method, deno_method, co_method, kr_family, kr_table, class_dic
-from pyrestoolbox.shared_fns import convert_to_numpy, process_output
+from pyrestoolbox.shared_fns import convert_to_numpy, process_output, halley_solve_cubic
 from pyrestoolbox.validate import validate_methods
 from pyrestoolbox.constants import R, psc, tsc, degF2R, tscr, scf_per_mol, CUFTperBBL, WDEN, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2
 
@@ -719,31 +721,40 @@ class CO2_Brine_Mixture():
     #  Cubic Polynomial Solver: f(Z) = Z**3 + E2*Z**2 + E1*Z + E1 = 0
     #=======================================================================
         self.repeat = False
-        Z = np.roots(np.array([1.0, e2, e1, e0]))
-        Z = np.array([x for x in Z if np.isreal(x)]) # Keep only real results
-        if len(Z) > 1: # Evaluate which root to use per Eqs 25 and 26 in Spycher & Pruess (2003)
-            vgas, vliq = max(Z), min(Z)
-            
+
+        # Try Halley for all roots
+        roots = halley_solve_cubic(e2, e1, e0, flag=0)
+
+        # Fallback to np.roots if Halley returned None
+        if roots is None:
+            Z = np.roots(np.array([1.0, e2, e1, e0]))
+            Z = np.array([x for x in Z if np.isreal(x)])  # Keep only real results
+            roots = np.real(Z)
+
+        if len(roots) > 1: # Evaluate which root to use per Eqs 25 and 26 in Spycher & Pruess (2003)
+            vgas, vliq = max(roots), min(roots)
+
             w1 = self.pBar*(vgas - vliq)
             w2 = RGASCON * self.tKel * np.log((vgas - self.bMix)/(vliq - self.bMix)) + self.aMix/(self.tKel**0.5 * self.bMix) * np.log((vgas + self.bMix) * vliq / ((vliq + self.bMix) * vgas))
-            
+
             if w2 - w1 > 0:
-                Z[0] = max(Z)
+                result = max(roots)
                 if self.CO2_sat:          # CO2 was saturated in previous iteration, but now its not
                     self.CO2_sat = False
                     self.repeat = True
             else:
-                Z[0] = min(Z)
+                result = min(roots)
                 if not self.CO2_sat:
                     self.CO2_sat = True
                     self.repeat = True
         else:
+            result = roots[0]
             if self.CO2_sat:          # CO2 was saturated in previous iteration, but now its not
                 self.CO2_sat = False
                 self.repeat = True
-                
-            
-        return np.real(Z[0])
+
+
+        return np.real(result)
 
         
     def MolarVolume(self):
@@ -1237,3 +1248,115 @@ class CO2_Brine_Mixture():
         c_usat = 1 - sg_CO2_Brine / sg_CO2_Brine_ # 1/Bar    
         
         return ([sg_CO2_Brine, sg_brine, rhowtp], [cP_CO2_brine, cP_brine, cP_freshwater], viscosblty, [bw, brine_res_vol, bw_freshwater], rs, c_usat)
+
+
+def make_pvtw_table(
+    pi: float,
+    degf: float,
+    wt: float = 0,
+    ch4_sat: float = 0,
+    pmin: float = 500,
+    pmax: float = 10000,
+    nrows: int = 20,
+    export: bool = False,
+) -> dict:
+    """ Generates a PVTW (water PVT) table over a pressure range using brine_props (Spivey correlation).
+        Follows the pattern of make_bot_og from the oil module.
+
+        pi: Initial (reference) pressure (psia)
+        degf: Temperature (deg F)
+        wt: Salt wt% (0-100), default 0
+        ch4_sat: Degree of methane saturation (0 - 1), default 0
+        pmin: Minimum pressure for table (psia), default 500
+        pmax: Maximum pressure for table (psia), default 10000
+        nrows: Number of rows in table, default 20
+        export: If True, writes PVTW.INC (ECLIPSE keyword) and pvtw_table.xlsx
+
+        Returns dict with keys:
+            table: pandas DataFrame with columns Pressure, Bw, Density, Viscosity, Cw, Rsw
+            pref: Reference pressure (psia)
+            bw_ref: Bw at reference pressure (rb/stb)
+            cw_ref: Compressibility at reference pressure (1/psi)
+            visw_ref: Viscosity at reference pressure (cP)
+            rsw_ref: Rsw at reference pressure (scf/stb)
+            den_ref: Density (sg) at reference pressure
+    """
+    # Build pressure grid, ensuring pi is included
+    pressures = list(np.linspace(pmin, pmax, nrows))
+    if pi not in pressures:
+        pressures.append(pi)
+    pressures = sorted(set(pressures))
+
+    bws, dens, visws, cws, rsws = [], [], [], [], []
+    for p in pressures:
+        bw, lden, visw, cw, rsw = brine_props(p=p, degf=degf, wt=wt, ch4_sat=ch4_sat)
+        bws.append(bw)
+        dens.append(lden)
+        visws.append(visw)
+        cws.append(cw)
+        rsws.append(rsw)
+
+    df = pd.DataFrame()
+    df["Pressure (psia)"] = pressures
+    df["Bw (rb/stb)"] = bws
+    df["Density (sg)"] = dens
+    df["Viscosity (cP)"] = visws
+    df["Cw (1/psi)"] = cws
+    df["Rsw (scf/stb)"] = rsws
+
+    # Reference properties at pi
+    bw_ref, den_ref, visw_ref, cw_ref, rsw_ref = brine_props(
+        p=pi, degf=degf, wt=wt, ch4_sat=ch4_sat
+    )
+
+    if export:
+        # Write ECLIPSE PVTW keyword
+        # PVTW format: Pref  Bw  Cw  Visw  Viscosibility
+        # Viscosibility set to 0 (constant viscosity assumption)
+        pvtw_line = f"  {pi:.1f}  {bw_ref:.6f}  {cw_ref:.6e}  {visw_ref:.4f}  0.0"
+        fileout = f"-- Generated by pyResToolbox make_pvtw_table\n"
+        fileout += f"-- Temperature: {degf:.1f} deg F, Salt: {wt:.1f} wt%, CH4 sat: {ch4_sat:.2f}\n"
+        fileout += f"PVTW\n{pvtw_line} /\n"
+        with open("PVTW.INC", "w") as f:
+            f.write(fileout)
+
+        # Write full table to Excel
+        df.to_excel("pvtw_table.xlsx", index=False)
+
+    return {
+        "table": df,
+        "pref": pi,
+        "bw_ref": bw_ref,
+        "cw_ref": cw_ref,
+        "visw_ref": visw_ref,
+        "rsw_ref": rsw_ref,
+        "den_ref": den_ref,
+    }
+
+
+class SoreideWhitson:
+    """ Soreide-Whitson (1992) model for gas solubility in water/brine.
+
+        Planned support for multicomponent gas mixtures containing:
+        C1, C2, C3, nC4, CO2, H2S, N2, H2
+
+        Will calculate:
+        - Mole fraction of dissolved gas components in aqueous phase
+        - Mole fraction of vaporised water in gas phase
+        - Water content of gas (stb/mmscf)
+        - Gas solubility in water (scf/stb)
+
+        Supports fresh and saline water (NaCl equivalent).
+
+        Reference:
+            Soreide, I. and Whitson, C.H., "Peng-Robinson Predictions for Hydrocarbons,
+            CO2, N2, and H2S with Pure Water and NaCl Brine", Fluid Phase Equilibria,
+            77, 217-240, 1992.
+    """
+
+    def __init__(self, **kwargs):
+        raise NotImplementedError(
+            "SoreideWhitson model is not yet implemented. "
+            "Planned support includes multicomponent gas (C1, C2, C3, nC4, CO2, H2S, N2, H2) "
+            "solubility in fresh/saline water using the Soreide-Whitson (1992) PR-EOS approach."
+        )

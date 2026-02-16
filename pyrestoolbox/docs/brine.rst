@@ -161,5 +161,106 @@ Usage example for 175 Bara x 85 degC and 0% NaCl brine:
 
     >>> mix = brine.CO2_Brine_Mixture(pres = 175, temp = 85)
     >>> mix.Rs  # Returns sm3 dissolved CO2 / sm3 Brine
-    24.742923469934272   
+    24.742923469934272
+
+pyrestoolbox.brine.make_pvtw_table
+======================
+
+.. code-block:: python
+
+    make_pvtw_table(pi, degf, wt=0, ch4_sat=0, pmin=500, pmax=10000, nrows=20, export=False) -> dict
+
+Generates a PVTW (water PVT) table over a pressure range using the Spivey correlation (brine_props).
+Optionally exports ECLIPSE PVTW keyword file and Excel spreadsheet.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - pi
+     - float
+     - Initial (reference) pressure (psia)
+   * - degf
+     - float
+     - Temperature (deg F)
+   * - wt
+     - float
+     - Salt weight% in the brine (0 - 100). Default 0
+   * - ch4_sat
+     - float
+     - Degree of methane saturation (0 - 1). Default 0
+   * - pmin
+     - float
+     - Minimum table pressure (psia). Default 500
+   * - pmax
+     - float
+     - Maximum table pressure (psia). Default 10000
+   * - nrows
+     - int
+     - Number of table rows. Default 20
+   * - export
+     - bool
+     - If True, writes PVTW.INC and pvtw_table.xlsx. Default False
+
+.. list-table:: Return dict keys
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - table
+     - DataFrame
+     - Pressure, Bw, Density, Viscosity, Cw, Rsw
+   * - pref
+     - float
+     - Reference pressure (psia)
+   * - bw_ref
+     - float
+     - Bw at reference pressure (rb/stb)
+   * - cw_ref
+     - float
+     - Compressibility at reference pressure (1/psi)
+   * - visw_ref
+     - float
+     - Viscosity at reference pressure (cP)
+   * - rsw_ref
+     - float
+     - Rsw at reference pressure (scf/stb)
+   * - den_ref
+     - float
+     - Density (sg) at reference pressure
+
+Examples:
+
+.. code-block:: python
+
+    >>> from pyrestoolbox import brine
+    >>> result = brine.make_pvtw_table(pi=3000, degf=200, wt=0, ch4_sat=0)
+    >>> print(result['bw_ref'])
+    >>> print(result['table'].head())
+
+pyrestoolbox.brine.SoreideWhitson
+======================
+
+.. code-block:: python
+
+    SoreideWhitson(**kwargs) -> raises NotImplementedError
+
+Placeholder for the Soreide-Whitson (1992) PR-EOS model for gas solubility in water/brine.
+
+Planned support includes multicomponent gas mixtures (C1, C2, C3, nC4, CO2, H2S, N2, H2)
+solubility in fresh and saline water.
+
+Planned return values:
+- Mole fraction of dissolved gas components in aqueous phase
+- Mole fraction of vaporised water in gas phase
+- Water content of gas (stb/mmscf)
+- Gas solubility in water (scf/stb)
+
+Reference: Soreide, I. and Whitson, C.H., "Peng-Robinson Predictions for Hydrocarbons,
+CO2, N2, and H2S with Pure Water and NaCl Brine", Fluid Phase Equilibria, 77, 217-240, 1992.
 

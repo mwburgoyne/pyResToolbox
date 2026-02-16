@@ -23,7 +23,6 @@
 
 import numpy as np
 import numpy.typing as npt
-from scipy.integrate import quad
 from typing import Tuple
 
 import pandas as pd
@@ -31,6 +30,10 @@ from pyrestoolbox.classes import z_method, c_method, pb_method, rs_method, bo_me
 from pyrestoolbox.shared_fns import convert_to_numpy, process_output, check_2_inputs, bisect_solve
 from pyrestoolbox.validate import validate_methods
 from pyrestoolbox.constants import R, psc, tsc, degF2R, tscr, scf_per_mol, CUFTperBBL, WDEN, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2
+
+# Precomputed Gauss-Legendre nodes/weights for pseudopressure integration
+_GL7_NODES, _GL7_WEIGHTS = np.polynomial.legendre.leggauss(7)
+_GL10_NODES, _GL10_WEIGHTS = np.polynomial.legendre.leggauss(10)
 
 def gas_rate_radial(
     k: npt.ArrayLike,
@@ -463,6 +466,99 @@ _BNS_OMEGAA = np.array([0.427671, 0.436725, 0.457236, 0.457236, 0.457236])
 _BNS_OMEGAB = np.array([0.0696397, 0.0724345, 0.0777961, 0.0777961, 0.0777961])
 _BNS_VCVIS = np.array([1.46352, 1.46808, 1.35526, 0.68473, 0.0])  # cuft/lbmol
 
+# BIP precomputed matrices: kij[i,j] = _BIP_CONST[i,j] + _BIP_SLOPE_TC[i,j] / degR
+# Component order: [CO2=0, H2S=1, N2=2, H2=3, Gas=4]
+# Gas column/row uses tpc_hc at runtime; stored slopes in _BIP_GAS_SLOPES
+_BIP_CONST = np.array([
+    [ 0.      ,  0.248638, -0.25    , -0.247153, -0.145561],
+    [ 0.248638,  0.      , -0.204414,  0.      ,  0.16852 ],
+    [-0.25    , -0.204414,  0.      , -0.166253, -0.108   ],
+    [-0.247153,  0.      , -0.166253,  0.      , -0.0620119],
+    [-0.145561,  0.16852 , -0.108   , -0.0620119,  0.      ]])
+
+_BIP_SLOPE_TC = np.array([
+    [  0.        , -75.64467996,  63.51120432,  89.65031832, 0.],
+    [-75.64467996,   0.        , 157.55635404,   0.        , 0.],
+    [ 63.51120432, 157.55635404,   0.        ,  17.90313836, 0.],
+    [ 89.65031832,   0.        ,  17.90313836,   0.        , 0.],
+    [  0.        ,   0.        ,   0.        ,   0.        , 0.]])
+
+_BIP_GAS_SLOPES = np.array([0.276572, -0.122378, 0.0605506, 0.0427873])
+
+def _calc_bips_fast(degR, tpc_hc):
+    """Compute 5x5 BIP matrix using precomputed constants."""
+    slope_tc = _BIP_SLOPE_TC.copy()
+    slope_tc[4, :4] = _BIP_GAS_SLOPES * tpc_hc
+    slope_tc[:4, 4] = slope_tc[4, :4]
+    return _BIP_CONST + slope_tc / degR
+
+def _cardano_cubic(c2, c1, c0, flag=0):
+    """Analytic Cardano solver for monic cubic Z^3 + c2*Z^2 + c1*Z + c0 = 0.
+    flag=1: max root, flag=-1: min root, flag=0: all real roots."""
+    p = (3 * c1 - c2**2) / 3
+    q = (2 * c2**3 - 9 * c2 * c1 + 27 * c0) / 27
+    root_diagnostic = q**2 / 4 + p**3 / 27
+
+    if root_diagnostic < 0:
+        m = 2 * np.sqrt(-p / 3)
+        qpm = 3 * q / p / m
+        theta1 = np.arccos(qpm) / 3
+        roots = np.array([m * np.cos(theta1),
+                          m * np.cos(theta1 + 4 * np.pi / 3),
+                          m * np.cos(theta1 + 2 * np.pi / 3)])
+        Zs = roots - c2 / 3
+    else:
+        P = (-q / 2 + np.sqrt(root_diagnostic))
+        if P >= 0:
+            P = P ** (1 / 3)
+        else:
+            P = -(-P) ** (1 / 3)
+        Q = (-q / 2 - np.sqrt(root_diagnostic))
+        if Q >= 0:
+            Q = Q ** (1 / 3)
+        else:
+            Q = -(-Q) ** (1 / 3)
+        Zs = np.array([P + Q]) - c2 / 3
+
+    if flag == -1:
+        return min(Zs)
+    if flag == 1:
+        return max(Zs)
+    return Zs
+
+def _halley_cubic_vec(c2, c1, c0, max_iter=50, tol=1e-12):
+    """Vectorized Halley solver: solve Z^3+c2*Z^2+c1*Z+c0=0 for max root (vapor Z).
+    c2, c1, c0 are 1D arrays of length N. Returns 1D array of Z values.
+    Falls back to _cardano_cubic for any non-converged elements."""
+    N = len(c2)
+    Z = -c2 / 3.0
+    f0 = Z**3 + c2 * Z**2 + c1 * Z + c0
+    Z = np.where(f0 < 0, Z + 1.0, Z)
+
+    for _ in range(max_iter):
+        f = Z**3 + c2 * Z**2 + c1 * Z + c0
+        fp = 3.0 * Z**2 + 2.0 * c2 * Z + c1
+        fpp = 6.0 * Z + 2.0 * c2
+        # Protect against zero derivatives
+        safe_fp = np.where(np.abs(fp) < 1e-30, 1e-30, fp)
+        dZ = f / safe_fp
+        denom = safe_fp - 0.5 * dZ * fpp
+        denom = np.where(np.abs(denom) < 1e-30, 1e-30, denom)
+        dZ = f / denom
+        Z -= dZ
+        if np.max(np.abs(dZ)) < tol:
+            break
+
+    # Check residuals and fall back to Cardano for any bad elements
+    f = Z**3 + c2 * Z**2 + c1 * Z + c0
+    bad = np.abs(f) > 1e-6
+    if np.any(bad):
+        bad_idx = np.where(bad)[0]
+        for idx in bad_idx:
+            Z[idx] = _cardano_cubic(c2[idx], c1[idx], c0[idx], flag=1)
+
+    return Z
+
 def gas_z(
     p: npt.ArrayLike,
     sg: float,
@@ -621,103 +717,43 @@ def gas_z(
     def z_bur(psias, degf):
         degR = degf + degF2R
 
-        # Analytic solution for real root(s) of cubic polynomial
-        # a[0] * Z**3 + a[1]*Z**2 + a[2]*Z + a[3] = 0
-        # Flag = 1 return Max root, = -1 returns minimum root, = 0 returns all real roots
-        def cubic_root(a, flag = 0):
-            if a[0] != 1:
-                a = np.array(a) / a[0] # Normalize to unity exponent for Z^3
-            p = (3 * a[2]- a[1]**2)/3
-            q = (2 * a[1]**3 - 9 * a[1] * a[2] + 27 * a[3])/27
-            root_diagnostic = q**2/4 + p**3/27
-        
-            if root_diagnostic < 0:
-                m = 2*np.sqrt(-p/3)
-                qpm = 3*q/p/m
-                theta1 = np.arccos(qpm)/3
-                roots = np.array([m*np.cos(theta1), m*np.cos(theta1+4*np.pi/3), m*np.cos(theta1+2*np.pi/3)])
-                Zs = roots - a[1] / 3
-            else:
-                P = (-q/2 + np.sqrt(root_diagnostic))
-                if P >= 0:
-                    P = P **(1/3)
-                else:
-                    P = -(-P)**(1/3)
-                Q = (-q/2 - np.sqrt(root_diagnostic))
-                if Q >=0:
-                    Q = Q **(1/3)
-                else:
-                    Q = -(-Q)**(1/3)
-                Zs = np.array([P + Q]) - a[1] / 3
-                
-            if flag == -1:      # Return minimum root
-                return min(Zs)
-            if flag == 1:       # Return maximum root
-                return max(Zs)
-            return Zs           # Return all roots
-
-        def calc_bips(degR, tpc_hc):
-            """
-            Temperature-dependent Binary Interaction Parameters (BIPs) for all pairs,
-            with analytic first and second T-derivatives for use in PR analytic derivatives.
-            - Fitted forms: constant + slope/Tr, Tr based on component crit temp.
-            - Returns: kij, dkij_dT, d2kij_dT2 (all NxN)
-            - Tuned to experimental VLE data Burgoyne, 2025
-            """
-            components = ['CO2', 'H2S', 'N2', 'H2', 'Gas']
-            bip_parameters = {
-                ("Gas", "CO2"): {"constant": -0.145561 ,  "Tr_slope": 0.276572 ,  "tc": tpc_hc  },
-                ("Gas", "H2S"): {"constant": 0.16852   ,  "Tr_slope": -0.122378,  "tc": tpc_hc  },
-                ("Gas", "N2"):  {"constant": -0.108    ,  "Tr_slope": 0.0605506,  "tc": tpc_hc  },
-                ("Gas", "H2"):  {"constant": -0.0620119,  "Tr_slope": 0.0427873,  "tc": tpc_hc  },
-                ("CO2", "H2S"): {"constant": 0.248638  ,  "Tr_slope": -0.138185,  "tc": 547.416 },
-                ("CO2", "N2"):  {"constant": -0.25     ,  "Tr_slope": 0.11602  ,  "tc": 547.416 },
-                ("CO2", "H2"):  {"constant": -0.247153 ,  "Tr_slope": 0.16377  ,  "tc": 547.416 },
-                ("H2S", "N2"):  {"constant": -0.204414 ,  "Tr_slope": 0.234417 ,  "tc": 672.12  },
-                ("H2S", "H2"):  {"constant": 0         ,  "Tr_slope": 0        ,  "tc": 672.12  },
-                ("N2",  "H2"):  {"constant": -0.166253 ,  "Tr_slope": 0.0788129,  "tc": 227.16  },
-            }
-            def lookup_key(i, j):
-                return (i, j) if (i, j) in bip_parameters else (j, i)
-            n = len(components)
-            kij = np.zeros((n, n))
-            for i, ci in enumerate(components):
-                for j, cj in enumerate(components):
-                    if ci == cj:
-                        kij[i, j] = 0.0
-                    else:
-                        params = bip_parameters[lookup_key(ci, cj)]
-                        tc = params["tc"]
-                        const = params["constant"]
-                        slope = params["Tr_slope"]
-                        Tr = degR / tc
-                        kij[i, j] = const + slope / Tr
-            return kij
-            
         z = np.array([co2, h2s, n2, h2, 1 - co2 - h2s - n2 - h2])
-        
-        #if tc * pc == 0:  # Critical properties have not been user specified
-        #    tc_peng, pc_peng = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod = 'BNS')
-        
-        tcs[-1], pcs[-1] = tc, pc # Hydrocarbon Tc and Pc from SG using BNS correlation
+
+        tcs[-1], pcs[-1] = tc, pc  # Hydrocarbon Tc and Pc from SG using BNS correlation
         trs = degR / tcs
-        
+
         m = 0.37464 + 1.54226 * ACF - 0.26992 * ACF**2
-        alpha = (1 + m * (1 - np.sqrt(trs)))**2    
-        
-        kij = calc_bips(degR, tc)
-        
-        zout = []
-        for psia in psias:
-            prs = psia / pcs
-            Ai, Bi = OmegaA * alpha * prs / trs**2, OmegaB * prs / trs
-            A, B = np.sum(z[:, None] * z * np.sqrt(np.outer(Ai, Ai)) * (1 - kij)), np.sum(z * Bi)
-        
-            # Coefficients of Cubic: a[0] * Z**3 + a[1]*Z**2 + a[2]*Z + a[3] = 0
-            a = [1, -(1 - B), A - 3 * B**2 - 2 * B, -(A * B - B**2 - B**3)]
-            zout.append(cubic_root(a, flag = 1) - np.sum(z * VSHIFT * Bi)) # Volume translated Z 
-        
-        return process_output(zout, is_list) 
+        alpha = (1 + m * (1 - np.sqrt(trs)))**2
+
+        kij = _calc_bips_fast(degR, tc)
+
+        # Vectorized across all pressures (N = len(psias))
+        prs = psias[:, None] / pcs[None, :]            # (N, 5)
+        Ai = OmegaA * alpha * prs / trs**2             # (N, 5)
+        Bi = OmegaB * prs / trs                        # (N, 5)
+
+        # Mixing rule A: A = sum_ij z_i*z_j*sqrt(Ai_i*Ai_j)*(1-kij)
+        sqrt_Ai = np.sqrt(Ai)                          # (N, 5)
+        w = z * sqrt_Ai                                # (N, 5)
+        onemk = 1.0 - kij                              # (5, 5)
+        A = np.sum((w @ onemk) * w, axis=1)            # (N,)
+
+        # Mixing rule B
+        B = Bi @ z                                      # (N,)
+
+        # Cubic coefficients: Z^3 + c2*Z^2 + c1*Z + c0 = 0
+        c2 = -(1.0 - B)
+        c1_coeff = A - 3.0 * B**2 - 2.0 * B
+        c0 = -(A * B - B**2 - B**3)
+
+        # Solve all cubics at once
+        Z_raw = _halley_cubic_vec(c2, c1_coeff, c0)    # (N,)
+
+        # Volume translation
+        vshift = np.sum(z * VSHIFT * Bi, axis=1)       # (N,)
+        zout = Z_raw - vshift
+
+        return process_output(zout, is_list)
         
     zfuncs = {"DAK": zdak, "HY": z_hy, "WYW": z_wyw, "BUR": z_bur}
 
@@ -790,78 +826,56 @@ def gas_ug(
     
     rho = m * p / (t * zee * R * 62.37)
     
-    mws, tcs, pcs = _BNS_MWS.copy(), _BNS_TCS.copy(), _BNS_PCS.copy()
-    ACF, VSHIFT = _BNS_ACF, _BNS_VSHIFT
-    OmegaA, OmegaB, VCVIS = _BNS_OMEGAA, _BNS_OMEGAB, _BNS_VCVIS
-        
-    # From https://wiki.whitson.com/bopvt/visc_correlations/
-    def lbc(Z, degf, psia, sg, co2=0.0, h2s=0.0, n2=0.0, h2 = 0.0):
-        if co2 + h2s + n2 + h2 > 1 or co2 < 0 or h2s < 0 or n2 < 0 or h2 < 0:
-            return None
-        degR = degf + degF2R
-        zi = np.array([co2, h2s, n2, h2, 1 - co2 - h2s - n2 - h2])
-        if n2 + co2 + h2s + h2 < 1:
-            sg_hc = (sg - (co2 * mws[0] + h2s * mws[1] + n2 * mws[2] + h2 * mws[3]) / MW_AIR) / (1 - co2 - h2s - n2 - h2)
-        else:
-            sg_hc = 0.75 # Irrelevant, since hydrocarbon fraction = 0
-        
-        sg_hc = max(sg_hc, 0.553779772) # Methane is lower limit
-        
-        hc_gas_mw = sg_hc * MW_AIR
-            
-        def vcvis_hc(mw): # Returns hydrocarbon gas VcVis for LBC viscosity calculations   
-            return  0.0576710 * (mw - 16.0425) + 1.44383 # ft3/lbmol      
-       
-                                                                       
-        mws[-1]  = hc_gas_mw       
-        tcs[-1], pcs[-1] = gas_tc_pc(hc_gas_mw/MW_AIR, cmethod = 'BNS')
-        
-        VCVIS[-1] = vcvis_hc(hc_gas_mw)
-        degR = degf + degF2R
-    
-        def stiel_thodos(degR, mws):
-            #Calculate the viscosity of a pure component using the Stiel-Thodos correlation.
-            Tr = degR / tcs
-            ui = []
-            Tc = tcs * 5/9 # (deg K)
-            Pc = pcs / 14.696
-            eta = Tc**(1/6) / (mws**(1/2) * Pc**(2/3)) # Tc and Pc must be in degK and Atm respectively
-            
-            for i in range(len(Tr)):
-                if Tr[i] <= 1.5:
-                    ui.append(34e-5 * Tr[i]**0.94 / eta[i])
-                else:
-                    ui.append(17.78e-5 * (4.58 * Tr[i] - 1.67)**(5/8) / eta[i])
-            return np.array(ui)
-        
-        def u0(zi, ui, mws, Z):  # dilute gas mixture viscosity from Herning and Zippener
-            sqrt_mws = np.sqrt(mws)
-            return np.sum(zi * ui * sqrt_mws)/np.sum(zi * sqrt_mws)
-    
-        a = [0.1023, 0.023364, 0.058533, -0.0392852, 0.00926279] # P3 and P4 have been modified
-        # Calculate the viscosity of the mixture using the Lorenz-Bray-Clark method.
-        rhoc = 1/np.sum(VCVIS*zi)
-        Tc = tcs * 5/9    # (deg K)
-        Pc = pcs / 14.696 # (Atm)
-    
-        eta = np.abs(np.sum(zi*Tc)**(1/6)) / (np.abs(np.sum(zi * mws))**0.5 * np.abs(np.sum(zi * Pc))**(2/3)) # Note 0.5 exponent from original paper
-        mw = np.sum(zi * mws)
-        rhor = psia / (Z * R * degR) / rhoc
-        lhs = a[0] + a[1]*rhor + a[2]*rhor**2 + a[3]*rhor**3 + a[4]*rhor**4
-        ui = stiel_thodos(degR, mws)
-        vis = (lhs**4 - 1e-4)/eta + u0(zi, ui, mws, Z)
-        return process_output(vis, is_list)  
-        
     if zmethod.name not in ('BNS', 'BUR'):
         b = 3.448 + (986.4 / t) + (0.01009 * m)  # 2.16
         c = 2.447 - (0.2224 * b)  # 2.17
         a = ((9.379 + (0.01607 * m)) * np.power(t, 1.5) / (209.2 + (19.26 * m) + t))  # 2.15
         ug = process_output(a * 0.0001 * np.exp(b * np.power(rho, c)), is_list)  # 2.14
     else:
-        ug = []
-        for i, psia in enumerate(p):
-            ug.append(lbc(zee[i], degf, psia, sg, co2, h2s, n2, h2))
-        ug = process_output(ug, is_list)
+        # Vectorized LBC viscosity for BNS method
+        # From https://wiki.whitson.com/bopvt/visc_correlations/
+        mws_lbc = _BNS_MWS.copy()
+        tcs_lbc = _BNS_TCS.copy()
+        pcs_lbc = _BNS_PCS.copy()
+        VCVIS_lbc = _BNS_VCVIS.copy()  # Copy to avoid mutating module-level array
+
+        degR = degf + degF2R
+        zi = np.array([co2, h2s, n2, h2, 1 - co2 - h2s - n2 - h2])
+        if n2 + co2 + h2s + h2 < 1:
+            sg_hc = (sg - (co2 * mws_lbc[0] + h2s * mws_lbc[1] + n2 * mws_lbc[2] + h2 * mws_lbc[3]) / MW_AIR) / (1 - co2 - h2s - n2 - h2)
+        else:
+            sg_hc = 0.75
+
+        sg_hc = max(sg_hc, 0.553779772)
+        hc_gas_mw = sg_hc * MW_AIR
+
+        mws_lbc[-1] = hc_gas_mw
+        tcs_lbc[-1], pcs_lbc[-1] = gas_tc_pc(hc_gas_mw / MW_AIR, cmethod='BNS')
+        VCVIS_lbc[-1] = 0.0576710 * (hc_gas_mw - 16.0425) + 1.44383
+
+        # Vectorized Stiel-Thodos
+        Tr = degR / tcs_lbc
+        Tc_K = tcs_lbc * 5.0 / 9.0
+        Pc_atm = pcs_lbc / 14.696
+        eta_st = Tc_K**(1.0/6.0) / (mws_lbc**0.5 * Pc_atm**(2.0/3.0))
+        ui_low = 34e-5 * Tr**0.94 / eta_st
+        ui_high = 17.78e-5 * np.maximum(4.58 * Tr - 1.67, 1e-30)**(5.0/8.0) / eta_st
+        ui = np.where(Tr <= 1.5, ui_low, ui_high)
+
+        # Herning-Zippener dilute gas mixture viscosity
+        sqrt_mws = np.sqrt(mws_lbc)
+        u0_val = np.sum(zi * ui * sqrt_mws) / np.sum(zi * sqrt_mws)
+
+        # LBC mixture parameters
+        a_lbc = np.array([0.1023, 0.023364, 0.058533, -0.0392852, 0.00926279])
+        rhoc = 1.0 / np.sum(VCVIS_lbc * zi)
+        eta_mix = np.abs(np.sum(zi * Tc_K))**(1.0/6.0) / (np.abs(np.sum(zi * mws_lbc))**0.5 * np.abs(np.sum(zi * Pc_atm))**(2.0/3.0))
+
+        # Vectorized over pressures
+        zee_arr, _ = convert_to_numpy(zee)
+        rhor = p / (zee_arr * R * degR * rhoc)
+        lhs = a_lbc[0] + rhor * (a_lbc[1] + rhor * (a_lbc[2] + rhor * (a_lbc[3] + rhor * a_lbc[4])))
+        ug = process_output((lhs**4 - 1e-4) / eta_mix + u0_val, is_list)
     if ugz:
         return process_output(ug * zee, is_list)
     else:
@@ -1191,23 +1205,51 @@ def gas_dmp(
         tc: Critical gas temperature (deg R). Calculates using cmethod if not specified
         pc: Critical gas pressure (psia). Calculates using cmethod if not specified
     """
-    if h2 > 0:
-        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BNS' 
-        
-    zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
-    
-    def m_p(p, *args):
-        # Pseudo pressure function to be integrated
-        degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s, h2 = args
-        zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc)    
-        mugz = gas_ug(p, sg, degf, zmethod, cmethod, co2, h2s, n2, h2, tc, pc, zee, ugz=True)  # Gas viscosity z-factor product using a precalculated Z factor
-        return 2 * p / (mugz)
-
     if p1 == p2:
         return 0
 
-    return quad(m_p, p1, p2, args=(degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s, h2), limit=500)[0]
+    if h2 > 0:
+        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
+        zmethod = 'BNS'
+
+    zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
+
+    def _gl_integrate(lo, hi, nodes, weights):
+        """Batch Gauss-Legendre integration of 2p/(mu*Z) over [lo, hi]."""
+        p_mid = (lo + hi) * 0.5
+        p_half = (hi - lo) * 0.5
+        p_eval = p_mid + p_half * nodes
+        zee = gas_z(p=p_eval, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod,
+                     co2=co2, h2s=h2s, n2=n2, h2=h2, tc=tc, pc=pc)
+        mugz = gas_ug(p_eval, sg, degf, zmethod, cmethod, co2, h2s, n2, h2, tc, pc, zee, ugz=True)
+        return p_half * np.sum(weights * 2.0 * p_eval / mugz)
+
+    # Two-tier integration: compute with n=7 and n=10, compare for convergence
+    result_7 = _gl_integrate(p1, p2, _GL7_NODES, _GL7_WEIGHTS)
+    result_10 = _gl_integrate(p1, p2, _GL10_NODES, _GL10_WEIGHTS)
+
+    if abs(result_10) < 1e-30 or abs(result_10 - result_7) / abs(result_10) < 1e-5:
+        return result_10
+
+    # If not converged, split into two subintervals and integrate with n=10 each (batch)
+    p_mid = (p1 + p2) * 0.5
+    p_half_lo = (p_mid - p1) * 0.5
+    p_half_hi = (p2 - p_mid) * 0.5
+    p_center_lo = (p1 + p_mid) * 0.5
+    p_center_hi = (p_mid + p2) * 0.5
+
+    # Build all evaluation points for both subintervals in a single array
+    p_eval = np.concatenate([p_center_lo + p_half_lo * _GL10_NODES,
+                             p_center_hi + p_half_hi * _GL10_NODES])
+
+    zee = gas_z(p=p_eval, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod,
+                 co2=co2, h2s=h2s, n2=n2, h2=h2, tc=tc, pc=pc)
+    mugz = gas_ug(p_eval, sg, degf, zmethod, cmethod, co2, h2s, n2, h2, tc, pc, zee, ugz=True)
+    integrand = 2.0 * p_eval / mugz
+
+    n = len(_GL10_NODES)
+    return (p_half_lo * np.sum(_GL10_WEIGHTS * integrand[:n]) +
+            p_half_hi * np.sum(_GL10_WEIGHTS * integrand[n:]))
 
 def gas_fws_sg(sg_g: float, cgr: float, api_st: float) -> float:
     """

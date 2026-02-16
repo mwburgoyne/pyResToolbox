@@ -139,6 +139,63 @@ def test_regression_co2_xco2():
     assert abs(mix.x[0] - b['co2_xco2_200_80']) < 1e-8
 
 
+# =============================================================================
+# make_pvtw_table Tests
+# =============================================================================
+
+def test_make_pvtw_table_basic():
+    """Result has expected keys and correct row count"""
+    result = brine.make_pvtw_table(pi=3000, degf=200, wt=0, ch4_sat=0, nrows=10)
+    expected_keys = {'table', 'pref', 'bw_ref', 'cw_ref', 'visw_ref', 'rsw_ref', 'den_ref'}
+    assert expected_keys == set(result.keys()), f"Missing keys: {expected_keys - set(result.keys())}"
+    # nrows=10 plus pi if not already in grid
+    assert len(result['table']) >= 10, f"Expected at least 10 rows, got {len(result['table'])}"
+    assert result['pref'] == 3000, f"pref should be 3000, got {result['pref']}"
+
+def test_make_pvtw_table_bw_range():
+    """Bw values should be in reasonable range (0.9 - 1.2)"""
+    result = brine.make_pvtw_table(pi=3000, degf=200, wt=0, ch4_sat=0)
+    bw_vals = result['table']['Bw (rb/stb)'].values
+    assert all(0.9 < bw < 1.2 for bw in bw_vals), f"Bw values outside 0.9-1.2: {bw_vals}"
+
+def test_make_pvtw_table_ref_vs_direct():
+    """Reference properties should match direct brine_props() call"""
+    pi, degf, wt, ch4_sat = 3000, 200, 5, 0.5
+    result = brine.make_pvtw_table(pi=pi, degf=degf, wt=wt, ch4_sat=ch4_sat)
+    bw, lden, visw, cw, rsw = brine.brine_props(p=pi, degf=degf, wt=wt, ch4_sat=ch4_sat)
+    assert abs(result['bw_ref'] - bw) < 1e-10, f"bw_ref mismatch: {result['bw_ref']} vs {bw}"
+    assert abs(result['den_ref'] - lden) < 1e-10, f"den_ref mismatch"
+    assert abs(result['visw_ref'] - visw) < 1e-10, f"visw_ref mismatch"
+    assert abs(result['cw_ref'] - cw) < 1e-10, f"cw_ref mismatch"
+    assert abs(result['rsw_ref'] - rsw) < 1e-10, f"rsw_ref mismatch"
+
+def test_make_pvtw_table_pi_included():
+    """pi should appear in the pressure grid"""
+    pi = 3333
+    result = brine.make_pvtw_table(pi=pi, degf=200, wt=0, ch4_sat=0)
+    pressures = result['table']['Pressure (psia)'].values
+    assert pi in pressures, f"pi={pi} not found in pressure grid: {pressures}"
+
+def test_make_pvtw_table_saline():
+    """Saline brine density should be greater than freshwater density"""
+    result_fresh = brine.make_pvtw_table(pi=3000, degf=200, wt=0, ch4_sat=0)
+    result_saline = brine.make_pvtw_table(pi=3000, degf=200, wt=10, ch4_sat=0)
+    assert result_saline['den_ref'] > result_fresh['den_ref'], \
+        f"Saline density ({result_saline['den_ref']}) should exceed freshwater ({result_fresh['den_ref']})"
+
+# =============================================================================
+# SoreideWhitson Tests
+# =============================================================================
+
+def test_soreide_whitson_not_implemented():
+    """SoreideWhitson should raise NotImplementedError"""
+    try:
+        brine.SoreideWhitson()
+        assert False, "Expected NotImplementedError"
+    except NotImplementedError as e:
+        assert "not yet implemented" in str(e).lower(), f"Unexpected error message: {e}"
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("BRINE MODULE VALIDATION TESTS")

@@ -75,6 +75,83 @@ def process_output(input_data, is_list):
         # If it's a single value (not in a list or array), return it directly
         return float(input_data)
         
+def halley_solve_cubic(c2, c1, c0, flag=1, max_iter=50, tol=1e-12):
+    """Solve Z^3 + c2*Z^2 + c1*Z + c0 = 0 via Halley's method.
+
+    flag=1: return max real root (vapor)
+    flag=-1: return min real root (liquid)
+    flag=0: return all real roots as array
+    Returns None if not converged (caller should use fallback).
+    """
+    # Find one root via Halley iteration from inflection point
+    Z = -c2 / 3.0
+    f = Z**3 + c2 * Z**2 + c1 * Z + c0
+    if f < 0:
+        Z = Z + 1.0  # Start on vapor side
+
+    converged = False
+    for _ in range(max_iter):
+        f = Z**3 + c2 * Z**2 + c1 * Z + c0
+        fp = 3.0 * Z**2 + 2.0 * c2 * Z + c1
+        fpp = 6.0 * Z + 2.0 * c2
+        if abs(fp) < 1e-30:
+            break
+        dZ = f / fp
+        denom = fp - 0.5 * dZ * fpp
+        if abs(denom) < 1e-30:
+            break
+        dZ = f / denom
+        Z -= dZ
+        if abs(dZ) < tol:
+            converged = True
+            break
+
+    if not converged:
+        return None
+
+    # Check residual
+    f = Z**3 + c2 * Z**2 + c1 * Z + c0
+    if abs(f) > 1e-6:
+        return None
+
+    r1 = Z
+
+    # Factor out converged root via synthetic division: Z^2 + e1*Z + e0
+    e1 = c2 + r1
+    e0 = c1 + r1 * e1
+
+    roots = [r1]
+
+    # Solve depressed quadratic
+    disc = e1**2 - 4.0 * e0
+    if disc >= 0:
+        sqrt_disc = np.sqrt(disc)
+        r2 = (-e1 + sqrt_disc) / 2.0
+        r3 = (-e1 - sqrt_disc) / 2.0
+
+        # Refine r2 with one Halley step (Michelsen pattern)
+        for r in (r2, r3):
+            f = r**3 + c2 * r**2 + c1 * r + c0
+            fp = 3.0 * r**2 + 2.0 * c2 * r + c1
+            fpp = 6.0 * r + 2.0 * c2
+            if abs(fp) > 1e-30:
+                dZ = f / fp
+                denom = fp - 0.5 * dZ * fpp
+                if abs(denom) > 1e-30:
+                    r -= f / denom
+            roots.append(r)
+
+    roots = np.array(roots)
+
+    if flag == 0:
+        return roots
+    elif flag == 1:
+        return float(np.max(roots))
+    elif flag == -1:
+        return float(np.min(roots))
+    return roots
+
+
 def check_2_inputs(x: Union[float, List[float]], y: Union[float, List[float]]) -> bool:
     """ Check inputs that need to be matched, either both float or both lists/arrays of same length"""
     # Check if both are scalars
