@@ -210,22 +210,7 @@ Examples:
     
     >>> gas.gas_z(p=[1000, 2000], sg=0.75, degf=160, cmethod='SUT', n2 = 0.02, co2 = 0.17)
     array([0.91920553, 0.87196032])
- 
- def gas_ug(
-    p: npt.ArrayLike,
-    sg: float,
-    degf: float,
-    zmethod: z_method = z_method.DAK,
-    cmethod: c_method = c_method.PMC,
-    co2: float = 0,
-    h2s: float = 0,
-    n2: float = 0,
-    h2: float = 0,
-    tc: float = 0,
-    pc: float = 0,
-    zee: float = 0,
-    ugz = False
-    
+
 pyrestoolbox.gas.gas_ug
 ===================
 
@@ -741,7 +726,7 @@ pyrestoolbox.gas.gas_rate_radial
     gas_rate_radial(k, h, pr, pwf, r_w, r_ext, degf, zmethod='DAK, cmethod='PMC', S = 0, D = 0, sg = 0.75, n2 = 0, co2 = 0, h2s = 0, tc  = 0, pc = 0) -> float or np.array
 
 Returns gas rate (mscf/day) for radial flow using Darcy pseudo steady state equation & gas pseudopressure. 
-Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D array of rates. Using more than one input array – while not prohibited - will not return expected results 
+Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D array of rates. Using more than one input array ï¿½ while not prohibited - will not return expected results 
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -806,7 +791,6 @@ Examples:
 
 .. code-block:: python
 
-    >>> from pyrestoolbox import pyrestoolbox as rtb
     >>> gas.gas_rate_radial(k=5, h=50, pr=2000, pwf=750, r_w=0.3, r_ext=1500, degf=180, sg = 0.75, D = 0.01, S=5)
     10269.669190157822
     
@@ -822,7 +806,7 @@ pyrestoolbox.gas.gas_rate_linear
     gas_rate_linear(k, pr, pwf, area, length, degf, zmethod='DAK, cmethod='PMC', sg = 0.75, n2 = 0, co2 = 0, h2s = 0, tc  = 0, pc = 0) -> float or np.array
 
 Returns gas rate (mscf/day) for linear flow using Darcy steady state equation & gas pseudopressure. 
-Arrays can be used for any one of k, pr, pwf or area, returning corresponding 1-D array of rates. Using more than one input array – while not prohibited - will not return expected results 
+Arrays can be used for any one of k, pr, pwf or area, returning corresponding 1-D array of rates. Using more than one input array ï¿½ while not prohibited - will not return expected results 
 
 
 .. list-table:: Inputs
