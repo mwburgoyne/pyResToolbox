@@ -746,8 +746,44 @@ def gas_z(
         c1_coeff = A - 3.0 * B**2 - 2.0 * B
         c0 = -(A * B - B**2 - B**3)
 
-        # Solve all cubics at once
+        # Solve all cubics at once - get max (vapor) root
         Z_raw = _halley_cubic_vec(c2, c1_coeff, c0)    # (N,)
+
+        # Fugacity-based root selection for sub-critical conditions
+        # When 3 real roots exist, the thermodynamically stable phase
+        # is the one with the lowest fugacity coefficient (Gibbs criterion).
+        # Discriminant of depressed cubic: disc < 0 means 3 real roots
+        p_d = (3.0 * c1_coeff - c2**2) / 3.0
+        q_d = (2.0 * c2**3 - 9.0 * c2 * c1_coeff + 27.0 * c0) / 27.0
+        disc = q_d**2 / 4.0 + p_d**3 / 27.0
+        three_roots = disc < -1e-15
+
+        if np.any(three_roots):
+            idx = three_roots
+            Z_max_s = Z_raw[idx]
+            A_s, B_s = A[idx], B[idx]
+
+            # Deflate cubic by Z_max to get quadratic for remaining roots
+            b_q = c2[idx] + Z_max_s
+            c_q = c1_coeff[idx] + Z_max_s * b_q
+            det = np.maximum(b_q**2 - 4.0 * c_q, 0.0)
+            sqrt_det = np.sqrt(det)
+            Z_min = (-b_q - sqrt_det) / 2.0  # Smallest root
+
+            # PR fugacity coefficient: ln(phi) for root selection
+            sqrt2 = np.sqrt(2.0)
+            s2p1, s2m1 = 1.0 + sqrt2, sqrt2 - 1.0
+
+            def _ln_phi(Zv):
+                return ((Zv - 1.0) - np.log(Zv - B_s)
+                        - A_s / (2.0 * sqrt2 * B_s)
+                        * np.log((Zv + s2p1 * B_s) / (Zv - s2m1 * B_s)))
+
+            # Only compare where min root is physically valid (Z > B)
+            valid = Z_min > B_s
+            Z_min_safe = np.where(valid, Z_min, Z_max_s)
+            use_min = valid & (_ln_phi(Z_min_safe) < _ln_phi(Z_max_s))
+            Z_raw[idx] = np.where(use_min, Z_min, Z_max_s)
 
         # Volume translation
         vshift = np.sum(z * VSHIFT * Bi, axis=1)       # (N,)
