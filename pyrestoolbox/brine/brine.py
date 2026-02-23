@@ -33,6 +33,7 @@ from pyrestoolbox.classes import z_method, c_method, pb_method, rs_method, bo_me
 from pyrestoolbox.shared_fns import convert_to_numpy, process_output, halley_solve_cubic
 from pyrestoolbox.validate import validate_methods
 from pyrestoolbox.constants import R, psc, tsc, degF2R, tscr, scf_per_mol, CUFTperBBL, WDEN, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2
+from pyrestoolbox.plyasunov.iapws_if97 import rho_if97 as _rho_if97
 
 def _Eq41(t, input_array):
     """Eq 4.1 from McCain Petroleum Reservoir Fluid Properties"""
@@ -99,7 +100,8 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0) -> Tuple:
 
     Iwt70 = (1 / Ewt) * np.log(abs(Ewt + Fwt))  # Eq 4.3
     Iwtp = (1 / Ewt) * np.log(abs(Ewt * (Mpa / 70) + Fwt))  # Eq 4.4
-    rhowtp = rhow_t70 * np.exp(Iwtp - Iwt70)  # Eq 4.5
+    rhowtp_spivey = rhow_t70 * np.exp(Iwtp - Iwt70)  # Eq 4.5 (Spivey freshwater)
+    rhowtp = _rho_if97(degc + 273.15, Mpa) / 1000.0  # IAPWS-IF97 freshwater density (g/cm3)
 
     rhobt70 = (
         rhow_t70
@@ -113,9 +115,12 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0) -> Tuple:
     cbtpm = (1 / 70) * (1 / (Ebtm * (Mpa / 70) + Fbtm))  # Eq 4.9
     Ibt70 = (1 / Ebtm) * np.log(abs(Ebtm + Fbtm))  # Eq 4.10
     Ibtpm = (1 / Ebtm) * np.log(abs(Ebtm * (Mpa / 70) + Fbtm))  # Eq 4.11
-    Rhob_tpm = rhobt70 * np.exp(
+    Rhob_tpm_spivey = rhobt70 * np.exp(
         Ibtpm - Ibt70
-    )  # Eq 4.12 - Density of pure brine (no methane) in SG
+    )  # Eq 4.12 - Spivey brine density (no methane)
+    # Apply Spivey salt ratio to IAPWS freshwater density
+    salt_ratio = Rhob_tpm_spivey / rhowtp_spivey if m > 0 else 1.0
+    Rhob_tpm = rhowtp * salt_ratio
 
     # Re-evaluate at standard conditions (15 deg C)
     rhow_sc70 = Eq41(15, rhow_t70_arr)
@@ -133,7 +138,8 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0) -> Tuple:
     cw_sc = (1 / 70) * (1 / (Ew_sc * (0.1013 / 70) + Fw_sc))
     Iw_sc70 = (1 / Ew_sc) * np.log(abs(Ew_sc + Fw_sc))
     Iw_sc = (1 / Ew_sc) * np.log(abs(Ew_sc * (0.1013 / 70) + Fw_sc))
-    rhow_sc = rhow_sc70 * np.exp(Iw_sc - Iw_sc70)
+    rhow_sc_spivey = rhow_sc70 * np.exp(Iw_sc - Iw_sc70)
+    rhow_sc = _rho_if97(273.15 + 15, 0.1013) / 1000.0  # IAPWS freshwater at SC
     rhob_sc70 = (
         rhow_sc70
         + Dm2_sc * m * m
@@ -146,9 +152,11 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0) -> Tuple:
     cb_scm = (1 / 70) * (1 / (Eb_scm * (0.1015 / 70) + Fb_scm))
     Ib_sc70 = (1 / Eb_scm) * np.log(abs(Eb_scm + Fb_scm))
     Ib_scm = (1 / Eb_scm) * np.log(abs(Eb_scm * (0.1015 / 70) + Fb_scm))
-    Rhob_scm = rhob_sc70 * np.exp(
+    Rhob_scm_spivey = rhob_sc70 * np.exp(
         Ib_scm - Ib_sc70
-    )  # Density of pure brine (no methane) in SG at standard conditions
+    )  # Spivey brine density at standard conditions
+    salt_ratio_sc = Rhob_scm_spivey / rhow_sc_spivey if m > 0 else 1.0
+    Rhob_scm = rhow_sc * salt_ratio_sc
 
     a_coefic = [
         0,
@@ -258,7 +266,8 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0) -> Tuple:
         / ((Mpa - vap_pressure) - 2 * dlambdadptm * m)
     )  # Eq 4.33
 
-    zee = gas.gas_z(p=p, sg=0.5537, degf=degf)  # Z-Factor of pure methane
+    zee = gas.gas_z(p=p, sg=0.5537, degf=degf, zmethod='BNS',
+                    co2=0, h2s=0, n2=0, h2=0)  # Z-Factor of pure methane
 
     vmch4g = zee * 8.314467 * degk / Mpa  # Eq 4.34
 
@@ -284,7 +293,8 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0) -> Tuple:
 
 
 
-    zee_sc = gas.gas_z(p=psc, sg=0.5537, degf=tsc)
+    zee_sc = gas.gas_z(p=psc, sg=0.5537, degf=tsc, zmethod='BNS',
+                       co2=0, h2s=0, n2=0, h2=0)
     vmch4g_sc = zee_sc * 8.314467 * (273 + 15) / 0.1013  # Eq 4.34
     rsw_new = mch4 * vmch4g_sc / ((1000 + m * 58.4428) * vb0_sc)
     rsw_new_oilfield = rsw_new / 0.1781076  # Convert to scf/stb
@@ -1057,10 +1067,11 @@ class CO2_Brine_Mixture():
         
     def brine_props_co2(self, pBar, degc, ppm, xCO2, MwB):
         """ Calculates CO2 saturated Brine properties
-            1. Pure Brine Density:            Spivey et al. (modified)
-            2. Pure Brine viscosity:          Mao-Duan (2009)
-            3. CO2 Corrected Brine Density:   Garcia (2001)
-            4. CO2 Corrected Brine Viscosity: Islam-Carlson (2012)
+            1. Pure Water Density:            IAPWS-IF97 Region 1
+            2. Brine Salt Correction:         Spivey et al. (modified)
+            3. Pure Brine viscosity:          Mao-Duan (2009)
+            4. CO2 Corrected Brine Density:   Garcia (2001)
+            5. CO2 Corrected Brine Viscosity: Islam-Carlson (2012)
             
             pBar: Pressure (Bar)
             degc: Temperature (deg C)
@@ -1124,27 +1135,24 @@ class CO2_Brine_Mixture():
         Fm12t = Eq41(degc, Fm12t_arr)
         
         # -- CO2-Free Brine Density (gm/cm3)
-        def brine_denw(Mpa):
-            # cw(T, p), in MPa�1, of pure water at temperature T and pressure p,
-            cwtp = (1 / 70) * (1 / (Ewt * (Mpa / 70) + Fwt))        # Eq 4.2
-    
-            #Density of pure water at temperature T and pressure p.
+        def brine_denw(Mpa, tKel_local=tKel):
+            # Spivey freshwater density at T, P
             Iwt70 = (1 / Ewt) * np.log(abs(Ewt + Fwt))              # Eq 4.3
             Iwtp = (1 / Ewt) * np.log(abs(Ewt * (Mpa / 70) + Fwt))  # Eq 4.4
-            rhowtp = rhow_t70 * np.exp(Iwtp - Iwt70)                # Eq 4.5
-            
-            # Density of brine at temperature T and the reference pressure of 70 MPa
+            rhowtp_spivey = rhow_t70 * np.exp(Iwtp - Iwt70)         # Eq 4.5
+            rhowtp = _rho_if97(tKel_local, Mpa) / 1000.0            # IAPWS freshwater (g/cm3)
+
+            # Spivey brine density at T, P
             rhobt70 = (rhow_t70 + Dm2t * m **2 + Dm32t * m ** 1.5 + Dm1t * m + Dm12t * m ** 0.5)  # Eq 4.6
-            
-            # Brine compressibility coefficients Eb(T,m) and Fb(T,m) from equations (4.7) and (4.8).
             Ebtm = Ewt + Emt * m                                                                  # Eq 4.7
             Fbtm = Fwt + Fm32t * m ** 1.5 + Fm1t * m + Fm12t * m ** 0.5                           # Eq 4.8
-            
-            # Return methane-free brine density as well as fresh water density in g/cm3
-            cbtpm = (1 / 70) * (1 / (Ebtm * (Mpa / 70) + Fbtm))                                   # Eq 4.9 (Step 6)
-            Ibt70 = (1 / Ebtm) * np.log(abs(Ebtm + Fbtm))                                         # Eq 4.10 (Step 7)
+            Ibt70 = (1 / Ebtm) * np.log(abs(Ebtm + Fbtm))                                         # Eq 4.10
             Ibtpm = (1 / Ebtm) * np.log(abs(Ebtm * (Mpa / 70) + Fbtm))                            # Eq 4.11
-            return rhobt70 * np.exp(Ibtpm - Ibt70), rhowtp                                        # Eq 4.12
+            rhob_spivey = rhobt70 * np.exp(Ibtpm - Ibt70)                                         # Eq 4.12
+
+            # Apply Spivey salt ratio to IAPWS freshwater
+            salt_ratio = rhob_spivey / rhowtp_spivey if m > 0 else 1.0
+            return rhowtp * salt_ratio, rhowtp
         
         # -- CO2 free brine viscosity Mao-Duan (2009) + fresh water viscosity
         def vis_brine(Mpa, rhowtp):
@@ -1220,7 +1228,8 @@ class CO2_Brine_Mixture():
         Fm12t = Eq41(degc, Fm12t_arr)
         
         # -- CO2-Free Brine & Freshwater Density at standard conditions (gm/cm3)
-        sg_SC_Brine, rhowSC = brine_denw(PSTND/10)
+        tKel_sc = (60 - 32) / 1.8 + 273.15  # 60 degF -> K
+        sg_SC_Brine, rhowSC = brine_denw(PSTND/10, tKel_local=tKel_sc)
         
         # Calculate mass of 1 sm3 of brine without CO2
         brine_mass = sg_SC_Brine * DENW              # kg brine / sm3 (No CO2)
@@ -1334,29 +1343,535 @@ def make_pvtw_table(
     }
 
 
+# ============================================================================
+# Viscosity correction constants for dissolved gases
+# ============================================================================
+_IC_A_CO2 = 4.65       # Islam-Carlson (2012) CO2 coefficient
+_IC_A_H2S = 1.50       # Calibrated from Murphy & Gaines (1974)
+_IC_B = 1.0134         # Islam-Carlson exponent
+
+# Ostermann (1985) SPE 14211 CH4 plateau coefficients
+# mu_sat/mu_free = c0 + c1*T + c2*T^2  (T in degF)
+# NOTE: SPE 14211 prints c2 as 1.0933e-5 (typo); correct is 1.0933e-6
+_OST_C0 = 1.109
+_OST_C1 = -5.98e-4
+_OST_C2 = 1.0933e-6
+
+# HC component molecular weights for SG-based splitting
+_MW_C1 = 16.043
+_MW_C2 = 30.069
+_MW_C3 = 44.096
+_MW_NC4 = 58.122
+
+# Mapping from VLE engine gas keys to plyasunov model gas keys
+_VLE_TO_PLYASUNOV = {
+    'CH4': 'CH4',
+    'C2H6': 'C2H6',
+    'C3H8': 'C3H8',
+    'nC4H10': 'NC4H10',
+    'CO2': 'CO2',
+    'N2': 'N2',
+    'H2S': 'H2S',
+    'H2': 'H2',
+}
+
+# Molecular weights for dissolved gas Rs calculations (g/mol)
+_SW_GAS_MW = {
+    'CH4': 16.0425,
+    'C2H6': 30.069,
+    'C3H8': 44.096,
+    'nC4H10': 58.122,
+    'CO2': 44.0095,
+    'N2': 28.0134,
+    'H2S': 34.081,
+    'H2': 2.01588,
+}
+
+# Plyasunov model (internal submodule)
+from pyrestoolbox.plyasunov import V_phi as _plyasunov_V_phi, gas_mw as _plyasunov_gas_mw
+
+# VLE engine (local copy in brine package)
+from pyrestoolbox.brine._lib_vle_engine import calc_gas_brine_equilibrium as _calc_gas_brine_equilibrium
+
+
 class SoreideWhitson:
-    """ Soreide-Whitson (1992) model for gas solubility in water/brine.
+    """ Soreide-Whitson (1992) VLE model for multicomponent gas solubility in water/brine,
+        with Garcia/Plyasunov density corrections and calibrated viscosity corrections.
 
-        Planned support for multicomponent gas mixtures containing:
-        C1, C2, C3, nC4, CO2, H2S, N2, H2
+        Uses the S&W VLE engine for gas-brine equilibrium calculations, supporting
+        multicomponent gas mixtures containing: C1, C2, C3, nC4, CO2, H2S, N2, H2.
 
-        Will calculate:
+        Calculates:
         - Mole fraction of dissolved gas components in aqueous phase
         - Mole fraction of vaporised water in gas phase
-        - Water content of gas (stb/mmscf)
-        - Gas solubility in water (scf/stb)
+        - Water content of gas (stb/mmscf, lb/mmscf)
+        - Gas solubility in water (sm3/sm3 or scf/stb) — total and per-gas
+        - Gas-saturated brine density via Garcia (2001) Eq. 18 with Plyasunov V_phi
+        - Gas-saturated brine viscosity with per-gas corrections (Islam-Carlson, Ostermann, Murphy-Gaines)
+        - Brine FVF, compressibility, viscosibility
 
         Supports fresh and saline water (NaCl equivalent).
 
-        Reference:
+        Inputs:
+            pres: Pressure (Bar / psia)
+            temp: Temperature (deg C / deg F)
+            ppm: NaCl equivalent weight concentration in ppm (default 0)
+            y_CO2: Mole fraction CO2 in dry gas (default 0)
+            y_H2S: Mole fraction H2S in dry gas (default 0)
+            y_N2: Mole fraction N2 in dry gas (default 0)
+            y_H2: Mole fraction H2 in dry gas (default 0)
+            sg: Gas specific gravity — used to estimate HC split among C1-C4 (default 0.65)
+            metric: Boolean for units (True=metric, False=oilfield). Default True.
+            cw_sat: If True, also calculate saturated compressibility (default False)
+
+        Returns object with following calculated properties:
+            .x          : Dict of dissolved gas mole fractions, e.g. {'CO2': 0.024, 'CH4': 0.0015}
+            .x_total    : Total dissolved gas mole fraction (sum of all x_i)
+            .y          : Dict of gas phase compositions (dry basis, normalized)
+            .y_H2O      : Water mole fraction in gas phase
+            .water_content : Dict with 'y_H2O', 'stb_mmscf', 'lb_mmscf'
+            .bDen       : Brine density (g/cm3) [gas-saturated, gas-free brine, freshwater]
+            .bVis       : Brine viscosity (cP) [gas-saturated, gas-free brine, freshwater]
+            .bVisblty   : Viscosibility (1/Bar or 1/psi)
+            .bw         : Brine FVF (rm3/sm3 or rb/stb) [gas-saturated, gas-free, freshwater]
+            .Rs         : Dict of per-gas solution ratios, e.g. {'CO2': sm3/sm3, 'CH4': sm3/sm3}
+            .Rs_total   : Total Rs (sum of all per-gas Rs)
+            .Cf_usat    : Undersaturated compressibility (1/Bar or 1/psi)
+            .Cf_sat     : Saturated compressibility (1/Bar or 1/psi) — only if cw_sat=True
+            .MwBrine    : MW of gas-free brine (g/mol)
+            .gas_comp   : Normalized gas composition used (including estimated HC split)
+
+        Usage examples:
+            # Pure CO2 case, oilfield units
+            mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=1.0, metric=False)
+            mix.Rs  # Returns per-gas Rs dict, e.g. {'CO2': 15.2}
+
+            # Mixed gas, metric units
+            mix = brine.SoreideWhitson(pres=200, temp=80, ppm=10000, y_CO2=0.1, y_H2S=0.05, sg=0.7)
+            mix.bDen  # Returns [gas-saturated, gas-free, freshwater] densities
+
+        References:
             Soreide, I. and Whitson, C.H., "Peng-Robinson Predictions for Hydrocarbons,
             CO2, N2, and H2S with Pure Water and NaCl Brine", Fluid Phase Equilibria,
             77, 217-240, 1992.
+
+            Garcia, J.E., "Density of Aqueous Solutions of CO2", LBNL Report 49023, 2001.
+
+            Plyasunov, A.V., Fluid Phase Equilibria (2019, 2020, 2021) — V_phi for
+            H2, N2, CH4, CO2, C2H6, C3H8, H2S.
+
+            Islam, A.W. and Carlson, E.S. (2012), Energy & Fuels 26(8), 5330-5336.
+
+            Ostermann, R.D. et al. (1985), SPE 14211.
+
+            Murphy, W.R. and Gaines, T.M. (1974), J. Chem. Eng. Data 19(4), 359-362.
     """
 
-    def __init__(self, **kwargs):
-        raise NotImplementedError(
-            "SoreideWhitson model is not yet implemented. "
-            "Planned support includes multicomponent gas (C1, C2, C3, nC4, CO2, H2S, N2, H2) "
-            "solubility in fresh/saline water using the Soreide-Whitson (1992) PR-EOS approach."
+    def __init__(self, pres, temp, ppm=0, y_CO2=0, y_H2S=0, y_N2=0, y_H2=0,
+                 sg=0.65, metric=True, cw_sat=False):
+        self.metric = metric
+        self.ppm = ppm
+
+        # Convert to working units (bar, degC)
+        if metric:
+            self.pBar = pres
+            self.degC = temp
+        else:
+            self.pBar = pres / BAR2PSI
+            self.degC = (temp - 32) / 1.8
+
+        self.degF = self.degC * 1.8 + 32
+        self.tKel = self.degC + CEL2KEL
+        self.psia = self.pBar * BAR2PSI
+        self.Mpa = self.pBar * 0.1
+        self.wt_pct = ppm / 10000  # wt% (0-100)
+        self.wt_frac = ppm / 1e6   # weight fraction
+
+        # Compute MW of gas-free brine
+        xNaCl = (ppm / MWSAL) / ((ppm / MWSAL) + (1e6 - ppm) / MWWAT)
+        self.MwBrine = xNaCl * MWSAL + (1 - xNaCl) * MWWAT
+
+        # Estimate HC split from SG and build full gas composition
+        self.gas_comp = self._estimate_gas_comp(y_CO2, y_H2S, y_N2, y_H2, sg)
+
+        # Lazy-import VLE engine and Plyasunov model
+        self._import_dependencies()
+
+        # Calculate saturated compressibility if requested
+        if cw_sat:
+            dP_bar = 0.5
+            self._calc_properties(self.pBar + dP_bar)
+            bw1 = self.bw[0]
+            Rs1_total = self.Rs_total
+            bDen1 = self.bDen[0]
+
+        # Main calculation at specified pressure
+        self._calc_properties(self.pBar)
+
+        if cw_sat:
+            bw2 = self.bw[0]
+            Rs2_total = self.Rs_total
+            # Compute gas Bg at reservoir conditions using gas module Z-factor
+            gas_sg = sum(
+                self.gas_comp.get(g, 0) * _SW_GAS_MW.get(g, 28.97)
+                for g in self.gas_comp
+            ) / MW_AIR
+            zee = gas.gas_z(p=self.psia, sg=gas_sg, degf=self.degF, zmethod='BNS',
+                            co2=self.gas_comp.get('CO2', 0),
+                            h2s=self.gas_comp.get('H2S', 0),
+                            n2=self.gas_comp.get('N2', 0),
+                            h2=self.gas_comp.get('H2', 0))
+            Bg = PSTND * zee * self.tKel / (TSTND * self.pBar)  # rm3/sm3
+            dBwdP = (bw1 - bw2) / dP_bar
+            dRsdP = (Rs1_total - Rs2_total) / dP_bar  # sm3/sm3/bar (internal units)
+            self.Cf_sat = (1 / bw2) * (-dBwdP + dRsdP * Bg)
+            if not self.metric:
+                self.Cf_sat /= BAR2PSI
+        else:
+            self.Cf_sat = None
+
+        # Unit conversions for oilfield output
+        if not self.metric:
+            self.bVisblty = self.bVisblty / BAR2PSI
+            self.Rs = {k: v * BBL2CUFT for k, v in self.Rs.items()}  # sm3/sm3 -> scf/stb
+            self.Rs_total = self.Rs_total * BBL2CUFT
+            self.Cf_usat = self.Cf_usat / BAR2PSI
+
+    def _import_dependencies(self):
+        """No-op. VLE engine now imported at module level."""
+        pass
+
+    @staticmethod
+    def _estimate_hc_split(target_mw):
+        """Split HC fraction among C1-C4 using constrained exponential decay.
+
+        Uses squared-exponential decay (r²) with bisection to match target MW.
+        If unconstrained solution gives C1 < 50%, constrains C1 = 50% and
+        distributes remainder among C2-C4 with the same decay pattern.
+
+        Ported from ResToolbox3 _estimateHcSplit().
+
+        Args:
+            target_mw: Target molecular weight of HC fraction.
+
+        Returns:
+            dict with keys 'CH4', 'C2H6', 'C3H8', 'nC4H10' (mole fractions summing to 1).
+        """
+        MIN_C1_FRAC = 0.50
+
+        # Clamp to valid range
+        mw = max(_MW_C1, min(_MW_NC4, target_mw))
+
+        # Pure methane shortcut
+        if mw <= _MW_C1 + 0.1:
+            return {'CH4': 1.0, 'C2H6': 0.0, 'C3H8': 0.0, 'nC4H10': 0.0}
+
+        def mw_unconstrained(r):
+            r2 = r * r
+            r4 = r2 * r2
+            r6 = r4 * r2
+            s = 1.0 + r2 + r4 + r6
+            k = 1.0 / s
+            return k * (_MW_C1 + r2 * _MW_C2 + r4 * _MW_C3 + r6 * _MW_NC4)
+
+        def mw_constrained(r):
+            r2 = r * r
+            r4 = r2 * r2
+            heavy_sum = 1.0 + r2 + r4
+            heavy_mw = (_MW_C2 + r2 * _MW_C3 + r4 * _MW_NC4) / heavy_sum
+            return MIN_C1_FRAC * _MW_C1 + (1.0 - MIN_C1_FRAC) * heavy_mw
+
+        # Try unconstrained solution first — bisect on r in [0, 1]
+        r_lo, r_hi = 0.0, 1.0
+        for _ in range(50):
+            r = (r_lo + r_hi) / 2.0
+            mw_calc = mw_unconstrained(r)
+            if abs(mw_calc - mw) < 0.001:
+                break
+            if mw_calc < mw:
+                r_lo = r
+            else:
+                r_hi = r
+
+        # Check if C1 fraction is acceptable
+        r2 = r * r
+        r4 = r2 * r2
+        r6 = r4 * r2
+        s = 1.0 + r2 + r4 + r6
+        c1_frac = 1.0 / s
+
+        if c1_frac >= MIN_C1_FRAC:
+            k = 1.0 / s
+            return {
+                'CH4': k,
+                'C2H6': k * r2,
+                'C3H8': k * r4,
+                'nC4H10': k * r6,
+            }
+
+        # Constrained: fix C1 = MIN_C1_FRAC, distribute C2-C4
+        max_mw_constr = MIN_C1_FRAC * _MW_C1 + (1.0 - MIN_C1_FRAC) * _MW_NC4
+        mw_target = max(_MW_C1, min(max_mw_constr, mw))
+
+        r_lo, r_hi = 0.0, 10.0
+        for _ in range(50):
+            r = (r_lo + r_hi) / 2.0
+            mw_calc = mw_constrained(r)
+            if abs(mw_calc - mw_target) < 0.001:
+                break
+            if mw_calc < mw_target:
+                r_lo = r
+            else:
+                r_hi = r
+
+        r2 = r * r
+        r4 = r2 * r2
+        heavy_sum = 1.0 + r2 + r4
+        heavy_frac = 1.0 - MIN_C1_FRAC
+
+        return {
+            'CH4': MIN_C1_FRAC,
+            'C2H6': heavy_frac / heavy_sum,
+            'C3H8': heavy_frac * r2 / heavy_sum,
+            'nC4H10': heavy_frac * r4 / heavy_sum,
+        }
+
+    @staticmethod
+    def _estimate_gas_comp(y_CO2, y_H2S, y_N2, y_H2, sg):
+        """Estimate full gas composition including HC split from SG.
+
+        The hydrocarbon portion (1 - sum of non-HC) is split among C1-C4
+        using constrained exponential decay with r² parameter, matching
+        the target HC molecular weight implied by the overall gas SG.
+
+        Returns dict with VLE engine keys (e.g. 'CH4', 'C2H6', 'nC4H10').
+        """
+        y_hc = 1.0 - y_CO2 - y_H2S - y_N2 - y_H2
+        if y_hc < 0:
+            raise ValueError(
+                f"Non-HC gas fractions sum to {1 - y_hc:.4f}, exceeding 1.0"
+            )
+
+        comp = {}
+        if y_CO2 > 0:
+            comp['CO2'] = y_CO2
+        if y_H2S > 0:
+            comp['H2S'] = y_H2S
+        if y_N2 > 0:
+            comp['N2'] = y_N2
+        if y_H2 > 0:
+            comp['H2'] = y_H2
+
+        if y_hc > 1e-10:
+            # Compute apparent HC molecular weight from SG
+            mw_gas = sg * MW_AIR
+            mw_hc_num = mw_gas - y_CO2 * MW_CO2 - y_H2S * MW_H2S - y_N2 * MW_N2 - y_H2 * MW_H2
+            mw_hc = mw_hc_num / y_hc
+
+            # Exponential decay split
+            hc_split = SoreideWhitson._estimate_hc_split(mw_hc)
+            for gas, frac in hc_split.items():
+                if frac > 0:
+                    comp[gas] = y_hc * frac
+
+        # Normalize
+        total = sum(comp.values())
+        if total > 0:
+            comp = {k: v / total for k, v in comp.items()}
+
+        return comp
+
+    def _calc_properties(self, pBar):
+        """Calculate all brine properties at given pressure (bar)."""
+        psia = pBar * BAR2PSI
+        degf = self.degF
+        Mpa = pBar * 0.1
+        tKel = self.tKel
+        wt = self.wt_pct  # wt% (0-100)
+        salinity_wt_pct = self.ppm / 10000  # Same as wt
+
+        # ================================================================
+        # Step 1: VLE — Gas-brine equilibrium
+        # ================================================================
+        x_gas, water_content = _calc_gas_brine_equilibrium(
+            salinity_wt_pct=salinity_wt_pct,
+            temperature_F=degf,
+            pressure_psia=psia,
+            y_CH4=self.gas_comp.get('CH4', 0),
+            y_C2H6=self.gas_comp.get('C2H6', 0),
+            y_C3H8=self.gas_comp.get('C3H8', 0),
+            y_nC4H10=self.gas_comp.get('nC4H10', 0),
+            y_CO2=self.gas_comp.get('CO2', 0),
+            y_N2=self.gas_comp.get('N2', 0),
+            y_H2S=self.gas_comp.get('H2S', 0),
+            y_H2=self.gas_comp.get('H2', 0),
+            method='flash',
+            salinity_method='gamma_phi',
+            framework='proposed',
         )
+
+        self.x = x_gas
+        self.x_total = sum(x_gas.values())
+        self.y = dict(self.gas_comp)  # Normalized dry gas composition
+        self.y_H2O = water_content['y_H2O']
+        self.water_content = water_content
+
+        # ================================================================
+        # Step 2: Base brine properties (gas-free)
+        #   Freshwater density: IAPWS-IF97 (international reference standard)
+        #   Salt correction: Spivey/McCain ratio (Eq 4.6-4.12 vs Eq 4.1-4.5)
+        #   Viscosity: Mao-Duan (2009) via brine_props
+        # ================================================================
+        # brine_props still needed for viscosity, compressibility, Bw, Rsw
+        bw_base, den_base_sg, vis_base_cP, cw_base, rsw_base = brine_props(
+            p=psia, degf=degf, wt=wt, ch4_sat=0
+        )
+        bw_fw, den_fw_sg, vis_fw_cP, cw_fw, rsw_fw = brine_props(
+            p=psia, degf=degf, wt=0, ch4_sat=0
+        )
+
+        # IAPWS-IF97 freshwater density (kg/m3 -> g/cm3)
+        rho_fw_gcc = _rho_if97(tKel, Mpa) / 1000.0
+        # Salt correction ratio from Spivey (brine/freshwater)
+        salt_ratio = den_base_sg / den_fw_sg if wt > 0 else 1.0
+        rho_brine_gcc = rho_fw_gcc * salt_ratio
+
+        # Standard conditions
+        p_sc_psia = PSTND * BAR2PSI  # ~14.696 psia
+        degf_sc = (TSTND - CEL2KEL) * 1.8 + 32  # ~60 degF
+        Mpa_sc = PSTND * 0.1  # ~0.101325 MPa
+        tKel_sc = TSTND  # ~288.706 K
+
+        bw_sc, den_sc_sg, _, _, _ = brine_props(
+            p=p_sc_psia, degf=degf_sc, wt=wt, ch4_sat=0
+        )
+        _, den_fw_sc_sg, _, _, _ = brine_props(
+            p=p_sc_psia, degf=degf_sc, wt=0, ch4_sat=0
+        )
+
+        rho_sc_fw_gcc = _rho_if97(tKel_sc, Mpa_sc) / 1000.0
+        salt_ratio_sc = den_sc_sg / den_fw_sc_sg if wt > 0 else 1.0
+        rho_sc_brine_gcc = rho_sc_fw_gcc * salt_ratio_sc
+
+        # ================================================================
+        # Step 3: Density correction via Garcia Eq. 18 + Plyasunov V_phi
+        # ================================================================
+        if self.x_total > 0:
+            # Compute mole-fraction-weighted effective V_phi and MW
+            vphi_eff = 0.0
+            mw_eff = 0.0
+            for gas_vle, x_i in x_gas.items():
+                if x_i <= 0:
+                    continue
+                yi = x_i / self.x_total  # Fraction among dissolved gases
+                gas_ply = _VLE_TO_PLYASUNOV.get(gas_vle, gas_vle.upper())
+                vphi_eff += yi * _plyasunov_V_phi(gas_ply, tKel, Mpa)
+                mw_eff += yi * _plyasunov_gas_mw(gas_ply)
+
+            # Garcia Eq. 18 in g/cm3:
+            # rho = (1 + x2*M2/(M1*x1)) / (x2*V_phi/(M1*x1) + 1/rho1)
+            x1 = 1.0 - self.x_total
+            M1 = MWWAT
+            numerator = 1.0 + self.x_total * mw_eff / (M1 * x1)
+            denominator = self.x_total * vphi_eff / (M1 * x1) + 1.0 / rho_brine_gcc
+            rho_gas_brine_gcc = numerator / denominator
+        else:
+            rho_gas_brine_gcc = rho_brine_gcc
+
+        self.bDen = [rho_gas_brine_gcc, rho_brine_gcc, rho_fw_gcc]
+
+        # ================================================================
+        # Step 4: Viscosity correction
+        # ================================================================
+        vis_factor = 1.0
+        for gas_vle, x_i in x_gas.items():
+            if x_i <= 0:
+                continue
+            gas_upper = gas_vle.upper()
+            if gas_upper == 'CO2':
+                vis_factor *= (1.0 + _IC_A_CO2 * x_i ** _IC_B)
+            elif gas_upper == 'H2S':
+                vis_factor *= (1.0 + _IC_A_H2S * x_i ** _IC_B)
+            elif gas_upper == 'CH4':
+                ratio = _OST_C0 + _OST_C1 * degf + _OST_C2 * degf ** 2
+                vis_factor *= max(ratio, 1.0)
+            # C2H6, N2, H2, C3H8, nC4H10: no correction (factor *= 1.0)
+
+        vis_gas_brine = vis_base_cP * vis_factor
+        self.bVis = [vis_gas_brine, vis_base_cP, vis_fw_cP]
+
+        # ================================================================
+        # Step 5: Viscosibility (numerical derivative at P+1 bar)
+        # ================================================================
+        bw_p1, den_p1_sg, vis_p1_cP, _, _ = brine_props(
+            p=(pBar + 1) * BAR2PSI, degf=degf, wt=wt, ch4_sat=0
+        )
+        vis_p1_corrected = vis_p1_cP * vis_factor  # Same x_gas (undersaturated)
+        dvdp = vis_p1_corrected - vis_gas_brine  # cP/bar
+        self.bVisblty = dvdp * 2 / (vis_gas_brine + vis_p1_corrected)  # 1/bar
+
+        # ================================================================
+        # Step 6: Bw and Rs
+        # ================================================================
+        # Mass of 1 sm3 of gas-free brine at standard conditions
+        brine_mass = rho_sc_brine_gcc * DENW  # kg/sm3
+        brine_moles = brine_mass / self.MwBrine  # kg-mol/sm3
+
+        # Per-gas Rs
+        self.Rs = {}
+        total_gas_mass = 0.0
+        for gas_vle, x_i in x_gas.items():
+            if x_i <= 0:
+                continue
+            gas_moles = brine_moles * x_i / (1.0 - self.x_total)  # kg-mol gas / sm3 brine
+            gas_mw_val = _SW_GAS_MW.get(gas_vle, _plyasunov_gas_mw(
+                _VLE_TO_PLYASUNOV.get(gas_vle, gas_vle.upper())
+            ))
+            total_gas_mass += gas_moles * gas_mw_val
+            # Rs = moles * molar volume at SC (sm3 gas / sm3 brine)
+            self.Rs[gas_vle] = KGMOL2SM3 * gas_moles
+
+        self.Rs_total = sum(self.Rs.values())
+
+        # Bw = total mass / (corrected density * DENW)
+        tot_mass = total_gas_mass + brine_mass
+        self.bw = [
+            tot_mass / (rho_gas_brine_gcc * DENW),   # Gas-saturated
+            brine_mass / (rho_brine_gcc * DENW),       # Gas-free brine
+            rho_sc_fw_gcc / rho_fw_gcc,                   # Freshwater Bw (sc/res density ratio)
+        ]
+
+        # ================================================================
+        # Step 7: Undersaturated compressibility
+        # ================================================================
+        # Recalculate density at P+1 bar with same x_gas (undersaturated)
+        Mpa_p1 = (pBar + 1) * 0.1
+        # IAPWS freshwater density at P+1
+        rho_fw_p1_gcc = _rho_if97(tKel, Mpa_p1) / 1000.0
+        # Spivey salt ratio at P+1
+        _, den_p1_brine_sg, _, _, _ = brine_props(
+            p=(pBar + 1) * BAR2PSI, degf=degf, wt=wt, ch4_sat=0
+        )
+        _, den_p1_fw_sg, _, _, _ = brine_props(
+            p=(pBar + 1) * BAR2PSI, degf=degf, wt=0, ch4_sat=0
+        )
+        salt_ratio_p1 = den_p1_brine_sg / den_p1_fw_sg if wt > 0 else 1.0
+        rho_brine_p1_gcc = rho_fw_p1_gcc * salt_ratio_p1
+
+        if self.x_total > 0:
+            # Recompute Garcia density at P+1 with same dissolved gas composition
+            vphi_eff_p1 = 0.0
+            for gas_vle, x_i in x_gas.items():
+                if x_i <= 0:
+                    continue
+                yi = x_i / self.x_total
+                gas_ply = _VLE_TO_PLYASUNOV.get(gas_vle, gas_vle.upper())
+                vphi_eff_p1 += yi * _plyasunov_V_phi(gas_ply, tKel, Mpa_p1)
+
+            numerator_p1 = 1.0 + self.x_total * mw_eff / (MWWAT * x1)
+            denom_p1 = self.x_total * vphi_eff_p1 / (MWWAT * x1) + 1.0 / rho_brine_p1_gcc
+            rho_p1_gcc = numerator_p1 / denom_p1
+        else:
+            rho_p1_gcc = rho_brine_p1_gcc
+
+        self.Cf_usat = 1.0 - rho_gas_brine_gcc / rho_p1_gcc  # 1/bar
