@@ -1692,7 +1692,7 @@ _OIL_METHOD_DIC = {
 #  Public API: fbhp
 # ============================================================================
 
-def fbhp(thp, completion, vlpmethod='HB', well_type='gas',
+def fbhp(thp, completion, vlpmethod='WG', well_type='gas',
          gas_pvt=None, oil_pvt=None,
          qg_mmscfd=0, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0,
          qt_stbpd=0, gor=0, wc=0,
@@ -1780,7 +1780,7 @@ def fbhp(thp, completion, vlpmethod='HB', well_type='gas',
 #  Public API: outflow_curve
 # ============================================================================
 
-def outflow_curve(thp, completion, vlpmethod='HB', well_type='gas',
+def outflow_curve(thp, completion, vlpmethod='WG', well_type='gas',
                   gas_pvt=None, oil_pvt=None,
                   rates=None, n_rates=20, max_rate=None,
                   cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0,
@@ -1924,7 +1924,7 @@ def ipr_curve(reservoir, well_type='gas', gas_pvt=None, oil_pvt=None,
 # ============================================================================
 
 def operating_point(thp, completion, reservoir,
-                    vlpmethod='HB', well_type='gas',
+                    vlpmethod='WG', well_type='gas',
                     gas_pvt=None, oil_pvt=None,
                     cgr=0, qw_bwpd=0, oil_vis=1.0, api=45,
                     gor=0, wc=0,
