@@ -27,7 +27,7 @@ from typing import Tuple
 
 import pandas as pd
 from pyrestoolbox.classes import z_method, c_method, pb_method, rs_method, bo_method, uo_method, deno_method, co_method, kr_family, kr_table, class_dic
-from pyrestoolbox.shared_fns import convert_to_numpy, process_output, check_2_inputs, bisect_solve
+from pyrestoolbox.shared_fns import convert_to_numpy, process_output, check_2_inputs, bisect_solve, validate_pe_inputs
 from pyrestoolbox.validate import validate_methods
 from pyrestoolbox.constants import R, psc, tsc, degF2R, tscr, scf_per_mol, CUFTperBBL, WDEN, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2
 
@@ -84,17 +84,23 @@ def gas_rate_radial(
         tc: Critical gas temperature (deg R). Uses cmethod correlation if not specified
         pc: Critical gas pressure (psia). Uses cmethod correlation if not specified
     """
+    validate_pe_inputs(degf=degf, sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2)
+    if r_w <= 0:
+        raise ValueError("Wellbore radius r_w must be positive")
+    if r_ext <= r_w:
+        raise ValueError("External radius r_ext must be greater than wellbore radius r_w")
+
     k, h, pr, pwf = (
         np.asarray(k),
         np.asarray(h),
         np.asarray(pr),
         np.asarray(pwf),
     )
-    
+
     if h2 > 0:
         cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BNS'  
-    
+        zmethod = 'BNS'
+
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
     tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc)
@@ -212,6 +218,10 @@ def gas_rate_linear(
         tc: Critical gas temperature (deg R). Uses cmethod correlation if not specified
         pc: Critical gas pressure (psia). Uses cmethod correlation if not specified
     """
+    validate_pe_inputs(degf=degf, sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2)
+    if length <= 0:
+        raise ValueError("Flow length must be positive")
+
     k, area, pr, pwf = (
         np.asarray(k),
         np.asarray(area),
@@ -220,7 +230,7 @@ def gas_rate_linear(
     )
     if h2 > 0:
         cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BNS'  
+        zmethod = 'BNS'
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
     tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc)
@@ -381,9 +391,10 @@ def gas_tc_pc(
         ppc = (k * k / j) / j
 
     elif (cmethod.name == "SUT"):  # Sutton equations with Wichert & Aziz corrections
-        sg_hc = (sg - (n2 * 28.01 + co2 * 44.01 + h2s * 34.1) / MW_AIR) / (
-            1 - n2 - co2 - h2s
-        )  # Eq 3.53
+        hc_frac = 1 - n2 - co2 - h2s
+        if hc_frac <= 0:
+            raise ValueError("SUT method requires hydrocarbon fraction > 0 (n2 + co2 + h2s must be < 1.0)")
+        sg_hc = (sg - (n2 * 28.01 + co2 * 44.01 + h2s * 34.1) / MW_AIR) / hc_frac  # Eq 3.53
         ppc_hc = 756.8 - 131.0 * sg_hc - 3.6 * sg_hc ** 2  # Eq 3.47b
         tpc_hc = 169.2 + 349.5 * sg_hc - 74.0 * sg_hc ** 2  # Eq 3.47a
 
@@ -501,7 +512,7 @@ def _cardano_cubic(c2, c1, c0, flag=0):
 
     if root_diagnostic < 0:
         m = 2 * np.sqrt(-p / 3)
-        qpm = 3 * q / p / m
+        qpm = np.clip(3 * q / p / m, -1.0, 1.0)
         theta1 = np.arccos(qpm) / 3
         roots = np.array([m * np.cos(theta1),
                           m * np.cos(theta1 + 4 * np.pi / 3),
@@ -595,6 +606,8 @@ def gas_z(
         tc: Critical gas temperature (deg R). Uses cmethod correlation if not specified
         pc: Critical gas pressure (psia). Uses cmethod correlation if not specified
     """
+    validate_pe_inputs(p=p, degf=degf, sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2)
+
     tolerance = 1e-6
     p, is_list = convert_to_numpy(p)
 
@@ -689,11 +702,14 @@ def gas_z(
         for pr in pprs:
             yi = a*pr / z_wyw(pr, 1/tr) # First guess
             niter, y = 0, 0.01
-            while (abs(y-yi)/y) > 0.0005 and niter < 100: 
+            while (abs(y-yi)/max(abs(y), 1e-10)) > 0.0005 and niter < 100:
                 # Newton Raphson
                 y = yi - (f(yi, a, b, c, D, pr) / df(yi, a, b, c, D))
+                y = max(y, 1e-10)  # Prevent negative y (NaN from fractional exponent)
                 niter += 1
                 yi = y
+            if abs(y) < 1e-30:
+                raise RuntimeError("Hall-Yarborough Z-factor: y converged to zero")
             zout.append(a * pr / y)
      
         return process_output(zout, is_list)
@@ -1184,6 +1200,10 @@ def gas_grad2sg(
           rtol: Relative solution tolerance. Will iterate until abs[(grad - calculation)/grad] < rtol
     """
 
+    validate_pe_inputs(p=p, degf=degf, co2=co2, h2s=h2s, n2=n2, h2=h2)
+    if grad <= 0:
+        raise ValueError("Gas gradient must be positive")
+
     degR = degf + degF2R
 
     def grad_err(args, sg):
@@ -1368,6 +1388,7 @@ def gas_water_content(p: float, degf: float, salinity: float = 0) -> float:
         p: Water pressure (psia)
         salinity: Water salinity (wt% NaCl). Defaults to 0 (freshwater)
     """
+    validate_pe_inputs(p=p, degf=degf)
     t = degf
     content = (
         (

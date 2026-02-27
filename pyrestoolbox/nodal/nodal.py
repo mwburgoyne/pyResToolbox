@@ -74,6 +74,14 @@ class WellSegment:
         roughness: Pipe roughness (inches). Defaults to 0.0006
     """
     def __init__(self, md, id, deviation=0, roughness=0.0006):
+        if md <= 0:
+            raise ValueError(f"Measured depth md must be positive, got {md}")
+        if id <= 0:
+            raise ValueError(f"Internal diameter id must be positive, got {id}")
+        if roughness < 0:
+            raise ValueError(f"Roughness must be non-negative, got {roughness}")
+        if not (0 <= deviation <= 90):
+            raise ValueError(f"Deviation must be between 0 and 90 degrees, got {deviation}")
         self.md = md
         self.id = id
         self.deviation = deviation
@@ -195,6 +203,18 @@ class Reservoir:
         D: Non-Darcy coefficient (day/mscf for gas, 0 for oil). Defaults to 0
     """
     def __init__(self, pr, degf, k, h, re, rw, S=0, D=0):
+        if pr <= 0:
+            raise ValueError(f"Reservoir pressure pr must be positive, got {pr}")
+        if degf <= -459.67:
+            raise ValueError(f"Temperature must be above absolute zero, got {degf}")
+        if k <= 0:
+            raise ValueError(f"Permeability k must be positive, got {k}")
+        if h <= 0:
+            raise ValueError(f"Net pay thickness h must be positive, got {h}")
+        if rw <= 0:
+            raise ValueError(f"Wellbore radius rw must be positive, got {rw}")
+        if re <= rw:
+            raise ValueError(f"Drainage radius re ({re}) must be greater than wellbore radius rw ({rw})")
         self.pr = pr
         self.degf = degf
         self.k = k
@@ -906,7 +926,7 @@ def _wg_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
         for _it in range(2):
             p_avg = (p_psia + p_est) / 2.0
             if p_avg < 14.7:
-                continue
+                p_avg = 14.7
 
             cgr_loc, qo_loc, ql_loc, lsg_loc = _condensate_dropout(
                 cgr, qg_mmscfd, p_avg, pr, osg, qw_bwpd, wsg)
@@ -1142,7 +1162,7 @@ def _gray_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
         for _it in range(2):
             p_avg = (p_psia + p_est) / 2.0
             if p_avg < 14.7:
-                continue
+                p_avg = 14.7
 
             cgr_loc, qo_loc, ql_loc, lsg_loc = _condensate_dropout(
                 cgr, qg_mmscfd, p_avg, pr, osg, qw_bwpd, wsg)
@@ -1434,7 +1454,7 @@ def _bb_core_gas(thp, api, gsg, tid, rough, length, tht, bht,
         for _it in range(2):
             p_avg = (p_psia + p_est) / 2.0
             if p_avg < 14.7:
-                continue
+                p_avg = 14.7
 
             cgr_loc, qo_loc, ql_loc, lsg_loc = _condensate_dropout(
                 cgr, qg_mmscfd, p_avg, pr, osg, qw_bwpd, wsg)
@@ -1749,6 +1769,9 @@ def fbhp(thp, completion, vlpmethod='HB', well_type='gas',
         p_current = _run_section(p_current, seg.id, seg.roughness, seg.md,
                                  tht_seg, bht_seg, seg.theta)
         md_traversed += seg.md
+
+    if not math.isfinite(p_current):
+        raise RuntimeError(f"VLP calculation produced non-finite BHP: {p_current}")
 
     return p_current
 

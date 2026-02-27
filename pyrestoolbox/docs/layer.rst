@@ -37,7 +37,7 @@ Returns the Beta value consistent with the Lorenz coefficient given, and impleme
      - float
      - Lorenz coefficient (0 < lorenz < 1)
    * - lrnz_method
-     - float
+     - str
      - Implementation method. Can be either 'EXP' or 'LANG'. Default is 'EXP'
 
 Examples:
@@ -71,7 +71,7 @@ Returns the Lorenz coefficient consistent with the Beta value given, and impleme
      - float
      - Beta value (B > 0)
    * - lrnz_method
-     - float
+     - str
      - Implementation method. Can be either 'EXP' or 'LANG'. Default is 'EXP'
 
 Examples:
@@ -107,7 +107,7 @@ Returns the Lorenz coefficient consistent with observed best flow fraction from 
      - float
      - The cumulative porosity thickness fraction of the best contributing flow unit ( phih_frac < kh_frac )
    * - lrnz_method
-     - float
+     - str
      - Implementation method. Can be either 'EXP' or 'LANG'. Default is 'EXP'
 
 Examples:
@@ -145,7 +145,7 @@ If B is left default, then it will be calculated. If B is explictly specified > 
      - float
      - The cumulative porosity thickness fraction of the best contributing flow unit ( 0 < phih_frac < 1 )
    * - lrnz_method
-     - float
+     - str
      - Implementation method. Can be either 'EXP' or 'LANG'. Default is 'EXP'
    * - B
      - float
@@ -161,7 +161,7 @@ Examples:
     
    
        
-pyrestoolbox.lorenz_2_layers
+pyrestoolbox.layer.lorenz_2_layers
 ======================
 
 .. code-block:: python
@@ -192,7 +192,7 @@ If B is left default, then it will be calculated. If B is explictly specified > 
      - bool
      - Boolean flag to determine whether to return the permeability array in decreasing order (False), or random order (True). Default False
    * - lrnz_method
-     - float
+     - str
      - Implementation method. Can be either 'EXP' or 'LANG'. Default is 'EXP'
    * - B
      - float

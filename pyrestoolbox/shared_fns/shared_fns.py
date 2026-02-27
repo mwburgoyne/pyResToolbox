@@ -27,8 +27,12 @@ import numpy.typing as npt
 from typing import Union, List, Tuple
 
 def bisect_solve(args, f, xmin, xmax, rtol):
+    if xmin > xmax:
+        xmin, xmax = xmax, xmin
     err_hi = f(args, xmax)
     err_lo = f(args, xmin)
+    if err_hi * err_lo > 0:
+        raise ValueError(f"bisect_solve: root is not bracketed between xmin={xmin} and xmax={xmax} (f(xmin)={err_lo}, f(xmax)={err_hi})")
     iternum = 0
     err_mid = 1e6
     while abs(err_mid) > rtol:
@@ -150,6 +154,33 @@ def halley_solve_cubic(c2, c1, c0, flag=1, max_iter=50, tol=1e-12):
     elif flag == -1:
         return float(np.min(roots))
     return roots
+
+
+def validate_pe_inputs(p=None, degf=None, sg=None, co2=None, h2s=None, n2=None, h2=None):
+    """Validate common petroleum engineering inputs.
+    Checks physical constraints: positive pressure, temperature above absolute zero,
+    positive specific gravity, non-negative mole fractions summing to <= 1.0.
+    Raises ValueError with descriptive message on failure.
+    """
+    if p is not None:
+        p_arr = np.atleast_1d(p)
+        if np.any(p_arr <= 0):
+            raise ValueError(f"Pressure must be positive, got min value: {np.min(p_arr)}")
+    if degf is not None:
+        degf_arr = np.atleast_1d(degf)
+        if np.any(degf_arr <= -459.67):
+            raise ValueError(f"Temperature must be above absolute zero (-459.67 degF), got: {np.min(degf_arr)}")
+    if sg is not None and sg <= 0:
+        raise ValueError(f"Specific gravity must be positive, got: {sg}")
+    fracs = {'co2': co2, 'h2s': h2s, 'n2': n2, 'h2': h2}
+    frac_sum = 0
+    for name, val in fracs.items():
+        if val is not None:
+            if val < 0:
+                raise ValueError(f"Mole fraction {name} must be non-negative, got: {val}")
+            frac_sum += val
+    if frac_sum > 1.0:
+        raise ValueError(f"Sum of non-hydrocarbon mole fractions ({frac_sum}) exceeds 1.0")
 
 
 def check_2_inputs(x: Union[float, List[float]], y: Union[float, List[float]]) -> bool:

@@ -40,14 +40,19 @@ Calculating gas Z-Factor of pure methane using DAK and PMC for critical properti
 
     >>> from pyrestoolbox import gas
     >>> gas.gas_z(p=2350, sg=0.68, degf = 180, zmethod='DAK', cmethod='PMC')
-    0.8785390750839772
-    
+    0.8785399927100872
+
+.. note::
+
+   **BNS method strongly recommended for high-inert or hydrogen-bearing gases.**
+   When modelling gases with significant CO2 (>10%), H2S, N2, or any H2 content, the ``'BNS'`` Z-factor and critical property methods (tuned 5-component Peng-Robinson EOS) should be used. Standard correlations (DAK/HY/WYW with PMC/SUT) were developed for sweet natural gas and become unreliable at high impurity concentrations. The BNS method handles the full range from pure hydrocarbon to 100% inerts. When ``h2 > 0``, BNS is auto-selected. For pure or high-concentration CO2/H2S/N2 gases, explicitly set ``zmethod='BNS', cmethod='BNS'``.
+
 Calculating gas Z-Factor of pure CO2
 
 .. code-block:: python
 
     >>> gas.gas_z(p=2350, sg=0.68, degf = 180, co2 = 1.0, zmethod='BUR', cmethod='BUR')
-    0.5258204505475871
+    0.5258309021348752
     
 Calculating gas sg, and then gas Z-Factor of a mixture of 5% CO2, 10% H2S, 0% N2 and 20% H2 (remainder natural gas with MW = 19).
 
@@ -55,7 +60,7 @@ Calculating gas sg, and then gas Z-Factor of a mixture of 5% CO2, 10% H2S, 0% N2
 
     >>> gsg = gas.gas_sg(hc_mw = 19.0, co2 = 0.05, h2s = 0.10, n2 = 0, h2 = 0.20)
     >>> gas.gas_z(p=2350, sg=gsg, degf = 180, co2 = 0.05, h2s = 0.10, n2 = 0, h2 = 0.20, zmethod='BUR', cmethod='BUR')
-    0.9182754436816966
+    0.9048153036714465
 
 
 Function List
@@ -91,7 +96,9 @@ Function List
      - `pyrestoolbox.gas.gas_fws_sg`_
    * - Gas Flow Rate Radial
      - `pyrestoolbox.gas.gas_rate_radial`_  
-   * - Gas Flow Rate Linear 
+   * - Gas Mixture SG
+     - `pyrestoolbox.gas.gas_sg`_
+   * - Gas Flow Rate Linear
      - `pyrestoolbox.gas.gas_rate_linear`_
   
 
@@ -144,7 +151,7 @@ Examples:
     (363.9387708314338, 738.3190067714969)
     
     >>> gas.gas_tc_pc(sg=0.7, co2 = 0.15, tc=365, cmethod='SUT')
-    (365, 709.2389730048743)
+    (365, 709.2356299485114)
 
 pyrestoolbox.gas.gas_z
 ==================
@@ -203,13 +210,13 @@ Examples:
 .. code-block:: python
 
     >>> gas.gas_z(p=1000, sg=0.75, degf=160, n2 = 0.02, co2 = 0.17)
-    0.9140707840075585
-    
+    0.9138558878125714
+
     >>> gas.gas_z(p=1000, sg=0.75, degf=160, n2 = 0.02, co2 = 0.17, zmethod='HY')
-    0.9141985223206194
-    
+    0.9142136711443208
+
     >>> gas.gas_z(p=[1000, 2000], sg=0.75, degf=160, cmethod='SUT', n2 = 0.02, co2 = 0.17)
-    array([0.91920553, 0.87196032])
+    array([0.91900003, 0.87160514])
 
 pyrestoolbox.gas.gas_ug
 ===================
@@ -275,10 +282,10 @@ Examples:
 .. code-block:: python
 
     >>> gas.gas_ug(p=1000, sg=0.75, degf=180, zmethod ='HY', cmethod = 'SUT')
-    0.0141231843661131
-    
+    0.014118890100250796
+
     >>> gas.gas_ug(p=1000, sg=0.75, degf=180)
-    0.014114198868648963
+    0.014110092961853301
     
     
 pyrestoolbox.gas.gas_cg
@@ -335,10 +342,10 @@ Examples:
 .. code-block:: python
 
     >>> gas.gas_cg(p=2000, sg=0.68, degf=120, co2=0.05)
-    0.0005375634134905346
-    
+    0.0005374854430839333
+
     >>> gas.gas_cg(p=np.array([1000,2000]), sg=0.68, degf=120, co2=0.05)
-    array([0.0011039 , 0.00053756])
+    array([0.00110369, 0.00053749])
     
 
 pyrestoolbox.gas.gas_bg
@@ -398,10 +405,10 @@ Examples:
 .. code-block:: python
 
     >>> gas.gas_bg (p=3000, sg=0.78, degf=240)
-    0.005930983977679231
-    
+    0.005927563975073749
+
     >>> 1 / gas.gas_bg (p=[3000, 5000], sg=0.78, degf=240)
-    array([168.60608691, 249.6801909 ])
+    array([168.70336688, 249.54573283])
 
 pyrestoolbox.gas.gas_den
 =====================
@@ -460,7 +467,7 @@ Examples:
 .. code-block:: python
 
     >>> gas.gas_den (p=2000, sg=0.75, degf=150, zmethod ='HY', cmethod ='SUT', n2 = 0.02, co2 = 0.15, h2s = 0.02)
-    7.728991860473501
+    7.736656004563576
     
 
 pyrestoolbox.gas.gas_water_content
@@ -468,9 +475,9 @@ pyrestoolbox.gas.gas_water_content
 
 .. code-block:: python
 
-    gas_water_content(p, degf) -> float
+    gas_water_content(p, degf, salinity=0) -> float
 
-Returns saturated volume of water vapor in natural gas (stb/mmscf). From 'PVT and Phase Behaviour Of Petroleum Reservoir Fluids' by Ali Danesh.
+Returns saturated volume of water vapor in natural gas (stb/mmscf). From 'PVT and Phase Behaviour Of Petroleum Reservoir Fluids' by Ali Danesh, with salinity correction.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -480,18 +487,24 @@ Returns saturated volume of water vapor in natural gas (stb/mmscf). From 'PVT an
      - Type
      - Description
    * - p
-     - float 
+     - float
      - Gas pressure (psia)
    * - degf
      - float
      - Reservoir Temperature (deg F)
+   * - salinity
+     - float
+     - Water salinity (wt% NaCl). Defaults to 0 (freshwater). Higher salinity reduces water content
 
 Examples:
 
 .. code-block:: python
 
     >>> gas.gas_water_content(p=1500, degf=165)
-    0.6521546577394491  
+    0.6474226409378979
+
+    >>> gas.gas_water_content(p=1500, degf=165, salinity=5)
+    0.628635730743162
 
 pyrestoolbox.gas.gas_ponz2p
 =======================
@@ -553,10 +566,10 @@ Examples:
 .. code-block:: python
 
     >>> gas.gas_ponz2p(poverz=2500, sg=0.75, degf=165)
-    2082.5648307800293   
-    
+    2081.5489292144775
+
     >>> gas.gas_ponz2p(poverz=[2500,5000], sg=0.75, degf=165)
-    array([2082.56483078, 4890.62070847])
+    array([2081.54892921, 4856.97983205])
     
 pyrestoolbox.gas.gas_grad2sg
 ========================
@@ -616,7 +629,7 @@ Examples:
 .. code-block:: python
 
     >>> gas.gas_grad2sg(grad=0.0657, p=2500, degf=175)
-    0.7500786632299423   
+    0.7495803994806547
     
 
 pyrestoolbox.gas.gas_dmp
@@ -678,10 +691,10 @@ Examples:
 .. code-block:: python
 
     >>> gas.gas_dmp(p1=1000, p2=2000, degf=185, sg=0.78, zmethod='HY', cmethod = 'SUT', n2 = 0.05, co2 = 0.1, h2s = 0.02)
-    3690873383.43637  
-    
+    213690308.9907268
+
     >>> gas.gas_dmp(p1=2000, p2=1000, degf=185, sg=0.78, tc = 371, pc = 682)
-    -3691052075.812854
+    -213713909.36339885
         
 pyrestoolbox.gas.gas_fws_sg
 =======================
@@ -715,7 +728,7 @@ Examples:
 .. code-block:: python
 
     >>> gas.gas_fws_sg(sg_g=0.855, cgr=30, api_st=53)
-    0.9371015922844881
+    0.937116010334538
     
     
 pyrestoolbox.gas.gas_rate_radial
@@ -726,7 +739,7 @@ pyrestoolbox.gas.gas_rate_radial
     gas_rate_radial(k, h, pr, pwf, r_w, r_ext, degf, zmethod='DAK, cmethod='PMC', S = 0, D = 0, sg = 0.75, n2 = 0, co2 = 0, h2s = 0, tc  = 0, pc = 0) -> float or np.array
 
 Returns gas rate (mscf/day) for radial flow using Darcy pseudo steady state equation & gas pseudopressure. 
-Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D array of rates. Using more than one input array � while not prohibited - will not return expected results 
+Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D array of rates. Using more than one input array -- while not prohibited -- will not return expected results.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -792,11 +805,54 @@ Examples:
 .. code-block:: python
 
     >>> gas.gas_rate_radial(k=5, h=50, pr=2000, pwf=750, r_w=0.3, r_ext=1500, degf=180, sg = 0.75, D = 0.01, S=5)
-    10269.669190157822
-    
+    2078.9101970773477
+
     >>> gas.gas_rate_radial(k=1, h=50, pr=[2000,1000], pwf=750, r_w=0.3, r_ext=1500, degf=180, sg = 0.75, D = 0.01, S=5)
-    array([4273.15956785, 1177.38697977])
+    array([704.29202227, 135.05317439])
     
+
+pyrestoolbox.gas.gas_sg
+======================
+
+.. code-block:: python
+
+    gas_sg(hc_mw, co2, h2s, n2, h2) -> float
+
+Returns specific gravity of a gas mixture (relative to air) given the hydrocarbon molecular weight and molar fractions of non-hydrocarbon components. Useful for converting a known gas composition into the SG input required by other gas functions.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - hc_mw
+     - float
+     - Molecular weight of the hydrocarbon portion of the gas (g/gmol). Typical range 16 (pure C1) to ~30+ (wet gas)
+   * - co2
+     - float
+     - Molar fraction of CO2 in the total gas mixture
+   * - h2s
+     - float
+     - Molar fraction of H2S in the total gas mixture
+   * - n2
+     - float
+     - Molar fraction of Nitrogen in the total gas mixture
+   * - h2
+     - float
+     - Molar fraction of Hydrogen in the total gas mixture
+
+Examples:
+
+.. code-block:: python
+
+    >>> gas.gas_sg(hc_mw=19.0, co2=0.05, h2s=0.10, n2=0, h2=0.20)
+    0.6338246461857093
+
+    >>> gas.gas_sg(hc_mw=16.043, co2=0, h2s=0, n2=0, h2=0)
+    0.5537797721781152
+
 
 pyrestoolbox.gas.gas_rate_linear
 ======================
@@ -806,7 +862,7 @@ pyrestoolbox.gas.gas_rate_linear
     gas_rate_linear(k, pr, pwf, area, length, degf, zmethod='DAK, cmethod='PMC', sg = 0.75, n2 = 0, co2 = 0, h2s = 0, tc  = 0, pc = 0) -> float or np.array
 
 Returns gas rate (mscf/day) for linear flow using Darcy steady state equation & gas pseudopressure. 
-Arrays can be used for any one of k, pr, pwf or area, returning corresponding 1-D array of rates. Using more than one input array � while not prohibited - will not return expected results 
+Arrays can be used for any one of k, pr, pwf or area, returning corresponding 1-D array of rates. Using more than one input array -- while not prohibited -- will not return expected results.
 
 
 .. list-table:: Inputs
@@ -864,8 +920,8 @@ Examples:
 .. code-block:: python
 
     >>> gas.gas_rate_linear(k=0.1, area=50, length=200, pr=2000, pwf=250, degf=180, sg = 0.8)
-    21.87803915816601
-    
+    8.202200317597859
+
     >>> gas.gas_rate_linear(k=0.1, area=50, length=200, pr=[2000, 1000, 500], pwf=250, degf=180, sg = 0.8)
-    array([21.87803916,  4.89593662,  0.94342881])
+    array([8.20220032, 2.10691337, 0.42685002])
     

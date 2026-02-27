@@ -63,6 +63,11 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0) -> Tuple:
         wt: Salt wt% (0-100)
         ch4_sat: Degree of methane saturation (0 - 1)
     """
+    if p <= 0:
+        raise ValueError("Pressure must be positive")
+    if wt < 0 or wt >= 100:
+        raise ValueError(f"Salt weight percent must be >= 0 and < 100, got {wt}")
+
     Eq41 = _Eq41
 
     Mpa = p * 0.00689476  # Pressure in mPa
@@ -1469,6 +1474,16 @@ class SoreideWhitson:
 
     def __init__(self, pres, temp, ppm=0, y_CO2=0, y_H2S=0, y_N2=0, y_H2=0,
                  sg=0.65, metric=True, cw_sat=False):
+        if ppm < 0:
+            raise ValueError(f"ppm must be non-negative, got {ppm}")
+        if ppm >= 1e6:
+            raise ValueError(f"ppm must be less than 1,000,000, got {ppm}")
+        if pres <= 0:
+            raise ValueError("Pressure must be positive")
+        non_hc = y_CO2 + y_H2S + y_N2 + y_H2
+        if non_hc > 1.0:
+            raise ValueError(f"Sum of non-HC gas fractions ({non_hc}) exceeds 1.0")
+
         self.metric = metric
         self.ppm = ppm
 

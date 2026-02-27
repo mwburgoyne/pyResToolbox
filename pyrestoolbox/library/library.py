@@ -65,22 +65,21 @@ class component_library:
     def prop(self, comp, prop, model='PR79'):
         comp = comp.upper()
         if comp not in self.components:
-            return 'Component not in Library. Choose from Name, MW, Tc_R, Pc_psia, Pchor, Zc, Vc_cuft_per_lbmol, Acentric, VTran, Tb_F, SpGr'
+            raise KeyError(f"Component '{comp}' not in Library. Available components: {', '.join(self.components[:10])}...")
         prop = prop.upper()
-        props = [x.upper() for x in self.property_list]
         if model.upper() not in self.models:
-            return 'Incorrect Model Name'
+            raise ValueError(f"Incorrect Model Name '{model}'. Choose from: {', '.join(self.models)}")
         dic = self.model_dics[model.upper()]
         if prop == 'ALL':
             return [self.all_dics[p.upper()][comp] for p in self.all_cols]+[dic[p.upper()][comp] for p in self.model_cols]
         props = [x.upper() for x in self.property_list]
         if prop not in props:
-            return 'Property not in Library'
+            raise KeyError(f"Property '{prop}' not in Library. Available properties: {', '.join(self.property_list)}")
         if prop in [x.upper() for x in self.all_cols]:
             return self.all_dics[prop][comp]
         if prop in [x.upper() for x in self.model_cols]:
             return dic[prop][comp]
-        return 'Component or Property not in library'
+        raise KeyError(f"Component '{comp}' or Property '{prop}' not in library")
 
 comp_library = component_library()
 

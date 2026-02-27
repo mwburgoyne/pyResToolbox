@@ -108,35 +108,40 @@ def test_co2_brine_saturated_compressibility():
 # Regression baselines
 # =============================================================================
 
-_BASELINES = None
-
-def capture_brine_baselines():
-    b = {}
-    b['brine_3000_200_0'] = brine.brine_props(p=3000, degf=200, wt=0, ch4_sat=0)
-    b['brine_3000_200_10'] = brine.brine_props(p=3000, degf=200, wt=10, ch4_sat=0)
-    mix = brine.CO2_Brine_Mixture(pres=200, temp=80, ppm=0, metric=True)
-    b['co2_xco2_200_80'] = mix.x[0]
-    b['co2_rs_200_80'] = mix.Rs
-    return b
-
-def get_baselines():
-    global _BASELINES
-    if _BASELINES is None:
-        _BASELINES = capture_brine_baselines()
-    return _BASELINES
+# Hard-coded regression baselines - frozen reference values
+# If any of these change, it means a code modification has altered computational results.
+# Do NOT update these values without explicit review and approval.
+# Frozen baselines captured 2026-02-27
+_FROZEN_BASELINES = {
+    'bw_3000_200_fresh': 1.027589195773527,
+    'lden_3000_200_fresh': 0.972276768415092,
+    'visw_3000_200_fresh': 0.3083544960904146,
+    'cw_3000_200_fresh': 3.0887176266534516e-06,
+    'co2_xco2_200_80': 0.02036714644979853,
+    'co2_rs_200_80': 26.141605639385897,
+}
 
 def test_regression_brine_freshwater():
-    b = get_baselines()
     bw, lden, visw, cw, rsw = brine.brine_props(p=3000, degf=200, wt=0, ch4_sat=0)
-    bw_b, lden_b, visw_b, cw_b, rsw_b = b['brine_3000_200_0']
-    assert abs(bw - bw_b) < 1e-10
-    assert abs(lden - lden_b) < 1e-10
-    assert abs(visw - visw_b) < 1e-10
+    assert abs(bw - _FROZEN_BASELINES['bw_3000_200_fresh']) / _FROZEN_BASELINES['bw_3000_200_fresh'] < 1e-8, \
+        f"Brine Bw changed: {bw} vs frozen {_FROZEN_BASELINES['bw_3000_200_fresh']}"
+    assert abs(lden - _FROZEN_BASELINES['lden_3000_200_fresh']) / _FROZEN_BASELINES['lden_3000_200_fresh'] < 1e-8, \
+        f"Brine density changed: {lden} vs frozen {_FROZEN_BASELINES['lden_3000_200_fresh']}"
+    assert abs(visw - _FROZEN_BASELINES['visw_3000_200_fresh']) / _FROZEN_BASELINES['visw_3000_200_fresh'] < 1e-8, \
+        f"Brine viscosity changed: {visw} vs frozen {_FROZEN_BASELINES['visw_3000_200_fresh']}"
 
 def test_regression_co2_xco2():
-    b = get_baselines()
     mix = brine.CO2_Brine_Mixture(pres=200, temp=80, ppm=0, metric=True)
-    assert abs(mix.x[0] - b['co2_xco2_200_80']) < 1e-8
+    expected = _FROZEN_BASELINES['co2_xco2_200_80']
+    assert abs(mix.x[0] - expected) / expected < 1e-6, \
+        f"CO2 xCO2 changed: {mix.x[0]} vs frozen {expected}"
+
+def test_regression_co2_rs():
+    """CO2 brine Rs must match frozen baseline"""
+    mix = brine.CO2_Brine_Mixture(pres=200, temp=80, ppm=0, metric=True)
+    expected = _FROZEN_BASELINES['co2_rs_200_80']
+    assert abs(mix.Rs - expected) / expected < 1e-6, \
+        f"CO2 Rs changed: {mix.Rs} vs frozen {expected}"
 
 
 # =============================================================================
