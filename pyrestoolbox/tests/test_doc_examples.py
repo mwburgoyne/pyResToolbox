@@ -15,6 +15,7 @@ import pyrestoolbox.gas as gas
 import pyrestoolbox.oil as oil
 import pyrestoolbox.brine as brine
 import pyrestoolbox.layer as layer
+import pyrestoolbox.nodal as nodal
 import pyrestoolbox.simtools as simtools
 import pyrestoolbox.library as library
 
@@ -377,25 +378,25 @@ def test_doc_make_bot_og():
 def test_doc_brine_props():
     """brine.rst: brine_props"""
     bw, lsg, visw, cw, rsw = brine.brine_props(p=160, degf=135, wt=1.5, ch4_sat=1.0)
-    assert abs(bw - 1.0151710978322923) / 1.0151710978322923 < RTOL
-    assert abs(lsg - 0.9950036658248123) / 0.9950036658248123 < RTOL
-    assert abs(visw - 0.4993957925685823) / 0.4993957925685823 < RTOL
-    assert abs(cw - 0.00015465242842085548) / 0.00015465242842085548 < RTOL
-    assert abs(rsw - 1.2548933067431638) / 1.2548933067431638 < RTOL
+    assert abs(bw - 1.0152007040056148) / 1.0152007040056148 < RTOL
+    assert abs(lsg - 0.9950108179684295) / 0.9950108179684295 < RTOL
+    assert abs(visw - 0.4994004662758671) / 0.4994004662758671 < RTOL
+    assert abs(cw - 0.0001539690974662865) / 0.0001539690974662865 < RTOL
+    assert abs(rsw - 1.2540982731813703) / 1.2540982731813703 < RTOL
 
 def test_doc_co2_brine_field():
     """brine.rst: CO2_Brine_Mixture field units"""
     mix = brine.CO2_Brine_Mixture(pres=5000, temp=275, ppm=30000, metric=False)
     assert isinstance(mix.bw, list)
     assert len(mix.bw) == 3
-    assert abs(float(mix.bw[0]) - 1.108579075130017) / 1.108579075130017 < RTOL
+    assert abs(float(mix.bw[0]) - 1.108578337107381) / 1.108578337107381 < RTOL
     assert isinstance(mix.x, np.ndarray)
     assert abs(mix.x[0] - 0.02431225) / 0.02431225 < RTOL
 
 def test_doc_co2_brine_metric():
     """brine.rst: CO2_Brine_Mixture metric units"""
     mix = brine.CO2_Brine_Mixture(pres=175, temp=85)
-    assert abs(mix.Rs - 24.742717860296057) / 24.742717860296057 < RTOL
+    assert abs(mix.Rs - 24.743651168969475) / 24.743651168969475 < RTOL
 
 def test_doc_make_pvtw_table():
     """brine.rst: make_pvtw_table"""
@@ -403,7 +404,36 @@ def test_doc_make_pvtw_table():
     assert isinstance(result, dict)
     for key in ['table', 'pref', 'bw_ref', 'cw_ref', 'visw_ref', 'rsw_ref', 'den_ref']:
         assert key in result, f"Missing key: {key}"
-    assert abs(result['bw_ref'] - 1.0275744009507692) / 1.0275744009507692 < RTOL
+    assert abs(result['bw_ref'] - 1.027589195773527) / 1.027589195773527 < RTOL
+
+def test_doc_sw_pure_co2_field():
+    """brine.rst: SoreideWhitson pure CO2 field units"""
+    mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=1.0, metric=False)
+    assert isinstance(mix.bDen, list) and len(mix.bDen) == 3
+    assert abs(mix.bDen[0] - 0.9733769457162755) / 0.9733769457162755 < RTOL
+    assert abs(mix.Rs['CO2'] - 140.90858294709142) / 140.90858294709142 < RTOL
+    assert abs(mix.bw[0] - 1.0968991160573776) / 1.0968991160573776 < RTOL
+
+def test_doc_sw_pure_ch4_field():
+    """brine.rst: SoreideWhitson pure CH4 field units"""
+    mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=0, sg=0.554, metric=False)
+    assert abs(mix.Rs['CH4'] - 21.414423540331008) / 21.414423540331008 < RTOL
+    assert abs(mix.bDen[0] - 0.9641137202631425) / 0.9641137202631425 < RTOL
+
+def test_doc_sw_mixed_gas_metric():
+    """brine.rst: SoreideWhitson mixed gas metric"""
+    mix = brine.SoreideWhitson(pres=200, temp=80, ppm=10000, y_CO2=0.1, y_H2S=0.05, sg=0.7, metric=True)
+    assert abs(mix.Rs_total - 6.32875877743837) / 6.32875877743837 < RTOL
+    assert abs(mix.bDen[0] - 0.9854845215724698) / 0.9854845215724698 < RTOL
+    assert 'CO2' in mix.gas_comp and 'H2S' in mix.gas_comp and 'CH4' in mix.gas_comp
+
+def test_doc_sw_co2_freshwater_cw_sat():
+    """brine.rst: SoreideWhitson pure CO2 freshwater with Cf_sat"""
+    mix = brine.SoreideWhitson(pres=175, temp=85, ppm=0, y_CO2=1.0, metric=True, cw_sat=True)
+    assert abs(mix.Rs_total - 24.188037633302223) / 24.188037633302223 < RTOL
+    assert abs(mix.Cf_sat - 0.00016012590421810821) / 0.00016012590421810821 < RTOL
+    assert isinstance(mix.water_content, dict)
+    assert abs(mix.water_content['stb_mmscf'] - 1.923030543083137) / 1.923030543083137 < RTOL
 
 # =============================================================================
 # Layer Module Documentation Examples (docs/layer.rst)
@@ -524,6 +554,189 @@ def test_doc_library_property_list():
 def test_doc_library_models():
     """library.rst: library.models"""
     assert library.models == ['PR79', 'PR77', 'SRK', 'RK']
+
+
+# =============================================================================
+# Nodal Module Documentation Examples (docs/nodal.rst)
+# =============================================================================
+
+def test_doc_nodal_gas_pvt_z():
+    """nodal.rst: GasPVT z-factor"""
+    gpvt = gas.GasPVT(sg=0.65, co2=0.1)
+    result = gpvt.z(2000, 180)
+    assert abs(result - 0.9026719828498643) / 0.9026719828498643 < RTOL
+
+def test_doc_nodal_gas_pvt_viscosity():
+    """nodal.rst: GasPVT viscosity"""
+    gpvt = gas.GasPVT(sg=0.65, co2=0.1)
+    result = gpvt.viscosity(2000, 180)
+    assert abs(result - 0.016666761192334678) / 0.016666761192334678 < RTOL
+
+def test_doc_nodal_gas_pvt_density():
+    """nodal.rst: GasPVT density"""
+    gpvt = gas.GasPVT(sg=0.65, co2=0.1)
+    result = gpvt.density(2000, 180)
+    assert abs(result - 6.077743278791424) / 6.077743278791424 < RTOL
+
+def test_doc_nodal_gas_pvt_bg():
+    """nodal.rst: GasPVT bg"""
+    gpvt = gas.GasPVT(sg=0.65, co2=0.1)
+    result = gpvt.bg(2000, 180)
+    assert abs(result - 0.008164459661048012) / 0.008164459661048012 < RTOL
+
+def test_doc_nodal_oil_pvt_rs():
+    """nodal.rst: OilPVT rs"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    result = opvt.rs(2000, 180)
+    assert abs(result - 403.58333168879415) / 403.58333168879415 < RTOL
+
+def test_doc_nodal_oil_pvt_bo():
+    """nodal.rst: OilPVT bo"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    result = opvt.bo(2000, 180)
+    assert abs(result - 1.22370082673546) / 1.22370082673546 < RTOL
+
+def test_doc_nodal_oil_pvt_density():
+    """nodal.rst: OilPVT density"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    result = opvt.density(2000, 180)
+    assert abs(result - 46.23700811760461) / 46.23700811760461 < RTOL
+
+def test_doc_nodal_oil_pvt_viscosity():
+    """nodal.rst: OilPVT viscosity"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    result = opvt.viscosity(2000, 180)
+    assert abs(result - 0.7187504436478858) / 0.7187504436478858 < RTOL
+
+def test_doc_nodal_completion_basic():
+    """nodal.rst: Completion with no casing"""
+    c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
+    assert c.has_casing_section == False
+
+def test_doc_nodal_completion_casing():
+    """nodal.rst: Completion with casing section"""
+    c2 = nodal.Completion(tid=2.441, length=9000, tht=100, bht=200, cid=6.184, mpd=10000)
+    assert c2.has_casing_section == True
+    assert c2.casing_length == 1000
+
+def test_doc_nodal_reservoir():
+    """nodal.rst: Reservoir constructor"""
+    r = nodal.Reservoir(pr=3000, degf=200, k=10, h=50, re=1500, rw=0.35, S=2, D=0.001)
+    assert r.pr == 3000
+
+def test_doc_nodal_fbhp_gas():
+    """nodal.rst: fbhp gas well HB"""
+    c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
+    result = nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas',
+                        qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
+    assert abs(result - 952.6868477414688) / 952.6868477414688 < RTOL
+
+def test_doc_nodal_fbhp_gas_wg():
+    """nodal.rst: fbhp gas well WG"""
+    c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
+    result = nodal.fbhp(thp=500, completion=c, vlpmethod='WG', well_type='gas',
+                        qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
+    assert abs(result - 1172.8626065704736) / 1172.8626065704736 < RTOL
+
+def test_doc_nodal_fbhp_gas_gray():
+    """nodal.rst: fbhp gas well GRAY"""
+    c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
+    result = nodal.fbhp(thp=500, completion=c, vlpmethod='GRAY', well_type='gas',
+                        qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
+    assert abs(result - 1940.034905804135) / 1940.034905804135 < RTOL
+
+def test_doc_nodal_fbhp_gas_bb():
+    """nodal.rst: fbhp gas well BB"""
+    c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
+    result = nodal.fbhp(thp=500, completion=c, vlpmethod='BB', well_type='gas',
+                        qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
+    assert abs(result - 1213.2399909265969) / 1213.2399909265969 < RTOL
+
+def test_doc_nodal_fbhp_oil():
+    """nodal.rst: fbhp oil well HB"""
+    c = nodal.Completion(tid=2.441, length=8000, tht=100, bht=180)
+    result = nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil',
+                        qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65,
+                        pb=2500, rsb=500, sgsp=0.65, api=35)
+    assert abs(result - 2256.2340921828286) / 2256.2340921828286 < RTOL
+
+def test_doc_nodal_fbhp_oil_pvt():
+    """nodal.rst: fbhp oil well with OilPVT"""
+    c = nodal.Completion(tid=2.441, length=8000, tht=100, bht=180)
+    opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    result = nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil',
+                        oil_pvt=opvt, qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65)
+    assert abs(result - 2258.2220198140935) / 2258.2220198140935 < RTOL
+
+def test_doc_nodal_outflow_curve():
+    """nodal.rst: outflow_curve gas"""
+    c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
+    result = nodal.outflow_curve(thp=500, completion=c, vlpmethod='HB',
+                                  well_type='gas', rates=[2.0, 5.0, 10.0, 15.0, 20.0], gsg=0.65)
+    assert result['rates'] == [2.0, 5.0, 10.0, 15.0, 20.0]
+    expected_bhp = [676.8, 925.7, 1498.7, 2121.5, 2757.8]
+    for actual, expected in zip(result['bhp'], expected_bhp):
+        assert abs(round(actual, 1) - expected) < 0.2, f"BHP mismatch: {round(actual, 1)} vs {expected}"
+
+def test_doc_nodal_ipr_curve():
+    """nodal.rst: ipr_curve gas"""
+    r = nodal.Reservoir(pr=3000, degf=200, k=10, h=50, re=1500, rw=0.35, S=2, D=0.001)
+    ipr = nodal.ipr_curve(r, well_type='gas', gsg=0.65, n_points=5)
+    expected_pwf = [14.7, 761.0, 1507.4, 2253.7, 3000.0]
+    for actual, expected in zip(ipr['pwf'], expected_pwf):
+        assert abs(round(actual, 1) - expected) < 0.2
+    expected_rate = [13456.5, 12812.2, 10861.0, 7290.7, 0.0]
+    for actual, expected in zip(ipr['rate'], expected_rate):
+        assert abs(round(actual, 1) - expected) < 0.2
+
+def test_doc_nodal_operating_point_gas():
+    """nodal.rst: operating_point gas"""
+    c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
+    r = nodal.Reservoir(pr=3000, degf=200, k=10, h=50, re=1500, rw=0.35, S=2, D=0.001)
+    result = nodal.operating_point(thp=500, completion=c, reservoir=r,
+                                    vlpmethod='HB', well_type='gas', gsg=0.65)
+    assert abs(round(result['rate'], 2) - 10.61) < 0.02
+    assert abs(round(result['bhp'], 1) - 1573.7) < 0.5
+
+def test_doc_nodal_operating_point_oil():
+    """nodal.rst: operating_point oil"""
+    c = nodal.Completion(tid=2.441, length=8000, tht=100, bht=180)
+    r = nodal.Reservoir(pr=3000, degf=180, k=50, h=30, re=1000, rw=0.35)
+    opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    result = nodal.operating_point(thp=200, completion=c, reservoir=r,
+                                    vlpmethod='HB', well_type='oil',
+                                    oil_pvt=opvt, gor=800, wc=0.3, gsg=0.65)
+    assert abs(round(result['rate'], 1) - 1412.6) < 1.0
+    assert abs(round(result['bhp'], 1) - 2193.0) < 1.0
+
+
+def test_doc_nodal_wellsegment_vertical():
+    """nodal.rst: WellSegment vertical tvd"""
+    seg = nodal.WellSegment(md=10000, id=2.441, deviation=0)
+    assert round(seg.tvd, 1) == 10000.0
+
+def test_doc_nodal_wellsegment_deviated():
+    """nodal.rst: WellSegment 45-degree tvd"""
+    seg = nodal.WellSegment(md=10000, id=2.441, deviation=45)
+    assert round(seg.tvd, 1) == 7071.1
+
+def test_doc_nodal_completion_segments():
+    """nodal.rst: Completion with segments and total_md/total_tvd"""
+    segs = [nodal.WellSegment(md=5000, id=2.441, deviation=0),
+            nodal.WellSegment(md=3000, id=2.441, deviation=45),
+            nodal.WellSegment(md=2000, id=2.441, deviation=60)]
+    c3 = nodal.Completion(segments=segs, tht=100, bht=250)
+    assert c3.total_md == 10000
+    assert round(c3.total_tvd, 1) == 8121.3
+
+def test_doc_nodal_fbhp_deviated():
+    """nodal.rst: fbhp deviated well using WellSegment"""
+    segs = [nodal.WellSegment(md=5000, id=2.441, deviation=0),
+            nodal.WellSegment(md=5000, id=2.441, deviation=45)]
+    c_dev = nodal.Completion(segments=segs, tht=100, bht=200)
+    result = nodal.fbhp(thp=500, completion=c_dev, vlpmethod='HB', well_type='gas',
+                        qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
+    assert abs(result - 920.8903232471756) < 0.01
 
 
 # =============================================================================

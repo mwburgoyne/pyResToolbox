@@ -1310,6 +1310,57 @@ def gas_fws_sg(sg_g: float, cgr: float, api_st: float) -> float:
     fws_gas_mw = fws_gas_mass / fws_gas_moles  # lb/lb-moles
     return fws_gas_mw / MW_AIR
 
+class GasPVT:
+    """ Gas PVT wrapper that stores composition and method choices, pre-computes critical properties.
+        Exposes z(), viscosity(), density(), bg() methods delegating to gas_z, gas_ug, gas_den, gas_bg.
+
+        sg: Gas SG relative to air. Defaults to 0.75
+        co2: Molar fraction of CO2. Defaults to zero
+        h2s: Molar fraction of H2S. Defaults to zero
+        n2: Molar fraction of Nitrogen. Defaults to zero
+        h2: Molar fraction of Hydrogen. Defaults to zero
+        zmethod: Method for calculating Z-Factor. Defaults to 'DAK', or 'BNS' if h2 > 0
+        cmethod: Method for calculating critical properties. Defaults to 'PMC'
+    """
+    def __init__(self, sg=0.75, co2=0, h2s=0, n2=0, h2=0,
+                 zmethod='DAK', cmethod='PMC'):
+        self.sg = sg
+        self.co2 = co2
+        self.h2s = h2s
+        self.n2 = n2
+        self.h2 = h2
+        if h2 > 0:
+            zmethod = 'BNS'
+            cmethod = 'BNS'
+        self.zmethod, self.cmethod = validate_methods(
+            ["zmethod", "cmethod"], [zmethod, cmethod])
+        self.tc, self.pc = gas_tc_pc(sg, co2, h2s, n2, h2, self.cmethod.name)
+
+    def z(self, p, degf):
+        """ Returns Z-factor at pressure p (psia) and temperature degf (deg F) """
+        return gas_z(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
+                     cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
+                     n2=self.n2, h2=self.h2, tc=self.tc, pc=self.pc)
+
+    def viscosity(self, p, degf):
+        """ Returns gas viscosity (cP) at pressure p (psia) and temperature degf (deg F) """
+        return gas_ug(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
+                      cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
+                      n2=self.n2, h2=self.h2, tc=self.tc, pc=self.pc)
+
+    def density(self, p, degf):
+        """ Returns gas density (lb/cuft) at pressure p (psia) and temperature degf (deg F) """
+        return gas_den(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
+                       cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
+                       n2=self.n2, h2=self.h2, tc=self.tc, pc=self.pc)
+
+    def bg(self, p, degf):
+        """ Returns gas FVF Bg (rcf/scf) at pressure p (psia) and temperature degf (deg F) """
+        return gas_bg(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
+                      cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
+                      n2=self.n2, h2=self.h2, tc=self.tc, pc=self.pc)
+
+
 def gas_water_content(p: float, degf: float, salinity: float = 0) -> float:
     """ Returns saturated volume of water vapor in natural gas (stb/mmscf)
         From 'PVT and Phase Behaviour Of Petroleum Reservoir Fluids' by Ali Danesh

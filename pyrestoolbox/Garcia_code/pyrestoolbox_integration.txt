@@ -1,0 +1,614 @@
+MULTI-GAS DENSITY CORRECTION - IMPLEMENTATION SPECIFICATION
+=============================================================
+
+Target projects:
+    - pyResToolbox (Python library, has access to iapws module)
+    - ResToolbox3 (Dart/Flutter app, no external IAPWS library)
+
+Purpose: Extend Garcia (2001) density mixing rule from CO2-only to 8 gases:
+CO2, CH4, C2H6, C3H8, n-C4H10, H2S, H2, N2.
+
+Reference implementation: github.com/mwburgoyne/garcia-extension
+
+
+1. WHAT ALREADY EXISTS IN PYRESTOOLBOX
+======================================
+
+In brine.py, the brine_props_co2() method (line ~1058) already implements:
+  - CO2-free brine density via Spivey et al. (brine_denw function)
+  - Garcia (2001) Eq. 18 for CO2 density correction (garciaDensity function)
+  - Apparent molar volume via Garcia cubic polynomial (partMolVol function)
+
+The relevant existing functions are:
+
+    def partMolVol(degK):
+        tC = degK - 273.15
+        return 37.51 + tC * (-0.09585 + tC * (0.000874 - tC * 0.0000005044))
+
+    def garciaDensity(rhoBRnoCO2, tKel, pBar, ppm, xCO2, MwB, MwG):
+        xNotCO2 = 1.0 - xCO2
+        xRat = xCO2 / xNotCO2
+        mRat = MwG / MwB
+        vPhi = partMolVol(tKel)
+        return (1.0 + mRat * xRat) / (vPhi * xRat / MwB + 1.0 / rhoBRnoCO2)
+
+partMolVol() returns V_phi in cm3/mol for CO2 only.
+garciaDensity() is Garcia Eq. 18 - it is ALREADY gas-generic (takes MwG).
+Only partMolVol() needs generalization to support other gases.
+
+
+2. WHAT NEEDS TO CHANGE
+========================
+
+Replace partMolVol(degK) with a general function that computes V_phi for any
+of the 8 target gases at a given (T, P). This requires implementing the
+Plyasunov A12-infinity model, which computes V2-infinity (= V_phi at infinite
+dilution) from first-principles thermodynamics.
+
+The Garcia density mixing rule (garciaDensity) needs NO changes - it already
+accepts arbitrary MwG. It just needs to be called with the correct V_phi and
+MW for whatever gas is dissolved.
+
+For mixed dissolved gases, compute effective V_phi and MW:
+    V_phi_eff = sum(yi * V_phi_i)
+    MW_eff = sum(yi * MW_i)
+where yi = x2_i / x2_total is the fraction of gas i among all dissolved gases.
+
+
+3. THE PLYASUNOV MODEL
+=======================
+
+3.1 Overview
+
+The Plyasunov model uses Fluctuation Solution Theory to compute A12-infinity,
+a dimensionless quantity related to the solute-solvent cross second virial
+coefficient. From A12-infinity, V2-infinity (apparent molar volume at infinite
+dilution, equivalent to V_phi for dilute solutions) is recovered via:
+
+    V2_inf(T, P) = A12_inf(T, rho1_star) * kappa_T(T, P) * R * T
+
+where:
+    rho1_star = density of pure water at (T, P) in kg/m3
+    kappa_T = isothermal compressibility of pure water at (T, P) in 1/MPa
+    R = 8.314462 J/(mol*K) = 8.314462 MPa*cm3/(mol*K)
+    T in Kelvin
+
+The result V2_inf is in cm3/mol, same units as partMolVol() currently returns.
+
+3.2 Master Equation
+
+    A12_inf = 1 + rho1_star * [a0 + a1*rho1_star + a2*rho1_star^2
+              + a3*rho1_star^3 + a4*rho1_star^4 + a5*rho1_star^5]
+
+where rho1_star is pure water density in kg/m3.
+
+3.3 a0 from Cross Second Virial Coefficient B12
+
+    a0 = 2 * omega * B12(T)
+    omega = 1e-3 / MW_water = 55.508e-6    (MW_water = 18.01528 g/mol)
+
+B12(T) has different functional forms depending on the gas (see Section 4).
+
+3.4 Temperature Expansion of a1 through a5
+
+Each ai is a polynomial in inverse reduced temperature:
+
+    ai(T) = pi0*theta^(-0.5) + pi1*theta^(-1) + pi2*theta^(-2) + pi3*theta^(-3)
+            + pi4*theta^(-4) + pi5*theta^(-5) + pi6*theta^(-n)
+
+where:
+    theta = T / Tc_water    (Tc_water = 647.096 K)
+    n = 9 for i=1
+    n = 8 for i=2
+    n = 7 for i=3
+    n = 6 for i=4
+    n = 6 for i=5
+
+Each gas has 5 rows x 7 columns = 35 p_in coefficients.
+
+
+4. B12 CROSS SECOND VIRIAL COEFFICIENTS
+========================================
+
+Three different functional forms are used depending on the gas:
+
+4.1 Polynomial Form (H2, N2, CH4)
+
+    B12(T) = sum_i[ a_i * (T/100)^b_i ]    [cm3/mol, 4 terms]
+
+Parameters (from Plyasunov Part IV, Table 1):
+
+    H2:
+        a = [33.047, -250.41, 285.42, -186.78]
+        b = [-0.21, -1.50, -2.26, -3.21]
+
+    N2:
+        a = [156.679, -183.541, -194.330, -154.815]
+        b = [-0.33, -0.57, -1.47, -3.66]
+
+    CH4:
+        a = [109.22, -202.52, -235.86, -297.63]
+        b = [-0.2, -0.6, -2.0, -3.0]
+
+4.2 Polynomial Form (CO2)
+
+    B12(T) = b1 + b2/Tstar^0.5 + b3/Tstar + b4/Tstar^3
+             + b5/Tstar^6 + b6/Tstar^(21/2)
+
+where Tstar = T/100, result in cm3/mol.
+
+Parameters (from Plyasunov Part II, Table 1):
+
+    CO2:
+        b = [15.210, 149.72, -534.54, -2234.6, -13017.0, -39482.0]
+
+4.3 Square-Well Potential Form (C2H6, C3H8, n-C4H10, H2S)
+
+    B12(T) = (2/3) * pi * NA * sigma12^3 * {1 - (lambda12^3 - 1) * [exp(epsilon12/(kB*T)) - 1]}
+
+where NA = 6.02214076e23 mol^-1, kB = 1.380649e-23 J/K.
+Result in cm3/mol (divide by 1e-24 to convert from A^3 to cm3).
+
+For hydrocarbons, use group contributions:
+    B12_total = sum of B12 for each functional group
+
+Parameters:
+
+    Group contributions:
+        CH3: sigma=2.788 A, epsilon/kB=283.8 K, lambda=1.430
+        CH2: sigma=2.226 A, epsilon/kB=271.4 K, lambda=1.430
+
+    Gas decomposition:
+        C2H6:    2 x CH3
+        C3H8:    2 x CH3 + 1 x CH2
+        n-C4H10: 2 x CH3 + 2 x CH2
+
+    H2S (single molecule, not group contribution):
+        sigma=2.85 A, epsilon/kB=650 K, lambda=1.324
+
+
+5. P_IN COEFFICIENTS FOR ALL 8 GASES
+======================================
+
+Format: 5 rows (i=1..5) x 7 columns (n=0..6) per gas.
+Source papers noted. These were manually verified against the original papers
+due to OCR errors in automated extraction.
+
+CRITICAL NOTE: These coefficients participate in extreme cancellation during
+polynomial evaluation. Terms reach magnitudes of ~6 but must cancel to ~0.03-0.07.
+All digits shown are significant and must be preserved. Truncating or rounding
+any coefficient will produce wildly incorrect results (errors of thousands of
+cm3/mol instead of sub-1%).
+
+5.1 H2 (Plyasunov Part IV, Table 2)
+
+    Row 1: 2.1203e-3, -6.0375e-3, 1.0196e-2, -1.0694e-2, 5.4992e-3, -1.0878e-3, 1.1746e-6
+    Row 2: -1.1046e-5, 3.1668e-5, -5.3804e-5, 5.6835e-5, -2.9567e-5, 5.9820e-6, -2.0190e-8
+    Row 3: 1.9307e-8, -5.4980e-8, 9.2491e-8, -9.7577e-8, 5.1231e-8, -1.0725e-8, 1.2613e-10
+    Row 4: -1.3252e-11, 3.7335e-11, -6.1485e-11, 6.4032e-11, -3.3548e-11, 7.4032e-12, -3.4171e-13
+    Row 5: 3.0112e-15, -8.3139e-15, 1.3052e-14, -1.2814e-14, 6.0470e-15, -9.8663e-16, -4.1238e-17
+
+5.2 N2 (Plyasunov Part IV, Table 2)
+
+    Row 1: -2.2071e-3, 6.6067e-3, -1.2028e-2, 1.3729e-2, -7.7929e-3, 1.7077e-3, -2.8424e-6
+    Row 2: 1.1431e-5, -3.3834e-5, 6.1522e-5, -7.1046e-5, 4.1166e-5, -9.3370e-6, 4.7959e-8
+    Row 3: -1.8030e-8, 5.3341e-8, -9.7755e-8, 1.1514e-7, -6.8971e-8, 1.6675e-8, -3.0104e-10
+    Row 4: 1.0436e-11, -3.0813e-11, 5.7057e-11, -6.8981e-11, 4.3377e-11, -1.2090e-11, 9.5828e-13
+    Row 5: -1.6677e-15, 4.8356e-15, -8.7552e-15, 1.0376e-14, -6.1250e-15, 1.3543e-15, -1.6688e-18
+
+5.3 CH4 (Plyasunov Part IV, Table 2)
+
+    Row 1: -1.3024e-3, 3.8481e-3, -6.8503e-3, 7.7002e-3, -4.3455e-3, 9.5404e-4, -1.8742e-6
+    Row 2: 7.3809e-6, -2.1303e-5, 3.7100e-5, -4.1343e-5, 2.3418e-5, -5.2628e-6, 3.0297e-8
+    Row 3: -1.2366e-8, 3.5519e-8, -6.1395e-8, 6.8386e-8, -3.9321e-8, 9.3025e-9, -1.7822e-10
+    Row 4: 7.5953e-12, -2.1583e-11, 3.6743e-11, -4.0503e-11, 2.3524e-11, -6.1572e-12, 4.6262e-13
+    Row 5: -1.3716e-15, 3.7670e-15, -5.9244e-15, 5.8113e-15, -2.7436e-15, 3.8224e-16, 5.3381e-17
+
+5.4 CO2 (Plyasunov Part II, Table 5)
+
+    Row 1: 9.1583134e-4, -2.7160016e-3, 5.0839423e-3, -5.8354599e-3, 3.2543133e-3, -7.0687955e-4, 1.4494891e-6
+    Row 2: -3.6106209e-6, 1.1315777e-5, -2.2758954e-5, 2.7797001e-5, -1.6473215e-5, 3.8439408e-6, -2.557928e-8
+    Row 3: 5.0157576e-9, -1.5637417e-8, 3.200829e-8, -4.1225984e-8, 2.6278766e-8, -6.8414637e-9, 1.6610365e-10
+    Row 4: -2.0446824e-12, 6.2444294e-12, -1.3130671e-11, 1.9003321e-11, -1.3986032e-11, 4.6916137e-12, -5.1705069e-13
+    Row 5: -1.1881416e-16, 4.4574039e-16, -7.9103055e-16, 2.5194274e-16, 2.4022155e-16, -9.7895994e-17, -1.4094429e-17
+
+5.5 C2H6 (Plyasunov Part II, Table 5)
+
+    Row 1: -5.1475443e-4, 1.729277e-3, -3.6536764e-3, 4.6194269e-3, -2.7977608e-3, 6.2657963e-4, -7.9712465e-8
+    Row 2: 3.5428879e-6, -1.0888811e-5, 2.1555401e-5, -2.6562891e-5, 1.5872915e-5, -3.5330389e-6, 1.9105807e-9
+    Row 3: -7.076262e-9, 2.150819e-8, -4.1847563e-8, 5.0828275e-8, -3.0091634e-8, 6.7020044e-9, -1.7913067e-11
+    Row 4: 5.7671272e-12, -1.7389573e-11, 3.3600113e-11, -4.0403444e-11, 2.3837864e-11, -5.457811e-12, 1.0241543e-13
+    Row 5: -1.6279128e-15, 4.8764202e-15, -9.3154249e-15, 1.1023937e-14, -6.3736955e-15, 1.4100215e-15, -1.4735524e-17
+
+5.6 C3H8 (Plyasunov Part II, Table 5)
+
+    Row 1: 2.2892124e-3, -6.4740679e-3, 1.1030983e-2, -1.1944689e-2, 6.4760838e-3, -1.3894223e-3, 3.3011188e-6
+    Row 2: -1.0293410e-5, 3.0090181e-5, -5.3316193e-5, 5.9603698e-5, -3.3532500e-5, 7.5922124e-6, -5.4814576e-8
+    Row 3: 1.5037316e-8, -4.4050725e-8, 7.8975079e-8, -9.0810405e-8, 5.3609476e-8, -1.3301616e-8, 3.3278243e-10
+    Row 4: -7.3401228e-12, 2.1306209e-11, -3.7787336e-11, 4.4705147e-11, -2.8278765e-11, 8.5764552e-12, -9.1713991e-13
+    Row 5: 5.5117215e-16, -1.4000747e-15, 1.7856523e-15, -1.6585346e-15, 6.3567082e-16, 7.7519099e-17, -7.8311547e-17
+
+5.7 n-C4H10 (Plyasunov Part II, Table 5)
+
+    Row 1: 2.5603794e-3, -6.9646157e-3, 1.0987245e-2, -1.1110696e-2, 5.7384581e-3, -1.2233119e-3, 4.9218547e-6
+    Row 2: -8.9460753e-6, 2.5173896e-5, -4.1659657e-5, 4.4713209e-5, -2.5204428e-5, 6.1085451e-6, -8.1017199e-8
+    Row 3: 7.0204532e-9, -1.9465263e-8, 3.2883394e-8, -4.0132208e-8, 2.8071928e-8, -9.1449293e-9, 4.8274281e-10
+    Row 4: 3.6497249e-12, -1.1330901e-11, 2.0340955e-11, -1.7139410e-11, 2.6365251e-12, 3.4703436e-12, -1.2475357e-12
+    Row 5: -3.7951579e-15, 1.1392044e-14, -2.0755110e-14, 2.2507396e-14, -1.2084700e-14, 2.7449667e-15, -1.3968834e-16
+
+5.8 H2S (Plyasunov Part III, Table 5)
+
+    Row 1: 6.7014672e-4, -1.9403321e-3, 3.5360019e-3, -4.0122786e-3, 2.2524974e-3, -4.8843038e-4, 1.6044152e-6
+    Row 2: -3.1805655e-6, 9.5800671e-6, -1.7994973e-5, 2.1087746e-5, -1.2352096e-5, 2.8686985e-6, -2.7620761e-8
+    Row 3: 5.0089935e-9, -1.4885595e-8, 2.7733075e-8, -3.3416171e-8, 2.0773681e-8, -5.4162153e-9, 1.7656758e-10
+    Row 4: -2.5739894e-12, 7.4227220e-12, -1.3339226e-11, 1.6779970e-11, -1.1669169e-11, 4.0370617e-12, -5.6862157e-13
+    Row 5: 1.6189502e-16, -3.2073034e-16, 1.4144345e-16, -7.3004629e-17, 5.7935525e-17, -3.1110700e-18, 1.3146726e-18
+
+
+6. MOLECULAR WEIGHTS
+=====================
+
+    H2:      2.01588 g/mol
+    N2:     28.0134 g/mol
+    CH4:    16.0425 g/mol
+    CO2:    44.0095 g/mol
+    C2H6:   30.0690 g/mol
+    C3H8:   44.0956 g/mol
+    n-C4H10: 58.1222 g/mol
+    H2S:    34.0809 g/mol
+
+
+7. WATER PROPERTIES DEPENDENCY
+===============================
+
+The Plyasunov model requires two pure water properties at each (T, P) point:
+    1. rho1_star: pure water density in kg/m3
+    2. kappa_T: isothermal compressibility in 1/MPa
+
+The Spivey correlation (already in pyResToolbox) only provides density, not
+compressibility, so it is NOT sufficient for the Plyasunov model. However,
+Spivey IS still used for the CO2-free brine density baseline.
+
+There are two options depending on the target platform:
+
+7.1 Option A: iapws Python Library (pyResToolbox)
+
+    from iapws import IAPWS95
+    w = IAPWS95(T=T_kelvin, P=P_mpa)
+    rho = w.rho       # kg/m3
+    kappa = w.kappa    # 1/MPa (isothermal compressibility)
+    # NOTE: w.kt is the isothermal BULK MODULUS (MPa), not compressibility
+
+    This is the full IAPWS-95 scientific formulation. Highest accuracy.
+    Requires: pip install iapws
+
+7.2 Option B: IAPWS-IF97 Region 1 From Scratch (ResToolbox3 / Dart)
+
+    For environments without access to the iapws library, IAPWS-IF97 Region 1
+    can be implemented from scratch. It covers compressed liquid water:
+        273.15 K <= T <= 623.15 K  (0 to 350 C)
+        up to 100 MPa
+
+    This is a SINGLE EQUATION: a dimensionless Gibbs free energy with 34 terms.
+    No iteration, no root-finding, no region-boundary logic needed (our use case
+    stays entirely within Region 1).
+
+    Implementation requires:
+        - 34 coefficient triplets (I, J, n) as a hardcoded table
+        - One polynomial evaluation with 1st and 2nd derivatives
+        - Two formulas to convert derivatives to density and compressibility
+
+    Total: approximately 100-150 lines of code in any language.
+
+    Accuracy vs IAPWS-95:
+        - Density: max difference 0.014 kg/m3 (tested 25-300 C, 0.1-100 MPa)
+        - kappa_T: max relative error 0.2%
+        - Both are negligible relative to the Plyasunov model uncertainties
+
+    The reference implementation is in: code/iapws_if97.py
+
+7.3 IF97 Region 1 Implementation Details
+
+    Constants:
+        R_specific = 461.526e-6  MPa*m3/(kg*K)     (specific gas constant for water)
+        P_star = 16.53           MPa                (reference pressure)
+        T_star = 1386.0          K                  (reference temperature)
+
+    Reduced variables:
+        pi = P / P_star
+        tau = T_star / T
+
+    Gibbs free energy (34 terms):
+        gamma(pi, tau) = sum_i( n_i * (7.1 - pi)^I_i * (tau - 1.222)^J_i )
+
+    First derivative w.r.t. pi:
+        gamma_pi = sum_i( n_i * (-I_i) * (7.1 - pi)^(I_i - 1) * (tau - 1.222)^J_i )
+        (terms with I_i = 0 contribute zero)
+
+    Second derivative w.r.t. pi:
+        gamma_pipi = sum_i( n_i * I_i * (I_i - 1) * (7.1 - pi)^(I_i - 2) * (tau - 1.222)^J_i )
+        (terms with I_i = 0 or 1 contribute zero)
+
+    Density:
+        rho [kg/m3] = P_star / (R_specific * T * gamma_pi)
+
+    Isothermal compressibility:
+        kappa_T [1/MPa] = -gamma_pipi / (gamma_pi * P_star)
+
+7.4 IF97 Region 1 Coefficient Table (I, J, n)
+
+    (0,  -2,   0.14632971213167e+00)
+    (0,  -1,  -0.84548187389013e+00)
+    (0,   0,  -0.37563603672040e+01)
+    (0,   1,   0.33855169168385e+01)
+    (0,   2,  -0.95791963387872e+00)
+    (0,   3,   0.15772038513228e+00)
+    (0,   4,  -0.16616417199501e-01)
+    (0,   5,   0.81214629983568e-03)
+    (1,  -9,   0.28319080123804e-03)
+    (1,  -7,  -0.60706301565874e-03)
+    (1,  -1,  -0.18990068218419e-01)
+    (1,   0,  -0.32529748770505e-01)
+    (1,   1,  -0.21841717175414e-01)
+    (1,   3,  -0.52838357969930e-04)
+    (2,  -3,  -0.47184321073267e-03)
+    (2,   0,  -0.30001780793026e-03)
+    (2,   1,   0.47661393906987e-04)
+    (2,   3,  -0.44141845330846e-05)
+    (2,  17,  -0.72694996297594e-15)
+    (3,  -4,  -0.31679644845054e-04)
+    (3,   0,  -0.28270797985312e-05)
+    (3,   6,  -0.85205128120103e-09)
+    (4,  -5,  -0.22425281908000e-05)
+    (4,  -2,  -0.65171222895601e-06)
+    (4,  10,  -0.14341729937924e-12)
+    (5,  -8,  -0.40516996860117e-06)
+    (8, -11,  -0.12734301741682e-08)
+    (8,  -6,  -0.17424871230634e-09)
+    (21, -29, -0.68762131295531e-18)
+    (23, -31,  0.14478307828521e-19)
+    (29, -38,  0.26335781662795e-22)
+    (30, -39, -0.11947622640071e-22)
+    (31, -40,  0.18228094581404e-23)
+    (32, -41, -0.93537087292458e-25)
+
+7.5 IF97 Verification Test Points (from IAPWS-IF97 Table 5)
+
+    T=300 K, P=3 MPa:   v = 0.100215168e-2 m3/kg  (rho = 997.853 kg/m3)
+    T=300 K, P=80 MPa:  v = 0.971180894e-3 m3/kg  (rho = 1029.672 kg/m3)
+    T=500 K, P=3 MPa:   v = 0.120241800e-2 m3/kg  (rho = 831.658 kg/m3)
+
+
+8. IMPLEMENTATION STRATEGY
+============================
+
+8.1 For pyResToolbox (Python)
+
+New module: plyasunov.py (or add to existing brine.py)
+
+Implement:
+    - B12(gas, T) -> cross second virial coefficient in cm3/mol
+    - A12_inf(gas, T, rho1_star) -> dimensionless A12-infinity
+    - V2_inf(gas, T, P) -> apparent molar volume in cm3/mol
+    - gas_mw(gas) -> molecular weight in g/mol
+
+For water properties, use iapws library (Option A from Section 7):
+    from iapws import IAPWS95
+    w = IAPWS95(T=T, P=P)
+    rho = w.rho; kappa = w.kappa
+
+Alternatively, implement the IF97 Region 1 equations from Section 7.3-7.4
+to avoid the external dependency entirely.
+
+8.2 For ResToolbox3 (Dart/Flutter)
+
+Implement IF97 Region 1 from scratch (Option B from Section 7). The 34-term
+polynomial with derivatives translates directly to Dart - no external
+libraries needed. Then implement the Plyasunov model on top.
+
+8.3 Modify garciaDensity()
+
+Currently:
+    def garciaDensity(rhoBRnoCO2, tKel, pBar, ppm, xCO2, MwB, MwG):
+        vPhi = partMolVol(tKel)         # CO2 only
+        ...
+
+Change to:
+    def garciaDensity(rhoBRnoCO2, tKel, pBar, ppm, xGas, MwB, MwG, vPhi):
+        # vPhi now passed as argument, computed externally via Plyasunov
+        ...
+
+Or alternatively, replace partMolVol(tKel) with a general function call:
+    vPhi = V2_inf(gas_name, tKel, pBar * 0.1)  # pBar -> MPa
+
+8.4 Mixed Gas Support
+
+For multiple dissolved gases, compute effective properties:
+    x2_total = sum of all x2_i
+    yi = x2_i / x2_total for each gas i
+    V_phi_eff = sum(yi * V2_inf(gas_i, T, P))
+    MW_eff = sum(yi * MW_i)
+
+Then call garciaDensity with V_phi_eff, MW_eff, and x2_total.
+
+8.5 Backward Compatibility
+
+The existing CO2-only path should continue to work identically. The Plyasunov
+model gives V_phi for CO2 that agrees with the Garcia cubic polynomial to
+within ~2 cm3/mol over 25-250C (the Garcia polynomial diverges above 250C
+because it is a simple cubic, while Plyasunov correctly captures near-critical
+behavior). For CO2-only calculations, either the existing polynomial or
+Plyasunov can be used.
+
+8.6 Unit Conventions
+
+pyResToolbox uses:
+    - Pressure in psia (brine_props) or bar (brine_props_co2)
+    - Temperature in degF (brine_props) or degC (brine_props_co2)
+    - Density in g/cm3 (specific gravity)
+
+The Plyasunov model uses:
+    - Pressure in MPa
+    - Temperature in K
+    - V_phi in cm3/mol
+
+Garcia Eq. 18 as implemented in garciaDensity already works in g/cm3, so
+V_phi in cm3/mol plugs directly into the existing formula with no unit conversion.
+
+Conversion: MPa = pBar * 0.1, K = degC + 273.15
+
+ResToolbox3 can use SI units internally (MPa, K) and convert at the UI layer.
+
+
+9. BRINE DENSITY ARCHITECTURE NOTE
+=====================================
+
+The Spivey brine density correlation cannot be simply replaced with IAPWS
+for the water portion. The Spivey framework uses intermediate values that
+the salt correction depends on:
+
+    - rhow_t70: water density at T and the 70 MPa reference pressure
+    - Ewt, Fwt: water compressibility parameters
+
+These feed into the brine equations (Eqs 4.6-4.8) as additive baselines.
+The salt correction is not a simple delta applied to the final water density;
+it hooks into the internal decomposition of the Spivey calculation.
+
+Recommended approach: Keep Spivey for brine density, use IAPWS (or IF97)
+only for the Plyasunov model's water property inputs (rho and kappa_T).
+The two do not conflict - Spivey provides the brine base density (rho1),
+while IAPWS/IF97 provides pure water properties for V_phi computation.
+
+
+10. VALIDATION DATA
+====================
+
+10.1 V2-infinity at 298.15 K, 0.1 MPa (reference values from Plyasunov)
+
+    H2:     26.1 cm3/mol
+    N2:     34.7
+    CH4:    37.0
+    CO2:    34.0
+    C2H6:   51.4
+    C3H8:   67.1
+    n-C4H10: 82.8
+    H2S:    34.8
+
+The implementation should reproduce these to within 0.5%.
+
+10.2 Temperature dependence
+
+Experimental data from Hnedkovsky, Wood & Majer (1996), J. Chem. Thermodynamics
+28, 125-142, DOI: 10.1006/jcht.1996.0011. Vibrating tube densitometer
+measurements at 28 and 35 MPa, averaged. Our Plyasunov model was validated
+against these at 30 MPa:
+
+CH4: 298K=36.75, 323K=37.30, 373K=40.50, 423K=45.90, 473K=54.10, 523K=64.80
+CO2: 298K=33.45, 323K=33.75, 373K=37.50, 423K=42.30, 473K=49.20, 523K=59.75
+H2S: 298K=34.90, 323K=35.90, 373K=38.70, 423K=42.75, 473K=48.45, 523K=56.75
+
+The implementation should agree within 5%.
+
+10.3 Density predictions
+
+CO2 at x2=0.05, T=298.15K, P=10MPa should give ~2.5-2.7% density increase.
+H2 should decrease density (lightest MW relative to V_phi).
+H2S should have near-neutral effect on density.
+Heavier hydrocarbons should decrease density more.
+
+10.4 Physical reasonableness
+
+V_phi should increase monotonically with temperature from 50-250C at 30 MPa.
+V_phi ordering at 25C: H2 < N2 ~ CO2 ~ H2S < CH4 < C2H6 < C3H8 < n-C4H10.
+
+
+11. VISCOSITY CORRECTION FOR DISSOLVED GASES
+==============================================
+
+11.1 Existing CO2 Viscosity Correction (Islam-Carlson 2012)
+
+pyResToolbox already implements the Islam-Carlson (2012) correction in
+co2_vis_brine():
+
+    mu = mu_brine * (1 + 4.65 * x_CO2^1.0134)
+
+This is a T-independent, power-law model. The exponent 1.0134 is nearly
+unity, so the effect is approximately linear in x_CO2: about +4.65% per
+unit mole fraction of dissolved CO2.
+
+11.2 Extension to Other Gases
+
+The density-effect scaling approach scales the Islam-Carlson coefficient
+by the ratio of density effects at a fixed reference condition:
+
+    a_i = a_CO2 * (drho%_i / drho%_CO2)
+
+where drho%_i is the percentage density change from dissolving gas i at
+x=0.02 in pure water at T=75°C (348.15 K), P=20 MPa.
+
+Physical basis: both density and viscosity effects arise from how the
+dissolved molecule occupies space in the hydrogen bond network. Gases that
+increase density (MW/V_phi > MW_water/V1*) increase viscosity, and
+vice versa.
+
+11.3 Scaled Coefficients (at reference condition 75°C, 20 MPa)
+
+    Gas       a_i        Direction
+    H2       -12.5       decreases viscosity
+    N2        -3.5       decreases viscosity
+    CH4      -11.0       decreases viscosity
+    CO2       +4.65      INCREASES viscosity (Islam-Carlson, calibrated)
+    C2H6     -10.8       decreases viscosity
+    C3H8     -11.5       decreases viscosity
+    n-C4H10  -12.2       decreases viscosity
+    H2S       -0.9       decreases viscosity (near neutral)
+
+11.4 Multi-Gas Viscosity
+
+For multiple dissolved gases, apply multiplicative corrections:
+
+    mu = mu_brine * Product_i(1 + a_i * x_i^1.0134)
+
+11.5 Implementation
+
+    def viscosity_correction_single(gas, x2):
+        if gas == 'CO2':
+            return 1.0 + 4.65 * x2^1.0134
+        ratio = drho%(gas, x_ref, T_ref, P_ref) / drho%('CO2', x_ref, T_ref, P_ref)
+        a_i = 4.65 * ratio
+        return max(1.0 + a_i * x2^1.0134, 0.2)  # floor at 20% of original
+
+The safety floor (0.2) prevents unphysical results at high mole fractions
+where the linear scaling is outside the Islam-Carlson calibration range.
+
+11.6 Validation Status
+
+    - CO2: Matches Islam-Carlson exactly (calibrated)
+    - CH4: Predicted ~2% decrease at x=0.002-0.003. Kumagai & Yokoyama (1998)
+      report 1-6% decrease at saturation. Order of magnitude consistent.
+    - H2S: Near-neutral (-0.9% per unit x). No published correction exists.
+    - Other gases: No published viscosity corrections exist. Predictions
+      are physically reasonable (correct sign, reasonable magnitude).
+
+11.7 Caveats
+
+    - Only CO2 is calibrated. All other gas coefficients are scaled estimates.
+    - The Islam-Carlson equation was fit to CO2 data at 40-160°C, 10-40 MPa.
+    - H2S has hydrogen bonding with water; its viscosity effect may not
+      follow the density-based scaling.
+    - At high dissolved gas mole fractions (>0.03), the linear scaling
+      extrapolation becomes uncertain.
+
+Reference: Islam & Carlson (2012), Energy Fuels 26(8), 5330-5336,
+DOI: 10.1021/ef3006228
+
+
+12. REFERENCES
+===============
+
+Garcia (2001): LBNL-49023, DOI: 10.2172/790022
+Hnedkovsky, Wood & Majer (1996): J. Chem. Thermodynamics 28, 125-142, DOI: 10.1006/jcht.1996.0011
+Plyasunov & Korzhinskaya (2020): Fluid Phase Equilibria 521, 112690 (Part II), DOI: 10.1016/j.fluid.2020.112690
+Plyasunov & Korzhinskaya (2020/2021): Fluid Phase Equilibria, 112872 (Part III), DOI: 10.1016/j.fluid.2020.112872
+Plyasunov & Korzhinskaya (2021): Fluid Phase Equilibria 536, 112982 (Part IV), DOI: 10.1016/j.fluid.2021.112982
+Wagner et al. (2000): ASME J. Eng. Gas Turbines Power, 122(1), 150-182 (IAPWS-IF97)

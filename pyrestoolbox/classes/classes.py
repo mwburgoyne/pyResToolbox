@@ -68,6 +68,12 @@ class kr_table(Enum):  # Relative permeability table type
     SGOF = 1
     SGWFN = 2
 
+class vlp_method(Enum):  # VLP multiphase flow correlation
+    HB = 0      # Hagedorn-Brown
+    WG = 1      # Woldesemayat-Ghajar
+    GRAY = 2    # Gray
+    BB = 3      # Beggs & Brill
+
 class_dic = {
     "zmethod": z_method,
     "cmethod": c_method,
@@ -79,5 +85,6 @@ class_dic = {
     "comethod": co_method,
     "krfamily": kr_family,
     "krtable": kr_table,
+    "vlpmethod": vlp_method,
 }
 
