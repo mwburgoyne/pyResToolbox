@@ -662,7 +662,7 @@ pyrestoolbox.simtools.make_vfpinj
 
 .. code-block:: python
 
-    make_vfpinj(table_num, completion, flo_type='WAT', vlpmethod='HB', flo_rates=None, thp_values=None, gas_pvt=None, gsg=0.65, wsg=1.07, oil_pvt=None, pb=0, rsb=0, sgsp=0.65, api=35, datum_depth=0, export=False, filename='') -> dict
+    make_vfpinj(table_num, completion, flo_type='WAT', vlpmethod='WG', flo_rates=None, thp_values=None, gas_pvt=None, gsg=0.65, wsg=1.07, oil_pvt=None, pb=0, rsb=0, sgsp=0.65, api=35, datum_depth=0, export=False, filename='') -> dict
 
 Generates an Eclipse VFPINJ keyword table for injection wells. Computes BHP as a function of flow rate and tubing head pressure using the nodal module VLP correlations.
 
@@ -684,7 +684,7 @@ Generates an Eclipse VFPINJ keyword table for injection wells. Computes BHP as a
      - Flow rate type: 'WAT' (water), 'GAS' (gas), or 'OIL' (oil). Default 'WAT'
    * - vlpmethod
      - str
-     - VLP correlation: 'HB', 'WG', 'GRAY', or 'BB'. Default 'HB'
+     - VLP correlation: 'HB', 'WG', 'GRAY', or 'BB'. Default 'WG'
    * - flo_rates
      - list
      - Flow rates in ascending order. Units: stb/d (WAT/OIL) or Mscf/d (GAS). Default provided if None
@@ -720,10 +720,10 @@ Generates an Eclipse VFPINJ keyword table for injection wells. Computes BHP as a
      - Bottom hole datum depth (ft). Default = completion total TVD
    * - export
      - bool
-     - If True, writes an Eclipse include file. Default False
+     - If True, writes an Eclipse VFP file. Default False
    * - filename
      - str
-     - Custom output filename. Default: VFPINJ_{table_num}.INC
+     - Custom output filename. Default: VFPINJ_{table_num}.VFP
 
 Returns a dictionary with keys: ``table_num``, ``datum_depth``, ``flo_type``, ``flo_rates``, ``thp_values``, ``bhp`` (2D numpy array shape NTHP x NFLO), ``n_failed``, ``eclipse_string``.
 
@@ -744,7 +744,7 @@ pyrestoolbox.simtools.make_vfpprod
 
 .. code-block:: python
 
-    make_vfpprod(table_num, completion, well_type='gas', vlpmethod='HB', flo_rates=None, thp_values=None, wfr_values=None, gfr_values=None, alq_values=None, gas_pvt=None, gsg=0.65, oil_vis=1.0, api=45, pr=0, oil_pvt=None, pb=0, rsb=0, sgsp=0.65, wsg=1.07, datum_depth=0, export=False, filename='') -> dict
+    make_vfpprod(table_num, completion, well_type='gas', vlpmethod='WG', flo_rates=None, thp_values=None, wfr_values=None, gfr_values=None, alq_values=None, gas_pvt=None, gsg=0.65, oil_vis=1.0, api=45, pr=0, oil_pvt=None, pb=0, rsb=0, sgsp=0.65, wsg=1.07, datum_depth=0, export=False, filename='') -> dict
 
 Generates an Eclipse VFPPROD keyword table for production wells. Computes BHP as a function of flow rate, tubing head pressure, water fraction, gas fraction, and artificial lift quantity using the nodal module VLP correlations.
 
@@ -770,7 +770,7 @@ For oil wells: FLO=OIL (stb/d), WFR=WCT (fraction 0-1), GFR=GOR (Mscf/stb)
      - 'gas' or 'oil'. Default 'gas'
    * - vlpmethod
      - str
-     - VLP correlation: 'HB', 'WG', 'GRAY', or 'BB'. Default 'HB'
+     - VLP correlation: 'HB', 'WG', 'GRAY', or 'BB'. Default 'WG'
    * - flo_rates
      - list
      - Flow rates in ascending order. Default provided if None
@@ -821,10 +821,10 @@ For oil wells: FLO=OIL (stb/d), WFR=WCT (fraction 0-1), GFR=GOR (Mscf/stb)
      - Bottom hole datum depth (ft). Default = completion total TVD
    * - export
      - bool
-     - If True, writes an Eclipse include file. Default False
+     - If True, writes an Eclipse VFP file. Default False
    * - filename
      - str
-     - Custom output filename. Default: VFPPROD_{table_num}.INC
+     - Custom output filename. Default: VFPPROD_{table_num}.VFP
 
 Returns a dictionary with keys: ``table_num``, ``datum_depth``, ``well_type``, ``flo_type``, ``wfr_type``, ``gfr_type``, ``flo_rates``, ``thp_values``, ``wfr_values``, ``gfr_values``, ``alq_values``, ``bhp`` (5D numpy array shape NTHP x NWFR x NGFR x NALQ x NFLO), ``n_failed``, ``eclipse_string``.
 

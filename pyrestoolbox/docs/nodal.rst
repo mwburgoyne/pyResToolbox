@@ -17,7 +17,7 @@ pyResToolBox uses class objects to track calculation options through the functio
      - Class Description & Options
    * - vlpmethod
      - vlp_method
-     - Multiphase flow correlation for VLP calculations. Defaults to 'HB'.
+     - Multiphase flow correlation for VLP calculations. Defaults to 'WG'.
        Options are:
         + 'HB': Hagedorn-Brown (1965) with Orkiszewski bubble flow correction
         + 'WG': Woldesemayat-Ghajar (2007) drift-flux model
@@ -479,7 +479,7 @@ pyrestoolbox.nodal.fbhp
 
 .. code-block:: python
 
-    fbhp(thp, completion, vlpmethod='HB', well_type='gas', gas_pvt=None, oil_pvt=None, qg_mmscfd=0, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, qt_stbpd=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65) -> float
+    fbhp(thp, completion, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, qg_mmscfd=0, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, qt_stbpd=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65) -> float
 
 Returns flowing bottom hole pressure (psia) using the specified VLP correlation. Supports both gas and oil wells. The Completion object can define vertical wells (legacy mode) or multi-segment deviated wells using WellSegment objects. The ``sin(theta)`` multiplier on hydrostatic gradient enables proper deviated and horizontal well support.
 
@@ -601,7 +601,7 @@ pyrestoolbox.nodal.outflow_curve
 
 .. code-block:: python
 
-    outflow_curve(thp, completion, vlpmethod='HB', well_type='gas', gas_pvt=None, oil_pvt=None, rates=None, n_rates=20, max_rate=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65) -> dict
+    outflow_curve(thp, completion, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, rates=None, n_rates=20, max_rate=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65) -> dict
 
 Returns VLP outflow curve as a dictionary with keys ``'rates'`` and ``'bhp'``. Evaluates ``fbhp()`` at each rate point. Rates are MMscf/d for gas wells, STB/d for oil wells.
 
@@ -724,7 +724,7 @@ pyrestoolbox.nodal.operating_point
 
 .. code-block:: python
 
-    operating_point(thp, completion, reservoir, vlpmethod='HB', well_type='gas', gas_pvt=None, oil_pvt=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, gor=0, wc=0, wsg=1.07, gsg=0.65, pb=0, rsb=0, sgsp=0.65, bo=1.2, uo=1.0, n_points=25) -> dict
+    operating_point(thp, completion, reservoir, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, gor=0, wc=0, wsg=1.07, gsg=0.65, pb=0, rsb=0, sgsp=0.65, bo=1.2, uo=1.0, n_points=25) -> dict
 
 Finds the operating point where VLP outflow curve intersects the IPR inflow curve via bisection. Returns a dictionary with keys:
 
