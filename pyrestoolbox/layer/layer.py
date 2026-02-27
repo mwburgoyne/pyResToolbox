@@ -44,6 +44,9 @@ def lorenz2b(lorenz: float, lrnz_method: str = "EXP") -> float:
     if lorenz < 0 or lorenz > 1:
         raise ValueError(f"Lorenz coefficient must be between 0 and 1, got {lorenz}")
 
+    if lorenz == 0:
+        return 0.0  # Homogeneous — no heterogeneity
+
     if lorenz < 0.000333:
         B = 2 / 1000
         if method == "LANG":
@@ -93,6 +96,8 @@ def lorenzfromb(B: float, lrnz_method: str = "EXP") -> float:
                 Where PL = 1 / B and VL = PL + 1
     """
     method = lrnz_method.upper()
+    if B <= 0:
+        return 0.0  # B=0 means homogeneous (Lc=0)
     B = max(B, 0.000001)
     if method == "LANG":
         B = min(B, 25000)

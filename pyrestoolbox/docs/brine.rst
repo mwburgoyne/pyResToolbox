@@ -172,6 +172,11 @@ Usage example for 175 Bara x 85 degC and 0% NaCl brine:
 pyrestoolbox.brine.make_pvtw_table
 ======================
 
+.. note::
+
+    In v3.0, the primary entry point for this function is ``simtools.make_pvtw_table()``.
+    The ``brine.make_pvtw_table()`` function remains as a backward-compatible wrapper.
+
 .. code-block:: python
 
     make_pvtw_table(pi, degf, wt=0, ch4_sat=0, pmin=500, pmax=10000, nrows=20, export=False) -> dict

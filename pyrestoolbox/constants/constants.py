@@ -23,7 +23,7 @@
 
 
 # Constants
-R = 10.731577089016  # Universal gas constant, ft³·psia/°R·lb.mol
+R = 10.731577089016  # Universal gas constant, ftï¿½ï¿½psia/ï¿½Rï¿½lb.mol
 psc = 14.696  # Standard conditions pressure (psia)
 tsc = 60  # Standard conditions temperature (deg F)
 degF2R = 459.67  # Offset to convert degrees F to degrees Rankine
@@ -36,5 +36,4 @@ WDEN = 62.367 # Water Density lb/cuft
 MW_CO2 = 44.01
 MW_H2S = 34.082
 MW_N2 = 28.014
-MW_AIR = 28.97
 MW_H2 = 2.016

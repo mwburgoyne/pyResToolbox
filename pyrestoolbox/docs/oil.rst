@@ -104,7 +104,9 @@ Function List
      - `pyrestoolbox.oil.oil_bo`_
    * - Oil Viscosity
      - `pyrestoolbox.oil.oil_viso`_
-   * - Generate Black Oil Table data
+   * - Harmonize Pb and Rsb (find consistent values and scaling factor)
+     - `pyrestoolbox.oil.oil_harmonize_pb_rsb`_
+   * - Generate Black Oil Table data (v3.0: see also simtools.make_bot_og)
      - `pyrestoolbox.oil.make_bot_og`_
    * - Estimate soln gas SG from oil
      - `pyrestoolbox.oil.sg_evolved_gas`_
@@ -608,8 +610,69 @@ Examples:
     0.416858469042502
     
 
+pyrestoolbox.oil.oil_harmonize_pb_rsb
+=====================
+
+.. code-block:: python
+
+    oil_harmonize_pb_rsb(pb=0, rsb=0, degf=0, api=0, sg_sp=0, sg_g=0, rsmethod='VELAR', pbmethod='VELAR') -> tuple
+
+Resolves consistent Pb, Rsb, and rsb_frac from user inputs. If only one of Pb or Rsb is specified, the other is calculated using the selected correlation. If both are specified, an iterative procedure finds an ``rsb_frac`` scaling factor that allows the correlations to honor both values simultaneously.
+
+Returns tuple of ``(pb, rsb, rsb_frac)`` where rsb_frac is 1.0 when only one value was specified, or the scaling factor needed to harmonize both.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - pb
+     - float
+     - Bubble point pressure (psia). 0 = unknown (will be calculated from rsb)
+   * - rsb
+     - float
+     - Solution GOR at Pb (scf/stb). 0 = unknown (will be calculated from pb)
+   * - degf
+     - float
+     - Reservoir temperature (deg F)
+   * - api
+     - float
+     - Stock tank oil density (deg API)
+   * - sg_sp
+     - float
+     - Separator gas specific gravity
+   * - sg_g
+     - float
+     - Weighted average surface gas specific gravity
+   * - rsmethod
+     - str or rs_method
+     - Rs calculation method. Default 'VELAR'
+   * - pbmethod
+     - str or pb_method
+     - Pb calculation method. Default 'VELAR'
+
+Examples:
+
+.. code-block:: python
+
+    >>> from pyrestoolbox import oil
+    >>> # Calculate rsb from pb
+    >>> pb, rsb, frac = oil.oil_harmonize_pb_rsb(pb=3500, degf=175, api=38, sg_g=0.68)
+    >>> print(f'Pb={pb:.0f}, Rsb={rsb:.0f}, frac={frac:.4f}')
+    >>> # Harmonize both user-specified values
+    >>> pb, rsb, frac = oil.oil_harmonize_pb_rsb(pb=3500, rsb=1200, degf=175, api=38, sg_sp=0.68, sg_g=0.68)
+    >>> print(f'frac={frac:.4f}')
+
+
 pyrestoolbox.oil.make_bot_og
 =====================
+
+.. note::
+
+    In v3.0, the primary entry point for this function is ``simtools.make_bot_og()``.
+    The ``oil.make_bot_og()`` function remains as a backward-compatible wrapper.
 
 .. code-block:: python
 
