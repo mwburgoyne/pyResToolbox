@@ -87,12 +87,23 @@ def oil_rate_radial(
     if pwf.size > 1:
         pb = np.array([max(pb, pwf[i]) for i in range(pwf.size)])
 
+    if r_w <= 0:
+        raise ValueError("Wellbore radius r_w must be positive")
+    if r_ext <= r_w:
+        raise ValueError("External radius r_ext must be greater than wellbore radius r_w")
+    if uo <= 0:
+        raise ValueError("Viscosity uo must be positive")
+    if bo <= 0:
+        raise ValueError("Formation volume factor bo must be positive")
+
     J = (
         0.00708 * k * h / (uo * bo * (np.log(r_ext / r_w) + S - 0.75))
     )  # Productivity index
     if not vogel:
         qoil = J * (pr - pwf)
     else:
+        if np.any(pb <= 0):
+            raise ValueError("Bubble point pressure pb must be positive when vogel=True")
         qsat_max = J * pb / 1.8
         qusat = J * (pr - pb)
         qoil = (
@@ -129,12 +140,21 @@ def oil_rate_linear(
         np.asarray(pwf),
     )
 
+    if length <= 0:
+        raise ValueError("Flow length must be positive")
+    if uo <= 0:
+        raise ValueError("Viscosity uo must be positive")
+    if bo <= 0:
+        raise ValueError("Formation volume factor bo must be positive")
+
     J = (
         0.00708 * k * area / (2 * np.pi * uo * bo * length)
     )  # Productivity index
     if not vogel:
         qoil = J * (pr - pwf)
     else:
+        if np.any(pb <= 0):
+            raise ValueError("Bubble point pressure pb must be positive when vogel=True")
         qsat_max = J * pb / 1.8
         qusat = J * (pr - pb)
         qoil = (
@@ -182,8 +202,7 @@ def oil_twu_props(
             tb, tcp, pcp, vcp, sgp = paraffin_props(Mp_guess)
             d_err = mw - M(tb, sgp, sg, Mp_guess, damp)
             if n_iter > 100:
-                print("Check inputs. Twu algorithm did not converge", mw, ja, sg, damp)
-                break
+                raise RuntimeError(f"Twu algorithm did not converge for mw={mw}, ja={ja}, sg={sg}, damp={damp}")
         return tb, Mp_guess, tcp, pcp, vcp, sgp
 
     # Return mw from modified Eq 5.78 to take into account damping
@@ -579,8 +598,9 @@ def oil_rs_bub(
             new_rsb = intcpt
                 
             #print('perr, pb_calc, rs_calc', new_err, new_pbcalc, new_rsb)
-            if (i > 100):  
-                print("Problem iterating to rsbub with Valko McCain")
+            if (i > 100):
+                import warnings
+                warnings.warn("oil_rs_bub: Valko-McCain did not converge after 100 iterations", RuntimeWarning)
                 return new_rsb
         return new_rsb
 
@@ -609,6 +629,8 @@ def oil_rs_bub(
         api=api, degf=degf, pb=pb, sg_g=sg_g, sg_sp=sg_sp
     )
     if np.isnan(rsbub):
+        import warnings
+        warnings.warn("oil_rs_bub: correlation returned NaN, returning 0", RuntimeWarning)
         return 0
     else:
         return rsbub

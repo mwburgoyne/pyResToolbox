@@ -41,6 +41,9 @@ def lorenz2b(lorenz: float, lrnz_method: str = "EXP") -> float:
     if method != "EXP" and method != "LANG":
         raise ValueError('Method must be "LANG" or "EXP"')
 
+    if lorenz < 0 or lorenz > 1:
+        raise ValueError(f"Lorenz coefficient must be between 0 and 1, got {lorenz}")
+
     if lorenz < 0.000333:
         B = 2 / 1000
         if method == "LANG":
@@ -117,12 +120,12 @@ def lorenz_from_flow_fraction(
                 Where PL = 1 / B and VL = PL + 1
     """
     method = lrnz_method.upper()
-    if kh_frac <= phih_frac:  #
-        print("kh fraction should always be greater than phi_h fraction")
-        return 0.001
+    if kh_frac <= phih_frac:
+        raise ValueError("kh_frac must be greater than phih_frac")
     if kh_frac >= 1:
-        print("kh Fraction must be less than 1")
-        return 0.001
+        raise ValueError("kh_frac must be less than 1")
+    if phih_frac <= 0:
+        raise ValueError("phih_frac must be positive")
 
     # If Langmuir method, can explicitly calculate B
     if method == "LANG":

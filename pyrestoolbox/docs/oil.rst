@@ -57,7 +57,7 @@ pyResToolBox uses class objects to track calculation options through the functio
      - Method for calculating oil formation volume factor. Defaults to 'MCAIN'
        Options are:
         + 'STAN': Standing Correlation
-        + 'MCAIN': McCain approach, calculating from densities � Default
+        + 'MCAIN': McCain approach, calculating from densities -- Default
 
 Users can specify which calculation method to use either by passing an option string, or a class object to any given function. The implementation of class objects should make it easier to program in an IDE that supports type hinting
 
@@ -72,13 +72,13 @@ Calculating bubble point pressure with Standing correlation via option string, a
     6406.067846808766
     
     >>> oil.oil_pbub(api=43, degf=185, rsb=2350, sg_g = 0.72, pbmethod = oil.pb_method.STAN)
-    6406.067846808766
+    6406.063846808766
 
 
 Function List
 =============
 
-.. list-table:: Gas Functions
+.. list-table:: Oil Functions
    :widths: 15 40
    :header-rows: 1
 
@@ -273,10 +273,10 @@ Examples:
 .. code-block:: python
 
     >>> oil.oil_pbub(api=43, degf=185, rsb=2350, sg_g =0.72)
-    5179.51086900132
-    
+    5199.2406069808885
+
     >>> oil.oil_pbub(api=43, degf=185, rsb=2350, sg_sp = 0.72, pbmethod ='STAN')
-    6390.285894698239
+    6390.281894698239
     
     
 pyrestoolbox.oil.oil_rs_bub
@@ -320,7 +320,7 @@ Examples:
 .. code-block:: python
 
     >>> oil.oil_rs_bub(api=43, degf=185, pb=5179.5, sg_sp = 0.72)
-    2370.1268120547115
+    1872.666133282599
     
 
 pyrestoolbox.oil.oil_rs
@@ -340,6 +340,7 @@ Returns solution gas oil ratio (scf/stb) calculated with different correlations.
      - Type
      - Description
    * - api
+     - float
      - Density of stock tank liquid (API)
    * - degf
      - float
@@ -368,16 +369,16 @@ Examples:
 .. code-block:: python
 
     >>> oil.oil_rs(api = 43, degf = 185, sg_sp=0.72, p = 3000, pb = 5179.5, rsb = 2370)
-    1017.9424240354475
-    
+    1017.9424383646037
+
     >>> oil.oil_rs(api=43, degf=185, sg_sp=0.72, p=3000, rsb =2370)
-    1010.0669446829819
-    
+    1010.0669567201218
+
     >>> oil.oil_rs(api=43, degf=185, sg_sp=0.72, p=3000, pb =5180)
-    1018.0168241109982
-    
+    804.2857187814161
+
     >>> oil.oil_rs(api=43, degf=185, sg_sp=0.72, p=3000, pb =5180, rsmethod ='STAN')
-    949.754509735243
+    947.1133546937306
 
 pyrestoolbox.oil.oil_co
 =====================
@@ -402,19 +403,20 @@ Either pb, rsb or both need to be specified. If one is missing, the other will b
      - float
      - Pressure (psia).
    * - api
+     - float
      - Density of stock tank liquid (API)
    * - degf
      - float
      - Oil Temperature (deg F)
    * - sg_sp
      - float
-     - Separator gas gravity (relative to air). 
+     - Separator gas gravity (relative to air).
    * - sg_g
      - float
-     - Weighted average specific gravity of surface gas, inclusive of gas evolved after separation (relative to air).   
+     - Weighted average specific gravity of surface gas, inclusive of gas evolved after separation (relative to air).
    * - pb
      - float
-     - Original bubble point pressure (psia) 
+     - Original bubble point pressure (psia)
    * - rsb
      - float
      - Original solution GOR at original bubble point pressure (scf/stb)
@@ -446,10 +448,10 @@ Examples:
 .. code-block:: python
 
     >>> oil.oil_co(p = 4500, api = 47, degf = 180, sg_sp = 0.72, rsb = 2750)
-    8.807199545797315e-05
-    
+    0.0007587726853322233
+
     >>> oil.oil_co(p=2000, api=47, degf=180, sg_sp =0.72, rsb =2750, pb=4945)
-    0.00023290195865185949
+    0.0009245540028053584
     
 
 pyrestoolbox.oil.oil_deno
@@ -493,6 +495,7 @@ pb only needs to be set when pressures are above pb. For saturated oil, this can
      - float
      - Specific gravity of stock tank liquid (rel water). Will calculate from api if not specified
    * - api
+     - float
      - Density of stock tank liquid (API). Will calculate from sg_sto if not specified
    * - denomethod
      - string or deno_method
@@ -504,7 +507,7 @@ Examples:
 .. code-block:: python
 
     >>> oil.oil_deno(p=2000, degf=165, rs=1000, rsb=2000, sg_g = 0.72, api =38)
-    40.95314479616728 
+    40.98349866963842
 
 pyrestoolbox.oil.oil_bo
 =======================
@@ -513,7 +516,7 @@ pyrestoolbox.oil.oil_bo
 
     oil_bo(p, pb, degf, rs, rsb, sg_o, sg_g =0, sg_sp =0, bomethod='MCAIN', denomethod='SWMH') -> float
 
-Returns oil formation volume factor calculated with different correlations
+Returns oil formation volume factor calculated with different correlations.
 At least one of sg_g and sg_sp must be supplied. This function will make simple assumption to estimate missing gas sg if only one is provided.
 
 
@@ -529,7 +532,7 @@ At least one of sg_g and sg_sp must be supplied. This function will make simple 
      - Pressure (psia).
    * - pb
      - float
-     - Original bubble point pressure (psia) 
+     - Original bubble point pressure (psia)
    * - degf
      - float
      - Oil temperature (deg F).
@@ -541,28 +544,28 @@ At least one of sg_g and sg_sp must be supplied. This function will make simple 
      - Original solution GOR at original bubble point pressure (scf/stb)
    * - sg_o
      - float
-     - Specific gravity of live oil (rel water).
+     - Specific gravity of stock tank oil (rel water).
    * - sg_g
      - float
-     - Weighted average specific gravity of surface gas, inclusive of gas evolved after separation (relative to air).   
+     - Weighted average specific gravity of surface gas, inclusive of gas evolved after separation (relative to air).
    * - sg_sp
      - float
-     - Separator gas gravity (relative to air). 
+     - Separator gas gravity (relative to air).
    * - bomethod
      - string or bo_method
      - The method of oil FVF calculation to be employed. `Calculation Methods and Class Objects`_.
    * - denomethod
      - string or deno_method
-     - The method of live oil density  calculation to be employed. `Calculation Methods and Class Objects`_.
+     - The method of live oil density calculation to be employed. `Calculation Methods and Class Objects`_.
 
 Examples:
 
 .. code-block:: python
 
-    >>> oil.oil_bo(p=2000, pb=3000, degf=165, rs=1000, sg_o=0.8, sg_g =0.68)
-    1.5038177989551806   
-    
-    >>> oil.oil_bo(p=2000, pb=3000, degf=165, rs=1000, sg_o=0.8, sg_g =0.68, bomethod='STAN')
+    >>> oil.oil_bo(p=2000, pb=3000, degf=165, rs=1000, rsb=2000, sg_o=0.8, sg_g =0.68)
+    1.5075107735318138
+
+    >>> oil.oil_bo(p=2000, pb=3000, degf=165, rs=1000, rsb=2000, sg_o=0.8, sg_g =0.68, bomethod='STAN')
     1.5393786735904431
     
 pyrestoolbox.oil.oil_viso
@@ -631,10 +634,6 @@ If user species Pb or Rsb only, the corresponding property will be calculated. I
    :widths: 10 15 40
    :header-rows: 1
 
-.. list-table:: Inputs
-   :widths: 10 15 40
-   :header-rows: 1
-
    * - Parameter
      - Type
      - Description
@@ -694,14 +693,11 @@ If user species Pb or Rsb only, the corresponding property will be calculated. I
      - The method of Rs calculation to be employed. `Calculation Methods and Class Objects`_.
    * - export
      - bool
-     - Boolean flag that controls whether to export full table to excel, and export separate PVDG, PVDO (and PVTO if requested) include files. Default is False.
+     - Boolean flag that controls whether to export full table to excel, and export separate PVDG, PVDO (and PVTO if requested) include files. Default is False
    * - pvto
      - bool
-     - Boolean flag that controls whether the pvto live oil Eclipse format will be generated. 
-         - extends saturated pressures up to maximum pressure
-         - generates undersaturated oil propeties at each pressure step
-         - writes out pvto include file if export == True
-         
+     - Boolean flag that controls whether PVTO live oil Eclipse format will be generated. If True: extends saturated pressures up to maximum pressure, generates undersaturated oil properties at each pressure step, and writes out PVTO include file if export is also True. Default is False
+
 Examples:
 
 .. code-block:: python
@@ -808,13 +804,13 @@ Calculates weighted average specific gravity of surface gas (sg_g) from separato
      - Description
    * - sg_sp
      - float
-     - Separator pressure (psia). 
+     - Separator gas specific gravity (relative to air).
    * - rsp
      - float
-     - Separator GOR (separator scf / stb). 
+     - Separator GOR (separator scf / stb).
    * - sg_st
      - float
-     - Specific gravity of incremental gas evolved from separator liquid as it equilibrates to stock tank conditions (relative to air)  
+     - Specific gravity of incremental gas evolved from separator liquid as it equilibrates to stock tank conditions (relative to air)
    * - rst
      - float
      - Incremental gas evolved from separator liquid as it equilibrates to stock tank conditions (scf/stb). 
@@ -890,7 +886,7 @@ pyrestoolbox.oil.oil_rate_radial
     oil_rate_radial(k, h, pr, pwf, r_w, r_ext, uo, bo, S = 0, vogel = False, pb = 0) -> float or np.array
 
 Returns liquid rate (stb/day) for radial flow using Darcy pseudo steady state equation with optional Vogel correction.
-Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D array of rates. Using more than one input array � while not prohibited - will not return expected results 
+Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D array of rates. Using more than one input array -- while not prohibited -- will not return expected results.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -951,7 +947,7 @@ pyrestoolbox.oil.oil_rate_linear
     oil_rate_linear(k, pr, pwf, area, length, uo, bo, vogel = False, pb = 0) -> float or np.array
 
 Returns liquid rate (stb/day) for linear flow using Darcy steady state equation with optional Vogel correction.
-Arrays can be used for any one of k, pr, pwf or area, returning corresponding 1-D array of rates. Using more than one input array � while not prohibited - will not return expected results 
+Arrays can be used for any one of k, pr, pwf or area, returning corresponding 1-D array of rates. Using more than one input array -- while not prohibited -- will not return expected results.
 
 .. list-table:: Inputs
    :widths: 10 15 40

@@ -246,8 +246,12 @@ Examples:
 
     >>> from pyrestoolbox import brine
     >>> result = brine.make_pvtw_table(pi=3000, degf=200, wt=0, ch4_sat=0)
-    >>> print(result['bw_ref'])
-    >>> print(result['table'].head())
+    >>> result['bw_ref']
+    1.027589195773527
+    >>> result['cw_ref']
+    3.0887176266534516e-06
+    >>> result['visw_ref']
+    0.3083544960904146
 
 pyrestoolbox.brine.SoreideWhitson
 ======================
@@ -471,7 +475,7 @@ brine viscosity:
      - mu x (1 + 1.5 x xH2S^1.0134)
      - Murphy-Gaines (1974)
    * - CH4
-     - mu x max(1.109 - 5.98e-4*T + 1.09e-6*T^2, 1.0), T in degF
+     - mu x max(1.109 - 5.98e-4*T + 1.0933e-6*T^2, 1.0), T in degF
      - Ostermann (SPE-14211, 1985)
    * - Other
      - No correction (factor = 1.0)

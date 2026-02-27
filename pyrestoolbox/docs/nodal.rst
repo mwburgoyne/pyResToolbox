@@ -504,7 +504,7 @@ Returns flowing bottom hole pressure (psia) using the specified VLP correlation.
      - 'gas' or 'oil'
    * - gas_pvt
      - GasPVT
-     - Gas PVT object (reserved for future use)
+     - Gas PVT object. If provided, extracts gas composition (sg, co2, h2s, n2, h2) and method selections for IPR calculations
    * - oil_pvt
      - OilPVT
      - Oil PVT object. If provided for oil wells, extracts api, sgsp, pb, rsb
@@ -661,6 +661,10 @@ Returns IPR (Inflow Performance Relationship) curve as a dictionary with keys ``
 For gas wells, uses pseudopressure deliverability via ``gas.gas_rate_radial()``. Returns rates in Mscf/d.
 
 For oil wells with OilPVT: uses Darcy above Pb, Vogel below Pb. Without OilPVT: simple Darcy. Returns rates in STB/d.
+
+.. warning::
+
+   **Gas rate unit mismatch between IPR and VLP:** Gas IPR rates from ``ipr_curve()`` are returned in **Mscf/d**, while VLP rates from ``outflow_curve()`` and the operating rate from ``operating_point()`` are in **MMscf/d**. When plotting IPR and VLP curves on the same axis, divide IPR rates by 1000. The ``operating_point()`` function handles this conversion internally.
 
 .. list-table:: Inputs
    :widths: 10 15 40

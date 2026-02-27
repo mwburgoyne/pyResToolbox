@@ -196,42 +196,54 @@ def test_oil_rs_st():
     assert isinstance(rst, float)
     assert rst >= 0, "Stock tank GOR should be non-negative"
 
+# Hard-coded regression baselines - frozen reference values
+# If any of these change, it means a code modification has altered computational results.
+# Do NOT update these values without explicit review and approval.
 # =============================================================================
-# Regression baselines
-# =============================================================================
 
-_BASELINES = None
-
-def capture_oil_baselines():
-    baselines = {}
-    baselines['pb_valmc'] = oil.oil_pbub(api=35, degf=200, rsb=500, sg_sp=0.75, pbmethod='VALMC')
-    baselines['pb_velar'] = oil.oil_pbub(api=35, degf=200, rsb=500, sg_sp=0.75, pbmethod='VELAR')
-    baselines['rsb_velar'] = oil.oil_rs_bub(api=35, degf=200, pb=3000, sg_sp=0.75, rsmethod='VELAR')
-    baselines['bo_3000'] = oil.oil_bo(p=3000, pb=3000, degf=200, rs=500, rsb=500, sg_o=oil.oil_sg(35), sg_g=0.75)
-    baselines['deno_3000'] = oil.oil_deno(p=3000, degf=200, rs=500, rsb=500, sg_sp=0.75, api=35)
-    baselines['uo_3000'] = oil.oil_viso(p=3000, api=35, degf=200, pb=3000, rs=500)
-    return baselines
-
-def get_baselines():
-    global _BASELINES
-    if _BASELINES is None:
-        _BASELINES = capture_oil_baselines()
-    return _BASELINES
+# Frozen baselines captured 2026-02-27
+_FROZEN_BASELINES = {
+    'pb_valmc': 2332.9599554806437,
+    'pb_velar': 2477.58071878937,
+    'bo_3000': 1.286959379509055,
+    'deno_3000': 45.143156554713826,
+    'uo_3000': 0.5657565566131671,
+    'co_above_pb': 0.0007587726853322233,
+    'rs_bub_velar': 1872.666133282599,
+}
 
 def test_regression_pb_valmc():
-    b = get_baselines()
     pb = oil.oil_pbub(api=35, degf=200, rsb=500, sg_sp=0.75, pbmethod='VALMC')
-    assert abs(pb - b['pb_valmc']) / b['pb_valmc'] < 1e-6
+    expected = _FROZEN_BASELINES['pb_valmc']
+    assert abs(pb - expected) / expected < 1e-6, f"Pb VALMC changed: {pb} vs frozen {expected}"
 
 def test_regression_bo():
-    b = get_baselines()
     bo = oil.oil_bo(p=3000, pb=3000, degf=200, rs=500, rsb=500, sg_o=oil.oil_sg(35), sg_g=0.75)
-    assert abs(bo - b['bo_3000']) / b['bo_3000'] < 1e-6
+    expected = _FROZEN_BASELINES['bo_3000']
+    assert abs(bo - expected) / expected < 1e-6, f"Bo changed: {bo} vs frozen {expected}"
 
 def test_regression_deno():
-    b = get_baselines()
     rho = oil.oil_deno(p=3000, degf=200, rs=500, rsb=500, sg_sp=0.75, api=35)
-    assert abs(rho - b['deno_3000']) / b['deno_3000'] < 1e-6
+    expected = _FROZEN_BASELINES['deno_3000']
+    assert abs(rho - expected) / expected < 1e-6, f"Oil density changed: {rho} vs frozen {expected}"
+
+def test_regression_viso():
+    """Oil viscosity must match frozen baseline"""
+    uo = oil.oil_viso(p=3000, api=35, degf=200, pb=3000, rs=500)
+    expected = _FROZEN_BASELINES['uo_3000']
+    assert abs(uo - expected) / expected < 1e-6, f"Oil viscosity changed: {uo} vs frozen {expected}"
+
+def test_regression_co():
+    """Oil compressibility must match frozen baseline"""
+    co = oil.oil_co(p=4500, api=47, degf=180, sg_sp=0.72, rsb=2750)
+    expected = _FROZEN_BASELINES['co_above_pb']
+    assert abs(co - expected) / expected < 1e-4, f"Oil Co changed: {co} vs frozen {expected}"
+
+def test_regression_pb_velar():
+    """Velarde Pb must match frozen baseline"""
+    pb = oil.oil_pbub(api=35, degf=200, rsb=500, sg_sp=0.75, pbmethod='VELAR')
+    expected = _FROZEN_BASELINES['pb_velar']
+    assert abs(pb - expected) / expected < 1e-6, f"Pb VELAR changed: {pb} vs frozen {expected}"
 
 
 if __name__ == '__main__':
@@ -256,11 +268,6 @@ if __name__ == '__main__':
 
     print(f"\n{'=' * 70}")
     print(f"Results: {passed} passed, {failed} failed out of {passed + failed}")
-
-    if _BASELINES:
-        print(f"\nCaptured Baselines:")
-        for k, v in _BASELINES.items():
-            print(f"  {k}: {v}")
 
     print("=" * 70)
     sys.exit(1 if failed > 0 else 0)

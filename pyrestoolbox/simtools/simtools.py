@@ -56,8 +56,7 @@ def ix_extract_problem_cells(filename: str = "", silent: bool = False) -> list:
 
     if filename != "":  # A Filename has been provided
         if "PRT" not in filename.upper():
-            print("File name needs to be an IX print file with .PRT extension")
-            return
+            raise ValueError("File name needs to be an IX print file with .PRT extension: " + filename)
 
     if filename == "":  # Show selection in local directory
         prt_files = glob.glob("*.PRT", recursive=False)
@@ -95,6 +94,7 @@ def ix_extract_problem_cells(filename: str = "", silent: bool = False) -> list:
     count = 0
     grab_line1 = False
     grab_line2 = False
+    ix_found = False
     max_it = 12
     timesteps = []
     tables = []
@@ -135,8 +135,7 @@ def ix_extract_problem_cells(filename: str = "", silent: bool = False) -> list:
     file1.close()
 
     if not ix_found:
-        print("Does not appear to be a valid IX PRT file")
-        return
+        raise ValueError("Does not appear to be a valid IX PRT file: " + filename)
 
     # Parse all the last lines in each table
     (
@@ -231,7 +230,9 @@ def LET(s: np.ndarray, L: float, E: float, T: float) -> np.ndarray:
     Output:
     Relative permeability of the phase (np.array)
     """
-    return s ** L / (s ** L + E * (1 - s) ** T)
+    denom = s ** L + E * (1 - s) ** T
+    denom = np.where(np.abs(denom) < 1e-30, 1e-30, denom)
+    return s ** L / denom
     
 def corey(s: np.ndarray, n: float) -> np.ndarray:
     """
@@ -366,19 +367,13 @@ def rel_perm_table(
 
         if krfamily.name == "COR":
             if not corey_info:
-                print(
-                    "Not enough information for SWOF Corey Curves. Check if no and nw are defined"
-                )
-                return
+                raise ValueError("Not enough information for SWOF Corey Curves. Check if no and nw are defined")
             krw = krwmax*corey(swn, nw)
             if sorw > 0:
                 krw[-1] = 1
         if krfamily.name == "LET":
             if not let_info:
-                print(
-                    "Not enough information for SWOF LET Curves. Check if Lw, Ew, Tw, Lo, Eo & To are defined"
-                )
-                return
+                raise ValueError("Not enough information for SWOF LET Curves. Check if Lw, Ew, Tw, Lo, Eo & To are defined")
             krw = krwmax*LET(swn, Lw, Ew, Tw)
             if sorw > 0:
                 krw[-1] = 1
@@ -460,17 +455,11 @@ def rel_perm_table(
         sgn = np.clip(sgn, 0, 1)
         if krfamily.name == "COR":
             if not corey_info:
-                print(
-                    "Not enough information for SGOF Corey Curves. Check if no and ng are defined"
-                )
-                return
+                raise ValueError("Not enough information for SGOF Corey Curves. Check if no and ng are defined")
             krg = krgmax * corey(sgn,ng)
         if krfamily.name == "LET":
             if not let_info:
-                print(
-                    "Not enough information for SGOF LET Curves. Check if Lg, Eg, Tg, Lo, Eo & To are defined"
-                )
-                return
+                raise ValueError("Not enough information for SGOF LET Curves. Check if Lg, Eg, Tg, Lo, Eo & To are defined")
             krg = krgmax*LET(sgn, Lg, Eg, Tg)
 
         # Assign oil relative permeabilities
@@ -546,18 +535,12 @@ def rel_perm_table(
         sgn = np.clip(sgn, 0, 1)
         if krfamily.name == "COR":
             if not corey_info:
-                print(
-                    "Not enough information for SGWFN Corey Curves. Check if nw and ng are defined"
-                )
-                return
+                raise ValueError("Not enough information for SGWFN Corey Curves. Check if nw and ng are defined")
             krg = krgmax * corey(sgn, ng)
             
         if krfamily.name == "LET":
             if not let_info:
-                print(
-                    "Not enough information for SGWFN LET Curves. Check if Lg, Eg, Tg, Lw, Ew & Tw are defined"
-                )
-                return
+                raise ValueError("Not enough information for SGWFN LET Curves. Check if Lg, Eg, Tg, Lw, Ew & Tw are defined")
             krg = krgmax*LET(sgn, Lg, Eg, Tg)
 
         # Assign water relative permeabilities
@@ -581,20 +564,18 @@ def rel_perm_table(
                 text_file.write(fileout)
         return kr_df
 
+    if rows < 2:
+        raise ValueError(f"rows must be at least 2, got {rows}")
+
     # Consistency checks
-    fail = False
+    errors = []
     swcr = max(swc, swcr)
     if sorg + sgcr + swc >= 1:
-        print("sorg+sgcr+swc must be less than 1")
-        fail = True
-    if sorg + sgcr + swc >= 1:
-        print("sorg+sgcr+swc must be less than 1")
-        fail = True
+        errors.append("sorg+sgcr+swc must be less than 1")
     if sorw + swcr >= 1:
-        print("sorw+swcr must be less than 1")
-        fail = True
-    if fail:
-        raise ValueError("Saturation consistency check failure: Check your inputs")
+        errors.append("sorw+swcr must be less than 1")
+    if errors:
+        raise ValueError("Saturation consistency check failure: " + "; ".join(errors))
 
     if krtable.name == "SWOF":
         return kr_SWOF(
@@ -698,9 +679,10 @@ def influence_tables(
         M: Laplace invesrion accuracy. Higher = more accurate, but more time. Generally 6-12 is good range. Default = 8
         export: Boolean value that controls whether an include file with 'INFLUENCE.INC' name is created. Default: False
     """
+    if len(ReDs) == 0:
+        raise ValueError("ReDs list cannot be empty")
     if min(ReDs) <=1:
-        print('\n\n\n -------  ReDs must all be strictly greater than 1.0  -------\n\n\n')
-        return 
+        raise ValueError("ReDs must all be strictly greater than 1.0")
 
     # Eq 16 from SPE 81428
     #def laplace_Qs(s: float, ReD: float):
@@ -999,8 +981,16 @@ def rr_solver(
     """
     zi = ensure_numpy_array(zi)
     ki = ensure_numpy_array(ki)
-    
-    zi = zi/np.sum(zi) # Normalize feed compositions
+
+    if len(zi) == 0 or len(ki) == 0:
+        raise ValueError("zi and ki arrays must not be empty")
+    if len(zi) != len(ki):
+        raise ValueError(f"zi and ki arrays must have the same length (got {len(zi)} and {len(ki)})")
+
+    zi_sum = np.sum(zi)
+    if zi_sum <= 0:
+        raise ValueError("Sum of zi must be positive")
+    zi = zi / zi_sum  # Normalize feed compositions
     
     def rr(V: float) -> float:
         return np.dot(zi, (ki - 1) / (1 + V * (ki - 1)))

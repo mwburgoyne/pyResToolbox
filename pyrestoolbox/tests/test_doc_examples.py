@@ -132,6 +132,63 @@ def test_doc_gas_water_content():
     assert isinstance(result, float)
     assert abs(result - 0.6474226409378979) / 0.6474226409378979 < RTOL
 
+def test_doc_gas_water_content_salinity():
+    """gas.rst: gas_water_content with salinity"""
+    result = gas.gas_water_content(p=1500, degf=165, salinity=5)
+    assert isinstance(result, float)
+    assert result < gas.gas_water_content(p=1500, degf=165)  # salinity reduces water content
+    assert abs(result - 0.628635730743162) / 0.628635730743162 < RTOL
+
+def test_doc_gas_sg_pure_methane():
+    """gas.rst: gas_sg for pure methane"""
+    result = gas.gas_sg(hc_mw=16.043, co2=0, h2s=0, n2=0, h2=0)
+    assert isinstance(result, float)
+    assert abs(result - 0.5537797721781152) / 0.5537797721781152 < RTOL
+
+def test_bns_recommended_for_high_inerts():
+    """gas.rst: BNS method is strongly recommended for high CO2/H2S/N2/H2 gases.
+
+    Standard correlations (DAK/HY/WYW with PMC/SUT) were developed for sweet natural
+    gas and become unreliable at high impurity concentrations. The BNS method (tuned
+    5-component Peng-Robinson EOS) handles the full range from pure hydrocarbon to
+    100% inerts. This test demonstrates the BNS method working correctly for:
+    - Pure CO2 (z should be << 1 at moderate pressure, sub-critical)
+    - Pure H2S (should produce valid z-factor)
+    - Pure N2 (should be near 1.0 at moderate conditions)
+    - High H2 blend (auto-selects BNS when h2 > 0)
+    - Mixed high-inert gas (50%+ inerts)
+
+    Standard methods will either fail or produce unreliable results for these cases.
+    """
+    # Pure CO2 at 2000 psia, 150 degF - BNS handles supercritical CO2 correctly
+    z_co2 = gas.gas_z(p=2000, sg=0.65, degf=150, co2=1.0, zmethod='BNS', cmethod='BNS')
+    assert 0.2 < z_co2 < 0.8, f"Pure CO2 Z-factor should be well below 1.0, got {z_co2}"
+
+    # Pure H2S at 2000 psia, 200 degF
+    z_h2s = gas.gas_z(p=2000, sg=0.65, degf=200, h2s=1.0, zmethod='BNS', cmethod='BNS')
+    assert 0.2 < z_h2s < 0.9, f"Pure H2S Z-factor should be well below 1.0, got {z_h2s}"
+
+    # Pure N2 at 2000 psia, 150 degF - N2 is supercritical, z near 1
+    z_n2 = gas.gas_z(p=2000, sg=0.65, degf=150, n2=1.0, zmethod='BNS', cmethod='BNS')
+    assert 0.8 < z_n2 < 1.2, f"Pure N2 Z-factor should be near 1.0, got {z_n2}"
+
+    # High H2 blend (20% H2) - auto-selects BNS when h2 > 0
+    gsg = gas.gas_sg(hc_mw=19.0, co2=0.05, h2s=0.10, n2=0, h2=0.20)
+    z_h2_blend = gas.gas_z(p=2000, sg=gsg, degf=180, co2=0.05, h2s=0.10, n2=0, h2=0.20)
+    assert 0.5 < z_h2_blend < 1.1, f"H2 blend Z-factor should be reasonable, got {z_h2_blend}"
+
+    # Mixed high-inert gas: 30% CO2, 10% H2S, 15% N2 = 55% inerts
+    gsg_mix = gas.gas_sg(hc_mw=18.0, co2=0.30, h2s=0.10, n2=0.15, h2=0)
+    z_mix = gas.gas_z(p=3000, sg=gsg_mix, degf=200, co2=0.30, h2s=0.10, n2=0.15, zmethod='BNS', cmethod='BNS')
+    assert 0.3 < z_mix < 1.0, f"High-inert mix Z-factor should be valid, got {z_mix}"
+
+    # Verify BNS viscosity also works for these cases (LBC correlation)
+    ug_co2 = gas.gas_ug(p=2000, sg=0.65, degf=150, co2=1.0, zmethod='BNS', cmethod='BNS')
+    assert ug_co2 > 0, "BNS viscosity for pure CO2 must be positive"
+
+    ug_h2_blend = gas.gas_ug(p=2000, sg=gsg, degf=180, co2=0.05, h2s=0.10, n2=0, h2=0.20, zmethod='BNS', cmethod='BNS')
+    assert ug_h2_blend > 0, "BNS viscosity for H2 blend must be positive"
+
 def test_doc_gas_ponz2p_scalar():
     """gas.rst: gas_ponz2p scalar"""
     result = gas.gas_ponz2p(poverz=2500, sg=0.75, degf=165)
@@ -374,6 +431,15 @@ def test_doc_make_bot_og():
 # =============================================================================
 # Brine Module Documentation Examples (docs/brine.rst)
 # =============================================================================
+
+def test_doc_make_pvtw_table():
+    """brine.rst: make_pvtw_table"""
+    result = brine.make_pvtw_table(pi=3000, degf=200, wt=0, ch4_sat=0)
+    assert isinstance(result, dict)
+    assert abs(result['bw_ref'] - 1.027589195773527) / 1.027589195773527 < RTOL
+    assert abs(result['cw_ref'] - 3.0887176266534516e-06) / 3.0887176266534516e-06 < RTOL
+    assert abs(result['visw_ref'] - 0.3083544960904146) / 0.3083544960904146 < RTOL
+    assert 'table' in result
 
 def test_doc_brine_props():
     """brine.rst: brine_props"""

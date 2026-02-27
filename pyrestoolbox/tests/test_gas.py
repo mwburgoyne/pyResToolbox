@@ -211,62 +211,94 @@ def test_gas_fws_sg():
     assert sg > 0.75, "FWS SG should be higher than separator gas SG"
 
 # =============================================================================
-# Regression baselines - exact values from current implementation
+# Hard-coded regression baselines - frozen reference values
+# If any of these change, it means a code modification has altered computational results.
+# Do NOT update these values without explicit review and approval.
 # =============================================================================
 
-def capture_gas_baselines():
-    """Capture and print baseline values for documentation"""
-    baselines = {}
-    baselines['z_dak_2000_075_200'] = gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='DAK', cmethod='PMC')
-    baselines['z_hy_2000_075_200'] = gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='HY', cmethod='PMC')
-    baselines['z_wyw_2000_075_200'] = gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='WYW', cmethod='PMC')
-    baselines['z_bns_2000_075_200'] = gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='BNS', cmethod='BNS')
-    baselines['ug_2000_075_200'] = gas.gas_ug(p=2000, sg=0.75, degf=200)
-    baselines['bg_2000_075_200'] = gas.gas_bg(p=2000, sg=0.75, degf=200)
-    baselines['cg_2000_075_200'] = gas.gas_cg(p=2000, sg=0.75, degf=200)
-    baselines['den_2000_075_200'] = gas.gas_den(p=2000, sg=0.75, degf=200)
-    baselines['tc_pc_pmc_075'] = gas.gas_tc_pc(sg=0.75, cmethod='PMC')
-    baselines['tc_pc_sut_075'] = gas.gas_tc_pc(sg=0.75, cmethod='SUT')
-    return baselines
-
-# Store baselines on first run
-_BASELINES = None
-
-def get_baselines():
-    global _BASELINES
-    if _BASELINES is None:
-        _BASELINES = capture_gas_baselines()
-    return _BASELINES
+# Frozen baselines captured 2026-02-27
+_FROZEN_BASELINES = {
+    'z_dak_2000_075_200': 0.8682651934424434,
+    'z_hy_2000_075_200': 0.8677386022105378,
+    'z_wyw_2000_075_200': 0.8570731189820472,
+    'z_bns_2000_075_200': 0.8457226741039529,
+    'ug_dak_2000_075_200': 0.017374276181391906,
+    'bg_dak_2000_075_200': 0.008098799120908043,
+    'cg_dak_2000_075_200': 0.0005199034510414734,
+    'den_dak_2000_075_200': 7.069636415667095,
+    'tc_pmc_075': (385.66677319794064, 653.255423805908),
+    'tc_sut_075': (389.7, 656.525),
+    'dmp_1000_2000_hy_sut': 213690308.9907268,
+    'dmp_0_4000_dak': 919822133.7011306,
+    'qg_radial': 2078.9101970773477,
+}
 
 def test_regression_z_dak():
-    b = get_baselines()
     z = gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='DAK', cmethod='PMC')
-    assert abs(z - b['z_dak_2000_075_200']) < 1e-10
+    expected = _FROZEN_BASELINES['z_dak_2000_075_200']
+    assert abs(z - expected) / expected < 1e-8, f"DAK Z-factor changed: {z} vs frozen {expected}"
 
 def test_regression_z_hy():
-    b = get_baselines()
     z = gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='HY', cmethod='PMC')
-    assert abs(z - b['z_hy_2000_075_200']) < 1e-10
+    expected = _FROZEN_BASELINES['z_hy_2000_075_200']
+    assert abs(z - expected) / expected < 1e-8, f"HY Z-factor changed: {z} vs frozen {expected}"
 
 def test_regression_z_wyw():
-    b = get_baselines()
     z = gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='WYW', cmethod='PMC')
-    assert abs(z - b['z_wyw_2000_075_200']) < 1e-10
+    expected = _FROZEN_BASELINES['z_wyw_2000_075_200']
+    assert abs(z - expected) / expected < 1e-8, f"WYW Z-factor changed: {z} vs frozen {expected}"
 
 def test_regression_ug():
-    b = get_baselines()
     ug = gas.gas_ug(p=2000, sg=0.75, degf=200)
-    assert abs(ug - b['ug_2000_075_200']) / b['ug_2000_075_200'] < 1e-6
+    expected = _FROZEN_BASELINES['ug_dak_2000_075_200']
+    assert abs(ug - expected) / expected < 1e-6, f"Gas viscosity changed: {ug} vs frozen {expected}"
 
 def test_regression_bg():
-    b = get_baselines()
     bg = gas.gas_bg(p=2000, sg=0.75, degf=200)
-    assert abs(bg - b['bg_2000_075_200']) / b['bg_2000_075_200'] < 1e-6
+    expected = _FROZEN_BASELINES['bg_dak_2000_075_200']
+    assert abs(bg - expected) / expected < 1e-6, f"Gas Bg changed: {bg} vs frozen {expected}"
 
 def test_regression_z_bns():
-    b = get_baselines()
     z = gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='BNS', cmethod='BNS')
-    assert abs(z - b['z_bns_2000_075_200']) < 1e-10
+    expected = _FROZEN_BASELINES['z_bns_2000_075_200']
+    assert abs(z - expected) / expected < 1e-8, f"BNS Z-factor changed: {z} vs frozen {expected}"
+
+def test_regression_dmp():
+    """Delta pseudopressure must match frozen baseline"""
+    dmp = gas.gas_dmp(p1=1000, p2=2000, degf=185, sg=0.78, zmethod='HY', cmethod='SUT', n2=0.05, co2=0.1, h2s=0.02)
+    expected = _FROZEN_BASELINES['dmp_1000_2000_hy_sut']
+    assert abs(dmp - expected) / expected < 1e-6, f"gas_dmp changed: {dmp} vs frozen {expected}"
+
+def test_regression_dmp_wide_range():
+    """Delta pseudopressure 0-4000 psia must match frozen baseline"""
+    dmp = gas.gas_dmp(p1=0, p2=4000, sg=0.75, degf=200)
+    expected = _FROZEN_BASELINES['dmp_0_4000_dak']
+    assert abs(dmp - expected) / expected < 1e-6, f"gas_dmp wide range changed: {dmp} vs frozen {expected}"
+
+def test_regression_gas_rate():
+    """Gas rate radial must match frozen baseline"""
+    qg = gas.gas_rate_radial(k=5, h=50, pr=2000, pwf=750, r_w=0.3, r_ext=1500, degf=180, sg=0.75, D=0.01, S=5)
+    expected = _FROZEN_BASELINES['qg_radial']
+    assert abs(qg - expected) / expected < 1e-6, f"gas_rate_radial changed: {qg} vs frozen {expected}"
+
+def test_regression_tc_pc():
+    """Critical properties must match frozen baselines"""
+    tc, pc = gas.gas_tc_pc(sg=0.75, cmethod='PMC')
+    tc_exp, pc_exp = _FROZEN_BASELINES['tc_pmc_075']
+    assert abs(tc - tc_exp) / tc_exp < 1e-8, f"PMC Tc changed: {tc} vs frozen {tc_exp}"
+    assert abs(pc - pc_exp) / pc_exp < 1e-8, f"PMC Pc changed: {pc} vs frozen {pc_exp}"
+
+def test_regression_cg():
+    """Gas compressibility must match frozen baseline"""
+    cg = gas.gas_cg(p=2000, sg=0.75, degf=200)
+    expected = _FROZEN_BASELINES['cg_dak_2000_075_200']
+    assert abs(cg - expected) / expected < 1e-6, f"gas_cg changed: {cg} vs frozen {expected}"
+
+def test_regression_den():
+    """Gas density must match frozen baseline"""
+    den = gas.gas_den(p=2000, sg=0.75, degf=200)
+    expected = _FROZEN_BASELINES['den_dak_2000_075_200']
+    assert abs(den - expected) / expected < 1e-6, f"gas_den changed: {den} vs frozen {expected}"
 
 # =============================================================================
 # List input tests (convert_to_numpy fix)
@@ -406,11 +438,6 @@ if __name__ == '__main__':
 
     print(f"\n{'=' * 70}")
     print(f"Results: {passed} passed, {failed} failed out of {passed + failed}")
-
-    if _BASELINES:
-        print(f"\nCaptured Baselines:")
-        for k, v in _BASELINES.items():
-            print(f"  {k}: {v}")
 
     print("=" * 70)
     sys.exit(1 if failed > 0 else 0)
