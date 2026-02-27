@@ -347,6 +347,33 @@ def test_bns_viscosity_array_pressures():
         ug_scalar = gas.gas_ug(p=p, sg=0.75, degf=200, zmethod='BNS', cmethod='BNS')
         assert abs(ug[i] - ug_scalar) < 1e-10, f"Array vs scalar viscosity mismatch at p={p}"
 
+def test_bns_z_subcritical_fugacity_selection():
+    """BNS Z-factor must use fugacity-based root selection in the 3-root regime.
+    Pure H2S at 80 degF is sub-critical (Tc_H2S = 672 R = 212 degF).
+    The cubic has 3 real roots between ~330-605 psia; the thermodynamically
+    stable root (lowest fugacity) switches from vapor to liquid at ~340 psia.
+    Without fugacity selection the solver returns the metastable vapor root,
+    producing a discontinuous Z-vs-P curve."""
+    # Reference values from bns.py (SPE-229932-MS reference implementation)
+    # Pressures chosen to span: vapor-only, fugacity crossover, liquid-only
+    ref = {
+        100:  0.9496046861917848,   # Vapor (single root)
+        300:  0.83365711413685,     # Vapor (3 roots, vapor has min fugacity)
+        350:  0.042605680488353545, # Liquid (3 roots, liquid has min fugacity)
+        400:  0.04862660238021889,  # Liquid (3 roots, liquid has min fugacity)
+        600:  0.07256104178906098,  # Liquid (3 roots merging)
+        1000: 0.11977671955327113,  # Liquid (single root)
+    }
+    pressures = np.array(sorted(ref.keys()))
+    z_arr = gas.gas_z(p=pressures, sg=0.8, degf=80, h2s=1.0, zmethod='BNS', cmethod='BNS')
+    for i, p in enumerate(pressures):
+        assert abs(z_arr[i] - ref[p]) < 1e-8, (
+            f"BNS Z at p={p} psia: got {z_arr[i]:.10f}, expected {ref[p]:.10f}"
+        )
+    # Verify monotonic in the liquid region (no discontinuous jump)
+    z_liquid = z_arr[pressures >= 350]
+    assert np.all(np.diff(z_liquid) > 0), "Z should increase monotonically in liquid region"
+
 def test_gas_water_content_salinity():
     """Water content should decrease with salinity"""
     wc_fresh = gas.gas_water_content(p=2000, degf=200, salinity=0)

@@ -187,13 +187,54 @@ def test_make_pvtw_table_saline():
 # SoreideWhitson Tests
 # =============================================================================
 
-def test_soreide_whitson_not_implemented():
-    """SoreideWhitson should raise NotImplementedError"""
+def test_soreide_whitson_pure_co2():
+    """SoreideWhitson with pure CO2 should produce positive density, viscosity, and Rs"""
+    mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=1.0, metric=False)
+    # Density: gas-saturated should be greater than gas-free (CO2 increases brine density)
+    assert mix.bDen[0] > mix.bDen[1], f"CO2-saturated density {mix.bDen[0]} should exceed gas-free {mix.bDen[1]}"
+    # Viscosity: gas-saturated should be greater than gas-free (CO2 increases viscosity)
+    assert mix.bVis[0] > mix.bVis[1], f"CO2-saturated viscosity {mix.bVis[0]} should exceed gas-free {mix.bVis[1]}"
+    # Rs should be positive
+    assert mix.Rs_total > 0, f"Rs_total should be positive, got {mix.Rs_total}"
+    # Bw should be > 1 (dissolved gas expands brine)
+    assert mix.bw[0] > 1.0, f"Gas-saturated Bw should exceed 1.0, got {mix.bw[0]}"
+    # x should have CO2 key with positive value
+    assert 'CO2' in mix.x, f"x should contain CO2, got {mix.x}"
+    assert mix.x['CO2'] > 0, f"xCO2 should be positive, got {mix.x['CO2']}"
+
+
+def test_soreide_whitson_pure_ch4():
+    """SoreideWhitson with pure CH4 should produce physically reasonable results"""
+    mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=0, sg=0.554, metric=False)
+    # CH4 decreases brine density
+    assert mix.bDen[0] < mix.bDen[1], f"CH4-saturated density {mix.bDen[0]} should be less than gas-free {mix.bDen[1]}"
+    # Rs should be positive
+    assert mix.Rs_total > 0, f"Rs_total should be positive, got {mix.Rs_total}"
+    # Should contain CH4 in dissolved gases
+    assert 'CH4' in mix.x, f"x should contain CH4, got {mix.x}"
+
+
+def test_soreide_whitson_mixed_gas():
+    """SoreideWhitson with mixed gas should return per-gas details"""
+    mix = brine.SoreideWhitson(pres=200, temp=80, ppm=10000, y_CO2=0.1, y_H2S=0.05, sg=0.7, metric=True)
+    # Should have multiple gases in results
+    assert len(mix.x) >= 2, f"Should have at least 2 dissolved gases, got {len(mix.x)}"
+    assert len(mix.Rs) >= 2, f"Should have at least 2 Rs entries, got {len(mix.Rs)}"
+    # Gas composition should be normalized
+    total_y = sum(mix.gas_comp.values())
+    assert abs(total_y - 1.0) < 1e-10, f"Gas composition should sum to 1.0, got {total_y}"
+    # All densities should be positive
+    for d in mix.bDen:
+        assert d > 0, f"All densities should be positive, got {mix.bDen}"
+
+
+def test_soreide_whitson_bad_gas_fractions():
+    """SoreideWhitson should raise ValueError if non-HC fractions exceed 1.0"""
     try:
-        brine.SoreideWhitson()
-        assert False, "Expected NotImplementedError"
-    except NotImplementedError as e:
-        assert "not yet implemented" in str(e).lower(), f"Unexpected error message: {e}"
+        brine.SoreideWhitson(pres=200, temp=80, y_CO2=0.6, y_H2S=0.5, metric=True)
+        assert False, "Expected ValueError for fractions > 1.0"
+    except ValueError:
+        pass
 
 
 if __name__ == '__main__':

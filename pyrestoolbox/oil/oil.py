@@ -1213,6 +1213,60 @@ def oil_viso(p: float, api: float, degf: float, pb: float, rs: float) -> float:
         return uo_pf(p, api, degf, pb, rs)
 
 
+class OilPVT:
+    """ Oil PVT wrapper that stores oil characterization and method choices.
+        Exposes rs(), bo(), density(), viscosity() methods delegating to oil_rs, oil_bo, oil_deno, oil_viso.
+
+        api: Stock tank oil density (deg API)
+        sg_sp: Separator gas specific gravity (relative to air)
+        pb: Bubble point pressure (psia)
+        rsb: Solution GOR at Pb (scf/stb)
+        sg_g: Weighted average specific gravity of surface gas (relative to air). Estimated from sg_sp if not provided
+        rsmethod: Method for Rs calculation. Defaults to 'VELAR'
+        pbmethod: Method for Pb calculation. Defaults to 'VALMC'
+        bomethod: Method for Bo calculation. Defaults to 'MCAIN'
+    """
+    def __init__(self, api, sg_sp, pb, rsb, sg_g=0,
+                 rsmethod='VELAR', pbmethod='VALMC', bomethod='MCAIN'):
+        self.api = api
+        self.sg_sp = sg_sp
+        self.pb = pb
+        self.rsb = rsb
+        self.sg_o = oil_sg(api)
+        self.sg_g, self.sg_sp = check_sgs(sg_g=sg_g, sg_sp=sg_sp)
+        self.rsmethod = validate_methods(["rsmethod"], [rsmethod])
+        self.pbmethod = validate_methods(["pbmethod"], [pbmethod])
+        self.bomethod = validate_methods(["bomethod"], [bomethod])
+
+    def rs(self, p, degf):
+        """ Returns solution GOR (scf/stb) at pressure p (psia) and temperature degf (deg F) """
+        return oil_rs(api=self.api, degf=degf, sg_sp=self.sg_sp, p=p,
+                      pb=self.pb, rsb=self.rsb, rsmethod=self.rsmethod,
+                      pbmethod=self.pbmethod)
+
+    def bo(self, p, degf, rs=None):
+        """ Returns oil FVF (rb/stb) at pressure p (psia) and temperature degf (deg F) """
+        if rs is None:
+            rs = self.rs(p, degf)
+        return oil_bo(p=p, pb=self.pb, degf=degf, rs=rs, rsb=self.rsb,
+                      sg_o=self.sg_o, sg_g=self.sg_g, sg_sp=self.sg_sp,
+                      bomethod=self.bomethod)
+
+    def density(self, p, degf, rs=None):
+        """ Returns live oil density (lb/cuft) at pressure p (psia) and temperature degf (deg F) """
+        if rs is None:
+            rs = self.rs(p, degf)
+        return oil_deno(p=p, degf=degf, rs=rs, rsb=self.rsb,
+                        sg_g=self.sg_g, sg_sp=self.sg_sp, pb=self.pb,
+                        sg_o=self.sg_o)
+
+    def viscosity(self, p, degf, rs=None):
+        """ Returns oil viscosity (cP) at pressure p (psia) and temperature degf (deg F) """
+        if rs is None:
+            rs = self.rs(p, degf)
+        return oil_viso(p=p, api=self.api, degf=degf, pb=self.pb, rs=rs)
+
+
 def make_bot_og(
     pi: float,
     api: float,
