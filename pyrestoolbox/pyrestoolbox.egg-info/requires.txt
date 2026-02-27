@@ -1,9 +1,0 @@
-requests
-numpy
-scipy
-pandas
-tabulate
-gwr_inversion
-mpmath
-openpyxl
-setuptools
