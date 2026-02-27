@@ -21,6 +21,10 @@ Function List
      - `pyrestoolbox.simtools.rr_solver`_
    * - Generates ECLIPSE style relative permeability tables (Corey, LET, Jerauld)
      - `pyrestoolbox.simtools.rel_perm_table`_
+   * - Corey relative permeability model
+     - `pyrestoolbox.simtools.corey`_
+   * - LET relative permeability model
+     - `pyrestoolbox.simtools.LET`_
    * - Jerauld (Arco) two-parameter relative permeability model
      - `pyrestoolbox.simtools.jerauld`_
    * - Checks LET curve physicality (monotonicity and concavity)
@@ -401,6 +405,80 @@ Examples:
 
 .. image:: img/swof.png
     :alt: SWOF Relative Permeability Curves
+
+
+pyrestoolbox.simtools.corey
+======================
+
+.. code-block:: python
+
+    corey(s, n) -> np.ndarray
+
+Returns Corey relative permeability values: ``kr = S^n``.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - s
+     - np.ndarray
+     - Normalized saturation of the phase (0-1)
+   * - n
+     - float
+     - Corey exponent
+
+Examples:
+
+.. code-block:: python
+
+    >>> from pyrestoolbox import simtools
+    >>> import numpy as np
+    >>> s = np.linspace(0, 1, 5)
+    >>> simtools.corey(s, n=2.0)
+    array([0.    , 0.0625, 0.25  , 0.5625, 1.    ])
+
+
+pyrestoolbox.simtools.LET
+======================
+
+.. code-block:: python
+
+    LET(s, L, E, T) -> np.ndarray
+
+Returns LET relative permeability values (Lomeland, Ebeltoft & Thomas, 2005): ``kr = S^L / (S^L + E * (1 - S)^T)``.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - s
+     - np.ndarray
+     - Normalized saturation of the phase (0-1)
+   * - L
+     - float
+     - LET 'L' parameter
+   * - E
+     - float
+     - LET 'E' parameter
+   * - T
+     - float
+     - LET 'T' parameter
+
+Examples:
+
+.. code-block:: python
+
+    >>> from pyrestoolbox import simtools
+    >>> import numpy as np
+    >>> s = np.linspace(0, 1, 5)
+    >>> simtools.LET(s, L=2.0, E=1.5, T=2.0)
+    array([0.        , 0.02298851, 0.14285714, 0.50420168, 1.        ])
 
 
 pyrestoolbox.simtools.jerauld
