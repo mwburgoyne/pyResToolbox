@@ -62,6 +62,7 @@ class co_method(Enum):  # Oil compressibility calculation method
 class kr_family(Enum):  # Relative permeability family type
     COR = 0
     LET = 1
+    JER = 2
 
 class kr_table(Enum):  # Relative permeability table type
     SWOF = 0

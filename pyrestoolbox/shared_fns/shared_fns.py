@@ -21,10 +21,8 @@
           Contact author at mark.w.burgoyne@gmail.com
 """
 
-from enum import Enum
 import numpy as np
-import numpy.typing as npt
-from typing import Union, List, Tuple
+from typing import Union, List
 
 def bisect_solve(args, f, xmin, xmax, rtol):
     if xmin > xmax:

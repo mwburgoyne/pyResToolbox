@@ -35,6 +35,52 @@ from pyrestoolbox.constants import R, psc, tsc, degF2R, tscr, scf_per_mol, CUFTp
 _GL7_NODES, _GL7_WEIGHTS = np.polynomial.legendre.leggauss(7)
 _GL10_NODES, _GL10_WEIGHTS = np.polynomial.legendre.leggauss(10)
 
+def _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s):
+    """Compute pseudopressure difference and flow direction for gas rate calculations.
+
+    Handles scalar and array inputs for pr and pwf.
+    Returns (direction, delta_mp) where direction encodes flow sign.
+    """
+    direction = 1
+    if pr.size + pwf.size == 2:  # Single set of pressures
+        if pr < pwf:
+            direction = -1
+        delta_mp = abs(
+            gas_dmp(
+                p1=pwf, p2=pr, degf=degf, sg=sg,
+                zmethod=zmethod, cmethod=cmethod, tc=tc, pc=pc,
+                n2=n2, co2=co2, h2s=h2s,
+            )
+        )
+    else:
+        if pr.size > 1:  # Multiple Pr's
+            direction = 2 * np.array([p > pwf for p in pr]) - 1
+            delta_mp = np.absolute(np.array([
+                gas_dmp(p1=p, p2=pwf, degf=degf, sg=sg,
+                        zmethod=zmethod, cmethod=cmethod, tc=tc, pc=pc,
+                        n2=n2, co2=co2, h2s=h2s)
+                for p in pr
+            ]))
+        else:  # Multiple BHFP's
+            direction = 2 * np.array([pr > bhfp for bhfp in pwf]) - 1
+            delta_mp = np.absolute(np.array([
+                gas_dmp(p1=pr, p2=bhfp, degf=degf, sg=sg,
+                        zmethod=zmethod, cmethod=cmethod, tc=tc, pc=pc,
+                        n2=n2, co2=co2, h2s=h2s)
+                for bhfp in pwf
+            ]))
+    return direction, delta_mp
+
+def _prepare_gas_rate_inputs(degf, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, pc):
+    """Validate inputs, apply H2 auto-selection, resolve methods and critical properties."""
+    validate_pe_inputs(degf=degf, sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2)
+    if h2 > 0:
+        cmethod = 'BNS'
+        zmethod = 'BNS'
+    zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
+    tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc)
+    return zmethod, cmethod, tc, pc
+
 def gas_rate_radial(
     k: npt.ArrayLike,
     h: npt.ArrayLike,
@@ -84,93 +130,14 @@ def gas_rate_radial(
         tc: Critical gas temperature (deg R). Uses cmethod correlation if not specified
         pc: Critical gas pressure (psia). Uses cmethod correlation if not specified
     """
-    validate_pe_inputs(degf=degf, sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2)
     if r_w <= 0:
         raise ValueError("Wellbore radius r_w must be positive")
     if r_ext <= r_w:
         raise ValueError("External radius r_ext must be greater than wellbore radius r_w")
 
-    k, h, pr, pwf = (
-        np.asarray(k),
-        np.asarray(h),
-        np.asarray(pr),
-        np.asarray(pwf),
-    )
-
-    if h2 > 0:
-        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BNS'
-
-    zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
-
-    tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc)
-
-    direction = 1
-    if pr.size + pwf.size == 2:  # Single set of pressures
-        if pr < pwf:
-            direction = -1  # Direction is needed because solving the quadratic with non-Darcy factor will fail if using a negative delta_mp
-        delta_mp = abs(
-            gas_dmp(
-                p1=pwf,
-                p2=pr,
-                degf=degf,
-                sg=sg,
-                zmethod=zmethod,
-                cmethod=cmethod,
-                tc=tc,
-                pc=pc,
-                n2=n2,
-                co2=co2,
-                h2s=h2s,
-            )
-        )
-    else:
-        if pr.size > 1:  # Multiple Pr's
-            direction = np.array([p > pwf for p in pr])
-            direction = 2 * direction - 1
-            delta_mp = np.absolute(
-                np.array(
-                    [
-                        gas_dmp(
-                            p1=p,
-                            p2=pwf,
-                            degf=degf,
-                            sg=sg,
-                            zmethod=zmethod,
-                            cmethod=cmethod,
-                            tc=tc,
-                            pc=pc,
-                            n2=n2,
-                            co2=co2,
-                            h2s=h2s,
-                        )
-                        for p in pr
-                    ]
-                )
-            )
-        else:  # Multiple BHFP's
-            direction = np.array([pr > bhfp for bhfp in pwf])
-            direction = 2 * direction - 1
-            delta_mp = np.absolute(
-                np.array(
-                    [
-                        gas_dmp(
-                            p1=pr,
-                            p2=bhfp,
-                            degf=degf,
-                            sg=sg,
-                            zmethod=zmethod,
-                            cmethod=cmethod,
-                            tc=tc,
-                            pc=pc,
-                            n2=n2,
-                            co2=co2,
-                            h2s=h2s,
-                        )
-                        for bhfp in pwf
-                    ]
-                )
-            )
+    k, h, pr, pwf = np.asarray(k), np.asarray(h), np.asarray(pr), np.asarray(pwf)
+    zmethod, cmethod, tc, pc = _prepare_gas_rate_inputs(degf, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, pc)
+    direction, delta_mp = _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s)
 
     qg = darcy_gas(delta_mp, k, h, degf, r_w, r_ext, S, D, radial=True)
     return direction * qg
@@ -218,91 +185,12 @@ def gas_rate_linear(
         tc: Critical gas temperature (deg R). Uses cmethod correlation if not specified
         pc: Critical gas pressure (psia). Uses cmethod correlation if not specified
     """
-    validate_pe_inputs(degf=degf, sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2)
     if length <= 0:
         raise ValueError("Flow length must be positive")
 
-    k, area, pr, pwf = (
-        np.asarray(k),
-        np.asarray(area),
-        np.asarray(pr),
-        np.asarray(pwf),
-    )
-    if h2 > 0:
-        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BNS'
-    zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
-
-    tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc)
-
-    direction = 1
-    if pr.size + pwf.size == 2:  # Single set of pressures
-        if pr < pwf:
-            direction = (
-                -1
-            )  # Direction is needed because solving the quadratic with non-Darcy factor will fail if using a negative delta_mp
-        delta_mp = abs(
-            gas_dmp(
-                p1=pwf,
-                p2=pr,
-                degf=degf,
-                sg=sg,
-                zmethod=zmethod,
-                cmethod=cmethod,
-                tc=tc,
-                pc=pc,
-                n2=n2,
-                co2=co2,
-                h2s=h2s,
-            )
-        )
-    else:
-        if pr.size > 1:
-            direction = np.array([p > pwf for p in pr])
-            direction = 2 * direction - 1
-            delta_mp = np.absolute(
-                np.array(
-                    [
-                        gas_dmp(
-                            p1=p,
-                            p2=pwf,
-                            degf=degf,
-                            sg=sg,
-                            zmethod=zmethod,
-                            cmethod=cmethod,
-                            tc=tc,
-                            pc=pc,
-                            n2=n2,
-                            co2=co2,
-                            h2s=h2s,
-                        )
-                        for p in pr
-                    ]
-                )
-            )
-        else:
-            direction = np.array([pr > bhfp for bhfp in pwf])
-            direction = 2 * direction - 1
-            delta_mp = np.absolute(
-                np.array(
-                    [
-                        gas_dmp(
-                            p1=pr,
-                            p2=bhfp,
-                            degf=degf,
-                            sg=sg,
-                            zmethod=zmethod,
-                            cmethod=cmethod,
-                            tc=tc,
-                            pc=pc,
-                            n2=n2,
-                            co2=co2,
-                            h2s=h2s,
-                        )
-                        for bhfp in pwf
-                    ]
-                )
-            )
+    k, area, pr, pwf = np.asarray(k), np.asarray(area), np.asarray(pr), np.asarray(pwf)
+    zmethod, cmethod, tc, pc = _prepare_gas_rate_inputs(degf, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, pc)
+    direction, delta_mp = _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s)
 
     qg = darcy_gas(delta_mp, k, 1, degf, area, length, 0, 0, radial=False)
     return direction * qg
@@ -635,83 +523,78 @@ def gas_z(
             
     def zdak(pprs, tr):
         # DAK from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-        # sg relative to air, t in deg F, p in psia, n2, co2 and h2s in fractions (0-1)
-        
-        def z_dak_calc(pr, tr):
-            """Core function to calculate Z-factor for a single Ppr and Tpr."""
-            # Coefficients
-            A1, A2, A3, A4, A5 = 0.3265, -1.0700, -0.5339, 0.01569, -0.05165
-            A6, A7, A8, A9, A10, A11 = 0.5475, -0.7361, 0.1844, 0.1056, 0.6134, 0.7210
-        
-            R1 = A1 + A2 / tr + A3 / tr**3 + A4 / tr**4 + A5 / tr**5
-            R2 = 0.27 * pr / tr
-            R3 = A6 + A7 / tr + A8 / tr**2
-            R4 = A9 * (A7 / tr + A8 / tr**2)
-            R5 = A10 / tr**3
-        
-            def F(rhor):
-                return (R1 * rhor - R2 / rhor + R3 * rhor**2 - R4 * rhor**5 +
-                        R5 * rhor**2 * (1 + A11 * rhor**2) * np.exp(-A11 * rhor**2) + 1)
-        
-            def Fprime(rhor):
-                return (R1 + R2 / rhor**2 + 2 * R3 * rhor - 5 * R4 * rhor**4 +
-                        2 * R5 * rhor * np.exp(-A11 * rhor**2) *
-                        ((1 + 2 * A11 * rhor**3) - A11 * rhor**2 * (1 + A11 * rhor**2)))
-        
-            # Initial guess for rhor
-            rhork = 0.27 * pr / tr
-        
-            # Iterative calculation of rhor
-            for i in range(100):
-                f_val = F(rhork)
-                f_prime_val = Fprime(rhork)
-                if abs(f_val) < tolerance:
-                    break
-                rhork1 = rhork - f_val / f_prime_val
-                if abs(rhork - rhork1) < tolerance:
-                    rhork = rhork1
-                    break
-                rhork = rhork1
-        
-            z = 0.27 * pr / (rhork * tr)
-            return z    
-        
-        zout = [z_dak_calc(pr, tr) for pr in pprs]
-            
+        # Vectorized Newton-Raphson on reduced density rhor
+        A1, A2, A3, A4, A5 = 0.3265, -1.0700, -0.5339, 0.01569, -0.05165
+        A6, A7, A8, A9, A10, A11 = 0.5475, -0.7361, 0.1844, 0.1056, 0.6134, 0.7210
+
+        R1 = A1 + A2 / tr + A3 / tr**3 + A4 / tr**4 + A5 / tr**5
+        R2 = 0.27 * pprs / tr  # Array
+        R3 = A6 + A7 / tr + A8 / tr**2
+        R4 = A9 * (A7 / tr + A8 / tr**2)
+        R5 = A10 / tr**3
+
+        rhor = 0.27 * pprs / tr  # Initial guess (array)
+        rhor = np.maximum(rhor, 1e-10)
+
+        for _ in range(100):
+            r2 = rhor ** 2
+            r5 = rhor ** 5
+            exp_term = np.exp(-A11 * r2)
+            f_val = (R1 * rhor - R2 / rhor + R3 * r2 - R4 * r5 +
+                     R5 * r2 * (1 + A11 * r2) * exp_term + 1)
+            fp_val = (R1 + R2 / r2 + 2 * R3 * rhor - 5 * R4 * rhor**4 +
+                      2 * R5 * rhor * exp_term *
+                      ((1 + 2 * A11 * rhor**3) - A11 * r2 * (1 + A11 * r2)))
+            fp_val = np.where(np.abs(fp_val) < 1e-30, 1e-30, fp_val)
+            # Converge on both function value and step size (matching original scalar logic)
+            if np.all(np.abs(f_val) < tolerance):
+                break
+            step = f_val / fp_val
+            rhor_new = rhor - step
+            rhor_new = np.maximum(rhor_new, 1e-10)
+            if np.all(np.abs(rhor - rhor_new) < tolerance):
+                rhor = rhor_new
+                break
+            rhor = rhor_new
+
+        zout = 0.27 * pprs / (rhor * tr)
         return process_output(zout, is_list)
 
-    # Hall & Yarborough
+    # Hall & Yarborough — Vectorized Newton-Raphson
     def z_hy(pprs, tr):
-        
-        tr = 1/tr
-        t2 = tr ** 2
-        a = 0.06125 * tr * np.exp(-1.2 * (1 - tr) ** 2)
-        b = tr * (14.76 - 9.76 * tr + 4.58 * t2)
-        c = tr * (90.7 - 242.2 * tr + 42.4 * t2)
-        D = 2.18 + 2.82 * tr
-         
-        # f(y)
-        def f(y, a, b, c, D, pr):   
-            return ((y + y ** 2 + y ** 3 - y ** 4) / ((1 - y) ** 3)) - a * pr - b * y ** 2 + c * y ** D
-    
-        # derivative of f(y)
-        def df(y, a, b, c, D):
-            return ((1 + 4 * y + 4 * y ** 2 - 4 * y ** 3 + y ** 4) / ((1 - y) ** 4)) - 2 * b * y + c * D * y ** (D - 1)     
-         
-        zout = []
-        for pr in pprs:
-            yi = a*pr / z_wyw(pr, 1/tr) # First guess
-            niter, y = 0, 0.01
-            while (abs(y-yi)/max(abs(y), 1e-10)) > 0.0005 and niter < 100:
-                # Newton Raphson
-                y = yi - (f(yi, a, b, c, D, pr) / df(yi, a, b, c, D))
-                y = max(y, 1e-10)  # Prevent negative y (NaN from fractional exponent)
-                niter += 1
-                yi = y
-            if abs(y) < 1e-30:
-                raise RuntimeError("Hall-Yarborough Z-factor: y converged to zero")
-            zout.append(a * pr / y)
-     
+
+        tpr_inv = 1/tr  # Reciprocal reduced temperature
+        t2 = tpr_inv ** 2
+        a = 0.06125 * tpr_inv * np.exp(-1.2 * (1 - tpr_inv) ** 2)
+        b = tpr_inv * (14.76 - 9.76 * tpr_inv + 4.58 * t2)
+        c = tpr_inv * (90.7 - 242.2 * tpr_inv + 42.4 * t2)
+        D = 2.18 + 2.82 * tpr_inv
+
+        # Initial guess from WYW
+        z_init = z_wyw(pprs, tr)
+        z_init = np.atleast_1d(z_init).astype(float)
+        yi = np.maximum(a * pprs / z_init, 1e-10)
+        # Match original scalar: y starts at 0.01, yi starts at WYW guess
+        y = np.full_like(yi, 0.01)
+
+        for _ in range(100):
+            # Convergence check at top of loop (original while-loop semantics)
+            rel_err = np.abs(y - yi) / np.maximum(np.abs(y), 1e-10)
+            if np.all(rel_err <= 0.0005):
+                break
+            # Newton-Raphson step on yi
+            yi_safe = np.clip(yi, 1e-10, 0.99)
+            omy3 = (1 - yi_safe) ** 3
+            omy4 = (1 - yi_safe) ** 4
+            f_val = ((yi_safe + yi_safe**2 + yi_safe**3 - yi_safe**4) / omy3) - a * pprs - b * yi_safe**2 + c * yi_safe**D
+            df_val = ((1 + 4*yi_safe + 4*yi_safe**2 - 4*yi_safe**3 + yi_safe**4) / omy4) - 2*b*yi_safe + c*D * yi_safe**(D-1)
+            df_val = np.where(np.abs(df_val) < 1e-30, 1e-30, df_val)
+            y = yi_safe - f_val / df_val
+            y = np.maximum(y, 1e-10)
+            yi = y
+
+        y = np.maximum(y, 1e-30)
+        zout = a * pprs / y
         return process_output(zout, is_list)
 
     # Wang, Ye & Wu, 2021, 0.2 < Ppr < 30, 1.05 < tpr < 3.0

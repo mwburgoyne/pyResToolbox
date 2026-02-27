@@ -21,17 +21,9 @@
           Contact author at mark.w.burgoyne@gmail.com
 """
 
-import sys
-from collections import Counter
-import glob
-from enum import Enum
 from importlib.resources import files
-from typing import Union, List, Tuple
 
-import numpy as np
-import numpy.typing as npt
 import pandas as pd
-from tabulate import tabulate
 
 
 class component_library:

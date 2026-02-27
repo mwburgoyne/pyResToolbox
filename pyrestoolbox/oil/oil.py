@@ -1289,207 +1289,122 @@ class OilPVT:
         return oil_viso(p=p, api=self.api, degf=degf, pb=self.pb, rs=rs)
 
 
-def make_bot_og(
-    pi: float,
-    api: float,
-    degf: float,
-    sg_g: float,
-    pmax: float,
+def oil_harmonize_pb_rsb(
     pb: float = 0,
     rsb: float = 0,
-    pmin: float = 25,
-    nrows: int = 20,
-    wt: float = 0,
-    ch4_sat: float = 0,
-    comethod: co_method = co_method.EXPLT,
-    zmethod: z_method = z_method.DAK,
+    degf: float = 0,
+    api: float = 0,
+    sg_sp: float = 0,
+    sg_g: float = 0,
     rsmethod: rs_method = rs_method.VELAR,
-    cmethod: c_method = c_method.PMC,
-    denomethod: deno_method = deno_method.SWMH,
-    bomethod: bo_method = bo_method.MCAIN,
     pbmethod: pb_method = pb_method.VELAR,
-    export: bool = False,
-    pvto: bool = False,
-) -> dict:
-    """
-    Creates data required for Oil-Gas-Water black oil tables
-    Returns dictionary of results, with index:
-      - bot: Pandas table of blackoil data (for PVTO == False), or Saturated properties to pmax (if PVTO == True)
-      - deno: ST Oil Density (lb/cuft)
-      - deng: ST Gas Density (lb/cuft)
-      - denw: Water Density at Pi (lb/cuft),
-      - cw: Water Compressibility at Pi (1/psi)
-      - uw: Water Viscosity at Pi (cP))
-      - pb: Bubble point pressure either calculated (if only Rsb provided), or supplied by user
-      - rsb: Solution GOR at Pb either calculated (if only Pb provided), or supplied by user
-      - rsb_scale: The scaling factor that was needed to match user supplied Pb and Rsb
-      - usat: a list of understaurated values (if PVTO == True) [usat_p, usat_bo, usat_uo]. This will be empty if PVTO == False
+) -> Tuple:
+    """Resolves consistent Pb, Rsb, and rsb_frac from user inputs.
 
-    If user species Pb or Rsb only, the corresponding property will be calculated
-    If both Pb and Rsb are specified, then Pb calculations will be adjusted to honor both
+    Given one or both of Pb and Rsb, returns values that are mutually consistent
+    with the selected oil PVT correlations.
 
-    pi: Initial reservoir pressure (psia). Used to return water properties at initial pressure
-    pb: Bubble point pressure (psia)
-    rsb: Oil solution GOR at Pb (scf/stb)
-    degf: Reservoir Temperature (deg F)
-    sg_g: Weighted average specific gravity of surface gas (relative to air).
-    api: Stock tank oil density (deg API).
-    pmax: Maximum pressure to calcuate table to
-    pmin: Minimum pressure to calculate table to. Default = 25
-    nrows: Number of BOT rows. Default = 20
-    wt: Salt wt% (0-100) in brine. Default = 0
-    ch4_sat: Degree of methane saturation (0 - 1) in brine. Default = 0
-    export: Boolean flag that controls whether to export full table to excel, and separate PVDG and PVDO include files. Default is False
-    pvto: Boolean flag that controls whether the pvto live oil Eclipse format will be generated. This can only be active if export flag is also True;
-          - extends bubble point line up to maximum pressure
-          - generates undersaturated oil propeties
-          - writes out PVTO include file
+    - If only pb is specified (rsb=0): calculates rsb from pb
+    - If only rsb is specified (pb=0): calculates pb from rsb
+    - If both are specified: finds rsb_frac scaling factor that honors both values
+
+    pb: Bubble point pressure (psia). Default 0 (unknown)
+    rsb: Solution GOR at Pb (scf/stb). Default 0 (unknown)
+    degf: Reservoir temperature (deg F)
+    api: Stock tank oil density (deg API)
+    sg_sp: Separator gas specific gravity
+    sg_g: Weighted average surface gas specific gravity
+    rsmethod: Rs calculation method. Default VELAR
+    pbmethod: Pb calculation method. Default VELAR
+
+    Returns tuple of (pb, rsb, rsb_frac) where:
+      - pb: Bubble point pressure (psia)
+      - rsb: Solution GOR at bubble point (scf/stb)
+      - rsb_frac: Scaling factor applied to Rs correlation to honor user Pb and Rsb
+                  (1.0 if only one was specified)
     """
-    (
-        zmethod,
-        rsmethod,
-        cmethod,
-        denomethod,
-        bomethod,
-        pbmethod,
-    ) = validate_methods(
-        [
-            "zmethod",
-            "rsmethod",
-            "cmethod",
-            "denomethod",
-            "bomethod",
-            "pbmethod",
-        ],
-        [zmethod, rsmethod, cmethod, denomethod, bomethod, pbmethod],
+    rsmethod, pbmethod = validate_methods(
+        ["rsmethod", "pbmethod"], [rsmethod, pbmethod]
     )
 
-    sg_g, sg_sp = check_sgs(sg_g=sg_g, sg_sp=0)
-    pmin = max(pmin, psc)
-    sg_o = oil_sg(api)
-    rsb_frac = 1.0
-
-    # If PVTO = False
-    #       - If Pb only provided, calculate rsb at Pb
-    #       - If Rsb only provided, calculate Pb
-    #       - If Pb AND Rsb provided, find rsb_frac (Rsb = Rsb_calc / rsb_frac) that honors both Pb and Rsb
-
-    # If PVTO = True
-    #       - If rsb_i only provided;
-    #           - Calculate Pb_i at rsb_i given
-    #           - Find rsb and rsb_frac at Maximum pressure point, which also delivers rs = rsb_i at Pb_i calculated
-    #       - If Pb only provided;
-    #           - Calculate rsb_i at Pb given
-    #           - Find rsb and rsb_frac at Maximum pressure point, which also delivers rs = rsb_i at Pb given
-    #       - If Pb AND Rsb provided
-    #           - Find rsb and rsb_frac at Maximum pressure point, which also delivers rs = rsb_i at Pb_i calculated
-
-    rsb_i = rsb  # _i stand for 'Initial' values given by user
+    rsb_i = rsb
     pb_i = pb
-    rsb_frac = (
-        1  # This is the fractional increase in rsb that Pb needs for solution.
-    )
+    rsb_frac = 1.0
 
     # Calculate rsb from pb
     if rsb_i <= 0 and pb_i > 0:
         rsb = oil_rs_bub(
-            degf=degf,
-            api=api,
-            sg_sp=sg_sp,
-            sg_g = sg_g,
-            pb=pb,
-            rsmethod=rsmethod,
+            degf=degf, api=api, sg_sp=sg_sp, sg_g=sg_g,
+            pb=pb, rsmethod=rsmethod,
         )
-        # rsb_i = rsb
 
     # Calculate pb from rsb
     if pb_i <= 0 and rsb_i > 0:
         pb = oil_pbub(
             degf=degf, api=api, sg_sp=sg_g, rsb=rsb, pbmethod=pbmethod
         )
-        # pb_i = pb
 
-    # Both have been defined by user. Need to work out scalar to apply to rsb to satisfy
-    rsbnew = rsb
-    rsb_frac = 1
+    # Both defined by user — find rsb_frac that honors both
     if pb_i > 0 and rsb_i > 0:
-        if not pvto:  # No need to solve this if just resolving later
-            #print(
-            #    "Iteratively solving for Rsb fraction to use in order to harmonize user specified Pb and Rsb\n"
-            #)
+        pbcalc = oil_pbub(
+            degf=degf, api=api, sg_sp=sg_sp, sg_g=sg_g,
+            rsb=rsb, pbmethod=pbmethod,
+        )
+        err = 100
+        rsb_old = rsb
+        i = 0
+        while err > 0.0001:
+            rsbnew = pb / pbcalc * rsb_old
             pbcalc = oil_pbub(
-                degf=degf, api=api, sg_sp=sg_sp, sg_g = sg_g, rsb=rsb, pbmethod=pbmethod
+                degf=degf, api=api, sg_sp=sg_sp, sg_g=sg_g,
+                rsb=rsbnew, pbmethod=pbmethod,
             )
-            err = 100
-            rsb_old = rsb
-            i = 0
-            while err > 0.0001:
-                rsbnew = pb / pbcalc * rsb_old
-                pbcalc = oil_pbub(
-                    degf=degf,
-                    api=api,
-                    sg_sp=sg_sp,
-                    sg_g = sg_g,
-                    rsb=rsbnew,
-                    pbmethod=pbmethod,
+            rsb_old = rsbnew
+            err = abs(pb - pbcalc)
+            i += 1
+            if i > 100:
+                raise RuntimeError(
+                    "Could not solve Pb & Rsb for these combination of inputs"
                 )
-                rsb_old = rsbnew
-                err = abs(pb - pbcalc)
-                i += 1
-                if i > 100:
-                    raise RuntimeError(
-                        "Could not solve Pb & Rsb for these combination of inputs"
-                    )
-            rsb_frac = (
-                rsb_i / rsbnew
-            )  # Ratio of rsb needed to satisfy rsb defined by user at pb vs that needed to calculate Pb
+        rsb_frac = rsb_i / rsbnew
+
+    return pb, rsb, rsb_frac
+
+
+def _resolve_pb_rsb(pb, rsb, degf, api, sg_sp, sg_g, pvto, pmax,
+                     rsmethod, pbmethod):
+    """Internal helper: resolves Pb/Rsb using oil_harmonize_pb_rsb plus PVTO extension.
+
+    Returns (pb, rsb, rsb_frac, rsb_max, pb_i, rsb_i).
+    """
+    pb_i = pb
+    rsb_i = rsb
+
+    pb, rsb, rsb_frac = oil_harmonize_pb_rsb(
+        pb=pb, rsb=rsb, degf=degf, api=api, sg_sp=sg_sp, sg_g=sg_g,
+        rsmethod=rsmethod, pbmethod=pbmethod,
+    )
+
     rsb_max = rsb
 
-    if (
-        pvto and pmax > pb
-    ):  # PVTO has been requested, and Pb is less than max pressure requested
-        # Need to find new rsb_frac that delivers rsb_i at pb_i (after depletion from pmax)
-        #print(
-        #    "Iteratively solving for Rsb fraction to use at maximum pressure to deliver appropriate Pb and Rsb\n"
-        #)
-        
-        #print('degf, api, sg_sp, sg_g, pmax', degf, api, sg_sp, sg_g, pmax)
+    if pvto and pmax > pb:
         rsb_max = oil_rs_bub(
-            degf=degf,
-            api=api,
-            sg_sp=sg_sp,
-            sg_g = sg_g,
-            pb=pmax,
-            rsmethod=rsmethod,
+            degf=degf, api=api, sg_sp=sg_sp, sg_g=sg_g,
+            pb=pmax, rsmethod=rsmethod,
         )
-        #print('rsb_max', rsb_max) #*********
         rs_at_pbi = oil_rs(
-            api=api,
-            degf=degf,
-            sg_sp=sg_sp,
-            p=pb,
-            pb=pmax,
-            rsb=rsb_max,
-            rsmethod=rsmethod,
-            pbmethod=pbmethod,
+            api=api, degf=degf, sg_sp=sg_sp, p=pb, pb=pmax,
+            rsb=rsb_max, rsmethod=rsmethod, pbmethod=pbmethod,
         )
-        #print(rs_at_pbi)
         err = rs_at_pbi - rsb
-        rsb_old = rs_at_pbi
         rsb_frac_new = rsb_frac
         i = 0
         while abs(err) > 0.0001:
             rsb_frac_new = rsb / rs_at_pbi * rsb_frac
-            #print(rsb_max, rsb_frac_new, rsb_max * rsb_frac_new)
             rs_at_pbi = oil_rs(
-                api=api,
-                degf=degf,
-                sg_sp=sg_sp,
-                p=pb,
-                pb=pmax,
+                api=api, degf=degf, sg_sp=sg_sp, p=pb, pb=pmax,
                 rsb=rsb_max * rsb_frac_new,
-                rsmethod=rsmethod,
-                pbmethod=pbmethod,
+                rsmethod=rsmethod, pbmethod=pbmethod,
             )
             rsb_frac = rsb_frac_new
             err = rs_at_pbi - rsb
@@ -1499,103 +1414,63 @@ def make_bot_og(
                     "Could not solve Pb & Rsb for these combination of inputs"
                 )
         rsb_frac = rsb_frac_new
-        
-    pmax = max(pb, pmax)
-    pbi = pb
-    sg_sp = sg_g
-    drows = 3
-    if pmin in [pb, pi]:
-        drows -= 1
-    if pmax in [pb, pi]:
-        drows -= 1
-    if pb == pi:
-        drows -= 1
 
-    incr = (pmax - pmin) / (nrows - drows)
+    return pb, rsb, rsb_frac, rsb_max, pb_i, rsb_i
 
-    pressures = list(pmin + incr * np.arange(0, nrows - drows + 1))
-    pressures.append(pbi)
-    pressures.append(pi)
-    pressures = list(set(pressures))
-    pressures.sort()
-    pressures = np.array(pressures)
-    co, cg, rss, bos, uos, gfvf, visg, gz, rvs, sg_rs, bws, visws, denos = [
-        [] for x in range(13)
-    ]
 
+def _build_bot_tables(pressures, pb, rsb, rsb_frac, rsb_max, sg_o, sg_g, sg_sp,
+                      api, degf, pvto, wt, ch4_sat,
+                      zmethod, rsmethod, cmethod, denomethod, bomethod, pbmethod):
+    """Compute all PVT properties over the pressure array.
+
+    Returns (rss, bos, denos, uos, co, gz, gfvf, cg, visg, bws, visws,
+             usat_p, usat_bo, usat_uo) where usat_* are empty lists if not pvto.
+    """
     if pvto:
-        pb = pmax
+        pb = max(pb, max(pressures))
         rsb = rsb_max * rsb_frac
 
-    
+    co, cg, rss, bos, uos, gfvf, visg, gz, bws, visws, denos = [
+        [] for _ in range(11)
+    ]
+
     for p in pressures:
         if p > pb:
             rss.append(rsb)
         else:
             rss.append(
                 oil_rs(
-                    api=api,
-                    degf=degf,
-                    sg_sp=sg_sp,
-                    p=p,
-                    pb=pb,
-                    rsb=rsb / rsb_frac,
-                    rsmethod=rsmethod,
-                    pbmethod=pbmethod,
-                )
-                * rsb_frac
+                    api=api, degf=degf, sg_sp=sg_sp, p=p, pb=pb,
+                    rsb=rsb / rsb_frac, rsmethod=rsmethod, pbmethod=pbmethod,
+                ) * rsb_frac
             )
 
         bos.append(
             oil_bo(
-                p=p,
-                pb=pb,
-                degf=degf,
-                rs=rss[-1],
-                rsb=rsb,
-                sg_g=sg_g,
-                sg_sp=sg_sp,
-                sg_o=sg_o,
-                denomethod=denomethod,
-                bomethod=bomethod,
+                p=p, pb=pb, degf=degf, rs=rss[-1], rsb=rsb,
+                sg_g=sg_g, sg_sp=sg_sp, sg_o=sg_o,
+                denomethod=denomethod, bomethod=bomethod,
             )
         )
         denos.append(
             oil_deno(
-                p=p,
-                degf=degf,
-                rs=rss[-1],
-                rsb=rsb,
-                sg_g=sg_g,
-                sg_sp=sg_sp,
-                pb=pb,
-                sg_o=sg_o,
-                api=api,
+                p=p, degf=degf, rs=rss[-1], rsb=rsb,
+                sg_g=sg_g, sg_sp=sg_sp, pb=pb, sg_o=sg_o, api=api,
             )
         )
         uos.append(oil_viso(p=p, api=api, degf=degf, pb=pb, rs=rss[-1]))
         co.append(
             oil_co(
-                p=p,
-                api=api,
-                sg_sp=sg_sp,
-                sg_g=sg_g,
-                degf=degf,
-                pb=pb,
-                rsb=rss[-1],
-                zmethod=zmethod,
-                rsmethod=rsmethod,
-                cmethod=cmethod,
-                denomethod=denomethod,
-                bomethod=bomethod,
+                p=p, api=api, sg_sp=sg_sp, sg_g=sg_g, degf=degf,
+                pb=pb, rsb=rss[-1], zmethod=zmethod, rsmethod=rsmethod,
+                cmethod=cmethod, denomethod=denomethod, bomethod=bomethod,
             )
         )
 
         gfvf.append(
             gas.gas_bg(p=p, sg=sg_g, degf=degf, zmethod=zmethod, cmethod=cmethod)
-            * 1000
-            / CUFTperBBL
-        )  # rb/mscf
+            * 1000 / CUFTperBBL
+        )
         gz.append(
             gas.gas_z(p=p, sg=sg_g, degf=degf, zmethod=zmethod, cmethod=cmethod)
         )
@@ -1603,18 +1478,15 @@ def make_bot_og(
             gas.gas_ug(p=p, sg=sg_g, degf=degf, zmethod=zmethod, cmethod=cmethod)
         )
         cg.append(gas.gas_cg(p=p, sg=sg_g, degf=degf, cmethod=cmethod))
-        bw, lden, visw, cw, rsw = brine.brine_props(
+        bw, _lden, visw, _cw, _rsw = brine.brine_props(
             p=p, degf=degf, wt=wt, ch4_sat=ch4_sat
         )
         bws.append(bw)
         visws.append(visw)
 
-    # And undersaturated lines if required
+    # Undersaturated extension for PVTO
+    usat_p, usat_bo, usat_uo = [], [], []
     if pvto:
-        usat_bo = []
-        usat_uo = []
-        usat_p = []
-
         for i, p in enumerate(pressures):
             if i == 0:
                 continue
@@ -1623,16 +1495,9 @@ def make_bot_og(
                 usat_bo.append(
                     [
                         oil_bo(
-                            p=pusat,
-                            pb=p,
-                            degf=degf,
-                            rs=rss[i],
-                            rsb=rss[i],
-                            sg_g=sg_g,
-                            sg_sp=sg_sp,
-                            sg_o=sg_o,
-                            denomethod=denomethod,
-                            bomethod=bomethod,
+                            p=pusat, pb=p, degf=degf, rs=rss[i], rsb=rss[i],
+                            sg_g=sg_g, sg_sp=sg_sp, sg_o=sg_o,
+                            denomethod=denomethod, bomethod=bomethod,
                         )
                         for pusat in usat_p[-1]
                     ]
@@ -1646,15 +1511,25 @@ def make_bot_og(
             except (ValueError, IndexError, ZeroDivisionError):
                 pass
 
-    st_deno = sg_o * WDEN  # lb/cuft
+    return (rss, bos, denos, uos, co, gz, gfvf, cg, visg, bws, visws,
+            usat_p, usat_bo, usat_uo)
+
+
+def _format_bot_results(pressures, rss, bos, denos, uos, co, gz, gfvf, cg,
+                        visg, bws, visws, usat_p, usat_bo, usat_uo,
+                        sg_o, sg_g, pi, degf, wt, ch4_sat, pb_i, rsb_i,
+                        rsb_frac, pvto, export, zmethod, cmethod):
+    """Assemble DataFrame, optionally export Eclipse files, and return results dict."""
+    st_deno = sg_o * WDEN
     st_deng = gas.gas_den(
         p=psc, sg=sg_g, degf=tsc, zmethod=zmethod, cmethod=cmethod
     )
-    bw, lden, visw, cw, rsw = brine.brine_props(
+    bw, lden, visw, cw, _rsw = brine.brine_props(
         p=pi, degf=degf, wt=wt, ch4_sat=ch4_sat
     )
-    res_denw = lden * WDEN  # lb/cuft
+    res_denw = lden * WDEN
     res_cw = cw
+
     df = pd.DataFrame()
     df["Pressure (psia)"] = pressures
     df["Rs (mscf/stb)"] = rss
@@ -1685,7 +1560,7 @@ def make_bot_og(
         with open("PVDO.INC", "w") as text_file:
             text_file.write(fileout)
 
-        if pvto:  # Also export PVTO include file;
+        if pvto:
             pvto_out = "PVTO\n"
             headers = [
                 "-- Rs (mscf/stb)",
@@ -1742,3 +1617,9 @@ def make_bot_og(
         results["usat"] = [usat_p, usat_bo, usat_uo]
 
     return results
+
+
+def make_bot_og(*args, **kwargs):
+    """Deprecated: Use simtools.make_bot_og() instead. This wrapper remains for backward compatibility."""
+    from pyrestoolbox.simtools import make_bot_og as _make_bot_og
+    return _make_bot_og(*args, **kwargs)
