@@ -27,7 +27,7 @@ Includes functions to perform calculations including;
 - Creation of Corey, LET and Jerauld relative permeability tables in Eclipse format, with curve fitting support
 - Calculation of Methane, CO2 and multicomponent gas saturated brine properties (Soreide-Whitson VLE)
 
-`Changelist <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/changelist.rst>`_
+`Changelist <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/changelist.rst>`_
 
 Upgrade previous installations with
 
