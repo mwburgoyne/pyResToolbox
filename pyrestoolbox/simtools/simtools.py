@@ -1121,7 +1121,7 @@ def make_vfpinj(
     table_num: int,
     completion,
     flo_type: str = 'WAT',
-    vlpmethod: str = 'HB',
+    vlpmethod: str = 'WG',
     flo_rates: list = None,
     thp_values: list = None,
     gas_pvt=None,
@@ -1157,8 +1157,8 @@ def make_vfpinj(
         sgsp: Separator gas SG. Default 0.65
         api: API gravity. Default 35
         datum_depth: Bottom hole datum depth (ft). Default = completion total TVD
-        export: If True, writes an Eclipse include file. Default False
-        filename: Custom output filename. Default: VFPINJ_{table_num}.INC
+        export: If True, writes an Eclipse VFP file. Default False
+        filename: Custom output filename. Default: VFPINJ_{table_num}.VFP
 
         Returns: Dictionary with keys:
             table_num, datum_depth, flo_type, flo_rates, thp_values,
@@ -1241,7 +1241,7 @@ def make_vfpinj(
                                   flo_rates, thp_values, bhp_array)
 
     if export:
-        fname = filename if filename else f"VFPINJ_{table_num}.INC"
+        fname = filename if filename else f"VFPINJ_{table_num}.VFP"
         with open(fname, 'w') as f:
             f.write(eclipse_str)
 
@@ -1261,7 +1261,7 @@ def make_vfpprod(
     table_num: int,
     completion,
     well_type: str = 'gas',
-    vlpmethod: str = 'HB',
+    vlpmethod: str = 'WG',
     flo_rates: list = None,
     thp_values: list = None,
     wfr_values: list = None,
@@ -1312,8 +1312,8 @@ def make_vfpprod(
         sgsp: Separator gas SG. Default 0.65
         wsg: Water specific gravity. Default 1.07
         datum_depth: Bottom hole datum depth (ft). Default = completion total TVD
-        export: If True, writes an Eclipse include file. Default False
-        filename: Custom output filename. Default: VFPPROD_{table_num}.INC
+        export: If True, writes an Eclipse VFP file. Default False
+        filename: Custom output filename. Default: VFPPROD_{table_num}.VFP
 
         Returns: Dictionary with keys:
             table_num, datum_depth, well_type, flo_type, wfr_type, gfr_type,
@@ -1354,6 +1354,14 @@ def make_vfpprod(
     wfr_values = list(wfr_values)
     gfr_values = list(gfr_values)
     alq_values = list(alq_values)
+
+    # Anchor ratios at zero where physically meaningful
+    # WFR: zero water is valid for both gas (WGR=0) and oil (WCT=0) wells
+    if 0 not in wfr_values:
+        wfr_values.insert(0, 0)
+    # GFR: zero condensate (OGR=0) is valid for gas wells only
+    if well_type == 'gas' and 0 not in gfr_values:
+        gfr_values.insert(0, 0)
 
     if len(flo_rates) < 2:
         raise ValueError("flo_rates must contain at least 2 values")
@@ -1424,7 +1432,7 @@ def make_vfpprod(
                                    alq_values, bhp_array)
 
     if export:
-        fname = filename if filename else f"VFPPROD_{table_num}.INC"
+        fname = filename if filename else f"VFPPROD_{table_num}.VFP"
         with open(fname, 'w') as f:
             f.write(eclipse_str)
 
