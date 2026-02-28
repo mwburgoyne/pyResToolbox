@@ -20,7 +20,7 @@ pyResToolBox uses class objects to track calculation options through the functio
         + 'DAK': Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al. - Slowest, Most Accurate
         + 'HY': Hall & Yarborough (1973) - Second Fastest
         + 'WYW': Wang, Ye & Wu (2021) - Fastest, Least Accurate
-        + 'BUR': Fast, can handle 100% inerts and Hydrogen. Tuned 5 component Peng Robinson EOS model (Unpublished, created by M. Burgoyne 2024)
+        + 'BUR'/'BNS': Fast, can handle 100% inerts and Hydrogen. Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen & Stanko (2025), `SPE-229932-MS <https://doi.org/10.2118/229932-MS>`_
    * - cmethod
      - c_method
      - Method for calculating gas critical properties. Defaults to 'PMC' 
