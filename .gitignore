@@ -1,0 +1,32 @@
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Byte-compiled / cached
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code
+.claude/
+CLAUDE.md
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Windows NTFS artifacts
+*Zone.Identifier
+
+# Local working files
+*.pdf
+*.rtf
+*.VFP
+*.png
