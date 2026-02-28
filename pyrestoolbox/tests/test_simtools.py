@@ -260,6 +260,7 @@ def test_vfpinj_gas():
     comp = Completion(tid=2.441, length=8000, tht=100, bht=250)
     result = simtools.make_vfpinj(
         table_num=1, completion=comp, flo_type='GAS',
+        vlpmethod='HB',
         flo_rates=[1000, 5000, 10000],
         thp_values=[1000, 2000],
         gsg=0.65)
@@ -300,6 +301,7 @@ def test_vfpprod_gas_basic():
     comp = Completion(tid=2.441, length=8000, tht=100, bht=250)
     result = simtools.make_vfpprod(
         table_num=1, completion=comp, well_type='gas',
+        vlpmethod='HB',
         flo_rates=[5000, 10000, 20000],
         thp_values=[500, 1000],
         wfr_values=[0],
@@ -336,6 +338,7 @@ def test_vfpprod_eclipse_format():
     comp = Completion(tid=2.441, length=8000, tht=100, bht=250)
     result = simtools.make_vfpprod(
         table_num=1, completion=comp, well_type='gas',
+        vlpmethod='HB',
         flo_rates=[5000, 10000],
         thp_values=[500],
         wfr_values=[0],
@@ -356,6 +359,7 @@ def test_vfpprod_gas_bhp_increases_with_rate():
     comp = Completion(tid=2.441, length=8000, tht=100, bht=250)
     result = simtools.make_vfpprod(
         table_num=1, completion=comp, well_type='gas',
+        vlpmethod='HB',
         flo_rates=[1000, 10000, 50000],
         thp_values=[500],
         wfr_values=[0],
