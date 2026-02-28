@@ -32,7 +32,9 @@ import pyrestoolbox.gas as gas # Needed for Z-Factor
 from pyrestoolbox.classes import z_method, c_method, pb_method, rs_method, bo_method, uo_method, deno_method, co_method, kr_family, kr_table, class_dic
 from pyrestoolbox.shared_fns import convert_to_numpy, process_output, halley_solve_cubic
 from pyrestoolbox.validate import validate_methods
-from pyrestoolbox.constants import R, psc, tsc, degF2R, tscr, scf_per_mol, CUFTperBBL, WDEN, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2
+from pyrestoolbox.constants import (R, psc, tsc, degF2R, tscr, scf_per_mol, CUFTperBBL, WDEN, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2,
+                                    BAR_TO_PSI, PSI_TO_BAR, degc_to_degf, degf_to_degc,
+                                    INVPSI_TO_INVBAR, SCF_PER_STB_TO_SM3_PER_SM3)
 from pyrestoolbox.plyasunov.iapws_if97 import rho_if97 as _rho_if97
 
 def _Eq41(t, input_array):
@@ -55,14 +57,18 @@ _FM32T_ARR = [0, -0.617, -0.747, -0.4339, 0, 10.26]
 _FM1T_ARR = [0, 0, 9.917, 5.1128, 0, 3.892]
 _FM12T_ARR = [0, 0.0365, -0.0369, 0, 0, 0]
 
-def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0) -> Tuple:
+def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0, metric: bool = False) -> Tuple:
     """ Calculates Brine properties from modified Spivey Correlation per McCain Petroleum Reservoir Fluid Properties pg 160
-        Returns Tuple of (Bw (rb/stb), Density (sg), viscosity (cP), Compressibility (1/psi), Rw GOR (scf/stb))
-        p: Pressure (psia)
-        degf: Temperature (deg F)
+        Returns Tuple of (Bw (rb/stb | rm3/sm3), Density (sg), viscosity (cP), Compressibility (1/psi | 1/bar), Rw GOR (scf/stb | sm3/sm3))
+        p: Pressure (psia | barsa)
+        degf: Temperature (deg F | deg C)
         wt: Salt wt% (0-100)
         ch4_sat: Degree of methane saturation (0 - 1)
+        metric: If True, inputs/outputs in Eclipse METRIC units (barsa, degC, 1/bar, sm3/sm3). Default False (oilfield).
     """
+    if metric:
+        p = p * BAR_TO_PSI
+        degf = degc_to_degf(degf)
     if p <= 0:
         raise ValueError("Pressure must be positive")
     if wt < 0 or wt >= 100:
@@ -336,11 +342,15 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0) -> Tuple:
     ur_tm = np.exp(lnur_tm)
     ub_tpm = ur_tm * uw_tp * 1000  # cP - Eq 4.48
 
-    bw = Bw  # rb/stb
-    lden = rhobtpbch4  # sg
+    bw = Bw  # rb/stb (dimensionless ratio, same in both unit systems)
+    lden = rhobtpbch4  # sg (g/cm3)
     visw = ub_tpm  # cP
     cw = cw_new  # 1/psi
     rsw = rsw_new_oilfield  # scf/stb
+
+    if metric:
+        cw = cw * INVPSI_TO_INVBAR  # 1/psi -> 1/bar
+        rsw = rsw * SCF_PER_STB_TO_SM3_PER_SM3  # scf/stb -> sm3/sm3
 
     return (bw, lden, visw, cw, rsw)
 

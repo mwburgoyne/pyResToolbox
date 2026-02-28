@@ -29,7 +29,13 @@ import pandas as pd
 from pyrestoolbox.classes import z_method, c_method, pb_method, rs_method, bo_method, uo_method, deno_method, co_method, kr_family, kr_table, class_dic
 from pyrestoolbox.shared_fns import convert_to_numpy, process_output, check_2_inputs, bisect_solve, validate_pe_inputs
 from pyrestoolbox.validate import validate_methods
-from pyrestoolbox.constants import R, psc, tsc, degF2R, tscr, scf_per_mol, CUFTperBBL, WDEN, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2
+from pyrestoolbox.constants import (R, psc, tsc, degF2R, tscr, scf_per_mol, CUFTperBBL, WDEN, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2,
+    BAR_TO_PSI, PSI_TO_BAR, degc_to_degf, degf_to_degc,
+    M_TO_FT, FT_TO_M, MM_TO_IN, IN_TO_MM, SQM_TO_SQFT, SQFT_TO_SQM,
+    LBCUFT_TO_KGM3, KGM3_TO_LBCUFT, INVPSI_TO_INVBAR, INVBAR_TO_INVPSI,
+    PSI2CP_TO_BAR2CP, BAR2CP_TO_PSI2CP, BARM_TO_PSIFT, PSIFT_TO_BARM,
+    MSCF_TO_SM3, SM3_TO_MSCF, STB_PER_MMSCF_TO_SM3_PER_SM3,
+    SM3_PER_SM3_TO_STB_PER_MSCF, D_PER_SM3_TO_D_PER_MSCF, D_PER_MSCF_TO_D_PER_SM3)
 
 # Precomputed Gauss-Legendre nodes/weights for pseudopressure integration
 _GL7_NODES, _GL7_WEIGHTS = np.polynomial.legendre.leggauss(7)
@@ -100,6 +106,7 @@ def gas_rate_radial(
     h2: float = 0,
     tc: float = 0,
     pc: float = 0,
+    metric: bool = False,
 ) -> np.ndarray:
     """ Returns gas rate for radial flow (mscf/day) using Darcy pseudo steady state equation & gas pseudopressure
         k: Permeability (mD)
@@ -127,9 +134,23 @@ def gas_rate_radial(
         h2s: Molar fraction of H2S. Defaults to zero if undefined
         n2: Molar fraction of Nitrogen. Defaults to zero if undefined
         h2: Molar fraction of Hydrogen. Defaults to zero if undefined. If > 0, will change zmethod to 'BNS'
-        tc: Critical gas temperature (deg R). Uses cmethod correlation if not specified
-        pc: Critical gas pressure (psia). Uses cmethod correlation if not specified
+        tc: Critical gas temperature (deg R | K). Uses cmethod correlation if not specified
+        pc: Critical gas pressure (psia | barsa). Uses cmethod correlation if not specified
+        metric: If True, input/output in Eclipse METRIC units (barsa, degC, m, sm3/d). Defaults to False (FIELD)
     """
+    if metric:
+        pr = np.asarray(pr) * BAR_TO_PSI if not isinstance(pr, (int, float)) else pr * BAR_TO_PSI
+        pwf = np.asarray(pwf) * BAR_TO_PSI if not isinstance(pwf, (int, float)) else pwf * BAR_TO_PSI
+        h = np.asarray(h) * M_TO_FT if not isinstance(h, (int, float)) else h * M_TO_FT
+        degf = degc_to_degf(degf)
+        r_w = r_w * M_TO_FT
+        r_ext = r_ext * M_TO_FT
+        if D > 0:
+            D = D * D_PER_SM3_TO_D_PER_MSCF  # day/sm3 -> day/Mscf
+        if tc > 0:
+            tc = tc * 1.8  # K to deg R
+        if pc > 0:
+            pc = pc * BAR_TO_PSI
     if r_w <= 0:
         raise ValueError("Wellbore radius r_w must be positive")
     if r_ext <= r_w:
@@ -140,7 +161,10 @@ def gas_rate_radial(
     direction, delta_mp = _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s)
 
     qg = darcy_gas(delta_mp, k, h, degf, r_w, r_ext, S, D, radial=True)
-    return direction * qg
+    result = direction * qg
+    if metric:
+        return result * MSCF_TO_SM3  # Mscf/d -> sm3/d
+    return result
 
 def gas_rate_linear(
     k: npt.ArrayLike,
@@ -158,6 +182,7 @@ def gas_rate_linear(
     h2: float = 0,
     tc: float = 0,
     pc: float = 0,
+    metric: bool = False,
 ) -> np.ndarray:
     """ Returns gas rate for linear flow (mscf/day) using Darcy steady state equation & gas pseudopressure
         k: Permeability (mD)
@@ -182,9 +207,20 @@ def gas_rate_linear(
         h2s: Molar fraction of H2S. Defaults to zero if not specified
         n2: Molar fraction of Nitrogen. Defaults to zero if not specified
         h2: Molar fraction of Hydrogen. Defaults to zero if not specified
-        tc: Critical gas temperature (deg R). Uses cmethod correlation if not specified
-        pc: Critical gas pressure (psia). Uses cmethod correlation if not specified
+        tc: Critical gas temperature (deg R | K). Uses cmethod correlation if not specified
+        pc: Critical gas pressure (psia | barsa). Uses cmethod correlation if not specified
+        metric: If True, input/output in Eclipse METRIC units (barsa, degC, m, m2, sm3/d). Defaults to False (FIELD)
     """
+    if metric:
+        pr = np.asarray(pr) * BAR_TO_PSI if not isinstance(pr, (int, float)) else pr * BAR_TO_PSI
+        pwf = np.asarray(pwf) * BAR_TO_PSI if not isinstance(pwf, (int, float)) else pwf * BAR_TO_PSI
+        area = np.asarray(area) * SQM_TO_SQFT if not isinstance(area, (int, float)) else area * SQM_TO_SQFT
+        degf = degc_to_degf(degf)
+        length = length * M_TO_FT
+        if tc > 0:
+            tc = tc * 1.8  # K to deg R
+        if pc > 0:
+            pc = pc * BAR_TO_PSI
     if length <= 0:
         raise ValueError("Flow length must be positive")
 
@@ -193,7 +229,10 @@ def gas_rate_linear(
     direction, delta_mp = _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s)
 
     qg = darcy_gas(delta_mp, k, 1, degf, area, length, 0, 0, radial=False)
-    return direction * qg
+    result = direction * qg
+    if metric:
+        return result * MSCF_TO_SM3  # Mscf/d -> sm3/d
+    return result
 
 def darcy_gas(
     delta_mp: npt.ArrayLike,
@@ -230,6 +269,7 @@ def gas_tc_pc(
     cmethod: str = "PMC",
     tc: float = 0,
     pc: float = 0,
+    metric: bool = False,
 ) -> Tuple:
     """ Returns a Tuple of critical temperature (deg R) and critical pressure (psia) for hydrocarbon gas
         For SUT and PMC, this returns an equivalent set of critical parameters for the mixture
@@ -242,10 +282,18 @@ def gas_tc_pc(
         cmethod: 'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, 
                  'PMC' for Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'BNS' for Burgoyne, Nielsen and Stanko method (2025). If h2 > 0, then 'BNS' will be used
-        tc: Critical gas temperature (deg R). Uses cmethod correlation if not specified
-        pc: Critical gas pressure (psia). Uses cmethod correlation if not specified
+        tc: Critical gas temperature (deg R | K). Uses cmethod correlation if not specified
+        pc: Critical gas pressure (psia | barsa). Uses cmethod correlation if not specified
+        metric: If True, input/output in Eclipse METRIC units (K, barsa). Defaults to False (FIELD)
     """
+    if metric:
+        if tc > 0:
+            tc = tc * 1.8  # K to deg R
+        if pc > 0:
+            pc = pc * BAR_TO_PSI
     if tc * pc > 0:  # Critical properties have both been user specified
+        if metric:
+            return (tc / 1.8, pc * PSI_TO_BAR)  # deg R -> K, psia -> barsa
         return (tc, pc)
     
     if h2 > 0:
@@ -353,8 +401,10 @@ def gas_tc_pc(
         tpc = tc
     if pc > 0:
         ppc = pc
+    if metric:
+        return (tpc / 1.8, ppc * PSI_TO_BAR)  # deg R -> K, psia -> barsa
     return (tpc, ppc)
-        
+
 # EOS parameters for BNS Peng-Robinson model (shared by gas_z and gas_ug)
 _BNS_MWS = np.array([44.01, 34.082, 28.014, 2.016, 0])
 _BNS_TCS = np.array([547.416, 672.120, 227.160, 47.430, 1])  # H2 Tc has been modified
@@ -470,12 +520,13 @@ def gas_z(
     h2: float = 0,
     tc: float = 0,
     pc: float = 0,
+    metric: bool = False,
 ) -> np.ndarray:
-    """ Returns real-gas deviation factor (Z). Returning either single float, or numpy array depending upon 
+    """ Returns real-gas deviation factor (Z). Returning either single float, or numpy array depending upon
         whether single pressure of list/array or pressures has been specified.
-        p: Gas pressure (psia). Takes a single float, 1D list or 1D Numpy array
+        p: Gas pressure (psia | barsa)
         sg: Gas SG relative to air. Single float only
-        degf: Gas Temperature (deg F). Single float only
+        degf: Gas Temperature (deg F | deg C)
         zmethod: Method for calculating Z-Factor
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
@@ -491,9 +542,17 @@ def gas_z(
         h2s: Molar fraction of H2S. Defaults to zero if undefined
         n2: Molar fraction of Nitrogen. Defaults to zero if undefined
         h2: Molar fraction of Hydrogen. Defaults to zero if undefined
-        tc: Critical gas temperature (deg R). Uses cmethod correlation if not specified
-        pc: Critical gas pressure (psia). Uses cmethod correlation if not specified
+        tc: Critical gas temperature (deg R | K). Uses cmethod correlation if not specified
+        pc: Critical gas pressure (psia | barsa). Uses cmethod correlation if not specified
+        metric: If True, input/output in Eclipse METRIC units (barsa, degC, K). Defaults to False (FIELD)
     """
+    if metric:
+        p = np.asarray(p) * BAR_TO_PSI if not isinstance(p, (int, float)) else p * BAR_TO_PSI
+        degf = degc_to_degf(degf)
+        if tc > 0:
+            tc = tc * 1.8  # K to deg R
+        if pc > 0:
+            pc = pc * BAR_TO_PSI
     validate_pe_inputs(p=p, degf=degf, sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2)
 
     tolerance = 1e-6
@@ -710,7 +769,8 @@ def gas_ug(
     tc: float = 0,
     pc: float = 0,
     zee: float = 0,
-    ugz = False
+    ugz = False,
+    metric: bool = False,
 ) -> np.ndarray:
     """ Returns Gas Viscosity (cP) or Gas Viscosity * Z-Factor
         Uses Lee, Gonzalez & Eakin (1966) Correlation using equations 2.14-2.17 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
@@ -738,7 +798,15 @@ def gas_ug(
           pc: Critical gas pressure (psia). Calculates using cmethod if not specified
           zee: Gas Z-Factor. If undefined, will trigger Z-Factor calculation.
           ugz: Boolean flag that if True returns ugZ instead of ug
+          metric: If True, input/output in Eclipse METRIC units (barsa, degC). Defaults to False (FIELD)
     """
+    if metric:
+        p = np.asarray(p) * BAR_TO_PSI if not isinstance(p, (int, float)) else p * BAR_TO_PSI
+        degf = degc_to_degf(degf)
+        if isinstance(tc, (int, float)) and tc > 0:
+            tc = tc * 1.8  # K to deg R
+        if isinstance(pc, (int, float)) and pc > 0:
+            pc = pc * BAR_TO_PSI
     zee_provided = not (isinstance(zee, (int, float, bool)) and not zee)
     p, is_list = convert_to_numpy(p)
     zee, _ = convert_to_numpy(zee)
@@ -828,6 +896,7 @@ def gas_cg(
     pc: float = 0,
     zmethod: z_method = z_method.DAK,
     cmethod: c_method = c_method.PMC,
+    metric: bool = False,
 ) -> np.ndarray:
     """ Returns gas compressibility (1/psi) using the 'DAK' Dranchuk & Abou-Kassem (1975) Z-Factor &
         Critical property correlation values if not explicitly specified
@@ -853,26 +922,37 @@ def gas_cg(
                  'PMC' for Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'BNS' for Burgoyne, Nielsen and Stanko method (2025). If h2 > 0, then 'BNS' will be used
                  Defaults to 'PMC
+          metric: If True, input/output in Eclipse METRIC units (barsa, degC, 1/barsa). Defaults to False (FIELD)
     """
+    if metric:
+        p = np.asarray(p) * BAR_TO_PSI if not isinstance(p, (int, float)) else p * BAR_TO_PSI
+        degf = degc_to_degf(degf)
+        if tc > 0:
+            tc = tc * 1.8  # K to deg R
+        if pc > 0:
+            pc = pc * BAR_TO_PSI
     if h2 > 0:
         cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BNS' 
-        
+        zmethod = 'BNS'
+
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
     p, is_list = convert_to_numpy(p)
     tc, pc = gas_tc_pc(sg=sg, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc, cmethod=cmethod)
-        
+
     pr = p / pc
     degR = (degf + degF2R)
     tr = degR / tc
     zee1 = gas_z(p=p, sg=sg, degf=degf, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2=h2, tc=tc, pc=pc)
     zee2 = gas_z(p=p+1, sg=sg, degf=degf,  zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2=h2, tc=tc, pc=pc)
-    
+
     vol1 = zee1*R*degR/p
     vol2 = zee2*R*degR/(p+1)
-    
-    return process_output((vol1 - vol2)/((vol1 + vol2)/2), is_list) # 1/psi
+
+    result = process_output((vol1 - vol2)/((vol1 + vol2)/2), is_list) # 1/psi
+    if metric:
+        return result * INVPSI_TO_INVBAR  # 1/psi -> 1/barsa
+    return result
 
 def gas_bg(
     p: npt.ArrayLike,
@@ -886,6 +966,7 @@ def gas_bg(
     h2: float = 0,
     tc: float = 0,
     pc: float = 0,
+    metric: bool = False,
 ) -> np.ndarray:
     """ Returns Bg (gas formation volume factor) for natural gas (rcf/scf)
         p: Gas pressure (psia)
@@ -906,14 +987,22 @@ def gas_bg(
           h2s: Molar fraction of H2S. Defaults to zero if undefined
           n2: Molar fraction of Nitrogen. Defaults to zero if undefined
           h2: Molar fraction of Nitrogen. Defaults to zero if undefined
-          tc: Critical gas temperature (deg R). Calculates using cmethod if not specified
-          pc: Critical gas pressure (psia). Calculates using cmethod if not specified          
+          tc: Critical gas temperature (deg R | K). Calculates using cmethod if not specified
+          pc: Critical gas pressure (psia | barsa). Calculates using cmethod if not specified
+          metric: If True, input/output in Eclipse METRIC units (barsa, degC). Defaults to False (FIELD)
     """
+    if metric:
+        p = np.asarray(p) * BAR_TO_PSI if not isinstance(p, (int, float)) else p * BAR_TO_PSI
+        degf = degc_to_degf(degf)
+        if tc > 0:
+            tc = tc * 1.8  # K to deg R
+        if pc > 0:
+            pc = pc * BAR_TO_PSI
     p, is_list = convert_to_numpy(p)
     if h2 > 0:
         cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BNS' 
-        
+        zmethod = 'BNS'
+
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
     zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc)
@@ -936,6 +1025,7 @@ def gas_den(
     h2: float = 0,
     tc: float = 0,
     pc: float = 0,
+    metric: bool = False,
 ) -> np.ndarray:
     """ Returns gas density for natural gas (lb/cuft)
           p: Gas pressure (psia)
@@ -956,21 +1046,29 @@ def gas_den(
           h2s: Molar fraction of H2S. Defaults to zero if undefined
           n2: Molar fraction of Nitrogen. Defaults to zero if undefined
           h2: Molar fraction of Hydrogen. Defaults to zero if undefined
-          tc: Critical gas temperature (deg R). Calculates using cmethod if not specified
-          pc: Critical gas pressure (psia). Calculates using cmethod if not specified         
+          tc: Critical gas temperature (deg R | K). Calculates using cmethod if not specified
+          pc: Critical gas pressure (psia | barsa). Calculates using cmethod if not specified
+          metric: If True, input/output in Eclipse METRIC units (barsa, degC, kg/m3). Defaults to False (FIELD)
     """
+    if metric:
+        p = np.asarray(p) * BAR_TO_PSI if not isinstance(p, (int, float)) else p * BAR_TO_PSI
+        degf = degc_to_degf(degf)
+        if tc > 0:
+            tc = tc * 1.8  # K to deg R
+        if pc > 0:
+            pc = pc * BAR_TO_PSI
     p, is_list = convert_to_numpy(p)
 
     if h2 > 0:
         cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BNS' 
-        
+        zmethod = 'BNS'
+
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
     zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc)
-    
+
     m = sg * MW_AIR
-    
+
     if co2 == 1:
         m = 44.01
     if h2s == 1:
@@ -981,8 +1079,11 @@ def gas_den(
         m = 2.016
     degR = degf + degF2R
     rhog = p * m / (zee * R * degR)
-        
-    return process_output(rhog, is_list)
+
+    result = process_output(rhog, is_list)
+    if metric:
+        return result * LBCUFT_TO_KGM3  # lb/cuft -> kg/m3
+    return result
 
 def gas_ponz2p(
     poverz: npt.ArrayLike,
@@ -997,6 +1098,7 @@ def gas_ponz2p(
     tc: float = 0,
     pc: float = 0,
     rtol: float = 1e-7,
+    metric: bool = False,
 ) -> np.ndarray:
     """ Returns pressure corresponding to a P/Z value for natural gas (psia)
         Calculated through iterative solution method
@@ -1021,12 +1123,20 @@ def gas_ponz2p(
           tc: Critical gas temperature (deg R). Calculates using cmethod if not specified
           pc: Critical gas pressure (psia). Calculates using cmethod if not specified
           rtol: Relative solution tolerance. Will iterate until abs[(p - poverz * Z)/p] < rtol
+          metric: If True, input/output in Eclipse METRIC units (barsa, degC). Defaults to False (FIELD)
     """
-    
+    if metric:
+        poverz = np.asarray(poverz) * BAR_TO_PSI if not isinstance(poverz, (int, float)) else poverz * BAR_TO_PSI
+        degf = degc_to_degf(degf)
+        if tc > 0:
+            tc = tc * 1.8  # K to deg R
+        if pc > 0:
+            pc = pc * BAR_TO_PSI
+
     if h2 > 0:
         cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BNS' 
-        
+        zmethod = 'BNS'
+
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
     def PonZ2P_err(args, p):
@@ -1041,7 +1151,10 @@ def gas_ponz2p(
         args = (ponz, sg, degf, zmethod, cmethod, tc, pc, co2, h2s, n2, h2)
         p.append(bisect_solve(args, PonZ2P_err, ponz * 0.1, ponz * 5, rtol))
 
-    return process_output(p, is_list)
+    result = process_output(p, is_list)
+    if metric:
+        return result * PSI_TO_BAR  # psia -> barsa
+    return result
 
 def gas_grad2sg(
     grad: float,
@@ -1056,6 +1169,7 @@ def gas_grad2sg(
     tc: float = 0,
     pc: float = 0,
     rtol: float = 1e-7,
+    metric: bool = False,
 ) -> float:
     """ Returns insitu gas specific gravity consistent with observed gas gradient. Solution iteratively calculated via bisection
         Calculated through iterative solution method. Will fail if gas SG is below 0.55, or greater than 3.0.
@@ -1081,7 +1195,16 @@ def gas_grad2sg(
           tc: Critical gas temperature (deg R). Calculates using cmethod if not specified
           pc: Critical gas pressure (psia). Calculates using cmethod if not specified
           rtol: Relative solution tolerance. Will iterate until abs[(grad - calculation)/grad] < rtol
+          metric: If True, input/output in Eclipse METRIC units (bar/m, barsa, degC). Defaults to False (FIELD)
     """
+    if metric:
+        grad = grad * BARM_TO_PSIFT  # bar/m -> psi/ft
+        p = p * BAR_TO_PSI
+        degf = degc_to_degf(degf)
+        if tc > 0:
+            tc = tc * 1.8  # K to deg R
+        if pc > 0:
+            pc = pc * BAR_TO_PSI
 
     validate_pe_inputs(p=p, degf=degf, co2=co2, h2s=h2s, n2=n2, h2=h2)
     if grad <= 0:
@@ -1119,6 +1242,7 @@ def gas_dmp(
     h2: float = 0,
     tc: float = 0,
     pc: float = 0,
+    metric: bool = False,
 ) -> float:
     """ Numerical integration of real-gas pseudopressure between two pressures
         Returns integral over range between p1 to p2 (psi**2/cP)
@@ -1141,9 +1265,18 @@ def gas_dmp(
         h2s: Molar fraction of H2S. Defaults to zero if undefined
         n2: Molar fraction of Nitrogen. Defaults to zero if undefined
         h2: Molar fraction of Hydrogen. Defaults to zero if undefined
-        tc: Critical gas temperature (deg R). Calculates using cmethod if not specified
-        pc: Critical gas pressure (psia). Calculates using cmethod if not specified
+        tc: Critical gas temperature (deg R | K). Calculates using cmethod if not specified
+        pc: Critical gas pressure (psia | barsa). Calculates using cmethod if not specified
+        metric: If True, input/output in Eclipse METRIC units (barsa, degC, bar^2/cP). Defaults to False (FIELD)
     """
+    if metric:
+        p1 = p1 * BAR_TO_PSI
+        p2 = p2 * BAR_TO_PSI
+        degf = degc_to_degf(degf)
+        if tc > 0:
+            tc = tc * 1.8  # K to deg R
+        if pc > 0:
+            pc = pc * BAR_TO_PSI
     if p1 == p2:
         return 0
 
@@ -1168,29 +1301,33 @@ def gas_dmp(
     result_10 = _gl_integrate(p1, p2, _GL10_NODES, _GL10_WEIGHTS)
 
     if abs(result_10) < 1e-30 or abs(result_10 - result_7) / abs(result_10) < 1e-5:
-        return result_10
+        result = result_10
+    else:
+        # If not converged, split into two subintervals and integrate with n=10 each (batch)
+        p_mid = (p1 + p2) * 0.5
+        p_half_lo = (p_mid - p1) * 0.5
+        p_half_hi = (p2 - p_mid) * 0.5
+        p_center_lo = (p1 + p_mid) * 0.5
+        p_center_hi = (p_mid + p2) * 0.5
 
-    # If not converged, split into two subintervals and integrate with n=10 each (batch)
-    p_mid = (p1 + p2) * 0.5
-    p_half_lo = (p_mid - p1) * 0.5
-    p_half_hi = (p2 - p_mid) * 0.5
-    p_center_lo = (p1 + p_mid) * 0.5
-    p_center_hi = (p_mid + p2) * 0.5
+        # Build all evaluation points for both subintervals in a single array
+        p_eval = np.concatenate([p_center_lo + p_half_lo * _GL10_NODES,
+                                 p_center_hi + p_half_hi * _GL10_NODES])
 
-    # Build all evaluation points for both subintervals in a single array
-    p_eval = np.concatenate([p_center_lo + p_half_lo * _GL10_NODES,
-                             p_center_hi + p_half_hi * _GL10_NODES])
+        zee = gas_z(p=p_eval, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod,
+                     co2=co2, h2s=h2s, n2=n2, h2=h2, tc=tc, pc=pc)
+        mugz = gas_ug(p_eval, sg, degf, zmethod, cmethod, co2, h2s, n2, h2, tc, pc, zee, ugz=True)
+        integrand = 2.0 * p_eval / mugz
 
-    zee = gas_z(p=p_eval, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod,
-                 co2=co2, h2s=h2s, n2=n2, h2=h2, tc=tc, pc=pc)
-    mugz = gas_ug(p_eval, sg, degf, zmethod, cmethod, co2, h2s, n2, h2, tc, pc, zee, ugz=True)
-    integrand = 2.0 * p_eval / mugz
+        n = len(_GL10_NODES)
+        result = (p_half_lo * np.sum(_GL10_WEIGHTS * integrand[:n]) +
+                  p_half_hi * np.sum(_GL10_WEIGHTS * integrand[n:]))
 
-    n = len(_GL10_NODES)
-    return (p_half_lo * np.sum(_GL10_WEIGHTS * integrand[:n]) +
-            p_half_hi * np.sum(_GL10_WEIGHTS * integrand[n:]))
+    if metric:
+        return result * PSI2CP_TO_BAR2CP  # psi^2/cP -> bar^2/cP
+    return result
 
-def gas_fws_sg(sg_g: float, cgr: float, api_st: float) -> float:
+def gas_fws_sg(sg_g: float, cgr: float, api_st: float, metric: bool = False) -> float:
     """
      Estimates FWS specific gravity of gas-condensate from separator gas SG, CGR and API
      Uses Standing correlation to estimate condensate MW from API.
@@ -1198,8 +1335,11 @@ def gas_fws_sg(sg_g: float, cgr: float, api_st: float) -> float:
 
      sg_g: Specific gravity of weighted average surface gas (relative to air)
      api_st: Density of stock tank liquid (API)
-     cgr: Condensate gas ratio (stb/mmscf)
+     cgr: Condensate gas ratio (stb/mmscf | sm3/sm3 if metric=True)
+     metric: If True, cgr is in sm3/sm3. Defaults to False (FIELD: stb/mmscf)
      """
+    if metric:
+        cgr = cgr / STB_PER_MMSCF_TO_SM3_PER_SM3  # sm3/sm3 -> stb/mmscf
     # 1 mmscf separator gas basis with 379.482 scf/lb-mole
     cond_vol = cgr * CUFTperBBL  # cuft/mmscf surface gas
     cond_sg = 141.5 / (api_st + 131.5)
@@ -1224,53 +1364,74 @@ class GasPVT:
         h2: Molar fraction of Hydrogen. Defaults to zero
         zmethod: Method for calculating Z-Factor. Defaults to 'DAK', or 'BNS' if h2 > 0
         cmethod: Method for calculating critical properties. Defaults to 'PMC'
+        metric: If True, methods accept/return Eclipse METRIC units (barsa, degC, kg/m3). Defaults to False
     """
     def __init__(self, sg=0.75, co2=0, h2s=0, n2=0, h2=0,
-                 zmethod='DAK', cmethod='PMC'):
+                 zmethod='DAK', cmethod='PMC', metric=False):
         self.sg = sg
         self.co2 = co2
         self.h2s = h2s
         self.n2 = n2
         self.h2 = h2
+        self.metric = metric
         if h2 > 0:
             zmethod = 'BNS'
             cmethod = 'BNS'
         self.zmethod, self.cmethod = validate_methods(
             ["zmethod", "cmethod"], [zmethod, cmethod])
+        # tc/pc always stored in oilfield units internally
         self.tc, self.pc = gas_tc_pc(sg, co2, h2s, n2, h2, self.cmethod.name)
 
+    def _convert_inputs(self, p, degf):
+        """Convert metric inputs to oilfield for internal calculations."""
+        if self.metric:
+            p = np.asarray(p) * BAR_TO_PSI if not isinstance(p, (int, float)) else p * BAR_TO_PSI
+            degf = degc_to_degf(degf)
+        return p, degf
+
     def z(self, p, degf):
-        """ Returns Z-factor at pressure p (psia) and temperature degf (deg F) """
+        """ Returns Z-factor at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
+        p, degf = self._convert_inputs(p, degf)
         return gas_z(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
                      cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
                      n2=self.n2, h2=self.h2, tc=self.tc, pc=self.pc)
 
     def viscosity(self, p, degf):
-        """ Returns gas viscosity (cP) at pressure p (psia) and temperature degf (deg F) """
+        """ Returns gas viscosity (cP) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
+        p, degf = self._convert_inputs(p, degf)
         return gas_ug(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
                       cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
                       n2=self.n2, h2=self.h2, tc=self.tc, pc=self.pc)
 
     def density(self, p, degf):
-        """ Returns gas density (lb/cuft) at pressure p (psia) and temperature degf (deg F) """
-        return gas_den(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
-                       cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
-                       n2=self.n2, h2=self.h2, tc=self.tc, pc=self.pc)
+        """ Returns gas density (lb/cuft | kg/m3) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
+        p, degf = self._convert_inputs(p, degf)
+        result = gas_den(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
+                         cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
+                         n2=self.n2, h2=self.h2, tc=self.tc, pc=self.pc)
+        if self.metric:
+            return result * LBCUFT_TO_KGM3
+        return result
 
     def bg(self, p, degf):
-        """ Returns gas FVF Bg (rcf/scf) at pressure p (psia) and temperature degf (deg F) """
+        """ Returns gas FVF Bg (rcf/scf | rm3/sm3) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
+        p, degf = self._convert_inputs(p, degf)
         return gas_bg(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
                       cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
                       n2=self.n2, h2=self.h2, tc=self.tc, pc=self.pc)
 
 
-def gas_water_content(p: float, degf: float, salinity: float = 0) -> float:
-    """ Returns saturated volume of water vapor in natural gas (stb/mmscf)
+def gas_water_content(p: float, degf: float, salinity: float = 0, metric: bool = False) -> float:
+    """ Returns saturated volume of water vapor in natural gas (stb/mmscf | sm3/sm3 if metric)
         From 'PVT and Phase Behaviour Of Petroleum Reservoir Fluids' by Ali Danesh
-        degf: Water Temperature (deg F)
-        p: Water pressure (psia)
+        degf: Water Temperature (deg F | deg C)
+        p: Water pressure (psia | barsa)
         salinity: Water salinity (wt% NaCl). Defaults to 0 (freshwater)
+        metric: If True, input/output in Eclipse METRIC units (barsa, degC, sm3/sm3). Defaults to False (FIELD)
     """
+    if metric:
+        p = p * BAR_TO_PSI
+        degf = degc_to_degf(degf)
     validate_pe_inputs(p=p, degf=degf)
     t = degf
     content = (
@@ -1291,4 +1452,6 @@ def gas_water_content(p: float, degf: float, salinity: float = 0) -> float:
         / 8.32
         / 42
     )
+    if metric:
+        return content * STB_PER_MMSCF_TO_SM3_PER_SM3  # stb/MMscf -> sm3/sm3
     return content

@@ -63,6 +63,15 @@ Calculating gas sg, and then gas Z-Factor of a mixture of 5% CO2, 10% H2S, 0% N2
     0.9048153036714465
 
 
+Unit System Support
+===================
+All gas module public functions accept an optional ``metric=False`` parameter. When ``metric=True``, inputs and outputs use Eclipse METRIC units (barsa, deg C, m, kg/m3, etc.) instead of oilfield units (psia, deg F, ft, lb/cuft, etc.). See individual function parameter tables for specific unit mappings.
+
+.. note::
+
+   **Standard conditions:** All "standard" volumes (scf, sm3, Bg, Rs, etc.) are calculated using oilfield standard conditions (60 deg F, 14.696 psia) regardless of the ``metric`` setting. This produces a ~0.06% systematic offset vs true Eclipse METRIC standard conditions (15 deg C, 1.01325 barsa) for gas volumes.
+
+
 Function List
 =============
 
@@ -107,9 +116,9 @@ pyrestoolbox.gas.gas_tc_pc
 
 .. code-block:: python
 
-    gas_tc_pc(sg, co2 = 0, h2s = 0, n2 = 0, h2 = 0, cmethod = 'PMC', tc = 0, pc = 0) -> tuple
+    gas_tc_pc(sg, co2 = 0, h2s = 0, n2 = 0, h2 = 0, cmethod = 'PMC', tc = 0, pc = 0, metric = False) -> tuple
 
-Returns a tuple of critical temperature (deg R) and critical pressure (psia) for hydrocarbon gas. If one or both of the tc and pc parameters are set to be non-zero, then this function will return that unchanged value for the corresponding critical parameter.
+Returns a tuple of critical temperature (deg R, or K if metric=True) and critical pressure (psia, or barsa if metric=True) for hydrocarbon gas. If one or both of the tc and pc parameters are set to be non-zero, then this function will return that unchanged value for the corresponding critical parameter.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -138,10 +147,13 @@ Returns a tuple of critical temperature (deg R) and critical pressure (psia) for
      - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
    * - tc
      - float
-     - Critical gas temperature (deg R). Uses cmethod correlation if not specified  
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
    * - pc
      - float
-     - Critical gas pressure (psia). Uses cmethod correlation if not specified  
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
+   * - metric
+     - bool
+     - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
 
 Examples:
 
@@ -149,16 +161,23 @@ Examples:
 
     >>> gas.gas_tc_pc(sg=0.7, co2 = 0.15)
     (363.9387708314338, 738.3190067714969)
-    
+
     >>> gas.gas_tc_pc(sg=0.7, co2 = 0.15, tc=365, cmethod='SUT')
     (365, 709.2356299485114)
+
+Using metric units (returns Tc in K, Pc in barsa):
+
+.. code-block:: python
+
+    >>> gas.gas_tc_pc(sg=0.7, co2 = 0.15, metric=True)
+    (202.18820601746322, 50.90644977899459)
 
 pyrestoolbox.gas.gas_z
 ==================
 
 .. code-block:: python
 
-    gas_z(p, sg, degf, zmethod='DAK', cmethod='PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0) -> float or np.array
+    gas_z(p, sg, degf, zmethod='DAK', cmethod='PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, metric = False) -> float or np.array
 
 Returns gas Z-factor (either float or Numpy array depending upon type of p specified) using specified method. 
 A float or list / array can be used for p, returning corresponding 1-D array of Z-Factors. The cmethod will be used to calculate critical gas parameters unless tc and/or pc are explicitly set to be non-zero. This option enables users to use precalculate gas critical properties and so avoid repeated duplicated critical property calculations when compute time is an issue
@@ -172,38 +191,41 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
      - Type
      - Description
    * - p
-     - float, list or np.array 
-     - Gas pressure (psia)
+     - float, list or np.array
+     - Gas pressure (psia, or barsa if metric=True)
    * - sg
      - float
-     - Gas SG relative to air  
+     - Gas SG relative to air
    * - degf
      - float
-     - Reservoir Temperature (deg F)
+     - Reservoir Temperature (deg F, or deg C if metric=True)
    * - zmethod
      - string or z_method
      - Method for calculating gas Z-factor. `Calculation Methods and Class Objects`_.
    * - cmethod
      - string or c_method
-     - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_. 
+     - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
    * - co2
      - float
-     - Molar fraction of CO2. Defaults to zero if undefined 
+     - Molar fraction of CO2. Defaults to zero if undefined
    * - h2s
      - float
      - Molar fraction of H2S. Defaults to zero if undefined
    * - n2
      - float
-     - Molar fraction of Nitrogen. Defaults to zero if undefined 
+     - Molar fraction of Nitrogen. Defaults to zero if undefined
    * - h2
      - float
      - Molar fraction of Hydrogen. Defaults to zero if undefined. zmethod and cmethod get overriden to 'BUR' if positive fraction.
    * - tc
      - float
-     - Critical gas temperature (deg R). Uses cmethod correlation if not specified  
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
    * - pc
      - float
-     - Critical gas pressure (psia). Uses cmethod correlation if not specified  
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
+   * - metric
+     - bool
+     - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
 
 Examples:
 
@@ -223,7 +245,7 @@ pyrestoolbox.gas.gas_ug
 
 .. code-block:: python
 
-    gas_ug(p, sg, degf, zmethod ='DAK', cmethod = 'PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, zee = 0, ugz = False) -> float or np.array
+    gas_ug(p, sg, degf, zmethod ='DAK', cmethod = 'PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, zee = 0, ugz = False, metric = False) -> float or np.array
 
 Returns gas viscosity (cP) using Lee, Gonzalez & Eakin (1966) correlation unless the 'BUR' method for Z-Factor is selected in which case a tuned LBC method is used. 
 A float or list / array can be used for p, returning corresponding 1-D array of gas viscosities. The cmethod will be used to calculate critical gas parameters unless tc and/or pc are explicitly set to be non-zero. This option enables users to use pre-calculate gas critical properties and so avoid repeated duplicated critical property calculations when compute time is an issue
@@ -238,44 +260,47 @@ Furnishing a positive value for zee means it will be used instead of calculating
      - Type
      - Description
    * - p
-     - float, list or np.array 
-     - Gas pressure (psia)
+     - float, list or np.array
+     - Gas pressure (psia, or barsa if metric=True)
    * - sg
      - float
-     - Gas SG relative to air  
+     - Gas SG relative to air
    * - degf
      - float
-     - Reservoir Temperature (deg F)
+     - Reservoir Temperature (deg F, or deg C if metric=True)
    * - zmethod
      - string or z_method
      - Method for calculating gas Z-factor. `Calculation Methods and Class Objects`_.
    * - cmethod
      - string or c_method
-     - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_. 
+     - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
    * - co2
      - float
-     - Molar fraction of CO2. Defaults to zero if undefined 
+     - Molar fraction of CO2. Defaults to zero if undefined
    * - h2s
      - float
      - Molar fraction of H2S. Defaults to zero if undefined
    * - n2
      - float
-     - Molar fraction of Nitrogen. Defaults to zero if undefined 
+     - Molar fraction of Nitrogen. Defaults to zero if undefined
    * - h2
      - float
      - Molar fraction of Hydrogen. Defaults to zero if undefined. Overrides methods to 'BUR' if positive fraction.
    * - tc
      - float
-     - Critical gas temperature (deg R). Uses cmethod correlation if not specified  
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
    * - pc
      - float
-     - Critical gas pressure (psia). Uses cmethod correlation if not specified  
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
    * - zee
-     - float, list or np.array 
+     - float, list or np.array
      - Z-Factor value, or list of values of same length as P, in case recalculation of Z-Factors is not needed. If undefined, will trigger Z-Factor calculation.
    * - ugz
      - boolean
-     - Boolean flag that if True returns ug * Z instead of ug 
+     - Boolean flag that if True returns ug * Z instead of ug
+   * - metric
+     - bool
+     - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
 
 Examples:
 
@@ -293,9 +318,9 @@ pyrestoolbox.gas.gas_cg
 
 .. code-block:: python
 
-    gas_cg(p, sg, degf, co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, zmethod = 'DAK', cmethod ='PMC') -> float or np.array
+    gas_cg(p, sg, degf, co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, zmethod = 'DAK', cmethod ='PMC', metric = False) -> float or np.array
 
-Returns gas compressibility (1/psi) 
+Returns gas compressibility (1/psi, or 1/barsa if metric=True).
 A float or list / array can be used for p, returning corresponding 1-D array of gas compressibility's. The cmethod will be used to calculate critical gas parameters unless tc and/or pc are explicitly set to be non-zero. This option enables users to use precalculated gas critical properties and so avoid repeated duplicated critical property calculations when compute time is an issue
 
 
@@ -307,35 +332,38 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
      - Type
      - Description
    * - p
-     - float, list or np.array 
-     - Gas pressure (psia)
+     - float, list or np.array
+     - Gas pressure (psia, or barsa if metric=True)
    * - sg
      - float
-     - Gas SG relative to air  
+     - Gas SG relative to air
    * - degf
      - float
-     - Reservoir Temperature (deg F)
+     - Reservoir Temperature (deg F, or deg C if metric=True)
    * - cmethod
      - string or c_method
      - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
    * - co2
      - float
-     - Molar fraction of CO2. Defaults to zero if undefined 
+     - Molar fraction of CO2. Defaults to zero if undefined
    * - h2s
      - float
      - Molar fraction of H2S. Defaults to zero if undefined
    * - n2
      - float
-     - Molar fraction of Nitrogen. Defaults to zero if undefined 
+     - Molar fraction of Nitrogen. Defaults to zero if undefined
    * - h2
      - float
      - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
    * - tc
      - float
-     - Critical gas temperature (deg R). Uses cmethod correlation if not specified  
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
    * - pc
      - float
-     - Critical gas pressure (psia). Uses cmethod correlation if not specified  
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
+   * - metric
+     - bool
+     - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
 
 Examples:
 
@@ -353,9 +381,9 @@ pyrestoolbox.gas.gas_bg
 
 .. code-block:: python
 
-    gas_bg(p, sg, degf, zmethod='DAK', cmethod = 'PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0) -> float or np.array
+    gas_bg(p, sg, degf, zmethod='DAK', cmethod = 'PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, metric = False) -> float or np.array
 
-Returns gas formation volume factor (rcf/scf). 
+Returns gas formation volume factor (rcf/scf, or rm3/sm3 if metric=True).
 A float or list / array can be used for p, returning corresponding 1-D array of gas FVF's. The cmethod will be used to calculate critical gas parameters unless tc and/or pc are explicitly set to be non-zero. This option enables users to use precalculate gas critical properties and so avoid repeated duplicated critical property calculations when compute time is an issue.
 
 
@@ -367,38 +395,41 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
      - Type
      - Description
    * - p
-     - float, list or np.array 
-     - Gas pressure (psia)
+     - float, list or np.array
+     - Gas pressure (psia, or barsa if metric=True)
    * - sg
      - float
-     - Gas SG relative to air  
+     - Gas SG relative to air
    * - degf
      - float
-     - Reservoir Temperature (deg F)
+     - Reservoir Temperature (deg F, or deg C if metric=True)
    * - zmethod
      - string or z_method
-     - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
+     - Method for calculating gas Z-factor. `Calculation Methods and Class Objects`_.
    * - cmethod
      - string or c_method
      - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
    * - co2
      - float
-     - Molar fraction of CO2. Defaults to zero if undefined 
+     - Molar fraction of CO2. Defaults to zero if undefined
    * - h2s
      - float
      - Molar fraction of H2S. Defaults to zero if undefined
    * - n2
      - float
-     - Molar fraction of Nitrogen. Defaults to zero if undefined 
+     - Molar fraction of Nitrogen. Defaults to zero if undefined
    * - h2
      - float
      - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
    * - tc
      - float
-     - Critical gas temperature (deg R). Uses cmethod correlation if not specified  
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
    * - pc
      - float
-     - Critical gas pressure (psia). Uses cmethod correlation if not specified  
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
+   * - metric
+     - bool
+     - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
 
 Examples:
 
@@ -415,9 +446,9 @@ pyrestoolbox.gas.gas_den
 
 .. code-block:: python
 
-    gas_den(p, sg, degf, zmethod ='DAK', cmethod ='PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0) -> float or np.array
+    gas_den(p, sg, degf, zmethod ='DAK', cmethod ='PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, metric = False) -> float or np.array
 
-Returns gas density (lb/cuft) 
+Returns gas density (lb/cuft, or kg/m3 if metric=True).
 A float or list / array can be used for p, returning corresponding 1-D array of gas densities. The cmethod will be used to calculate critical gas parameters unless tc and/or pc are explicitly set to be non-zero. This option enables users to use precalculate gas critical properties and so avoid repeated duplicated critical property calculations when compute time is an issue
 
 
@@ -429,38 +460,41 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
      - Type
      - Description
    * - p
-     - float, list or np.array 
-     - Gas pressure (psia)
+     - float, list or np.array
+     - Gas pressure (psia, or barsa if metric=True)
    * - sg
      - float
-     - Gas SG relative to air  
+     - Gas SG relative to air
    * - degf
      - float
-     - Reservoir Temperature (deg F)
+     - Reservoir Temperature (deg F, or deg C if metric=True)
    * - zmethod
      - string or z_method
-     - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
+     - Method for calculating gas Z-factor. `Calculation Methods and Class Objects`_.
    * - cmethod
      - string or c_method
      - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
    * - co2
      - float
-     - Molar fraction of CO2. Defaults to zero if undefined 
+     - Molar fraction of CO2. Defaults to zero if undefined
    * - h2s
      - float
      - Molar fraction of H2S. Defaults to zero if undefined
    * - n2
      - float
-     - Molar fraction of Nitrogen. Defaults to zero if undefined 
+     - Molar fraction of Nitrogen. Defaults to zero if undefined
    * - h2
      - float
      - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
    * - tc
      - float
-     - Critical gas temperature (deg R). Uses cmethod correlation if not specified  
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
    * - pc
      - float
-     - Critical gas pressure (psia). Uses cmethod correlation if not specified  
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
+   * - metric
+     - bool
+     - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
 
 Examples:
 
@@ -475,7 +509,7 @@ pyrestoolbox.gas.gas_water_content
 
 .. code-block:: python
 
-    gas_water_content(p, degf, salinity=0) -> float
+    gas_water_content(p, degf, salinity=0, metric = False) -> float
 
 Returns saturated volume of water vapor in natural gas (stb/mmscf). From 'PVT and Phase Behaviour Of Petroleum Reservoir Fluids' by Ali Danesh, with salinity correction.
 
@@ -488,13 +522,16 @@ Returns saturated volume of water vapor in natural gas (stb/mmscf). From 'PVT an
      - Description
    * - p
      - float
-     - Gas pressure (psia)
+     - Gas pressure (psia, or barsa if metric=True)
    * - degf
      - float
-     - Reservoir Temperature (deg F)
+     - Reservoir Temperature (deg F, or deg C if metric=True)
    * - salinity
      - float
      - Water salinity (wt% NaCl). Defaults to 0 (freshwater). Higher salinity reduces water content
+   * - metric
+     - bool
+     - If True, pressure in barsa, temperature in deg C. Defaults to False
 
 Examples:
 
@@ -511,9 +548,9 @@ pyrestoolbox.gas.gas_ponz2p
 
 .. code-block:: python
 
-    gas_ponz2p(poverz, sg, degf, zmethod='DAK', cmethod='PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, rtol = 1E-7) -> float or np.array
+    gas_ponz2p(poverz, sg, degf, zmethod='DAK', cmethod='PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, rtol = 1E-7, metric = False) -> float or np.array
 
-Returns gas pressure corresponding to a value of P/Z, iteratively solving with specified zmethod via bisection.
+Returns gas pressure (psia, or barsa if metric=True) corresponding to a value of P/Z, iteratively solving with specified zmethod via bisection.
 A float or list / array can be used for poverz, returning corresponding 1-D array of pressures. The cmethod will be used to calculate critical gas parameters unless tc and/or pc are explicitly set to be non-zero. This option enables users to use precalculate gas critical properties and so avoid repeated duplicated critical property calculations when compute time is an issue
 
 
@@ -525,41 +562,44 @@ A float or list / array can be used for poverz, returning corresponding 1-D arra
      - Type
      - Description
    * - poverz
-     - float, list or np.array 
-     - Gas pressure / Z-factor (psia)
+     - float, list or np.array
+     - Gas pressure / Z-factor (psia, or barsa if metric=True)
    * - sg
      - float
-     - Gas SG relative to air  
+     - Gas SG relative to air
    * - degf
      - float
-     - Reservoir Temperature (deg F)
+     - Reservoir Temperature (deg F, or deg C if metric=True)
    * - zmethod
      - string or z_method
-     - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
+     - Method for calculating gas Z-factor. `Calculation Methods and Class Objects`_.
    * - cmethod
      - string or c_method
      - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
    * - co2
      - float
-     - Molar fraction of CO2. Defaults to zero if undefined 
+     - Molar fraction of CO2. Defaults to zero if undefined
    * - h2s
      - float
      - Molar fraction of H2S. Defaults to zero if undefined
    * - n2
      - float
-     - Molar fraction of Nitrogen. Defaults to zero if undefined 
+     - Molar fraction of Nitrogen. Defaults to zero if undefined
    * - h2
      - float
      - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
    * - tc
      - float
-     - Critical gas temperature (deg R). Uses cmethod correlation if not specified  
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
    * - pc
      - float
-     - Critical gas pressure (psia). Uses cmethod correlation if not specified 
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
    * - rtol
      - float
      - relative solution tolerance as compared with abs([User P/Z - Calculated P/Z] / [User P/Z])
+   * - metric
+     - bool
+     - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
 
 Examples:
 
@@ -576,7 +616,7 @@ pyrestoolbox.gas.gas_grad2sg
 
 .. code-block:: python
 
-    gas_grad2sg( grad, p, degf, zmethod='DAK', cmethod='PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, rtol = 1E-7) -> float
+    gas_grad2sg( grad, p, degf, zmethod='DAK', cmethod='PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, rtol = 1E-7, metric = False) -> float
 
 Returns gas specific gravity consistent with observed gas gradient. Calculated through iterative solution method. Will fail if gas SG is below 0.55, or greater than 1.75
 
@@ -589,41 +629,44 @@ Returns gas specific gravity consistent with observed gas gradient. Calculated t
      - Description
    * - grad
      - float
-     - Observed gas gradient (psi/ft)
+     - Observed gas gradient (psi/ft, or bar/m if metric=True)
    * - p
-     - float, list or np.array 
-     - Pressure at observation (psia)
+     - float, list or np.array
+     - Pressure at observation (psia, or barsa if metric=True)
    * - degf
      - float
-     - Reservoir Temperature (deg F)
+     - Reservoir Temperature (deg F, or deg C if metric=True)
    * - zmethod
      - string or z_method
-     - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
+     - Method for calculating gas Z-factor. `Calculation Methods and Class Objects`_.
    * - cmethod
      - string or c_method
      - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
    * - co2
      - float
-     - Molar fraction of CO2. Defaults to zero if undefined 
+     - Molar fraction of CO2. Defaults to zero if undefined
    * - h2s
      - float
      - Molar fraction of H2S. Defaults to zero if undefined
    * - n2
      - float
-     - Molar fraction of Nitrogen. Defaults to zero if undefined 
+     - Molar fraction of Nitrogen. Defaults to zero if undefined
    * - h2
      - float
      - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
    * - tc
      - float
-     - Critical gas temperature (deg R). Uses cmethod correlation if not specified  
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
    * - pc
      - float
-     - Critical gas pressure (psia). Uses cmethod correlation if not specified  
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
    * - rtol
      - float
      - relative solution tolerance as compared with abs([User grad - Calculated grad] / [User grad])
-     
+   * - metric
+     - bool
+     - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
+
 Examples:
 
 .. code-block:: python
@@ -637,10 +680,10 @@ pyrestoolbox.gas.gas_dmp
 
 .. code-block:: python
 
-    gas_dmp(p1, p2, degf, sg, zmethod='DAK', cmethod = 'PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0) -> float
+    gas_dmp(p1, p2, degf, sg, zmethod='DAK', cmethod = 'PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, metric = False) -> float
 
-Returns gas pseudo-pressure integral between two pressure points. Will return a positive value if p1 < p2, and a negative value if p1 > p2. 
-Integrates the equation: m(p) = 2 * p / (ug * z) 
+Returns gas pseudo-pressure integral (psi2/cP, or bar2/cP if metric=True) between two pressure points. Will return a positive value if p1 < p2, and a negative value if p1 > p2.
+Integrates the equation: m(p) = 2 * p / (ug * z)
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -650,41 +693,44 @@ Integrates the equation: m(p) = 2 * p / (ug * z)
      - Type
      - Description
    * - p1
-     - float, list or np.array 
-     - First gas pressure (psia)
+     - float, list or np.array
+     - First gas pressure (psia, or barsa if metric=True)
    * - p2
-     - float, list or np.array 
-     - Second gas pressure (psia)
+     - float, list or np.array
+     - Second gas pressure (psia, or barsa if metric=True)
    * - sg
      - float
      - Gas SG relative to air.
    * - degf
      - float
-     - Reservoir Temperature (deg F)
+     - Reservoir Temperature (deg F, or deg C if metric=True)
    * - zmethod
      - string or z_method
-     - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
+     - Method for calculating gas Z-factor. `Calculation Methods and Class Objects`_.
    * - cmethod
      - string or c_method
      - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
    * - co2
      - float
-     - Molar fraction of CO2. Defaults to zero if undefined 
+     - Molar fraction of CO2. Defaults to zero if undefined
    * - h2s
      - float
      - Molar fraction of H2S. Defaults to zero if undefined
    * - n2
      - float
-     - Molar fraction of Nitrogen. Defaults to zero if undefined 
+     - Molar fraction of Nitrogen. Defaults to zero if undefined
    * - h2
      - float
      - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
    * - tc
      - float
-     - Critical gas temperature (deg R). Uses cmethod correlation if not specified  
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
    * - pc
      - float
-     - Critical gas pressure (psia). Uses cmethod correlation if not specified  
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
+   * - metric
+     - bool
+     - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
 
 Examples:
 
@@ -701,10 +747,10 @@ pyrestoolbox.gas.gas_fws_sg
 
 .. code-block:: python
 
-    gas_fws_sg(sg_g, cgr, api_st) -> float
+    gas_fws_sg(sg_g, cgr, api_st, metric = False) -> float
 
 Estimates specific gravity of full-wellstream (FWS) gas from gas-condensate well. Calculates from weighted average surface gas SG, CGR and API. Uses Standing correlation to estimate condensate MW from API.
-Returns SG of FWS gas 
+Returns SG of FWS gas
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -715,13 +761,16 @@ Returns SG of FWS gas
      - Description
    * - sg_g
      - float
-     - Specific gravity of weighted average surface gas (relative to air) 
+     - Specific gravity of weighted average surface gas (relative to air)
    * - cgr
      - float
-     - Condensate gas ratio (stb/mmscf). 
+     - Condensate gas ratio (stb/mmscf, or sm3/sm3 if metric=True)
    * - api_st
      - float
-     - Density of stock tank liquid (API)  
+     - Density of stock tank liquid (API)
+   * - metric
+     - bool
+     - If True, CGR input in sm3/sm3. Defaults to False
 
 Examples:
 
@@ -736,9 +785,9 @@ pyrestoolbox.gas.gas_rate_radial
 
 .. code-block:: python
 
-    gas_rate_radial(k, h, pr, pwf, r_w, r_ext, degf, zmethod='DAK, cmethod='PMC', S = 0, D = 0, sg = 0.75, n2 = 0, co2 = 0, h2s = 0, tc  = 0, pc = 0) -> float or np.array
+    gas_rate_radial(k, h, pr, pwf, r_w, r_ext, degf, zmethod='DAK, cmethod='PMC', S = 0, D = 0, sg = 0.75, n2 = 0, co2 = 0, h2s = 0, tc  = 0, pc = 0, metric = False) -> float or np.array
 
-Returns gas rate (mscf/day) for radial flow using Darcy pseudo steady state equation & gas pseudopressure. 
+Returns gas rate (Mscf/day, or sm3/d if metric=True) for radial flow using Darcy pseudo steady state equation & gas pseudopressure.
 Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D array of rates. Using more than one input array -- while not prohibited -- will not return expected results.
 
 .. list-table:: Inputs
@@ -753,22 +802,22 @@ Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D a
      - Effective permeability to gas flow (mD)
    * - h
      - float, list or np.array
-     - Net height for flow (ft).
+     - Net height for flow (ft, or m if metric=True)
    * - pr
      - float, list or np.array
-     - Reservoir pressure (psia)
+     - Reservoir pressure (psia, or barsa if metric=True)
    * - pwf
      - float, list or np.array
-     - BHFP (psia).
+     - BHFP (psia, or barsa if metric=True)
    * - r_w
      - float
-     - Wellbore Radius (ft).
+     - Wellbore Radius (ft, or m if metric=True)
    * - r_ext
      - float
-     - External Reservoir Radius (ft).
+     - External Reservoir Radius (ft, or m if metric=True)
    * - degf
      - float
-     - Reservoir Temperature (deg F). 
+     - Reservoir Temperature (deg F, or deg C if metric=True)
    * - zmethod
      - string or z_method
      - Method for calculating gas Z-factor. `Calculation Methods and Class Objects`_.
@@ -777,16 +826,16 @@ Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D a
      - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
    * - tc
      - float
-     - Critical gas temperature (deg R). Uses cmethod correlation if not specified  
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
    * - pc
      - float
-     - Critical gas pressure (psia). Uses cmethod correlation if not specified 
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
    * - n2
      - float
-     - Molar fraction of Nitrogen. Defaults to zero if undefined  
+     - Molar fraction of Nitrogen. Defaults to zero if undefined
    * - co2
      - float
-     - Molar fraction of CO2. Defaults to zero if undefined 
+     - Molar fraction of CO2. Defaults to zero if undefined
    * - h2s
      - float
      - Molar fraction of H2S. Defaults to zero if undefined
@@ -795,11 +844,14 @@ Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D a
      - Skin. Defaults to zero if undefined
    * - D
      - float
-     - Non Darcy Skin Factor (day/mscf). Defaults to zero if undefined
+     - Non Darcy Skin Factor (day/Mscf, or day/sm3 if metric=True). Defaults to zero if undefined
    * - sg
      - float
      - Gas SG relative to air, Defaults to 0.75 if undefined
-     
+   * - metric
+     - bool
+     - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
+
 Examples:
 
 .. code-block:: python
@@ -859,9 +911,9 @@ pyrestoolbox.gas.gas_rate_linear
 
 .. code-block:: python
 
-    gas_rate_linear(k, pr, pwf, area, length, degf, zmethod='DAK, cmethod='PMC', sg = 0.75, n2 = 0, co2 = 0, h2s = 0, tc  = 0, pc = 0) -> float or np.array
+    gas_rate_linear(k, pr, pwf, area, length, degf, zmethod='DAK, cmethod='PMC', sg = 0.75, n2 = 0, co2 = 0, h2s = 0, tc  = 0, pc = 0, metric = False) -> float or np.array
 
-Returns gas rate (mscf/day) for linear flow using Darcy steady state equation & gas pseudopressure. 
+Returns gas rate (Mscf/day, or sm3/d if metric=True) for linear flow using Darcy steady state equation & gas pseudopressure.
 Arrays can be used for any one of k, pr, pwf or area, returning corresponding 1-D array of rates. Using more than one input array -- while not prohibited -- will not return expected results.
 
 
@@ -877,19 +929,19 @@ Arrays can be used for any one of k, pr, pwf or area, returning corresponding 1-
      - Effective permeability to gas flow (mD)
    * - pr
      - float, list or np.array
-     - Reservoir pressure (psia)
+     - Reservoir pressure (psia, or barsa if metric=True)
    * - pwf
      - float, list or np.array
-     - BHFP (psia).
+     - BHFP (psia, or barsa if metric=True)
    * - area
      - float
-     - Net cross-sectional area perpendicular to direction of flow (ft2)
+     - Net cross-sectional area perpendicular to direction of flow (ft2, or m2 if metric=True)
    * - length
      - float
-     - Linear distance of fluid flow (ft).
+     - Linear distance of fluid flow (ft, or m if metric=True)
    * - degf
      - float
-     - Reservoir Temperature (deg F). 
+     - Reservoir Temperature (deg F, or deg C if metric=True)
    * - zmethod
      - string or z_method
      - Method for calculating gas Z-factor. `Calculation Methods and Class Objects`_.
@@ -898,23 +950,26 @@ Arrays can be used for any one of k, pr, pwf or area, returning corresponding 1-
      - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
    * - tc
      - float
-     - Critical gas temperature (deg R). Uses cmethod correlation if not specified  
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
    * - pc
      - float
-     - Critical gas pressure (psia). Uses cmethod correlation if not specified 
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
    * - n2
      - float
-     - Molar fraction of Nitrogen. Defaults to zero if undefined  
+     - Molar fraction of Nitrogen. Defaults to zero if undefined
    * - co2
      - float
-     - Molar fraction of CO2. Defaults to zero if undefined 
+     - Molar fraction of CO2. Defaults to zero if undefined
    * - h2s
      - float
      - Molar fraction of H2S. Defaults to zero if undefined
    * - sg
      - float
      - Gas SG relative to air, Defaults to 0.75 if undefined
-     
+   * - metric
+     - bool
+     - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
+
 Examples:
 
 .. code-block:: python

@@ -297,6 +297,11 @@ def test_doc_oil_pbub_class_object():
     assert isinstance(result, float)
     assert result > 0
 
+def test_doc_oil_pbub_metric():
+    """oil.rst: oil_pbub metric example"""
+    result = oil.oil_pbub(api=43, degf=85, rsb=418.8, sg_g=0.72, metric=True)
+    assert abs(result - 358.5685338835858) / 358.5685338835858 < RTOL
+
 def test_doc_oil_rs_bub():
     """oil.rst: oil_rs_bub"""
     result = oil.oil_rs_bub(api=43, degf=185, pb=5179.5, sg_sp=0.72)
@@ -673,6 +678,30 @@ def test_doc_nodal_oil_pvt_viscosity():
     opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     result = opvt.viscosity(2000, 180)
     assert abs(result - 0.7187504436478858) / 0.7187504436478858 < RTOL
+
+def test_doc_nodal_gas_pvt_metric_z():
+    """nodal.rst: GasPVT metric z-factor"""
+    gpvt_m = gas.GasPVT(sg=0.65, co2=0.1, metric=True)
+    result = gpvt_m.z(137.9, 82.2)
+    assert abs(result - 0.9026433033953588) / 0.9026433033953588 < RTOL
+
+def test_doc_nodal_gas_pvt_metric_density():
+    """nodal.rst: GasPVT metric density"""
+    gpvt_m = gas.GasPVT(sg=0.65, co2=0.1, metric=True)
+    result = gpvt_m.density(137.9, 82.2)
+    assert abs(result - 97.36871728783241) / 97.36871728783241 < RTOL
+
+def test_doc_nodal_oil_pvt_metric_rs():
+    """nodal.rst: OilPVT metric rs"""
+    opvt_m = oil.OilPVT(api=35, sg_sp=0.65, pb=172.4, rsb=89, metric=True)
+    result = opvt_m.rs(137.9, 82.2)
+    assert abs(result - 71.82727018664512) / 71.82727018664512 < RTOL
+
+def test_doc_nodal_oil_pvt_metric_density():
+    """nodal.rst: OilPVT metric density"""
+    opvt_m = oil.OilPVT(api=35, sg_sp=0.65, pb=172.4, rsb=89, metric=True)
+    result = opvt_m.density(137.9, 82.2)
+    assert abs(result - 740.7086089268661) / 740.7086089268661 < RTOL
 
 def test_doc_nodal_completion_basic():
     """nodal.rst: Completion with no casing"""

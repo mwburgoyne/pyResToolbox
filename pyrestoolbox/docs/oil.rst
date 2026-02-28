@@ -75,6 +75,59 @@ Calculating bubble point pressure with Standing correlation via option string, a
     6406.063846808766
 
 
+Unit System Support
+===================
+All PVT and flow functions accept an optional ``metric=False`` parameter. When ``metric=True``, inputs and outputs use Eclipse METRIC units:
+
+.. list-table:: Unit Conventions
+   :widths: 25 25 25
+   :header-rows: 1
+
+   * - Quantity
+     - Oilfield (default)
+     - Metric (metric=True)
+   * - Pressure
+     - psia
+     - barsa
+   * - Temperature
+     - deg F
+     - deg C
+   * - Solution GOR
+     - scf/stb
+     - sm3/sm3
+   * - FVF
+     - rb/stb
+     - rm3/sm3
+   * - Density
+     - lb/cuft
+     - kg/m3
+   * - Compressibility
+     - 1/psi
+     - 1/barsa
+   * - Oil rate
+     - stb/d
+     - sm3/d
+   * - Length / Radius
+     - ft
+     - m
+   * - Area
+     - ft2
+     - m2
+   * - Tc / Tb (Twu)
+     - deg R
+     - K
+   * - Pc (Twu)
+     - psia
+     - barsa
+   * - Vc (Twu)
+     - cuft/lbmol
+     - m3/kmol
+
+.. note::
+
+   Dimensionless functions (``oil_ja_sg``, ``oil_api``, ``oil_sg``, ``sg_evolved_gas``, ``sg_st_gas``, ``sgg_wt_avg``) do not have a ``metric`` parameter.
+
+
 Function List
 =============
 
@@ -158,9 +211,9 @@ pyrestoolbox.oil.oil_twu_props
 
 .. code-block:: python
 
-    oil_twu_props(mw, ja = 0, sg = 0, damp = 1) -> tuple
+    oil_twu_props(mw, ja = 0, sg = 0, damp = 1, metric = False) -> tuple
 
-Returns tuple of liquid critical parameters - sg, tb (R), tc (R), pc (psia), vc (ft3/lbmol) - using correlation method from Twu (1984). Modified with damping factor proposed by A. Zick between 0 (paraffin) and 1 (original Twu). 
+Returns tuple of liquid critical parameters - sg, tb (deg R, or K if metric=True), tc (deg R, or K if metric=True), pc (psia, or barsa if metric=True), vc (cuft/lbmol, or m3/kmol if metric=True) - using correlation method from Twu (1984). Modified with damping factor proposed by A. Zick between 0 (paraffin) and 1 (original Twu).
 If sg is left as default, the Jacoby relationship shall be used to estimate specific gravity
 
 
@@ -183,7 +236,10 @@ If sg is left as default, the Jacoby relationship shall be used to estimate spec
    * - damp
      - float
      - Damping factor proposed by A. Zick, modifying Eq 5.78 in the Whitson Monograph to permit some flexibility in the degree of parafinicity. Varies between 0 (paraffin) and 1 (original Twu). Defaults to 1
-     
+   * - metric
+     - bool
+     - Use Eclipse METRIC units for outputs (K, barsa, m3/kmol). Default False
+
 Examples:
 
 .. code-block:: python
@@ -201,9 +257,9 @@ pyrestoolbox.oil.oil_rs_st
 
 .. code-block:: python
 
-    oil_rs_st(psp, degf_sp, api) -> float
+    oil_rs_st(psp, degf_sp, api, metric = False) -> float
 
-Estimates incremental gas evolved from separator liquid as it equilibrates to stock tank conditions (scf/stb). Correlation reproduced from Valko McCain 2003 paper Eq 3-2. 
+Estimates incremental gas evolved from separator liquid as it equilibrates to stock tank conditions (scf/stb, or sm3/sm3 if metric=True). Correlation reproduced from Valko McCain 2003 paper Eq 3-2. 
 
 Rsb = Rsp + Rst (Solution GOR at bubble point = Separator GOR + Stock Tank GOR).
  
@@ -220,15 +276,18 @@ rs_st = 0.1618 * Separator GOR (Adapted from Eq 3-4 in Valko McCain 2003 paper)
      - Type
      - Description
    * - psp
-     - float 
-     - Separator pressure (psia). 
+     - float
+     - Separator pressure (psia, or barsa if metric=True).
    * - degf_sp
      - float
-     - Separator temperature (deg F).
+     - Separator temperature (deg F, or deg C if metric=True).
    * - api
      - float
      - Density of stock tank liquid (API)
-     
+   * - metric
+     - bool
+     - Use Eclipse METRIC units for inputs/outputs. Default False
+
 Examples:
 
 .. code-block:: python
@@ -241,9 +300,9 @@ pyrestoolbox.oil.oil_pbub
 
 .. code-block:: python
 
-    oil_pbub(api, degf, rsb, sg_g =0, sg_sp =0, pbmethod ='VALMC') -> float
+    oil_pbub(api, degf, rsb, sg_g =0, sg_sp =0, pbmethod ='VALMC', metric = False) -> float
 
-Returns bubble point pressure (psia) calculated with different correlations. 
+Returns bubble point pressure (psia, or barsa if metric=True) calculated with different correlations.
 At least one of sg_g and sg_sp must be supplied. This function will make simple assumption to estimate missing gas sg if only one is provided.
 
 
@@ -255,20 +314,26 @@ At least one of sg_g and sg_sp must be supplied. This function will make simple 
      - Type
      - Description
    * - api
-     - float 
+     - float
      - Density of stock tank liquid (API)
    * - degf
      - float
-     - Oil temperature (deg F).   
+     - Oil temperature (deg F, or deg C if metric=True).
+   * - rsb
+     - float
+     - Solution GOR at bubble point (scf/stb, or sm3/sm3 if metric=True)
    * - sg_g
      - float
-     - Weighted average specific gravity of surface gas, inclusive of gas evolved after separation (relative to air). 
+     - Weighted average specific gravity of surface gas, inclusive of gas evolved after separation (relative to air).
    * - sg_sp
      - float
      - Specific gravity of separator gas (relative to air)
    * - pbmethod
      - str or pb_method class object
      - The method of Pb calculation to be employed. See Class Objects section for details.
+   * - metric
+     - bool
+     - Use Eclipse METRIC units for inputs/outputs. Default False
 
 Examples:
 
@@ -279,16 +344,19 @@ Examples:
 
     >>> oil.oil_pbub(api=43, degf=185, rsb=2350, sg_sp = 0.72, pbmethod ='STAN')
     6390.281894698239
-    
-    
+
+    >>> # Metric example: temperature in degC, rsb in sm3/sm3, returns Pb in barsa
+    >>> oil.oil_pbub(api=43, degf=85, rsb=418.8, sg_g=0.72, metric=True)
+    358.5685338835858
+
 pyrestoolbox.oil.oil_rs_bub
 ===================
 
 .. code-block:: python
 
-    oil_rs_bub(api, degf, pb, sg_g =0, sg_sp =0, pbmethod ='VALMC', rsmethod='VELAR') -> float
+    oil_rs_bub(api, degf, pb, sg_g =0, sg_sp =0, pbmethod ='VALMC', rsmethod='VELAR', metric = False) -> float
 
-Returns solution GOR (scf/stb) at bubble point pressure. Uses the inverse of the Bubble point pressure correlations, with the same method families. Note: At low pressures, the VALMC method will fail (generally when rsb < 10 scf/stb). The VALMC method will revert to the Standing method in these cases. 
+Returns solution GOR (scf/stb, or sm3/sm3 if metric=True) at bubble point pressure. Uses the inverse of the Bubble point pressure correlations, with the same method families. Note: At low pressures, the VALMC method will fail (generally when rsb < 10 scf/stb). The VALMC method will revert to the Standing method in these cases.
 At least one of sg_g and sg_sp must be supplied. This function will make simple assumption to estimate missing gas sg if only one is provided.
 
 .. list-table:: Inputs
@@ -303,19 +371,25 @@ At least one of sg_g and sg_sp must be supplied. This function will make simple 
      - Density of stock tank liquid (API)
    * - degf
      - float
-     - Oil Temperature (deg F)
+     - Oil Temperature (deg F, or deg C if metric=True)
+   * - pb
+     - float
+     - Bubble point pressure (psia, or barsa if metric=True)
    * - sg_g
      - float
-     - Weighted average specific gravity of surface gas, inclusive of gas evolved after separation (relative to air).   
+     - Weighted average specific gravity of surface gas, inclusive of gas evolved after separation (relative to air).
    * - sg_sp
      - float
-     - Specific gravity of separator gas (relative to air).  
+     - Specific gravity of separator gas (relative to air).
    * - pbmethod
      - string or pb_method
      - The method of Pb calculation to be employed. `Calculation Methods and Class Objects`_.
    * - rsmethod
      - string or rs_method
      - The method of Rs calculation to be employed. `Calculation Methods and Class Objects`_.
+   * - metric
+     - bool
+     - Use Eclipse METRIC units for inputs/outputs. Default False
 
 Examples:
 
@@ -330,9 +404,9 @@ pyrestoolbox.oil.oil_rs
 
 .. code-block:: python
 
-    oil_rs(api, degf, sg_sp, p, pb =0, rsb =0, rsmethod='VELAR', pbmethod='VALMC') -> float
+    oil_rs(api, degf, sg_sp, p, pb =0, rsb =0, rsmethod='VELAR', pbmethod='VALMC', metric = False) -> float
 
-Returns solution gas oil ratio (scf/stb) calculated with different correlations. Either pb, rsb or both need to be specified. If one is missing, the other will be calculated from correlation
+Returns solution gas oil ratio (scf/stb, or sm3/sm3 if metric=True) calculated with different correlations. Either pb, rsb or both need to be specified. If one is missing, the other will be calculated from correlation
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -346,25 +420,28 @@ Returns solution gas oil ratio (scf/stb) calculated with different correlations.
      - Density of stock tank liquid (API)
    * - degf
      - float
-     - Oil Temperature (deg F)
+     - Oil Temperature (deg F, or deg C if metric=True)
    * - sg_sp
      - float
      - Separator gas gravity (relative to air).
    * - p
      - float
-     - Pressure (psia).
+     - Pressure (psia, or barsa if metric=True).
    * - pb
      - float
-     - Original bubble point pressure (psia)
+     - Original bubble point pressure (psia, or barsa if metric=True)
    * - rsb
      - float
-     - Original solution GOR at original bubble point pressure (scf/stb)
+     - Original solution GOR at original bubble point pressure (scf/stb, or sm3/sm3 if metric=True)
    * - rsmethod
      - string or rs_method
      - The method of Rs calculation to be employed. `Calculation Methods and Class Objects`_.
    * - pbmethod
      - string or pb_method
      - The method of Pb calculation to be employed. `Calculation Methods and Class Objects`_.
+   * - metric
+     - bool
+     - Use Eclipse METRIC units for inputs/outputs. Default False
 
 Examples:
 
@@ -387,11 +464,11 @@ pyrestoolbox.oil.oil_co
 
 .. code-block:: python
 
-    oil_co(p, api,  degf, sg_sp =0, sg_g =0, pb =0, rsb =0, comethod='EXPLT', zmethod='DAK', rsmethod='VELAR', cmethod='PMC', denomethod='SWMH', bomethod='MCAIN', pbmethod='VALMC') -> float
+    oil_co(p, api,  degf, sg_sp =0, sg_g =0, pb =0, rsb =0, comethod='EXPLT', zmethod='DAK', rsmethod='VELAR', cmethod='PMC', denomethod='SWMH', bomethod='MCAIN', pbmethod='VALMC', metric = False) -> float
 
-Returns oil compressibility (1/psi) calculated with Co = -1/Bo *[dBodp - Bg*dRsdp], using correlation values and their numerical derivatives. 
+Returns oil compressibility (1/psi, or 1/barsa if metric=True) calculated with Co = -1/Bo *[dBodp - Bg*dRsdp], using correlation values and their numerical derivatives.
 At least one of sg_g and sg_sp must be supplied. This function will make simple assumption to estimate missing gas sg if only one is provided.
-Either pb, rsb or both need to be specified. If one is missing, the other will be calculated from correlation 
+Either pb, rsb or both need to be specified. If one is missing, the other will be calculated from correlation
 
 
 .. list-table:: Inputs
@@ -403,13 +480,13 @@ Either pb, rsb or both need to be specified. If one is missing, the other will b
      - Description
    * - p
      - float
-     - Pressure (psia).
+     - Pressure (psia, or barsa if metric=True).
    * - api
      - float
      - Density of stock tank liquid (API)
    * - degf
      - float
-     - Oil Temperature (deg F)
+     - Oil Temperature (deg F, or deg C if metric=True)
    * - sg_sp
      - float
      - Separator gas gravity (relative to air).
@@ -418,10 +495,10 @@ Either pb, rsb or both need to be specified. If one is missing, the other will b
      - Weighted average specific gravity of surface gas, inclusive of gas evolved after separation (relative to air).
    * - pb
      - float
-     - Original bubble point pressure (psia)
+     - Original bubble point pressure (psia, or barsa if metric=True)
    * - rsb
      - float
-     - Original solution GOR at original bubble point pressure (scf/stb)
+     - Original solution GOR at original bubble point pressure (scf/stb, or sm3/sm3 if metric=True)
    * - comethod
      - string or co_method
      - The method of Compressibility calculation to be employed. `Calculation Methods and Class Objects`_.
@@ -443,6 +520,9 @@ Either pb, rsb or both need to be specified. If one is missing, the other will b
    * - pbmethod
      - string or pb_method
      - The method of Rs calculation to be employed. `Calculation Methods and Class Objects`_.
+   * - metric
+     - bool
+     - Use Eclipse METRIC units for inputs/outputs. Default False
 
 
 Examples:
@@ -461,9 +541,9 @@ pyrestoolbox.oil.oil_deno
 
 .. code-block:: python
 
-    oil_deno(p, degf, rs, rsb, sg_g = 0, sg_sp = 0, pb = 1e6, sg_o =0, api =0, denomethod='SWMH') -> float
+    oil_deno(p, degf, rs, rsb, sg_g = 0, sg_sp = 0, pb = 1e6, sg_o =0, api =0, denomethod='SWMH', metric = False) -> float
 
-Returns live oil density (lb/cuft). 
+Returns live oil density (lb/cuft, or kg/m3 if metric=True).
 At least one of sg_g and sg_sp must be supplied. This function will make simple assumption to estimate missing gas sg if only one is provided.
 At least one of sg_o and api must be supplied. One will be calculated from the other if only one supplied. If both specified, api will be used.
 pb only needs to be set when pressures are above pb. For saturated oil, this can be left as default
@@ -477,22 +557,25 @@ pb only needs to be set when pressures are above pb. For saturated oil, this can
      - Description
    * - p
      - float
-     - Pressure (psia).
+     - Pressure (psia, or barsa if metric=True).
+   * - degf
+     - float
+     - Oil Temperature (deg F, or deg C if metric=True)
    * - rs
      - float
-     - Solution GOR at pressure of interest (scf/stb).
+     - Solution GOR at pressure of interest (scf/stb, or sm3/sm3 if metric=True).
    * - rsb
      - float
-     - Original solution GOR at original bubble point pressure (scf/stb)
+     - Original solution GOR at original bubble point pressure (scf/stb, or sm3/sm3 if metric=True)
    * - sg_g
      - float
-     - Weighted average specific gravity of surface gas, inclusive of gas evolved after separation (relative to air).   
+     - Weighted average specific gravity of surface gas, inclusive of gas evolved after separation (relative to air).
    * - sg_sp
      - float
-     - Separator gas gravity (relative to air). 
+     - Separator gas gravity (relative to air).
    * - pb
      - float
-     - Original bubble point pressure (psia) 
+     - Original bubble point pressure (psia, or barsa if metric=True)
    * - sg_sto
      - float
      - Specific gravity of stock tank liquid (rel water). Will calculate from api if not specified
@@ -502,6 +585,9 @@ pb only needs to be set when pressures are above pb. For saturated oil, this can
    * - denomethod
      - string or deno_method
      - The method of live oil density  calculation to be employed. `Calculation Methods and Class Objects`_.
+   * - metric
+     - bool
+     - Use Eclipse METRIC units for inputs/outputs. Default False
 
 
 Examples:
@@ -516,9 +602,9 @@ pyrestoolbox.oil.oil_bo
 
 .. code-block:: python
 
-    oil_bo(p, pb, degf, rs, rsb, sg_o, sg_g =0, sg_sp =0, bomethod='MCAIN', denomethod='SWMH') -> float
+    oil_bo(p, pb, degf, rs, rsb, sg_o, sg_g =0, sg_sp =0, bomethod='MCAIN', denomethod='SWMH', metric = False) -> float
 
-Returns oil formation volume factor calculated with different correlations.
+Returns oil formation volume factor (rb/stb, or rm3/sm3 if metric=True) calculated with different correlations.
 At least one of sg_g and sg_sp must be supplied. This function will make simple assumption to estimate missing gas sg if only one is provided.
 
 
@@ -531,19 +617,19 @@ At least one of sg_g and sg_sp must be supplied. This function will make simple 
      - Description
    * - p
      - float
-     - Pressure (psia).
+     - Pressure (psia, or barsa if metric=True).
    * - pb
      - float
-     - Original bubble point pressure (psia)
+     - Original bubble point pressure (psia, or barsa if metric=True)
    * - degf
      - float
-     - Oil temperature (deg F).
+     - Oil temperature (deg F, or deg C if metric=True).
    * - rs
      - float
-     - Solution GOR at pressure of interest (scf/stb).
+     - Solution GOR at pressure of interest (scf/stb, or sm3/sm3 if metric=True).
    * - rsb
      - float
-     - Original solution GOR at original bubble point pressure (scf/stb)
+     - Original solution GOR at original bubble point pressure (scf/stb, or sm3/sm3 if metric=True)
    * - sg_o
      - float
      - Specific gravity of stock tank oil (rel water).
@@ -559,6 +645,9 @@ At least one of sg_g and sg_sp must be supplied. This function will make simple 
    * - denomethod
      - string or deno_method
      - The method of live oil density calculation to be employed. `Calculation Methods and Class Objects`_.
+   * - metric
+     - bool
+     - Use Eclipse METRIC units for inputs/outputs. Default False
 
 Examples:
 
@@ -575,9 +664,9 @@ pyrestoolbox.oil.oil_viso
 
 .. code-block:: python
 
-    oil_viso(p, api, degf, pb, rs) -> float
+    oil_viso(p, api, degf, pb, rs, metric = False) -> float
 
-Returns Oil Viscosity with Beggs-Robinson (1975) correlation at saturated pressures and Petrosky-Farshad (1995) at undersaturated pressures
+Returns Oil Viscosity (cP) with Beggs-Robinson (1975) correlation at saturated pressures and Petrosky-Farshad (1995) at undersaturated pressures
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -588,19 +677,22 @@ Returns Oil Viscosity with Beggs-Robinson (1975) correlation at saturated pressu
      - Description
    * - p
      - float
-     - Pressure at observation (psia)
+     - Pressure at observation (psia, or barsa if metric=True)
    * - api
-     - float 
+     - float
      - Stock tank oil density (degrees API)
    * - degf
      - float
-     - Oil Temperature (deg F)
+     - Oil Temperature (deg F, or deg C if metric=True)
    * - pb
      - float
-     - Original bubble point pressure of the oil (psia)
+     - Original bubble point pressure of the oil (psia, or barsa if metric=True)
    * - rs
      - float
-     - Solution GOR at pressure of interest (scf/stb).
+     - Solution GOR at pressure of interest (scf/stb, or sm3/sm3 if metric=True).
+   * - metric
+     - bool
+     - Use Eclipse METRIC units for inputs/outputs. Default False
 
 Examples:
 
@@ -615,11 +707,11 @@ pyrestoolbox.oil.oil_harmonize_pb_rsb
 
 .. code-block:: python
 
-    oil_harmonize_pb_rsb(pb=0, rsb=0, degf=0, api=0, sg_sp=0, sg_g=0, rsmethod='VELAR', pbmethod='VELAR') -> tuple
+    oil_harmonize_pb_rsb(pb=0, rsb=0, degf=0, api=0, sg_sp=0, sg_g=0, rsmethod='VELAR', pbmethod='VELAR', metric = False) -> tuple
 
 Resolves consistent Pb, Rsb, and rsb_frac from user inputs. If only one of Pb or Rsb is specified, the other is calculated using the selected correlation. If both are specified, an iterative procedure finds an ``rsb_frac`` scaling factor that allows the correlations to honor both values simultaneously.
 
-Returns tuple of ``(pb, rsb, rsb_frac)`` where rsb_frac is 1.0 when only one value was specified, or the scaling factor needed to harmonize both.
+Returns tuple of ``(pb, rsb, rsb_frac)`` where rsb_frac is 1.0 when only one value was specified, or the scaling factor needed to harmonize both. Pb is in psia (or barsa if metric=True), Rsb in scf/stb (or sm3/sm3 if metric=True).
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -630,13 +722,13 @@ Returns tuple of ``(pb, rsb, rsb_frac)`` where rsb_frac is 1.0 when only one val
      - Description
    * - pb
      - float
-     - Bubble point pressure (psia). 0 = unknown (will be calculated from rsb)
+     - Bubble point pressure (psia, or barsa if metric=True). 0 = unknown (will be calculated from rsb)
    * - rsb
      - float
-     - Solution GOR at Pb (scf/stb). 0 = unknown (will be calculated from pb)
+     - Solution GOR at Pb (scf/stb, or sm3/sm3 if metric=True). 0 = unknown (will be calculated from pb)
    * - degf
      - float
-     - Reservoir temperature (deg F)
+     - Reservoir temperature (deg F, or deg C if metric=True)
    * - api
      - float
      - Stock tank oil density (deg API)
@@ -652,6 +744,9 @@ Returns tuple of ``(pb, rsb, rsb_frac)`` where rsb_frac is 1.0 when only one val
    * - pbmethod
      - str or pb_method
      - Pb calculation method. Default 'VELAR'
+   * - metric
+     - bool
+     - Use Eclipse METRIC units for inputs/outputs. Default False
 
 Examples:
 
@@ -946,9 +1041,9 @@ pyrestoolbox.oil.oil_rate_radial
 
 .. code-block:: python
 
-    oil_rate_radial(k, h, pr, pwf, r_w, r_ext, uo, bo, S = 0, vogel = False, pb = 0) -> float or np.array
+    oil_rate_radial(k, h, pr, pwf, r_w, r_ext, uo, bo, S = 0, vogel = False, pb = 0, metric = False) -> float or np.array
 
-Returns liquid rate (stb/day) for radial flow using Darcy pseudo steady state equation with optional Vogel correction.
+Returns liquid rate (stb/d, or sm3/d if metric=True) for radial flow using Darcy pseudo steady state equation with optional Vogel correction.
 Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D array of rates. Using more than one input array -- while not prohibited -- will not return expected results.
 
 .. list-table:: Inputs
@@ -963,25 +1058,25 @@ Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D a
      - Effective permeability to gas flow (mD)
    * - h
      - float, list or np.array
-     - Net height for flow (ft).
+     - Net height for flow (ft, or m if metric=True).
    * - pr
      - float, list or np.array
-     - Reservoir pressure (psia)
+     - Reservoir pressure (psia, or barsa if metric=True)
    * - pwf
      - float, list or np.array
-     - BHFP (psia).
+     - BHFP (psia, or barsa if metric=True).
    * - r_w
      - float
-     - Wellbore Radius (ft).
+     - Wellbore Radius (ft, or m if metric=True).
    * - r_ext
      - float
-     - External Reservoir Radius (ft).
+     - External Reservoir Radius (ft, or m if metric=True).
    * - uo
      - float
-     - Liquid viscosity (cP). 
+     - Liquid viscosity (cP).
    * - bo
      - float
-     - Liquid formation volume factor (rb/stb)
+     - Liquid formation volume factor (rb/stb or rm3/sm3)
    * - S
      - float
      - Skin. Defaults to zero if undefined
@@ -990,8 +1085,11 @@ Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D a
      - Boolean flag indicating whether to use vogel Pb correction. Defaults to False
    * - pb
      - float
-     - Bubble point pressure. Used only when Vogel correction is invoked
-     
+     - Bubble point pressure (psia, or barsa if metric=True). Used only when Vogel correction is invoked
+   * - metric
+     - bool
+     - Use Eclipse METRIC units for inputs/outputs. Default False
+
 Examples:
 
 .. code-block:: python
@@ -1007,9 +1105,9 @@ pyrestoolbox.oil.oil_rate_linear
 
 .. code-block:: python
 
-    oil_rate_linear(k, pr, pwf, area, length, uo, bo, vogel = False, pb = 0) -> float or np.array
+    oil_rate_linear(k, pr, pwf, area, length, uo, bo, vogel = False, pb = 0, metric = False) -> float or np.array
 
-Returns liquid rate (stb/day) for linear flow using Darcy steady state equation with optional Vogel correction.
+Returns liquid rate (stb/d, or sm3/d if metric=True) for linear flow using Darcy steady state equation with optional Vogel correction.
 Arrays can be used for any one of k, pr, pwf or area, returning corresponding 1-D array of rates. Using more than one input array -- while not prohibited -- will not return expected results.
 
 .. list-table:: Inputs
@@ -1024,25 +1122,31 @@ Arrays can be used for any one of k, pr, pwf or area, returning corresponding 1-
      - Effective permeability to gas flow (mD)
    * - pr
      - float, list or np.array
-     - Reservoir pressure (psia)
+     - Reservoir pressure (psia, or barsa if metric=True)
    * - pwf
      - float, list or np.array
-     - BHFP (psia).
+     - BHFP (psia, or barsa if metric=True).
    * - area
      - float, list or np.array
-     - Net cross-sectional area perpendicular to direction of flow (ft2)
+     - Net cross-sectional area perpendicular to direction of flow (ft2, or m2 if metric=True)
    * - length
      - float
-     - Linear distance of fluid flow (ft)
+     - Linear distance of fluid flow (ft, or m if metric=True)
+   * - uo
+     - float
+     - Liquid viscosity (cP).
    * - bo
      - float
-     - Liquid formation volume factor (rb/stb)
+     - Liquid formation volume factor (rb/stb or rm3/sm3)
    * - vogel
      - bool
      - Boolean flag indicating whether to use vogel Pb correction. Defaults to False
    * - pb
      - float
-     - Bubble point pressure. Used only when Vogel correction is invoked
+     - Bubble point pressure (psia, or barsa if metric=True). Used only when Vogel correction is invoked
+   * - metric
+     - bool
+     - Use Eclipse METRIC units for inputs/outputs. Default False
      
 Examples:
 

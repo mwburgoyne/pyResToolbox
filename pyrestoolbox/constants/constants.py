@@ -37,3 +37,84 @@ MW_CO2 = 44.01
 MW_H2S = 34.082
 MW_N2 = 28.014
 MW_H2 = 2.016
+
+# ---- Unit conversion constants (FIELD <-> Eclipse METRIC) ----
+# Pressure: psia <-> barsa
+PSI_TO_BAR = 0.0689475729
+BAR_TO_PSI = 1.0 / PSI_TO_BAR
+
+# Temperature: degF <-> degC
+def degf_to_degc(degf):
+    """Convert degrees Fahrenheit to degrees Celsius."""
+    return (degf - 32.0) * 5.0 / 9.0
+
+def degc_to_degf(degc):
+    """Convert degrees Celsius to degrees Fahrenheit."""
+    return degc * 9.0 / 5.0 + 32.0
+
+# Length: ft <-> m
+FT_TO_M = 0.3048
+M_TO_FT = 1.0 / FT_TO_M
+
+# Diameter/roughness: inches <-> mm
+IN_TO_MM = 25.4
+MM_TO_IN = 1.0 / IN_TO_MM
+
+# Volume: bbl <-> m3, cuft <-> m3
+BBL_TO_M3 = 0.158987295
+M3_TO_BBL = 1.0 / BBL_TO_M3
+CUFT_TO_M3 = 0.028316846592
+M3_TO_CUFT = 1.0 / CUFT_TO_M3
+
+# Gas rate: Mscf/d <-> sm3/d (1 Mscf = 28.316846592 sm3)
+MSCF_TO_SM3 = 28.316846592
+SM3_TO_MSCF = 1.0 / MSCF_TO_SM3
+
+# Liquid rate: stb/d <-> sm3/d
+STB_TO_SM3 = BBL_TO_M3
+SM3_TO_STB = M3_TO_BBL
+
+# GOR: scf/stb <-> sm3/sm3
+SCF_PER_STB_TO_SM3_PER_SM3 = CUFT_TO_M3 / BBL_TO_M3  # ~0.17810760667903522
+SM3_PER_SM3_TO_SCF_PER_STB = 1.0 / SCF_PER_STB_TO_SM3_PER_SM3
+
+# OGR/CGR: stb/Mscf <-> sm3/sm3 (in Eclipse METRIC, OGR/CGR also sm3/sm3)
+STB_PER_MSCF_TO_SM3_PER_SM3 = BBL_TO_M3 / (1000.0 * CUFT_TO_M3)  # ~0.005614583333
+SM3_PER_SM3_TO_STB_PER_MSCF = 1.0 / STB_PER_MSCF_TO_SM3_PER_SM3
+
+# Density: lb/cuft <-> kg/m3
+LBCUFT_TO_KGM3 = 16.01846337
+KGM3_TO_LBCUFT = 1.0 / LBCUFT_TO_KGM3
+
+# Compressibility: 1/psi <-> 1/barsa
+INVPSI_TO_INVBAR = BAR_TO_PSI
+INVBAR_TO_INVPSI = PSI_TO_BAR
+
+# Pseudopressure: psi^2/cP <-> bar^2/cP
+PSI2CP_TO_BAR2CP = PSI_TO_BAR ** 2
+BAR2CP_TO_PSI2CP = BAR_TO_PSI ** 2
+
+# Gradient: psi/ft <-> bar/m
+PSIFT_TO_BARM = PSI_TO_BAR / FT_TO_M
+BARM_TO_PSIFT = 1.0 / PSIFT_TO_BARM
+
+# Area: ft^2 <-> m^2
+SQFT_TO_SQM = FT_TO_M ** 2
+SQM_TO_SQFT = 1.0 / SQFT_TO_SQM
+
+# Non-Darcy coefficient: day/Mscf <-> day/sm3
+D_PER_MSCF_TO_D_PER_SM3 = SM3_TO_MSCF
+D_PER_SM3_TO_D_PER_MSCF = MSCF_TO_SM3
+
+# Water content / CGR: stb/MMscf <-> sm3/sm3
+STB_PER_MMSCF_TO_SM3_PER_SM3 = BBL_TO_M3 / (1e6 * CUFT_TO_M3)
+SM3_PER_SM3_TO_STB_PER_MMSCF = 1.0 / STB_PER_MMSCF_TO_SM3_PER_SM3
+
+# Gas rate: MMscf/d <-> sm3/d (1 MMscf = 28316.846592 sm3)
+MMSCF_TO_SM3 = 1000.0 * MSCF_TO_SM3  # 28316.846592
+SM3_TO_MMSCF = 1.0 / MMSCF_TO_SM3
+
+# FVF: rb/stb (rcf/scf) <-> rm3/sm3 — both are dimensionless ratios, same numeric value
+# (reservoir volume / surface volume in consistent units = same ratio regardless of unit system)
+# So no conversion needed for Bo, Bg, Bw expressed as FVF ratios.
+# Exception: gas Bg in rcf/scf needs conversion to rm3/sm3 — these are the same ratio, no conversion.

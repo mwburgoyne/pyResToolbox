@@ -28,6 +28,11 @@ from tabulate import tabulate
 from typing import Tuple
 
 from pyrestoolbox.constants import R, psc, tsc, degF2R, tscr, MW_AIR, scf_per_mol, CUFTperBBL, WDEN
+from pyrestoolbox.constants import (BAR_TO_PSI, PSI_TO_BAR, degc_to_degf, degf_to_degc,
+    M_TO_FT, FT_TO_M, SQM_TO_SQFT, LBCUFT_TO_KGM3, KGM3_TO_LBCUFT,
+    INVPSI_TO_INVBAR, INVBAR_TO_INVPSI,
+    SCF_PER_STB_TO_SM3_PER_SM3, SM3_PER_SM3_TO_SCF_PER_STB,
+    STB_TO_SM3, SM3_TO_STB)
 from pyrestoolbox.classes import z_method, c_method, pb_method, rs_method, bo_method, uo_method, deno_method, co_method, kr_family, kr_table, class_dic
 from pyrestoolbox.validate import validate_methods
 import pyrestoolbox.gas as gas
@@ -63,20 +68,31 @@ def oil_rate_radial(
     S: float = 0,
     vogel: bool = False,
     pb: float = 0,
+    metric: bool = False,
 ) -> np.ndarray:
-    """ Returns liquid rate for radial flow (stb/day) using Darcy pseudo steady state equation
+    """ Returns liquid rate for radial flow (stb/day | sm3/day) using Darcy pseudo steady state equation
         k: Effective Permeability to flow (mD)
-        h: Net flow height (ft)
-        Pr: Reservoir pressure (psia)
-        pwf: BHFP (psia)
-        r_w: Wellbore Radius (ft)
-        r_ext: External Reservoir Radius (ft)
+        h: Net flow height (ft | m)
+        Pr: Reservoir pressure (psia | barsa)
+        pwf: BHFP (psia | barsa)
+        r_w: Wellbore Radius (ft | m)
+        r_ext: External Reservoir Radius (ft | m)
         uo: Liquid viscosity (cP)
-        bo: Liquid Formation Volume Factor (rb/stb)
+        bo: Liquid Formation Volume Factor (rb/stb | rm3/sm3)
         S: Wellbore Skin (Dimensionless). Defaults to zero if not specified
         vogel: (True / False). Invokes the Vogel model that reduces inflow below bubble point pressure. Defaults to False if undefined
-        pb: Bubble point pressure (psia). Defaults to zero if not specified. Not used unless Vogel option is invoked
+        pb: Bubble point pressure (psia | barsa). Defaults to zero if not specified. Not used unless Vogel option is invoked
+        metric: If True, input/output in Eclipse METRIC units (barsa, m, sm3/d). Defaults to False (FIELD)
     """
+    if metric:
+        h = np.asarray(h) * M_TO_FT if not isinstance(h, (int, float)) else h * M_TO_FT
+        pr = np.asarray(pr) * BAR_TO_PSI if not isinstance(pr, (int, float)) else pr * BAR_TO_PSI
+        pwf = np.asarray(pwf) * BAR_TO_PSI if not isinstance(pwf, (int, float)) else pwf * BAR_TO_PSI
+        r_w = r_w * M_TO_FT
+        r_ext = r_ext * M_TO_FT
+        if pb > 0:
+            pb = pb * BAR_TO_PSI
+
     k, h, pr, pwf = (
         np.asarray(k),
         np.asarray(h),
@@ -109,6 +125,8 @@ def oil_rate_radial(
         qoil = (
             qsat_max * (1 - 0.2 * (pwf / pb) - 0.8 * (pwf / pb) ** 2) + qusat
         )
+    if metric:
+        return qoil * STB_TO_SM3  # stb/d -> sm3/d
     return qoil
 
 def oil_rate_linear(
@@ -121,18 +139,28 @@ def oil_rate_linear(
     bo: float,
     vogel: bool = False,
     pb: float = 0,
+    metric: bool = False,
 ) -> np.ndarray:
-    """ Returns liquid rate for linear flow (stb/day) using Darcy steady state equation
+    """ Returns liquid rate for linear flow (stb/day | sm3/day) using Darcy steady state equation
         k: Permeability (mD)
-        Pr: Reservoir pressure (psia)
-        pwf: BHFP (psia)
-        area: Net cross sectional area perpendicular to direction of flow (ft2).
-        length: Length over which flow takes place (ft)
+        Pr: Reservoir pressure (psia | barsa)
+        pwf: BHFP (psia | barsa)
+        area: Net cross sectional area perpendicular to direction of flow (ft2 | m2).
+        length: Length over which flow takes place (ft | m)
         uo: Liquid viscosity (cP)
-        bo: Liquid Formation Volume Factor (rb/stb)
+        bo: Liquid Formation Volume Factor (rb/stb | rm3/sm3)
         vogel: (True / False). Invokes the Vogel model that reduces inflow below bubble point pressure. Defaults to False if undefined
-        pb: Bubble point pressure (psia). Defaults to zero if not specified. Not used unless Vogel option is invoked
+        pb: Bubble point pressure (psia | barsa). Defaults to zero if not specified. Not used unless Vogel option is invoked
+        metric: If True, input/output in Eclipse METRIC units (barsa, m, m2, sm3/d). Defaults to False (FIELD)
     """
+    if metric:
+        pr = np.asarray(pr) * BAR_TO_PSI if not isinstance(pr, (int, float)) else pr * BAR_TO_PSI
+        pwf = np.asarray(pwf) * BAR_TO_PSI if not isinstance(pwf, (int, float)) else pwf * BAR_TO_PSI
+        area = np.asarray(area) * SQM_TO_SQFT if not isinstance(area, (int, float)) else area * SQM_TO_SQFT
+        length = length * M_TO_FT
+        if pb > 0:
+            pb = pb * BAR_TO_PSI
+
     k, area, pr, pwf = (
         np.asarray(k),
         np.asarray(area),
@@ -160,6 +188,8 @@ def oil_rate_linear(
         qoil = (
             qsat_max * (1 - 0.2 * (pwf / pb) - 0.8 * (pwf / pb) ** 2) + qusat
         )
+    if metric:
+        return qoil * STB_TO_SM3  # stb/d -> sm3/d
     return qoil
 
 def oil_ja_sg(mw: float, ja: float) -> float:
@@ -173,16 +203,17 @@ def oil_ja_sg(mw: float, ja: float) -> float:
 
 
 def oil_twu_props(
-    mw: float, ja: float = 0, sg: float = 0, damp: float = 1
+    mw: float, ja: float = 0, sg: float = 0, damp: float = 1, metric: bool = False
 ) -> Tuple:
-    """ Returns Tuple of sg, tb (degR), tc (DegR), pc (psia), Vc (ft3/lb-mol) using method from Twu (1984) correlations for petroleum liquids
+    """ Returns Tuple of sg, tb (degR | K), tc (DegR | K), pc (psia | barsa), Vc (ft3/lb-mol) using method from Twu (1984) correlations for petroleum liquids
         Modified with damping factor proposed by A. Zick between 0 (paraffin) and 1 (original Twu)
-        Returns sg, tb (R), tc (R), pc (psia), vc (ft3/lbmol)
+        Returns sg, tb (R | K), tc (R | K), pc (psia | barsa), vc (ft3/lbmol)
 
         mw: Molecular weight of the liquid hydrocarbon (g/g.mol / lb/lb.mol)
         ja: jacoby Aromaticity Factor relationship. Varies between 0 (Paraffins) - 1 (Aromatic). Defaults to zero if undefined
         sg: Specific gravity of the liquid (fraction relative to water density). Will use jacoby method to estimate sg from mw if undefined.
         damp: damping factor proposed by A. Zick between 0 (paraffin) and 1 (original Twu). Defaults to 1
+        metric: If True, output Tc/Tb in Kelvin and Pc in barsa. Defaults to False (FIELD: Rankine, psia)
         Unless otherwise mentioned, all Twu equation references are from Whitson Monograph
     """
     if sg == 0:
@@ -320,10 +351,14 @@ def oil_twu_props(
     tb, Mp, tcp, pcp, vcp, sgp = Twu_tb(mw, sg, damp)
     #print(tb, Mp, tcp, pcp, vcp, sgp)
     tc = Twu_tc(tb, sgp, sg)
-    
+
     vc = Twu_vc(tb, tcp, sg, sgp)
     pc = Twu_pc(tb, sgp, sg, pcp, tc, tcp, vc, vcp)
     #print(tc, pc, vc)
+    if metric:
+        tb = tb / 1.8  # Rankine -> Kelvin
+        tc = tc / 1.8  # Rankine -> Kelvin
+        pc = pc * PSI_TO_BAR  # psia -> barsa
     return (sg, tb, tc, pc, vc)
 
 def sg_evolved_gas(
@@ -426,7 +461,7 @@ def sgg_wt_avg(sg_sp: float, rsp: float, sg_st: float, rst: float) -> float:
     return sg_g
 
 
-def oil_rs_st(psp: float, degf_sp: float, api: float) -> float:
+def oil_rs_st(psp: float, degf_sp: float, api: float, metric: bool = False) -> float:
     """ Estimates incremental gas evolved from separator liquid as it equilibrates to stock tank conditions (scf/stb)
 
         Rsb = Rsp + Rst (Solution GOR at bubble point = Separator GOR + Stock Tank GOR).
@@ -434,10 +469,15 @@ def oil_rs_st(psp: float, degf_sp: float, api: float) -> float:
           rs_st = 0.1618 * Separator GOR (Adapted from Eq 3-4 in Valko McCain 2003 paper)
         Correlation reproduced from Valko McCain 2003 paper Eq 3-2
 
-        psp: Separator pressure (psia)
-        degf_sp: Separator temperature (deg f)
+        psp: Separator pressure (psia | barsa)
+        degf_sp: Separator temperature (deg f | deg C)
         api: Stock tank oil density (API)
+        metric: If True, input/output in Eclipse METRIC units. Defaults to False (FIELD)
     """
+    if metric:
+        psp = psp * BAR_TO_PSI
+        degf_sp = degc_to_degf(degf_sp)
+
     var = [np.log(psp), np.log(degf_sp), api]
     C = [[-8.005, 1.224, -1.587], [2.7, -0.5, 0.0441], [-0.161, 0, -2.29e-5]]
     Zn = [sum([C[i][n] * var[n] ** i for i in range(3)]) for n in range(3)]
@@ -451,19 +491,25 @@ def oil_pbub(
     sg_g: float = 0,
     sg_sp: float = 0,
     pbmethod: pb_method = pb_method.VALMC,
+    metric: bool = False,
 ) -> float:
-    """ Returns bubble point pressure (psia) calculated with different correlations
+    """ Returns bubble point pressure (psia | barsa) calculated with different correlations
 
         api: Stock tank oil density (deg API)
-        degf: Reservoir Temperature (deg F)
-        rsb: Oil solution gas volume at Pbub (scf/stb)
+        degf: Reservoir Temperature (deg F | deg C)
+        rsb: Oil solution gas volume at Pbub (scf/stb | sm3/sm3)
         sg_sp: Separator Gas specific Gravity (relative to air) <-- Required for Valko McCain & Velarde
         sg_g: Weighted average specific gravity of surface gas (relative to air). <-- Required for Standing
         pbmethod: A string or pb_method Enum class that specifies one of following calculation choices;
                    STAN: Standing Correlation (1947)
                    VALMC: Valko-McCain Correlation (2003) - https://www.sciencedirect.com/science/article/abs/pii/S0920410502003194
                    VELAR: Velarde, Blasingame & McCain (1997)
+        metric: If True, input/output in Eclipse METRIC units (barsa, degC, sm3/sm3). Defaults to False (FIELD)
     """
+    if metric:
+        degf = degc_to_degf(degf)
+        rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
+
     sg_g, sg_sp = check_sgs(sg_g=sg_g, sg_sp=sg_sp)
 
     pbmethod = validate_methods(["pbmethod"], [pbmethod])
@@ -532,9 +578,12 @@ def oil_pbub(
         "VELAR": pbub_velarde,
     }
 
-    return fn_dic[pbmethod.name](
+    result = fn_dic[pbmethod.name](
         api=api, degf=degf, sg_g=sg_g, rsb=rsb, sg_sp=sg_sp
     )
+    if metric:
+        return result * PSI_TO_BAR  # psia -> barsa
+    return result
 
 def oil_rs_bub(
     api: float,
@@ -543,22 +592,28 @@ def oil_rs_bub(
     sg_g: float = 0,
     sg_sp: float = 0,
     rsmethod: rs_method = rs_method.VELAR,
+    metric: bool = False,
 ) -> float:
-    """ Returns Solution GOR (scf/stb) at bubble point pressure.
+    """ Returns Solution GOR (scf/stb | sm3/sm3) at bubble point pressure.
         Uses the inverse of the Bubble point pressure correlations, with the same method families
         Note: At low pressures, the VALMC method will fail (generally when Rsb < 10 scf/stb).
               The VALMC method will revert to the STAN method in these cases
 
         api: Stock tank oil density (deg API)
-        degf: Reservoir Temperature (deg F)
-        pb: Bubble point Pressure (psia)
+        degf: Reservoir Temperature (deg F | deg C)
+        pb: Bubble point Pressure (psia | barsa)
         sg_sp: Separator Gas specific Gravity (relative to air) <-- Required for Valko McCain & Velarde
         sg_g: Weighted average specific gravity of surface gas (relative to air). <-- Required for Standing
         rsmethod: A string or pb_method Enum class that specifies one of following calculation choices. Note that VASBG is not available as it requires Pb as an input;
                    VELAR: Velarde, Blasingame & McCain (1997) - Default
                    STAN: Standing Correlation (1947), using form from https://www.sciencedirect.com/science/article/pii/B9780128034378000014
                    VALMC: Valko-McCain Correlation (2003) - https://www.sciencedirect.com/science/article/abs/pii/S0920410502003194
+        metric: If True, input/output in Eclipse METRIC units (barsa, degC, sm3/sm3). Defaults to False (FIELD)
     """
+    if metric:
+        degf = degc_to_degf(degf)
+        pb = pb * BAR_TO_PSI
+
     sg_g, sg_sp = check_sgs(sg_g=sg_g, sg_sp=sg_sp)
 
     pbmethod = 'VALMC' # Pbub calculations only needed with 'VALMC' rsmethod
@@ -632,8 +687,9 @@ def oil_rs_bub(
         import warnings
         warnings.warn("oil_rs_bub: correlation returned NaN, returning 0", RuntimeWarning)
         return 0
-    else:
-        return rsbub
+    if metric:
+        return rsbub * SCF_PER_STB_TO_SM3_PER_SM3  # scf/stb -> sm3/sm3
+    return rsbub
 
 def oil_rs(
     api: float,
@@ -644,16 +700,17 @@ def oil_rs(
     rsb: float = 0,
     rsmethod: rs_method = rs_method.VELAR,
     pbmethod: pb_method = pb_method.VALMC,
+    metric: bool = False,
 ) -> float:
-    """ Returns solution gas oil ratio (scf/stb) calculated from different correlations. Either pb, rsb or both need to be specified.
+    """ Returns solution gas oil ratio (scf/stb | sm3/sm3) calculated from different correlations. Either pb, rsb or both need to be specified.
         If one is missing, the other will be calculated from correlation.
 
         api: Stock tank oil density (deg API)
-        degf: Reservoir Temperature (deg F)
+        degf: Reservoir Temperature (deg F | deg C)
         sg_sp: SG of separator gas
-        p: Pressure of oil (psia)
-        pb: Original bubble point pressure of oil (psia)
-        rsb: Oil solution gas volume at bubblepoint pressure (scf/stb) <-- Required for Velarde, Blasingame & McCain
+        p: Pressure of oil (psia | barsa)
+        pb: Original bubble point pressure of oil (psia | barsa)
+        rsb: Oil solution gas volume at bubblepoint pressure (scf/stb | sm3/sm3) <-- Required for Velarde, Blasingame & McCain
         rsmethod: A string or pb_method Enum class that specifies one of following calculation choices;
                    VELAR: Velarde, Blasingame & McCain (1997) - Default
                    STAN: Standing Correlation (1947), using form from https://www.sciencedirect.com/science/article/pii/B9780128034378000014
@@ -662,7 +719,16 @@ def oil_rs(
                    STAN: Standing Correlation (1947)
                    VALMC: Valko-McCain Correlation (2003) - https://www.sciencedirect.com/science/article/abs/pii/S0920410502003194
                    VELAR: Velarde, Blasingame & McCain (1997) - Default
+        metric: If True, input/output in Eclipse METRIC units (barsa, degC, sm3/sm3). Defaults to False (FIELD)
     """
+    if metric:
+        degf = degc_to_degf(degf)
+        p = p * BAR_TO_PSI
+        if pb > 0:
+            pb = pb * BAR_TO_PSI
+        if rsb > 0:
+            rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
+
     pbmethod, rsmethod = validate_methods(
         ["pbmethod", "rsmethod"], [pbmethod, rsmethod]
     )
@@ -686,6 +752,8 @@ def oil_rs(
     #print(rsb)
     
     if p >= pb:
+        if metric:
+            return rsb * SCF_PER_STB_TO_SM3_PER_SM3
         return rsb
 
     def Rs_velarde(
@@ -756,9 +824,12 @@ def oil_rs(
         "VALMC": rs_valko_mccain,
     }
 
-    return fn_dic[rsmethod.name](
+    result = fn_dic[rsmethod.name](
         api=api, degf=degf, sg_sp=sg_sp, p=p, pb=pb, rsb=rsb
     )
+    if metric:
+        return result * SCF_PER_STB_TO_SM3_PER_SM3  # scf/stb -> sm3/sm3
+    return result
 
 def check_sgs(
     sg_g: float,
@@ -805,17 +876,18 @@ def oil_co(
     denomethod: deno_method = deno_method.SWMH,
     bomethod: bo_method = bo_method.MCAIN,
     pbmethod: pb_method = pb_method.VALMC,
+    metric: bool = False,
 ):
-    """ Returns oil compressibility (1/psi) calculated with Co = -1/Bo *[dBodp - Bg*dRsdp]
+    """ Returns oil compressibility (1/psi | 1/bar) calculated with Co = -1/Bo *[dBodp - Bg*dRsdp]
         using numerically derived values and their derivatives
 
-        p: Reservoir pressure (psia)
+        p: Reservoir pressure (psia | barsa)
         api: Stock tank oil density (deg API)
         sg_sp: Separator Gas specific Gravity (relative to air). If not defined, will use sg_g instead
         sg_g: Weighted average specific gravity of surface gas (relative to air). If not defined, will use sg_sp instead
-        degf: Reservoir Temperature (deg F)
-        pb: Bubble point pressure. If not provided, will attempt to calculate with Valko-McCain Pb Correlation
-        rsb: Oil solution gas volume at bubblepoint pressure (scf/stb)
+        degf: Reservoir Temperature (deg F | deg C)
+        pb: Bubble point pressure (psia | barsa). If not provided, will attempt to calculate with Valko-McCain Pb Correlation
+        rsb: Oil solution gas volume at bubblepoint pressure (scf/stb | sm3/sm3)
         comethod: A string or co_method Enum class that specifies calculation method for compressibility (currently only one option)
         zmethod: A string or z_method Enum class that specifies calculation method for gas Z-factor
         rsmethod: A string or rs_method Enum class that specifies calculation method for GOR
@@ -823,7 +895,18 @@ def oil_co(
         denomethod: A string or deno_method Enum class that specifies calculation method for live oil density
         bomethod: A string or bo_method Enum class that specifies calculation method for oil FVF
         pbmethod: A string or pb_method Enum class that specifies calculation method for bubble point pressure
+        metric: If True, input/output in Eclipse METRIC units (barsa, degC, sm3/sm3, 1/bar). Defaults to False (FIELD)
     """
+    if metric:
+        p = p * BAR_TO_PSI
+        degf = degc_to_degf(degf)
+        if pb > 0:
+            pb = pb * BAR_TO_PSI
+        if rsb > 0:
+            rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
+        if pi > 0:
+            pi = pi * BAR_TO_PSI
+
     sg_g, sg_sp = check_sgs(sg_g=sg_g, sg_sp=sg_sp)
 
     (
@@ -940,7 +1023,7 @@ def oil_co(
 
     fn_dic = {"EXPLT": Co_explicit}
 
-    return fn_dic[comethod.name](
+    result = fn_dic[comethod.name](
         p=p,
         api=api,
         sg_sp=sg_sp,
@@ -954,6 +1037,9 @@ def oil_co(
         denomethod=denomethod,
         bomethod=bomethod,
     )
+    if metric:
+        return result * INVPSI_TO_INVBAR  # 1/psi -> 1/bar
+    return result
 
 def oil_deno(
     p: float,
@@ -966,21 +1052,31 @@ def oil_deno(
     sg_o: float = 0,
     api: float = 0,
     denomethod: deno_method = deno_method.SWMH,
+    metric: bool = False,
 ) -> float:
-    """ Returns live oil density calculated with different correlations
+    """ Returns live oil density (lb/cuft | kg/m3) calculated with different correlations
 
-        p: Pressure (psia)
-        pb: Bubble point pressure (psia). Defaults to 1E6, and not used for densities below Pb. A valid value is required for density calculations above Pb
-        degf: Reservoir Temperature (deg F)
-        rs: Oil solution gas volume (scf/stb)
-        rsb: Oil solution gas volume at bubble point pressure (scf/stb)
+        p: Pressure (psia | barsa)
+        pb: Bubble point pressure (psia | barsa). Defaults to 1E6, and not used for densities below Pb. A valid value is required for density calculations above Pb
+        degf: Reservoir Temperature (deg F | deg C)
+        rs: Oil solution gas volume (scf/stb | sm3/sm3)
+        rsb: Oil solution gas volume at bubble point pressure (scf/stb | sm3/sm3)
         sg_g: Weighted average specific gravity of surface gas (relative to air).
         sg_sp: Separator gas specific gravity (relative to air). If not known, an alternate nethod to estimate pseudo liquid density of surface gas will be used
         sg_o: Stock tank oil specific gravity (SG relative to water). If undefined will calculate from api
         api: Stock tank oil density (deg API). If undefined will calculate from sg_o. If both defined api value will prevail
         denomethod: A string or deno_method Enum class that specifies one of following calculation choices;
                    SWMH: Standing, Witte, McCain-Hill (1995) - Default
+        metric: If True, input/output in Eclipse METRIC units (barsa, degC, sm3/sm3, kg/m3). Defaults to False (FIELD)
     """
+    if metric:
+        p = p * BAR_TO_PSI
+        degf = degc_to_degf(degf)
+        rs = rs * SM3_PER_SM3_TO_SCF_PER_STB
+        rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
+        if pb != 1e6:
+            pb = pb * BAR_TO_PSI
+
     sg_g, sg_sp = check_sgs(sg_g=sg_g, sg_sp=sg_sp)
 
     denomethod = validate_methods(["denomethod"], [denomethod])
@@ -1112,7 +1208,7 @@ def oil_deno(
     if (
         p > pb
     ):  # Use Eq 3.20, calculating oil density from density at Pb and compressibility factor
-        return fn_dic["PGTPB"](
+        result = fn_dic["PGTPB"](
             p=p,
             degf=degf,
             rs=rs,
@@ -1123,8 +1219,11 @@ def oil_deno(
             sg_o=sg_o,
             api=api,
         )
+        if metric:
+            return result * LBCUFT_TO_KGM3  # lb/cuft -> kg/m3
+        return result
 
-    return fn_dic[denomethod.name](
+    result = fn_dic[denomethod.name](
         p=p,
         degf=degf,
         rs=rs,
@@ -1135,6 +1234,9 @@ def oil_deno(
         sg_o=sg_o,
         api=api,
     )
+    if metric:
+        return result * LBCUFT_TO_KGM3  # lb/cuft -> kg/m3
+    return result
 
 def oil_bo(
     p: float,
@@ -1147,14 +1249,15 @@ def oil_bo(
     sg_sp: float = 0,
     bomethod: bo_method = bo_method.MCAIN,
     denomethod: deno_method = deno_method.SWMH,
+    metric: bool = False,
 ) -> float:
-    """ Returns oil formation volume factor calculated with different correlations
+    """ Returns oil formation volume factor (rb/stb | rm3/sm3) calculated with different correlations
 
-        p: Pressure (psia)
-        pb: Bubble point pressure (psia). Defaults to 1E6, and not used for densities below Pb. A valid value is required for density calculations above Pb
-        degf: Reservoir Temperature (deg F)
-        rs: Oil solution gas volume (scf/stb)
-        rsb: Oil solution gas volume (scf/stb) at Pb
+        p: Pressure (psia | barsa)
+        pb: Bubble point pressure (psia | barsa). Defaults to 1E6, and not used for densities below Pb. A valid value is required for density calculations above Pb
+        degf: Reservoir Temperature (deg F | deg C)
+        rs: Oil solution gas volume (scf/stb | sm3/sm3)
+        rsb: Oil solution gas volume (scf/stb | sm3/sm3) at Pb
         sg_g: Weighted average specific gravity of surface gas (relative to air). If not known, it will be estimated from sg_sp
         sg_sp: Separator gas specific gravity (relative to air).
         sg_o: Stock tank oil specific gravity (SG relative to water).
@@ -1163,7 +1266,15 @@ def oil_bo(
                    MCAIN: McCain approach, calculating from densities
         denomethod: A string or deno_method Enum class that specifies one of following calculation choices;
                    SWMH: Standing, Witte, McCain-Hill (1995) - Default
+        metric: If True, input/output in Eclipse METRIC units (barsa, degC, sm3/sm3). Defaults to False (FIELD)
     """
+    if metric:
+        p = p * BAR_TO_PSI
+        pb = pb * BAR_TO_PSI
+        degf = degc_to_degf(degf)
+        rs = rs * SM3_PER_SM3_TO_SCF_PER_STB
+        rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
+
     sg_g, sg_sp = check_sgs(sg_g=sg_g, sg_sp=sg_sp)
     denomethod, bomethod = validate_methods(
         ["denomethod", "bomethod"], [denomethod, bomethod]
@@ -1195,16 +1306,22 @@ def oil_bo(
     return fn_dic[bomethod.name](p, pb, degf, rs, rsb, sg_sp, sg_g, sg_o)
 
 
-def oil_viso(p: float, api: float, degf: float, pb: float, rs: float) -> float:
-    """ Returns Oil Viscosity with Beggs-Robinson (1975) correlation at saturated pressures
+def oil_viso(p: float, api: float, degf: float, pb: float, rs: float, metric: bool = False) -> float:
+    """ Returns Oil Viscosity (cP) with Beggs-Robinson (1975) correlation at saturated pressures
         and Petrosky-Farshad (1995) at undersaturated pressures
 
-        p: Pressure (psia)
+        p: Pressure (psia | barsa)
         api: Stock tank oil density (deg API)
-        degf: Reservoir Temperature (deg F)
-        pb: Bubble point Pressure (psia)
-        rs: Solution GOR (scf/stb)
+        degf: Reservoir Temperature (deg F | deg C)
+        pb: Bubble point Pressure (psia | barsa)
+        rs: Solution GOR (scf/stb | sm3/sm3)
+        metric: If True, input in Eclipse METRIC units (barsa, degC, sm3/sm3). Defaults to False (FIELD)
     """
+    if metric:
+        p = p * BAR_TO_PSI
+        degf = degc_to_degf(degf)
+        pb = pb * BAR_TO_PSI
+        rs = rs * SM3_PER_SM3_TO_SCF_PER_STB
 
     def uo_br(p, api, degf, pb, rs):
         Z = 3.0324 - 0.02023 * api
@@ -1241,19 +1358,26 @@ class OilPVT:
 
         api: Stock tank oil density (deg API)
         sg_sp: Separator gas specific gravity (relative to air)
-        pb: Bubble point pressure (psia)
-        rsb: Solution GOR at Pb (scf/stb)
+        pb: Bubble point pressure (psia | barsa)
+        rsb: Solution GOR at Pb (scf/stb | sm3/sm3)
         sg_g: Weighted average specific gravity of surface gas (relative to air). Estimated from sg_sp if not provided
         rsmethod: Method for Rs calculation. Defaults to 'VELAR'
         pbmethod: Method for Pb calculation. Defaults to 'VALMC'
         bomethod: Method for Bo calculation. Defaults to 'MCAIN'
+        metric: If True, constructor inputs (pb, rsb) and method inputs/outputs use Eclipse METRIC units. Defaults to False (FIELD)
     """
     def __init__(self, api, sg_sp, pb, rsb, sg_g=0,
-                 rsmethod='VELAR', pbmethod='VALMC', bomethod='MCAIN'):
+                 rsmethod='VELAR', pbmethod='VALMC', bomethod='MCAIN',
+                 metric=False):
         self.api = api
         self.sg_sp = sg_sp
-        self.pb = pb
-        self.rsb = rsb
+        self.metric = metric
+        if metric:
+            self.pb = pb * BAR_TO_PSI
+            self.rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
+        else:
+            self.pb = pb
+            self.rsb = rsb
         self.sg_o = oil_sg(api)
         self.sg_g, self.sg_sp = check_sgs(sg_g=sg_g, sg_sp=sg_sp)
         self.rsmethod = validate_methods(["rsmethod"], [rsmethod])
@@ -1261,32 +1385,71 @@ class OilPVT:
         self.bomethod = validate_methods(["bomethod"], [bomethod])
 
     def rs(self, p, degf):
-        """ Returns solution GOR (scf/stb) at pressure p (psia) and temperature degf (deg F) """
-        return oil_rs(api=self.api, degf=degf, sg_sp=self.sg_sp, p=p,
+        """ Returns solution GOR (scf/stb | sm3/sm3) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
+        if self.metric:
+            p = p * BAR_TO_PSI
+            degf = degc_to_degf(degf)
+        result = oil_rs(api=self.api, degf=degf, sg_sp=self.sg_sp, p=p,
                       pb=self.pb, rsb=self.rsb, rsmethod=self.rsmethod,
                       pbmethod=self.pbmethod)
+        if self.metric:
+            return result * SCF_PER_STB_TO_SM3_PER_SM3
+        return result
 
     def bo(self, p, degf, rs=None):
-        """ Returns oil FVF (rb/stb) at pressure p (psia) and temperature degf (deg F) """
+        """ Returns oil FVF (rb/stb | rm3/sm3) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
+        if self.metric:
+            p_field = p * BAR_TO_PSI
+            degf_field = degc_to_degf(degf)
+        else:
+            p_field = p
+            degf_field = degf
         if rs is None:
-            rs = self.rs(p, degf)
-        return oil_bo(p=p, pb=self.pb, degf=degf, rs=rs, rsb=self.rsb,
+            rs_field = oil_rs(api=self.api, degf=degf_field, sg_sp=self.sg_sp, p=p_field,
+                              pb=self.pb, rsb=self.rsb, rsmethod=self.rsmethod,
+                              pbmethod=self.pbmethod)
+        else:
+            rs_field = rs * SM3_PER_SM3_TO_SCF_PER_STB if self.metric else rs
+        return oil_bo(p=p_field, pb=self.pb, degf=degf_field, rs=rs_field, rsb=self.rsb,
                       sg_o=self.sg_o, sg_g=self.sg_g, sg_sp=self.sg_sp,
                       bomethod=self.bomethod)
 
     def density(self, p, degf, rs=None):
-        """ Returns live oil density (lb/cuft) at pressure p (psia) and temperature degf (deg F) """
+        """ Returns live oil density (lb/cuft | kg/m3) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
+        if self.metric:
+            p_field = p * BAR_TO_PSI
+            degf_field = degc_to_degf(degf)
+        else:
+            p_field = p
+            degf_field = degf
         if rs is None:
-            rs = self.rs(p, degf)
-        return oil_deno(p=p, degf=degf, rs=rs, rsb=self.rsb,
+            rs_field = oil_rs(api=self.api, degf=degf_field, sg_sp=self.sg_sp, p=p_field,
+                              pb=self.pb, rsb=self.rsb, rsmethod=self.rsmethod,
+                              pbmethod=self.pbmethod)
+        else:
+            rs_field = rs * SM3_PER_SM3_TO_SCF_PER_STB if self.metric else rs
+        result = oil_deno(p=p_field, degf=degf_field, rs=rs_field, rsb=self.rsb,
                         sg_g=self.sg_g, sg_sp=self.sg_sp, pb=self.pb,
                         sg_o=self.sg_o)
+        if self.metric:
+            return result * LBCUFT_TO_KGM3
+        return result
 
     def viscosity(self, p, degf, rs=None):
-        """ Returns oil viscosity (cP) at pressure p (psia) and temperature degf (deg F) """
+        """ Returns oil viscosity (cP) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
+        if self.metric:
+            p_field = p * BAR_TO_PSI
+            degf_field = degc_to_degf(degf)
+        else:
+            p_field = p
+            degf_field = degf
         if rs is None:
-            rs = self.rs(p, degf)
-        return oil_viso(p=p, api=self.api, degf=degf, pb=self.pb, rs=rs)
+            rs_field = oil_rs(api=self.api, degf=degf_field, sg_sp=self.sg_sp, p=p_field,
+                              pb=self.pb, rsb=self.rsb, rsmethod=self.rsmethod,
+                              pbmethod=self.pbmethod)
+        else:
+            rs_field = rs * SM3_PER_SM3_TO_SCF_PER_STB if self.metric else rs
+        return oil_viso(p=p_field, api=self.api, degf=degf_field, pb=self.pb, rs=rs_field)
 
 
 def oil_harmonize_pb_rsb(
@@ -1298,6 +1461,7 @@ def oil_harmonize_pb_rsb(
     sg_g: float = 0,
     rsmethod: rs_method = rs_method.VELAR,
     pbmethod: pb_method = pb_method.VELAR,
+    metric: bool = False,
 ) -> Tuple:
     """Resolves consistent Pb, Rsb, and rsb_frac from user inputs.
 
@@ -1308,21 +1472,29 @@ def oil_harmonize_pb_rsb(
     - If only rsb is specified (pb=0): calculates pb from rsb
     - If both are specified: finds rsb_frac scaling factor that honors both values
 
-    pb: Bubble point pressure (psia). Default 0 (unknown)
-    rsb: Solution GOR at Pb (scf/stb). Default 0 (unknown)
-    degf: Reservoir temperature (deg F)
+    pb: Bubble point pressure (psia | barsa). Default 0 (unknown)
+    rsb: Solution GOR at Pb (scf/stb | sm3/sm3). Default 0 (unknown)
+    degf: Reservoir temperature (deg F | deg C)
     api: Stock tank oil density (deg API)
     sg_sp: Separator gas specific gravity
     sg_g: Weighted average surface gas specific gravity
     rsmethod: Rs calculation method. Default VELAR
     pbmethod: Pb calculation method. Default VELAR
+    metric: If True, input/output in Eclipse METRIC units (barsa, degC, sm3/sm3). Defaults to False (FIELD)
 
     Returns tuple of (pb, rsb, rsb_frac) where:
-      - pb: Bubble point pressure (psia)
-      - rsb: Solution GOR at bubble point (scf/stb)
+      - pb: Bubble point pressure (psia | barsa)
+      - rsb: Solution GOR at bubble point (scf/stb | sm3/sm3)
       - rsb_frac: Scaling factor applied to Rs correlation to honor user Pb and Rsb
                   (1.0 if only one was specified)
     """
+    if metric:
+        degf = degc_to_degf(degf)
+        if pb > 0:
+            pb = pb * BAR_TO_PSI
+        if rsb > 0:
+            rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
+
     rsmethod, pbmethod = validate_methods(
         ["rsmethod", "pbmethod"], [rsmethod, pbmethod]
     )
@@ -1368,6 +1540,8 @@ def oil_harmonize_pb_rsb(
                 )
         rsb_frac = rsb_i / rsbnew
 
+    if metric:
+        return pb * PSI_TO_BAR, rsb * SCF_PER_STB_TO_SM3_PER_SM3, rsb_frac
     return pb, rsb, rsb_frac
 
 

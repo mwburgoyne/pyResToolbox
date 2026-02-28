@@ -11,6 +11,19 @@ Returns tuple of (Bw (rb/stb), Density (sg), viscosity (cP), Compressibility (1/
 
 **SoreideWhitson** — Multicomponent gas-saturated brine via Soreide-Whitson (1992) VLE model. Supports mixtures of C1, C2, C3, nC4, CO2, H2S, N2 and H2 in fresh or saline water.
 
+Unit System Support
+----------------------
+
+All three brine models support both oilfield and metric unit systems via a ``metric`` parameter:
+
+- ``brine_props``: ``metric=False`` (default). When ``metric=True``, pressure is in barsa, temperature is in degC, compressibility is in 1/barsa, and Rsw is in sm3/sm3.
+- ``CO2_Brine_Mixture``: ``metric=True`` (default). When ``metric=False``, pressure is in psia and temperature is in degF.
+- ``SoreideWhitson``: ``metric=True`` (default). When ``metric=False``, pressure is in psia and temperature is in degF.
+
+.. note::
+
+    All "standard" volumes (Bw, Rs) use oilfield standard conditions (60 deg F, 14.696 psia) regardless of unit system.
+
 .. list-table:: Method employed for different calculations (CO2_Brine_Mixture)
    :widths: 30 40
    :header-rows: 1
@@ -36,7 +49,7 @@ pyrestoolbox.brine.brine_props
 
 .. code-block:: python
 
-    brine_props(p, degf, wt, ch4_sat) -> tuple
+    brine_props(p, degf, wt=0, ch4_sat=0, metric=False) -> tuple
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -47,16 +60,19 @@ pyrestoolbox.brine.brine_props
      - Description
    * - p
      - float
-     - Pressure (psia)
+     - Pressure (psia, or barsa if metric=True)
    * - degf
      - float
-     - Temperature (deg F)
+     - Temperature (deg F, or deg C if metric=True)
    * - wt
      - float
      - Salt weight% in the brine (0 - 100)
    * - ch4_sat
      - float
      - Degree of methane saturation (0 - 1). 0 = No Methane, 1 = 100% Methane saturated
+   * - metric
+     - bool
+     - If True, treats input pressure & temperature as metric, otherwise treats as Field units. Default False
 
 Examples:
 
@@ -74,6 +90,11 @@ Examples:
     Visw: 0.4994004662758671
     Cw: 0.0001539690974662865
     Rsw: 1.2540982731813703
+
+.. note::
+
+    When ``metric=True``, Cw is returned in 1/barsa (instead of 1/psi) and Rsw in sm3/sm3 (instead of scf/stb).
+    Bw (rb/stb), density (SG), and viscosity (cP) are unchanged by the unit system.
 
 pyrestoolbox.brine.CO2_Brine_Mixture
 ======================
@@ -179,7 +200,7 @@ pyrestoolbox.brine.make_pvtw_table
 
 .. code-block:: python
 
-    make_pvtw_table(pi, degf, wt=0, ch4_sat=0, pmin=500, pmax=10000, nrows=20, export=False) -> dict
+    make_pvtw_table(pi, degf, wt=0, ch4_sat=0, pmin=500, pmax=10000, nrows=20, export=False, metric=False) -> dict
 
 Generates a PVTW (water PVT) table over a pressure range using brine_props (IAPWS-IF97 freshwater with Spivey salt correction).
 Optionally exports ECLIPSE PVTW keyword file and Excel spreadsheet.
@@ -193,10 +214,10 @@ Optionally exports ECLIPSE PVTW keyword file and Excel spreadsheet.
      - Description
    * - pi
      - float
-     - Initial (reference) pressure (psia)
+     - Initial (reference) pressure (psia, or barsa if metric=True)
    * - degf
      - float
-     - Temperature (deg F)
+     - Temperature (deg F, or deg C if metric=True)
    * - wt
      - float
      - Salt weight% in the brine (0 - 100). Default 0
@@ -205,16 +226,19 @@ Optionally exports ECLIPSE PVTW keyword file and Excel spreadsheet.
      - Degree of methane saturation (0 - 1). Default 0
    * - pmin
      - float
-     - Minimum table pressure (psia). Default 500
+     - Minimum table pressure (psia, or barsa if metric=True). Default 500
    * - pmax
      - float
-     - Maximum table pressure (psia). Default 10000
+     - Maximum table pressure (psia, or barsa if metric=True). Default 10000
    * - nrows
      - int
      - Number of table rows. Default 20
    * - export
      - bool
      - If True, writes PVTW.INC and pvtw_table.xlsx. Default False
+   * - metric
+     - bool
+     - If True, inputs/outputs use Eclipse METRIC units (barsa, deg C, sm3/sm3, 1/bar). Default False
 
 .. list-table:: Return dict keys
    :widths: 10 15 40
@@ -228,19 +252,19 @@ Optionally exports ECLIPSE PVTW keyword file and Excel spreadsheet.
      - Pressure, Bw, Density, Viscosity, Cw, Rsw
    * - pref
      - float
-     - Reference pressure (psia)
+     - Reference pressure (psia, or barsa if metric=True)
    * - bw_ref
      - float
      - Bw at reference pressure (rb/stb)
    * - cw_ref
      - float
-     - Compressibility at reference pressure (1/psi)
+     - Compressibility at reference pressure (1/psi, or 1/bar if metric=True)
    * - visw_ref
      - float
      - Viscosity at reference pressure (cP)
    * - rsw_ref
      - float
-     - Rsw at reference pressure (scf/stb)
+     - Rsw at reference pressure (scf/stb, or sm3/sm3 if metric=True)
    * - den_ref
      - float
      - Density (sg) at reference pressure
