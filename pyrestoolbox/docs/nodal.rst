@@ -87,6 +87,52 @@ The deviation support in pyResToolbox applies a ``sin(theta)`` correction to the
 - These correlations should not be used as a substitute for a calibrated mechanistic multiphase model when accurate pressure predictions are required for field development decisions in deviated or horizontal wells.
 
 
+Unit System Support
+===================
+
+All nodal classes and functions accept a ``metric=False`` parameter. When set to ``True``, inputs and outputs use Eclipse METRIC units:
+
+.. list-table:: Unit Convention
+   :widths: 15 20 20
+   :header-rows: 1
+
+   * - Quantity
+     - Field (metric=False)
+     - Metric (metric=True)
+   * - Pressure
+     - psia
+     - barsa
+   * - Temperature
+     - deg F
+     - deg C
+   * - Length / Depth
+     - ft
+     - m
+   * - Pipe diameter
+     - inches
+     - mm
+   * - Pipe roughness
+     - inches
+     - mm
+   * - Gas rate
+     - MMscf/d
+     - sm3/d
+   * - Liquid rate
+     - STB/d
+     - sm3/d
+   * - CGR
+     - STB/MMscf
+     - sm3/sm3
+   * - GOR
+     - scf/STB
+     - sm3/sm3
+   * - Non-Darcy D
+     - day/mscf
+     - day/sm3
+
+The data classes (``WellSegment``, ``Completion``, ``Reservoir``) convert metric inputs to oilfield units internally, so all calculation engines operate in field units regardless of the user-facing unit system. Standard conditions in metric mode are 1.01325 barsa and 15.0 deg C.
+
+
 PVT Wrapper Objects
 ===================
 
@@ -97,7 +143,7 @@ pyrestoolbox.gas.GasPVT
 
 .. code-block:: python
 
-    GasPVT(sg=0.75, co2=0, h2s=0, n2=0, h2=0, zmethod='DAK', cmethod='PMC')
+    GasPVT(sg=0.75, co2=0, h2s=0, n2=0, h2=0, zmethod='DAK', cmethod='PMC', metric=False)
 
 Stores gas composition and method choices. Pre-computes critical temperature and pressure via ``gas_tc_pc()`` so they are not recalculated per call. Automatically selects BNS zmethod/cmethod when h2 > 0.
 
@@ -129,6 +175,9 @@ Stores gas composition and method choices. Pre-computes critical temperature and
    * - cmethod
      - string or c_method
      - Method for critical property calculation. Defaults to 'PMC'
+   * - metric
+     - bool
+     - If True, methods accept/return Eclipse METRIC units (barsa, deg C, kg/m3, rm3/sm3). Defaults to False
 
 .. list-table:: Methods
    :widths: 15 40
@@ -137,13 +186,13 @@ Stores gas composition and method choices. Pre-computes critical temperature and
    * - Method
      - Description
    * - ``z(p, degf)``
-     - Returns Z-factor at pressure p (psia) and temperature degf (deg F)
+     - Returns Z-factor at pressure p (psia, or barsa if metric=True) and temperature degf (deg F, or deg C if metric=True)
    * - ``viscosity(p, degf)``
      - Returns gas viscosity (cP)
    * - ``density(p, degf)``
-     - Returns gas density (lb/cuft)
+     - Returns gas density (lb/cuft, or kg/m3 if metric=True)
    * - ``bg(p, degf)``
-     - Returns gas formation volume factor (rcf/scf)
+     - Returns gas formation volume factor (rcf/scf, or rm3/sm3 if metric=True)
 
 Examples:
 
@@ -160,13 +209,23 @@ Examples:
     >>> gpvt.bg(2000, 180)
     0.008164459661048012
 
+Using metric units (pressure in barsa, temperature in deg C):
+
+.. code-block:: python
+
+    >>> gpvt_m = gas.GasPVT(sg=0.65, co2=0.1, metric=True)
+    >>> gpvt_m.z(137.9, 82.2)
+    0.9026433033953588
+    >>> gpvt_m.density(137.9, 82.2)
+    97.36871728783241
+
 
 pyrestoolbox.oil.OilPVT
 ------------------------
 
 .. code-block:: python
 
-    OilPVT(api, sg_sp, pb, rsb, sg_g=0, rsmethod='VELAR', pbmethod='VALMC', bomethod='MCAIN')
+    OilPVT(api, sg_sp, pb, rsb, sg_g=0, rsmethod='VELAR', pbmethod='VALMC', bomethod='MCAIN', metric=False)
 
 Stores oil characterization parameters and method choices. Computes ``sg_o`` from API in constructor. Can be passed directly to ``fbhp()`` and ``operating_point()`` for oil wells.
 
@@ -185,10 +244,10 @@ Stores oil characterization parameters and method choices. Computes ``sg_o`` fro
      - Separator gas specific gravity (relative to air)
    * - pb
      - float
-     - Bubble point pressure (psia)
+     - Bubble point pressure (psia, or barsa if metric=True)
    * - rsb
      - float
-     - Solution GOR at Pb (scf/STB)
+     - Solution GOR at Pb (scf/STB, or sm3/sm3 if metric=True)
    * - sg_g
      - float
      - Weighted average surface gas SG. Estimated from sg_sp if not provided
@@ -201,6 +260,9 @@ Stores oil characterization parameters and method choices. Computes ``sg_o`` fro
    * - bomethod
      - string or bo_method
      - Method for Bo calculation. Defaults to 'MCAIN'
+   * - metric
+     - bool
+     - If True, constructor inputs (pb, rsb) and method inputs/outputs use Eclipse METRIC units. Defaults to False
 
 .. list-table:: Methods
    :widths: 15 40
@@ -209,11 +271,11 @@ Stores oil characterization parameters and method choices. Computes ``sg_o`` fro
    * - Method
      - Description
    * - ``rs(p, degf)``
-     - Returns solution GOR (scf/STB) at pressure p (psia) and temperature degf (deg F)
+     - Returns solution GOR (scf/STB, or sm3/sm3 if metric=True) at pressure p (psia, or barsa if metric=True) and temperature degf (deg F, or deg C if metric=True)
    * - ``bo(p, degf, rs=None)``
-     - Returns oil FVF (rb/STB). Optionally pass pre-calculated rs to avoid redundant calculation
+     - Returns oil FVF (rb/STB, or rm3/sm3 if metric=True). Optionally pass pre-calculated rs to avoid redundant calculation
    * - ``density(p, degf, rs=None)``
-     - Returns live oil density (lb/cuft)
+     - Returns live oil density (lb/cuft, or kg/m3 if metric=True)
    * - ``viscosity(p, degf, rs=None)``
      - Returns oil viscosity (cP)
 
@@ -231,6 +293,16 @@ Examples:
     46.23700811760461
     >>> opvt.viscosity(2000, 180)
     0.7187504436478858
+
+Using metric units (pb in barsa, rsb in sm3/sm3):
+
+.. code-block:: python
+
+    >>> opvt_m = oil.OilPVT(api=35, sg_sp=0.65, pb=172.4, rsb=89, metric=True)
+    >>> opvt_m.rs(137.9, 82.2)
+    71.82727018664512
+    >>> opvt_m.density(137.9, 82.2)
+    740.7086089268661
 
 
 Function List
@@ -263,7 +335,7 @@ pyrestoolbox.nodal.WellSegment
 
 .. code-block:: python
 
-    WellSegment(md, id, deviation=0, roughness=0.0006)
+    WellSegment(md, id, deviation=0, roughness=None, metric=False)
 
 Single wellbore segment with uniform geometry and deviation. Used to build multi-segment completions for deviated and horizontal wells.
 
@@ -276,16 +348,19 @@ Single wellbore segment with uniform geometry and deviation. Used to build multi
      - Description
    * - md
      - float
-     - Measured depth of this segment (ft)
+     - Measured depth of this segment (ft, or m if metric=True)
    * - id
      - float
-     - Internal diameter (inches)
+     - Internal diameter (inches, or mm if metric=True)
    * - deviation
      - float
      - Deviation from vertical (degrees). 0 = vertical, 90 = horizontal. Defaults to 0
    * - roughness
      - float
-     - Pipe roughness (inches). Defaults to 0.0006
+     - Pipe roughness (inches, or mm if metric=True). Defaults to 0.0006 in / 0.01524 mm
+   * - metric
+     - bool
+     - If True, interpret inputs in Eclipse METRIC units. Defaults to False
 
 .. list-table:: Properties
    :widths: 15 40
@@ -316,14 +391,14 @@ pyrestoolbox.nodal.Completion
 
 .. code-block:: python
 
-    Completion(tid, length, tht, bht, rough=0.0006, cid=0, crough=0.0006, mpd=0)
-    Completion(segments=[...], tht=..., bht=...)
+    Completion(tid, length, tht, bht, rough=None, cid=0, crough=None, mpd=0, metric=False)
+    Completion(segments=[...], tht=..., bht=..., metric=False)
 
 Wellbore completion description for VLP calculations. Can be constructed in two ways:
 
 **Legacy mode** (positional arguments): Defines a simple vertical wellbore with optional casing section below the tubing shoe (when ``mpd > length`` and ``cid > 0``).
 
-**Segment mode** (``segments`` keyword): Accepts a list of ``WellSegment`` objects for arbitrary multi-segment wellbore definitions with deviation support. Temperature is interpolated linearly over the total measured depth.
+**Segment mode** (``segments`` keyword): Accepts a list of ``WellSegment`` objects for arbitrary multi-segment wellbore definitions with deviation support. Temperature is interpolated linearly over the total measured depth. In segment mode, ``metric`` only converts ``tht`` and ``bht``; segment dimensions are handled by each ``WellSegment``'s own ``metric`` flag.
 
 .. list-table:: Legacy Mode Inputs
    :widths: 10 15 40
@@ -334,28 +409,31 @@ Wellbore completion description for VLP calculations. Can be constructed in two 
      - Description
    * - tid
      - float
-     - Tubing ID (inches)
+     - Tubing ID (inches, or mm if metric=True)
    * - length
      - float
-     - Tubing length from wellhead to tubing shoe (ft)
+     - Tubing length from wellhead to tubing shoe (ft, or m if metric=True)
    * - tht
      - float
-     - Tubing head (wellhead) temperature (deg F)
+     - Tubing head (wellhead) temperature (deg F, or deg C if metric=True)
    * - bht
      - float
-     - Bottom hole temperature (deg F)
+     - Bottom hole temperature (deg F, or deg C if metric=True)
    * - rough
      - float
-     - Tubing roughness (inches). Defaults to 0.0006
+     - Tubing roughness (inches, or mm if metric=True). Defaults to 0.0006 in / 0.01524 mm
    * - cid
      - float
-     - Casing ID below tubing shoe (inches). Defaults to 0 (no casing section)
+     - Casing ID below tubing shoe (inches, or mm if metric=True). Defaults to 0 (no casing section)
    * - crough
      - float
-     - Casing roughness (inches). Defaults to 0.0006
+     - Casing roughness (inches, or mm if metric=True). Defaults to 0.0006 in / 0.01524 mm
    * - mpd
      - float
-     - Mid-perforation depth (ft). Defaults to length (no casing section)
+     - Mid-perforation depth (ft, or m if metric=True). Defaults to length (no casing section)
+   * - metric
+     - bool
+     - If True, interpret inputs in Eclipse METRIC units. Defaults to False
 
 .. list-table:: Segment Mode Inputs
    :widths: 10 15 40
@@ -369,10 +447,13 @@ Wellbore completion description for VLP calculations. Can be constructed in two 
      - List of WellSegment objects defining the wellbore from surface to bottom
    * - tht
      - float
-     - Tubing head (wellhead) temperature (deg F)
+     - Tubing head (wellhead) temperature (deg F, or deg C if metric=True)
    * - bht
      - float
-     - Bottom hole temperature (deg F)
+     - Bottom hole temperature (deg F, or deg C if metric=True)
+   * - metric
+     - bool
+     - If True, convert tht/bht from deg C. Defaults to False
 
 .. list-table:: Properties
    :widths: 15 40
@@ -429,7 +510,7 @@ pyrestoolbox.nodal.Reservoir
 
 .. code-block:: python
 
-    Reservoir(pr, degf, k, h, re, rw, S=0, D=0)
+    Reservoir(pr, degf, k, h, re, rw, S=0, D=0, metric=False)
 
 Reservoir description for IPR calculations.
 
@@ -442,28 +523,31 @@ Reservoir description for IPR calculations.
      - Description
    * - pr
      - float
-     - Reservoir pressure (psia)
+     - Reservoir pressure (psia, or barsa if metric=True)
    * - degf
      - float
-     - Reservoir temperature (deg F)
+     - Reservoir temperature (deg F, or deg C if metric=True)
    * - k
      - float
      - Permeability (mD)
    * - h
      - float
-     - Net pay thickness (ft)
+     - Net pay thickness (ft, or m if metric=True)
    * - re
      - float
-     - Drainage radius (ft)
+     - Drainage radius (ft, or m if metric=True)
    * - rw
      - float
-     - Wellbore radius (ft)
+     - Wellbore radius (ft, or m if metric=True)
    * - S
      - float
      - Skin factor. Defaults to 0
    * - D
      - float
-     - Non-Darcy coefficient (day/mscf for gas, 0 for oil). Defaults to 0
+     - Non-Darcy coefficient (day/mscf for gas, or day/sm3 if metric=True). Defaults to 0
+   * - metric
+     - bool
+     - If True, interpret inputs in Eclipse METRIC units. Defaults to False
 
 Examples:
 
@@ -479,9 +563,9 @@ pyrestoolbox.nodal.fbhp
 
 .. code-block:: python
 
-    fbhp(thp, completion, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, qg_mmscfd=0, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, qt_stbpd=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65) -> float
+    fbhp(thp, completion, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, qg_mmscfd=0, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, qt_stbpd=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65, metric=False) -> float
 
-Returns flowing bottom hole pressure (psia) using the specified VLP correlation. Supports both gas and oil wells. The Completion object can define vertical wells (legacy mode) or multi-segment deviated wells using WellSegment objects. The ``sin(theta)`` multiplier on hydrostatic gradient enables proper deviated and horizontal well support.
+Returns flowing bottom hole pressure (psia, or barsa if metric=True) using the specified VLP correlation. Supports both gas and oil wells. The Completion object can define vertical wells (legacy mode) or multi-segment deviated wells using WellSegment objects. The ``sin(theta)`` multiplier on hydrostatic gradient enables proper deviated and horizontal well support.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -492,7 +576,7 @@ Returns flowing bottom hole pressure (psia) using the specified VLP correlation.
      - Description
    * - thp
      - float
-     - Tubing head pressure (psia)
+     - Tubing head pressure (psia, or barsa if metric=True)
    * - completion
      - Completion
      - Completion object describing the wellbore
@@ -510,13 +594,13 @@ Returns flowing bottom hole pressure (psia) using the specified VLP correlation.
      - Oil PVT object. If provided for oil wells, extracts api, sgsp, pb, rsb
    * - qg_mmscfd
      - float
-     - Gas rate (MMscf/d). Gas wells only
+     - Gas rate (MMscf/d, or sm3/d if metric=True). Gas wells only
    * - cgr
      - float
-     - Condensate-gas ratio (STB/MMscf). Gas wells only
+     - Condensate-gas ratio (STB/MMscf, or sm3/sm3 if metric=True). Gas wells only
    * - qw_bwpd
      - float
-     - Water rate (STB/d). Gas wells only
+     - Water rate (STB/d, or sm3/d if metric=True). Gas wells only
    * - oil_vis
      - float
      - Oil/condensate viscosity (cP). Defaults to 1.0. Gas wells only
@@ -525,13 +609,13 @@ Returns flowing bottom hole pressure (psia) using the specified VLP correlation.
      - Condensate or oil API gravity. Defaults to 45
    * - pr
      - float
-     - Reservoir pressure for condensate dropout model (psia). 0 disables. Gas wells only
+     - Reservoir pressure for condensate dropout model (psia, or barsa if metric=True). 0 disables. Gas wells only
    * - qt_stbpd
      - float
-     - Total liquid rate (STB/d). Oil wells only
+     - Total liquid rate (STB/d, or sm3/d if metric=True). Oil wells only
    * - gor
      - float
-     - Gas-oil ratio (scf/STB). Oil wells only
+     - Gas-oil ratio (scf/STB, or sm3/sm3 if metric=True). Oil wells only
    * - wc
      - float
      - Water cut (fraction 0-1). Oil wells only
@@ -546,13 +630,16 @@ Returns flowing bottom hole pressure (psia) using the specified VLP correlation.
      - Gas specific gravity relative to air. Defaults to 0.65
    * - pb
      - float
-     - Bubble point pressure (psia). Required for oil wells
+     - Bubble point pressure (psia, or barsa if metric=True). Required for oil wells
    * - rsb
      - float
-     - Solution GOR at Pb (scf/STB). Required for oil wells
+     - Solution GOR at Pb (scf/STB, or sm3/sm3 if metric=True). Required for oil wells
    * - sgsp
      - float
      - Separator gas specific gravity. Defaults to 0.65
+   * - metric
+     - bool
+     - If True, interpret inputs and return output in Eclipse METRIC units. Defaults to False
 
 Examples:
 
@@ -601,9 +688,9 @@ pyrestoolbox.nodal.outflow_curve
 
 .. code-block:: python
 
-    outflow_curve(thp, completion, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, rates=None, n_rates=20, max_rate=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65) -> dict
+    outflow_curve(thp, completion, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, rates=None, n_rates=20, max_rate=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65, metric=False) -> dict
 
-Returns VLP outflow curve as a dictionary with keys ``'rates'`` and ``'bhp'``. Evaluates ``fbhp()`` at each rate point. Rates are MMscf/d for gas wells, STB/d for oil wells.
+Returns VLP outflow curve as a dictionary with keys ``'rates'`` and ``'bhp'``. Evaluates ``fbhp()`` at each rate point. Rates are MMscf/d for gas wells (sm3/d if metric=True), STB/d for oil wells (sm3/d if metric=True). BHP is in psia (barsa if metric=True).
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -614,7 +701,7 @@ Returns VLP outflow curve as a dictionary with keys ``'rates'`` and ``'bhp'``. E
      - Description
    * - thp
      - float
-     - Tubing head pressure (psia)
+     - Tubing head pressure (psia, or barsa if metric=True)
    * - completion
      - Completion
      - Completion object
@@ -626,13 +713,16 @@ Returns VLP outflow curve as a dictionary with keys ``'rates'`` and ``'bhp'``. E
      - 'gas' or 'oil'
    * - rates
      - list
-     - Explicit list of rates to evaluate. If None, auto-generated
+     - Explicit list of rates to evaluate (same units as output rates). If None, auto-generated
    * - n_rates
      - int
      - Number of rate points if rates is None. Defaults to 20
    * - max_rate
      - float
      - Maximum rate for auto-generation. Defaults to 50 MMscf/d (gas) or 10000 STB/d (oil)
+   * - metric
+     - bool
+     - If True, interpret inputs and return output in Eclipse METRIC units. Defaults to False
    * - (other)
      -
      - Same parameters as ``fbhp()``
@@ -654,9 +744,9 @@ pyrestoolbox.nodal.ipr_curve
 
 .. code-block:: python
 
-    ipr_curve(reservoir, well_type='gas', gas_pvt=None, oil_pvt=None, n_points=20, min_pwf=14.7, wc=0, wsg=1.07, bo=1.2, uo=1.0, gsg=0.65) -> dict
+    ipr_curve(reservoir, well_type='gas', gas_pvt=None, oil_pvt=None, n_points=20, min_pwf=None, wc=0, wsg=1.07, bo=1.2, uo=1.0, gsg=0.65, metric=False) -> dict
 
-Returns IPR (Inflow Performance Relationship) curve as a dictionary with keys ``'pwf'`` and ``'rate'``.
+Returns IPR (Inflow Performance Relationship) curve as a dictionary with keys ``'pwf'`` and ``'rate'``. Pressures are in psia (barsa if metric=True), rates in Mscf/d for gas (sm3/d if metric=True) or STB/d for oil (sm3/d if metric=True).
 
 For gas wells, uses pseudopressure deliverability via ``gas.gas_rate_radial()``. Returns rates in Mscf/d.
 
@@ -690,7 +780,7 @@ For oil wells with OilPVT: uses Darcy above Pb, Vogel below Pb. Without OilPVT: 
      - Number of pressure points. Defaults to 20
    * - min_pwf
      - float
-     - Minimum flowing BHP (psia). Defaults to 14.7
+     - Minimum flowing BHP (psia, or barsa if metric=True). Defaults to 14.7 psia / 1.01325 barsa
    * - wc
      - float
      - Water cut (fraction 0-1). For oil wells
@@ -706,6 +796,9 @@ For oil wells with OilPVT: uses Darcy above Pb, Vogel below Pb. Without OilPVT: 
    * - gsg
      - float
      - Gas specific gravity. Used if gas_pvt not provided. Defaults to 0.65
+   * - metric
+     - bool
+     - If True, interpret inputs and return output in Eclipse METRIC units. Defaults to False
 
 Examples:
 
@@ -724,12 +817,12 @@ pyrestoolbox.nodal.operating_point
 
 .. code-block:: python
 
-    operating_point(thp, completion, reservoir, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, gor=0, wc=0, wsg=1.07, gsg=0.65, pb=0, rsb=0, sgsp=0.65, bo=1.2, uo=1.0, n_points=25) -> dict
+    operating_point(thp, completion, reservoir, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, gor=0, wc=0, wsg=1.07, gsg=0.65, pb=0, rsb=0, sgsp=0.65, bo=1.2, uo=1.0, n_points=25, metric=False) -> dict
 
 Finds the operating point where VLP outflow curve intersects the IPR inflow curve via bisection. Returns a dictionary with keys:
 
-- ``'rate'``: Operating rate (MMscf/d for gas, STB/d for oil)
-- ``'bhp'``: Operating flowing BHP (psia)
+- ``'rate'``: Operating rate (MMscf/d for gas / sm3/d if metric, STB/d for oil / sm3/d if metric)
+- ``'bhp'``: Operating flowing BHP (psia, or barsa if metric=True)
 - ``'vlp'``: VLP curve dict ``{'rates': [...], 'bhp': [...]}``
 - ``'ipr'``: IPR curve dict ``{'pwf': [...], 'rate': [...]}``
 
@@ -742,7 +835,7 @@ Finds the operating point where VLP outflow curve intersects the IPR inflow curv
      - Description
    * - thp
      - float
-     - Tubing head pressure (psia)
+     - Tubing head pressure (psia, or barsa if metric=True)
    * - completion
      - Completion
      - Completion object
@@ -758,6 +851,9 @@ Finds the operating point where VLP outflow curve intersects the IPR inflow curv
    * - n_points
      - int
      - Number of points for VLP and IPR curves. Defaults to 25
+   * - metric
+     - bool
+     - If True, all inputs and outputs use Eclipse METRIC units. Defaults to False
    * - (other)
      -
      - Same parameters as ``fbhp()`` and ``ipr_curve()``

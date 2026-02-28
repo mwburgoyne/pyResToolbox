@@ -27,6 +27,15 @@ import numpy as np
 from pyrestoolbox.classes import vlp_method, class_dic
 from pyrestoolbox.validate import validate_methods
 from pyrestoolbox.shared_fns import bisect_solve
+from pyrestoolbox.constants import (BAR_TO_PSI, PSI_TO_BAR, degc_to_degf, degf_to_degc,
+                                    M_TO_FT, FT_TO_M, MM_TO_IN, IN_TO_MM,
+                                    SM3_PER_SM3_TO_SCF_PER_STB, SCF_PER_STB_TO_SM3_PER_SM3,
+                                    SM3_PER_SM3_TO_STB_PER_MSCF, STB_PER_MSCF_TO_SM3_PER_SM3,
+                                    SM3_PER_SM3_TO_STB_PER_MMSCF, STB_PER_MMSCF_TO_SM3_PER_SM3,
+                                    M3_TO_BBL, BBL_TO_M3, MSCF_TO_SM3, SM3_TO_MSCF,
+                                    MMSCF_TO_SM3, SM3_TO_MMSCF,
+                                    D_PER_SM3_TO_D_PER_MSCF, D_PER_MSCF_TO_D_PER_SM3,
+                                    STB_TO_SM3, SM3_TO_STB)
 import pyrestoolbox.gas as gas
 import pyrestoolbox.oil as oil
 
@@ -68,12 +77,19 @@ def _clamp(val, lo, hi):
 class WellSegment:
     """Single wellbore segment with uniform geometry and deviation.
 
-        md: Measured depth of this segment (ft)
-        id: Internal diameter (inches)
+        md: Measured depth of this segment (ft | m)
+        id: Internal diameter (inches | mm)
         deviation: Deviation from vertical (degrees). 0=vertical, 90=horizontal. Defaults to 0
-        roughness: Pipe roughness (inches). Defaults to 0.0006
+        roughness: Pipe roughness (inches | mm). Defaults to 0.0006 in (0.01524 mm)
+        metric: If True, inputs in metric units (m, mm). Default False (ft, inches).
     """
-    def __init__(self, md, id, deviation=0, roughness=0.0006):
+    def __init__(self, md, id, deviation=0, roughness=None, metric=False):
+        if roughness is None:
+            roughness = 0.01524 if metric else 0.0006  # 0.0006 in = 0.01524 mm
+        if metric:
+            md = md * M_TO_FT
+            id = id * MM_TO_IN
+            roughness = roughness * MM_TO_IN
         if md <= 0:
             raise ValueError(f"Measured depth md must be positive, got {md}")
         if id <= 0:
@@ -82,10 +98,10 @@ class WellSegment:
             raise ValueError(f"Roughness must be non-negative, got {roughness}")
         if not (0 <= deviation <= 90):
             raise ValueError(f"Deviation must be between 0 and 90 degrees, got {deviation}")
-        self.md = md
-        self.id = id
+        self.md = md  # stored in ft
+        self.id = id  # stored in inches
         self.deviation = deviation
-        self.roughness = roughness
+        self.roughness = roughness  # stored in inches
 
     @property
     def tvd(self):
@@ -104,50 +120,73 @@ class Completion:
         Can be constructed in two ways:
 
         Legacy mode (positional):
-            tid: Tubing ID (inches)
-            length: Tubing length (ft) - from wellhead to tubing shoe
-            tht: Tubing head (wellhead) temperature (degF)
-            bht: Bottom hole temperature (degF)
-            rough: Tubing roughness (inches). Defaults to 0.0006
-            cid: Casing ID (inches) below tubing shoe. Defaults to 0 (no casing section)
-            crough: Casing roughness (inches). Defaults to 0.0006
-            mpd: Mid-perforation depth (ft). Defaults to length (no casing section)
+            tid: Tubing ID (inches | mm)
+            length: Tubing length (ft | m) - from wellhead to tubing shoe
+            tht: Tubing head (wellhead) temperature (degF | degC)
+            bht: Bottom hole temperature (degF | degC)
+            rough: Tubing roughness (inches | mm). Defaults to 0.0006 in (0.01524 mm)
+            cid: Casing ID (inches | mm) below tubing shoe. Defaults to 0 (no casing section)
+            crough: Casing roughness (inches | mm). Defaults to 0.0006 in
+            mpd: Mid-perforation depth (ft | m). Defaults to length (no casing section)
 
         Segment mode (keyword):
             segments: List of WellSegment objects defining the wellbore
-            tht: Tubing head (wellhead) temperature (degF)
-            bht: Bottom hole temperature (degF)
+            tht: Tubing head (wellhead) temperature (degF | degC)
+            bht: Bottom hole temperature (degF | degC)
+
+        metric: If True, inputs in metric units (m, mm, degC). Default False.
+                Note: WellSegments passed in segment mode should already be constructed
+                with their own metric flag. The Completion metric flag only converts
+                legacy mode dimensions and temperatures.
     """
-    def __init__(self, tid=None, length=None, tht=None, bht=None, rough=0.0006,
-                 cid=0, crough=0.0006, mpd=0, segments=None):
+    def __init__(self, tid=None, length=None, tht=None, bht=None, rough=None,
+                 cid=0, crough=None, mpd=0, segments=None, metric=False):
+        # Set roughness defaults appropriate for unit system
+        if rough is None:
+            rough = 0.01524 if metric else 0.0006  # 0.0006 in = 0.01524 mm
+        if crough is None:
+            crough = 0.01524 if metric else 0.0006
+
         if segments is not None:
-            # Segment mode
+            # Segment mode — segments already store oilfield units internally
             if tht is None or bht is None:
                 raise ValueError("tht and bht are required when using segments")
             if not segments:
                 raise ValueError("segments list must not be empty")
             self._segments = list(segments)
-            self.tht = tht
-            self.bht = bht
+            if metric:
+                tht = degc_to_degf(tht)
+                bht = degc_to_degf(bht)
+            self.tht = tht  # stored in degF
+            self.bht = bht  # stored in degF
             # Set legacy attributes from first segment for compatibility
             self.tid = self._segments[0].id
             self.rough = self._segments[0].roughness
             self.length = self._segments[0].md
             self.cid = 0
-            self.crough = crough
+            self.crough = crough if not metric else crough * MM_TO_IN
             self.mpd = self.total_md
         elif tid is not None and length is not None:
             # Legacy mode
             if tht is None or bht is None:
                 raise ValueError("tht and bht are required")
-            self.tid = tid
-            self.length = length
-            self.tht = tht
-            self.bht = bht
-            self.rough = rough
-            self.cid = cid
-            self.crough = crough
-            self.mpd = mpd if mpd > 0 else length
+            if metric:
+                tid = tid * MM_TO_IN
+                length = length * M_TO_FT
+                tht = degc_to_degf(tht)
+                bht = degc_to_degf(bht)
+                rough = rough * MM_TO_IN
+                cid = cid * MM_TO_IN if cid > 0 else 0
+                crough = crough * MM_TO_IN
+                mpd = mpd * M_TO_FT if mpd > 0 else 0
+            self.tid = tid  # stored in inches
+            self.length = length  # stored in ft
+            self.tht = tht  # stored in degF
+            self.bht = bht  # stored in degF
+            self.rough = rough  # stored in inches
+            self.cid = cid  # stored in inches
+            self.crough = crough  # stored in inches
+            self.mpd = mpd if mpd > 0 else length  # stored in ft
             # Build segments from legacy parameters
             segs = [WellSegment(md=length, id=tid, deviation=0, roughness=rough)]
             if cid > 0 and self.mpd > length:
@@ -193,16 +232,25 @@ class Completion:
 class Reservoir:
     """ Reservoir description for IPR calculations.
 
-        pr: Reservoir pressure (psia)
-        degf: Reservoir temperature (degF)
-        k: Permeability (mD)
-        h: Net pay thickness (ft)
-        re: Drainage radius (ft)
-        rw: Wellbore radius (ft)
+        pr: Reservoir pressure (psia | barsa)
+        degf: Reservoir temperature (degF | degC)
+        k: Permeability (mD) — same in both unit systems
+        h: Net pay thickness (ft | m)
+        re: Drainage radius (ft | m)
+        rw: Wellbore radius (ft | m)
         S: Skin factor. Defaults to 0
-        D: Non-Darcy coefficient (day/mscf for gas, 0 for oil). Defaults to 0
+        D: Non-Darcy coefficient (day/Mscf | day/sm3 for gas, 0 for oil). Defaults to 0
+        metric: If True, inputs in metric units (barsa, degC, m, day/sm3). Default False.
     """
-    def __init__(self, pr, degf, k, h, re, rw, S=0, D=0):
+    def __init__(self, pr, degf, k, h, re, rw, S=0, D=0, metric=False):
+        if metric:
+            pr = pr * BAR_TO_PSI
+            degf = degc_to_degf(degf)
+            h = h * M_TO_FT
+            re = re * M_TO_FT
+            rw = rw * M_TO_FT
+            if D != 0:
+                D = D * D_PER_SM3_TO_D_PER_MSCF
         if pr <= 0:
             raise ValueError(f"Reservoir pressure pr must be positive, got {pr}")
         if degf <= -459.67:
@@ -215,14 +263,14 @@ class Reservoir:
             raise ValueError(f"Wellbore radius rw must be positive, got {rw}")
         if re <= rw:
             raise ValueError(f"Drainage radius re ({re}) must be greater than wellbore radius rw ({rw})")
-        self.pr = pr
-        self.degf = degf
-        self.k = k
-        self.h = h
-        self.re = re
-        self.rw = rw
+        self.pr = pr  # stored in psia
+        self.degf = degf  # stored in degF
+        self.k = k  # mD (same in both systems)
+        self.h = h  # stored in ft
+        self.re = re  # stored in ft
+        self.rw = rw  # stored in ft
         self.S = S
-        self.D = D
+        self.D = D  # stored in day/Mscf
 
 
 # ============================================================================
@@ -461,9 +509,12 @@ def _condensate_dropout(cgr, qg_mmscfd, p_avg, pr, osg, qw_bwpd, wsg):
         cgr_local = cgr * max(0.0, pr - p_avg) / (pr - 14.7)
     else:
         cgr_local = cgr
-    qo_local = max(cgr_local * qg_mmscfd, 1e-7)
+    qo_local = cgr_local * qg_mmscfd
     ql_local = qo_local + qw_bwpd
-    lsg_local = (qo_local * osg + qw_bwpd * wsg) / ql_local
+    if ql_local > 0:
+        lsg_local = (qo_local * osg + qw_bwpd * wsg) / ql_local
+    else:
+        lsg_local = osg  # No liquid; value won't be used meaningfully
     return cgr_local, qo_local, ql_local, lsg_local
 
 
@@ -882,6 +933,8 @@ def _wg_friction_gradient_lm(m_flow_g, m_flow_l, rho_g, rho_l,
     dpdz_l = 2.0 * f_l * g_l ** 2 / (diam * rho_l)
     dpdz_g = 2.0 * f_g * g_g ** 2 / (diam * max(rho_g, 1e-30))
     x_param = math.sqrt(dpdz_l / max(dpdz_g, 1e-30))
+    if x_param < 1e-30:
+        return dpdz_g
     liq_turb = re_l >= 2100
     gas_turb = re_g >= 2100
     if liq_turb and gas_turb:
@@ -1697,41 +1750,63 @@ def fbhp(thp, completion, vlpmethod='WG', well_type='gas',
          qg_mmscfd=0, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0,
          qt_stbpd=0, gor=0, wc=0,
          wsg=1.07, injection=False,
-         gsg=0.65, pb=0, rsb=0, sgsp=0.65):
-    """ Returns flowing bottom hole pressure (psia) using specified VLP correlation.
+         gsg=0.65, pb=0, rsb=0, sgsp=0.65,
+         metric=False):
+    """ Returns flowing bottom hole pressure (psia | barsa) using specified VLP correlation.
 
-        thp: Tubing head pressure (psia)
+        thp: Tubing head pressure (psia | barsa)
         completion: Completion object describing the wellbore
         vlpmethod: VLP method - 'HB' (Hagedorn-Brown), 'WG' (Woldesemayat-Ghajar), 'GRAY', or 'BB' (Beggs & Brill)
         well_type: 'gas' or 'oil'
 
         Gas well parameters:
-            qg_mmscfd: Gas rate (MMscf/d)
-            cgr: Condensate-gas ratio (STB/MMscf)
-            qw_bwpd: Water rate (STB/d)
+            qg_mmscfd: Gas rate (MMscf/d | sm3/d)
+            cgr: Condensate-gas ratio (STB/MMscf | sm3/sm3)
+            qw_bwpd: Water rate (STB/d | sm3/d)
             oil_vis: Oil (condensate) viscosity (cP). Defaults to 1.0
             api: Condensate API gravity. Defaults to 45
-            pr: Reservoir pressure (psia) - for condensate dropout. 0 disables
+            pr: Reservoir pressure (psia | barsa) - for condensate dropout. 0 disables
 
         Oil well parameters:
-            qt_stbpd: Total liquid rate (STB/d)
-            gor: Gas-oil ratio (scf/STB)
+            qt_stbpd: Total liquid rate (STB/d | sm3/d)
+            gor: Gas-oil ratio (scf/STB | sm3/sm3)
             wc: Water cut (fraction 0-1)
 
         Common parameters:
             wsg: Water specific gravity. Defaults to 1.07
             injection: True for injection wells. Defaults to False
             gsg: Gas specific gravity (relative to air). Defaults to 0.65
-            pb: Bubble point pressure (psia). Required for oil wells
-            rsb: Solution GOR at Pb (scf/STB). Required for oil wells
+            pb: Bubble point pressure (psia | barsa). Required for oil wells
+            rsb: Solution GOR at Pb (scf/STB | sm3/sm3). Required for oil wells
             sgsp: Separator gas specific gravity. Defaults to 0.65
+            metric: If True, inputs/outputs in Eclipse METRIC units. Default False.
 
         gas_pvt: GasPVT object (unused by VLP methods directly, reserved for future use)
         oil_pvt: OilPVT object. If provided for oil wells, extracts api, sgsp, pb, rsb from it
     """
+    if metric:
+        thp = thp * BAR_TO_PSI
+        if pr > 0:
+            pr = pr * BAR_TO_PSI
+        if well_type == 'gas':
+            qg_mmscfd = qg_mmscfd * SM3_TO_MMSCF  # sm3/d -> MMscf/d
+            if cgr > 0:
+                cgr = cgr * SM3_PER_SM3_TO_STB_PER_MMSCF  # sm3/sm3 -> STB/MMscf
+            if qw_bwpd > 0:
+                qw_bwpd = qw_bwpd * SM3_TO_STB  # sm3/d -> STB/d
+        else:
+            if qt_stbpd > 0:
+                qt_stbpd = qt_stbpd * SM3_TO_STB  # sm3/d -> STB/d
+            if gor > 0:
+                gor = gor * SM3_PER_SM3_TO_SCF_PER_STB  # sm3/sm3 -> scf/STB
+            if pb > 0:
+                pb = pb * BAR_TO_PSI
+            if rsb > 0:
+                rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
+
     vlpmethod = validate_methods(["vlpmethod"], [vlpmethod])
 
-    # Extract oil PVT parameters if provided
+    # Extract oil PVT parameters if provided (already in oilfield units from OilPVT)
     if oil_pvt is not None and well_type == 'oil':
         api = oil_pvt.api
         sgsp = oil_pvt.sg_sp
@@ -1775,6 +1850,9 @@ def fbhp(thp, completion, vlpmethod='WG', well_type='gas',
     if not math.isfinite(p_current):
         raise RuntimeError(f"VLP calculation produced non-finite BHP: {p_current}")
 
+    if metric:
+        return p_current * PSI_TO_BAR
+
     return p_current
 
 
@@ -1788,18 +1866,38 @@ def outflow_curve(thp, completion, vlpmethod='WG', well_type='gas',
                   cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0,
                   gor=0, wc=0,
                   wsg=1.07, injection=False,
-                  gsg=0.65, pb=0, rsb=0, sgsp=0.65):
+                  gsg=0.65, pb=0, rsb=0, sgsp=0.65,
+                  metric=False):
     """ Returns VLP outflow curve as dict {'rates': [...], 'bhp': [...]}.
 
-        thp: Tubing head pressure (psia)
+        thp: Tubing head pressure (psia | barsa)
         completion: Completion object
         vlpmethod: VLP method string
         well_type: 'gas' or 'oil'
-        rates: List of rates to evaluate (MMscf/d for gas, STB/d for oil). If None, auto-generated
+        rates: List of rates to evaluate (MMscf/d | sm3/d for gas, STB/d | sm3/d for oil). If None, auto-generated
         n_rates: Number of rate points if rates is None
-        max_rate: Maximum rate for auto-generation. If None, defaults to 50 MMscf/d (gas) or 10000 STB/d (oil)
+        max_rate: Maximum rate for auto-generation
         Other parameters: Same as fbhp()
+        metric: If True, inputs/outputs in Eclipse METRIC units. Default False.
     """
+    # Convert metric inputs to oilfield at the boundary
+    if metric:
+        thp = thp * BAR_TO_PSI
+        if pr > 0:
+            pr = pr * BAR_TO_PSI
+        if well_type == 'gas':
+            if cgr > 0:
+                cgr = cgr * SM3_PER_SM3_TO_STB_PER_MMSCF
+            if qw_bwpd > 0:
+                qw_bwpd = qw_bwpd * SM3_TO_STB
+        else:
+            if gor > 0:
+                gor = gor * SM3_PER_SM3_TO_SCF_PER_STB
+            if pb > 0:
+                pb = pb * BAR_TO_PSI
+            if rsb > 0:
+                rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
+
     if oil_pvt is not None and well_type == 'oil':
         api = oil_pvt.api
         sgsp = oil_pvt.sg_sp
@@ -1810,22 +1908,36 @@ def outflow_curve(thp, completion, vlpmethod='WG', well_type='gas',
 
     if rates is None:
         if max_rate is None:
-            max_rate = 50.0 if well_type == 'gas' else 10000.0
-        rates = list(np.linspace(0.01 if well_type == 'gas' else 1.0,
-                                 max_rate, n_rates))
+            if metric:
+                # Default max rates in metric units
+                max_rate = 50.0 * MMSCF_TO_SM3 if well_type == 'gas' else 10000.0 * STB_TO_SM3
+            else:
+                max_rate = 50.0 if well_type == 'gas' else 10000.0
+        if metric:
+            min_rate = 0.01 * MMSCF_TO_SM3 if well_type == 'gas' else 1.0 * STB_TO_SM3
+        else:
+            min_rate = 0.01 if well_type == 'gas' else 1.0
+        rates = list(np.linspace(min_rate, max_rate, n_rates))
 
     bhp_list = []
     for rate in rates:
         if well_type == 'gas':
+            # Convert rate to MMscf/d for internal fbhp call
+            rate_mmscfd = rate * SM3_TO_MMSCF if metric else rate
             bhp_val = fbhp(thp=thp, completion=completion, vlpmethod=vlpmethod,
-                           well_type='gas', qg_mmscfd=rate, cgr=cgr,
+                           well_type='gas', qg_mmscfd=rate_mmscfd, cgr=cgr,
                            qw_bwpd=qw_bwpd, oil_vis=oil_vis, api=api, pr=pr,
                            wsg=wsg, injection=injection, gsg=gsg)
         else:
+            # Convert rate to STB/d for internal fbhp call
+            rate_stbpd = rate * SM3_TO_STB if metric else rate
             bhp_val = fbhp(thp=thp, completion=completion, vlpmethod=vlpmethod,
-                           well_type='oil', qt_stbpd=rate, gor=gor, wc=wc,
+                           well_type='oil', qt_stbpd=rate_stbpd, gor=gor, wc=wc,
                            wsg=wsg, injection=injection, gsg=gsg,
                            pb=pb, rsb=rsb, sgsp=sgsp, api=api, oil_pvt=oil_pvt)
+        # bhp_val is in psia (fbhp called without metric=True)
+        if metric:
+            bhp_val = bhp_val * PSI_TO_BAR
         bhp_list.append(bhp_val)
 
     return {'rates': list(rates), 'bhp': bhp_list}
@@ -1836,22 +1948,30 @@ def outflow_curve(thp, completion, vlpmethod='WG', well_type='gas',
 # ============================================================================
 
 def ipr_curve(reservoir, well_type='gas', gas_pvt=None, oil_pvt=None,
-              n_points=20, min_pwf=14.7,
-              wc=0, wsg=1.07, bo=1.2, uo=1.0, gsg=0.65):
+              n_points=20, min_pwf=None,
+              wc=0, wsg=1.07, bo=1.2, uo=1.0, gsg=0.65,
+              metric=False):
     """ Returns IPR curve as dict {'pwf': [...], 'rate': [...]}.
 
-        reservoir: Reservoir object
+        reservoir: Reservoir object (constructed with matching metric flag)
         well_type: 'gas', 'oil', or 'water'
         gas_pvt: GasPVT object (required for gas wells if not using defaults)
         oil_pvt: OilPVT object (optional for oil wells)
         n_points: Number of pressure points
-        min_pwf: Minimum flowing BHP (psia). Defaults to 14.7
+        min_pwf: Minimum flowing BHP (psia | barsa). Defaults to 14.7 psia (1.01325 barsa)
         wc: Water cut (fraction 0-1). For oil wells
         wsg: Water specific gravity
-        bo: Oil FVF (rb/stb). Used for oil/water wells if oil_pvt not provided
+        bo: Oil FVF (rb/stb | rm3/sm3). Used for oil/water wells if oil_pvt not provided
         uo: Oil viscosity (cP). Used for oil/water wells if oil_pvt not provided
         gsg: Gas specific gravity. Used if gas_pvt not provided
+        metric: If True, inputs/outputs in Eclipse METRIC units. Default False.
     """
+    if min_pwf is None:
+        min_pwf = 1.01325 if metric else 14.7
+    if metric:
+        min_pwf = min_pwf * BAR_TO_PSI
+
+    # Reservoir stores oilfield units internally (converted in constructor)
     pr = reservoir.pr
     degf = reservoir.degf
     k = reservoir.k
@@ -1876,7 +1996,7 @@ def ipr_curve(reservoir, well_type='gas', gas_pvt=None, oil_pvt=None,
                 k=k, h=h, pr=pr, pwf=pwf, r_w=rw, r_ext=re,
                 degf=degf, S=S, D=D, sg=sg,
                 co2=co2, h2s=h2s, n2=n2, h2=h2_frac)
-            rate_list.append(float(qg))
+            rate_list.append(float(qg))  # Mscf/d in oilfield
 
     elif well_type == 'oil':
         # Darcy above Pb, Vogel below Pb
@@ -1918,6 +2038,14 @@ def ipr_curve(reservoir, well_type='gas', gas_pvt=None, oil_pvt=None,
         for pwf in pwf_list:
             rate_list.append(J * (pr - pwf))
 
+    # Convert outputs to metric if requested
+    if metric:
+        pwf_list = [p * PSI_TO_BAR for p in pwf_list]
+        if well_type == 'gas':
+            rate_list = [r * MSCF_TO_SM3 for r in rate_list]  # Mscf/d -> sm3/d
+        elif well_type in ('oil', 'water'):
+            rate_list = [r * STB_TO_SM3 for r in rate_list]  # STB/d -> sm3/d
+
     return {'pwf': pwf_list, 'rate': rate_list}
 
 
@@ -1932,18 +2060,43 @@ def operating_point(thp, completion, reservoir,
                     gor=0, wc=0,
                     wsg=1.07, gsg=0.65, pb=0, rsb=0, sgsp=0.65,
                     bo=1.2, uo=1.0,
-                    n_points=25):
+                    n_points=25,
+                    metric=False):
     """ Returns operating point as dict with 'rate', 'bhp', 'vlp', 'ipr'.
 
         Finds intersection of VLP outflow curve and IPR inflow curve via bisection.
 
-        thp: Tubing head pressure (psia)
+        thp: Tubing head pressure (psia | barsa)
         completion: Completion object
-        reservoir: Reservoir object
+        reservoir: Reservoir object (constructed with matching metric flag)
         vlpmethod: VLP method string
         well_type: 'gas' or 'oil'
         Other parameters: Same as fbhp() and ipr_curve()
+        metric: If True, inputs/outputs in Eclipse METRIC units. Default False.
+
+        Returns:
+            rate: Operating rate (MMscf/d | sm3/d for gas, STB/d | sm3/d for oil)
+            bhp: Operating BHP (psia | barsa)
+            vlp: VLP outflow curve dict
+            ipr: IPR inflow curve dict
     """
+    # Convert metric inputs to oilfield at the boundary
+    if metric:
+        thp = thp * BAR_TO_PSI
+        if well_type == 'gas':
+            if cgr > 0:
+                cgr = cgr * SM3_PER_SM3_TO_STB_PER_MMSCF
+            if qw_bwpd > 0:
+                qw_bwpd = qw_bwpd * SM3_TO_STB
+        else:
+            if gor > 0:
+                gor = gor * SM3_PER_SM3_TO_SCF_PER_STB
+            if pb > 0:
+                pb = pb * BAR_TO_PSI
+            if rsb > 0:
+                rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
+
+    # Reservoir stores oilfield units internally (converted in constructor)
     pr = reservoir.pr
 
     if oil_pvt is not None and well_type == 'oil':
@@ -1954,7 +2107,7 @@ def operating_point(thp, completion, reservoir,
         if oil_pvt.sg_g > 0:
             gsg = oil_pvt.sg_g
 
-    # Get IPR curve
+    # Get IPR curve (in oilfield units — no metric flag)
     ipr = ipr_curve(reservoir=reservoir, well_type=well_type,
                     gas_pvt=gas_pvt, oil_pvt=oil_pvt,
                     n_points=n_points, wc=wc, wsg=wsg,
@@ -1963,8 +2116,12 @@ def operating_point(thp, completion, reservoir,
     # Find AOF (maximum rate at minimum pwf)
     aof = max(ipr['rate'])
     if aof <= 0:
-        return {'rate': 0.0, 'bhp': pr, 'vlp': {'rates': [], 'bhp': []},
-                'ipr': ipr}
+        result = {'rate': 0.0, 'bhp': pr, 'vlp': {'rates': [], 'bhp': []},
+                  'ipr': ipr}
+        if metric:
+            result['bhp'] = pr * PSI_TO_BAR
+            result['ipr'] = _convert_ipr_to_metric(ipr, well_type)
+        return result
 
     # IPR gas rates are in Mscf/d; VLP uses MMscf/d. Scale factor:
     gas_scale = 1000.0 if well_type == 'gas' else 1.0
@@ -2031,4 +2188,34 @@ def operating_point(thp, completion, reservoir,
     # Convert operating rate to VLP units for return
     op_rate_out = op_rate / gas_scale if well_type == 'gas' else op_rate
 
+    # Convert outputs to metric
+    if metric:
+        op_bhp = op_bhp * PSI_TO_BAR
+        if well_type == 'gas':
+            op_rate_out = op_rate_out * MMSCF_TO_SM3  # MMscf/d -> sm3/d
+        else:
+            op_rate_out = op_rate_out * STB_TO_SM3  # STB/d -> sm3/d
+        vlp = _convert_vlp_to_metric(vlp, well_type)
+        ipr = _convert_ipr_to_metric(ipr, well_type)
+
     return {'rate': op_rate_out, 'bhp': op_bhp, 'vlp': vlp, 'ipr': ipr}
+
+
+def _convert_vlp_to_metric(vlp, well_type):
+    """Convert VLP outflow curve dict from oilfield to metric units."""
+    if well_type == 'gas':
+        rates = [r * MMSCF_TO_SM3 for r in vlp['rates']]  # MMscf/d -> sm3/d
+    else:
+        rates = [r * STB_TO_SM3 for r in vlp['rates']]  # STB/d -> sm3/d
+    bhps = [b * PSI_TO_BAR for b in vlp['bhp']]  # psia -> barsa
+    return {'rates': rates, 'bhp': bhps}
+
+
+def _convert_ipr_to_metric(ipr, well_type):
+    """Convert IPR curve dict from oilfield to metric units."""
+    pwfs = [p * PSI_TO_BAR for p in ipr['pwf']]  # psia -> barsa
+    if well_type == 'gas':
+        rates = [r * MSCF_TO_SM3 for r in ipr['rate']]  # Mscf/d -> sm3/d
+    else:
+        rates = [r * STB_TO_SM3 for r in ipr['rate']]  # STB/d -> sm3/d
+    return {'pwf': pwfs, 'rate': rates}

@@ -657,12 +657,17 @@ Examples:
     'LET'
 
 
+.. note::
+
+    **Metric unit support**: The ``make_vfpinj``, ``make_vfpprod``, ``make_bot_og``, and ``make_pvtw_table`` functions accept a ``metric=False`` parameter. When ``metric=True``, all inputs and outputs use Eclipse METRIC units (barsa, deg C, sm3/d, sm3/sm3, m, kg/m3, 1/bar) and the generated Eclipse keyword strings use the METRIC unit system. All "standard" volumes reference oilfield standard conditions (60 deg F, 14.696 psia) regardless of unit system selection.
+
+
 pyrestoolbox.simtools.make_vfpinj
 ======================
 
 .. code-block:: python
 
-    make_vfpinj(table_num, completion, flo_type='WAT', vlpmethod='WG', flo_rates=None, thp_values=None, gas_pvt=None, gsg=0.65, wsg=1.07, oil_pvt=None, pb=0, rsb=0, sgsp=0.65, api=35, datum_depth=0, export=False, filename='') -> dict
+    make_vfpinj(table_num, completion, flo_type='WAT', vlpmethod='WG', flo_rates=None, thp_values=None, gas_pvt=None, gsg=0.65, wsg=1.07, oil_pvt=None, pb=0, rsb=0, sgsp=0.65, api=35, datum_depth=0, export=False, filename='', metric=False) -> dict
 
 Generates an Eclipse VFPINJ keyword table for injection wells. Computes BHP as a function of flow rate and tubing head pressure using the nodal module VLP correlations.
 
@@ -687,10 +692,10 @@ Generates an Eclipse VFPINJ keyword table for injection wells. Computes BHP as a
      - VLP correlation: 'HB', 'WG', 'GRAY', or 'BB'. Default 'WG'
    * - flo_rates
      - list
-     - Flow rates in ascending order. Units: stb/d (WAT/OIL) or Mscf/d (GAS). Default provided if None
+     - Flow rates in ascending order. Units: stb/d (WAT/OIL) or Mscf/d (GAS) in field; sm3/d in metric. Default provided if None
    * - thp_values
      - list
-     - Tubing head pressures (psia) in ascending order. Default provided if None
+     - Tubing head pressures (psia, or barsa if metric=True) in ascending order. Default provided if None
    * - gas_pvt
      - GasPVT
      - Optional GasPVT object for gas injection
@@ -717,13 +722,16 @@ Generates an Eclipse VFPINJ keyword table for injection wells. Computes BHP as a
      - API gravity. Default 35
    * - datum_depth
      - float
-     - Bottom hole datum depth (ft). Default = completion total TVD
+     - Bottom hole datum depth (ft, or m if metric=True). Default = completion total TVD
    * - export
      - bool
      - If True, writes an Eclipse VFP file. Default False
    * - filename
      - str
      - Custom output filename. Default: VFPINJ_{table_num}.VFP
+   * - metric
+     - bool
+     - If True, inputs/outputs use Eclipse METRIC units (barsa, sm3/d, m). Eclipse keyword output uses 'METRIC' unit system. Default False
 
 Returns a dictionary with keys: ``table_num``, ``datum_depth``, ``flo_type``, ``flo_rates``, ``thp_values``, ``bhp`` (2D numpy array shape NTHP x NFLO), ``n_failed``, ``eclipse_string``.
 
@@ -744,13 +752,13 @@ pyrestoolbox.simtools.make_vfpprod
 
 .. code-block:: python
 
-    make_vfpprod(table_num, completion, well_type='gas', vlpmethod='WG', flo_rates=None, thp_values=None, wfr_values=None, gfr_values=None, alq_values=None, gas_pvt=None, gsg=0.65, oil_vis=1.0, api=45, pr=0, oil_pvt=None, pb=0, rsb=0, sgsp=0.65, wsg=1.07, datum_depth=0, export=False, filename='') -> dict
+    make_vfpprod(table_num, completion, well_type='gas', vlpmethod='WG', flo_rates=None, thp_values=None, wfr_values=None, gfr_values=None, alq_values=None, gas_pvt=None, gsg=0.65, oil_vis=1.0, api=45, pr=0, oil_pvt=None, pb=0, rsb=0, sgsp=0.65, wsg=1.07, datum_depth=0, export=False, filename='', metric=False) -> dict
 
 Generates an Eclipse VFPPROD keyword table for production wells. Computes BHP as a function of flow rate, tubing head pressure, water fraction, gas fraction, and artificial lift quantity using the nodal module VLP correlations.
 
-For gas wells: FLO=GAS (Mscf/d), WFR=WGR (stb/Mscf), GFR=OGR (stb/Mscf)
+For gas wells: FLO=GAS (Mscf/d, or sm3/d if metric), WFR=WGR (stb/Mscf, or sm3/sm3 if metric), GFR=OGR (stb/Mscf, or sm3/sm3 if metric)
 
-For oil wells: FLO=OIL (stb/d), WFR=WCT (fraction 0-1), GFR=GOR (Mscf/stb)
+For oil wells: FLO=OIL (stb/d, or sm3/d if metric), WFR=WCT (fraction 0-1), GFR=GOR (Mscf/stb, or sm3/sm3 if metric)
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -773,16 +781,16 @@ For oil wells: FLO=OIL (stb/d), WFR=WCT (fraction 0-1), GFR=GOR (Mscf/stb)
      - VLP correlation: 'HB', 'WG', 'GRAY', or 'BB'. Default 'WG'
    * - flo_rates
      - list
-     - Flow rates in ascending order. Default provided if None
+     - Flow rates in ascending order. Gas wells: Mscf/d or sm3/d (metric). Oil wells: stb/d or sm3/d (metric). Default provided if None
    * - thp_values
      - list
-     - Tubing head pressures (psia). Default provided if None
+     - Tubing head pressures (psia, or barsa if metric=True). Default provided if None
    * - wfr_values
      - list
-     - Water fraction values. Gas wells: WGR (stb/Mscf). Oil wells: WCT (fraction). Default provided if None
+     - Water fraction values. Gas wells: WGR (stb/Mscf, or sm3/sm3 if metric). Oil wells: WCT (fraction). Default provided if None
    * - gfr_values
      - list
-     - Gas/oil fraction values. Gas wells: OGR (stb/Mscf). Oil wells: GOR (Mscf/stb). Default provided if None
+     - Gas/oil fraction values. Gas wells: OGR (stb/Mscf, or sm3/sm3 if metric). Oil wells: GOR (Mscf/stb, or sm3/sm3 if metric). Default provided if None
    * - alq_values
      - list
      - Artificial lift values. Default [0]
@@ -806,10 +814,10 @@ For oil wells: FLO=OIL (stb/d), WFR=WCT (fraction 0-1), GFR=GOR (Mscf/stb)
      - Optional OilPVT object for oil wells
    * - pb
      - float
-     - Bubble point pressure (psia). Required for oil wells
+     - Bubble point pressure (psia, or barsa if metric=True). Required for oil wells
    * - rsb
      - float
-     - Solution GOR at Pb (scf/stb). Required for oil wells
+     - Solution GOR at Pb (scf/stb, or sm3/sm3 if metric=True). Required for oil wells
    * - sgsp
      - float
      - Separator gas SG. Default 0.65
@@ -818,13 +826,16 @@ For oil wells: FLO=OIL (stb/d), WFR=WCT (fraction 0-1), GFR=GOR (Mscf/stb)
      - Water specific gravity. Default 1.07
    * - datum_depth
      - float
-     - Bottom hole datum depth (ft). Default = completion total TVD
+     - Bottom hole datum depth (ft, or m if metric=True). Default = completion total TVD
    * - export
      - bool
      - If True, writes an Eclipse VFP file. Default False
    * - filename
      - str
      - Custom output filename. Default: VFPPROD_{table_num}.VFP
+   * - metric
+     - bool
+     - If True, inputs/outputs use Eclipse METRIC units (barsa, sm3/d, sm3/sm3, m). Eclipse keyword output uses 'METRIC' unit system. Default False
 
 Returns a dictionary with keys: ``table_num``, ``datum_depth``, ``well_type``, ``flo_type``, ``wfr_type``, ``gfr_type``, ``flo_rates``, ``thp_values``, ``wfr_values``, ``gfr_values``, ``alq_values``, ``bhp`` (5D numpy array shape NTHP x NWFR x NGFR x NALQ x NFLO), ``n_failed``, ``eclipse_string``.
 
@@ -837,8 +848,8 @@ Examples:
     >>> result = simtools.make_vfpprod(table_num=1, completion=comp, well_type='gas',
     ...                                flo_rates=[1000, 5000, 10000],
     ...                                thp_values=[100, 500],
-    ...                                wfr_values=[0, 5],
-    ...                                gfr_values=[0, 50],
+    ...                                wfr_values=[0, 0.005],
+    ...                                gfr_values=[0, 0.05],
     ...                                alq_values=[0])
     >>> result['bhp'].shape  # (NTHP, NWFR, NGFR, NALQ, NFLO)
     (2, 2, 2, 1, 3)
@@ -849,7 +860,7 @@ pyrestoolbox.simtools.make_bot_og
 
 .. code-block:: python
 
-    make_bot_og(pi, api, degf, sg_g, pmax, pb=0, rsb=0, pmin=25, nrows=20, wt=0, ch4_sat=0, comethod='EXPLT', zmethod='DAK', rsmethod='VELAR', cmethod='PMC', denomethod='SWMH', bomethod='MCAIN', pbmethod='VELAR', export=False, pvto=False) -> dict
+    make_bot_og(pi, api, degf, sg_g, pmax, pb=0, rsb=0, pmin=25, nrows=20, wt=0, ch4_sat=0, comethod='EXPLT', zmethod='DAK', rsmethod='VELAR', cmethod='PMC', denomethod='SWMH', bomethod='MCAIN', pbmethod='VELAR', export=False, pvto=False, metric=False) -> dict
 
 Creates data required for Oil-Gas-Water black oil tables (PVDO, PVDG, optionally PVTO).
 
@@ -859,13 +870,13 @@ Creates data required for Oil-Gas-Water black oil tables (PVDO, PVDG, optionally
 
 Returns dictionary of results with keys:
   - ``bot``: Pandas DataFrame of black oil data
-  - ``deno``: Stock tank oil density (lb/cuft)
-  - ``deng``: Stock tank gas density (lb/cuft)
-  - ``denw``: Water density at Pi (lb/cuft)
-  - ``cw``: Water compressibility at Pi (1/psi)
+  - ``deno``: Stock tank oil density (lb/cuft, or kg/m3 if metric)
+  - ``deng``: Stock tank gas density (lb/cuft, or kg/m3 if metric)
+  - ``denw``: Water density at Pi (lb/cuft, or kg/m3 if metric)
+  - ``cw``: Water compressibility at Pi (1/psi, or 1/bar if metric)
   - ``uw``: Water viscosity at Pi (cP)
-  - ``pb``: Bubble point pressure (psia)
-  - ``rsb``: Solution GOR at Pb (scf/stb)
+  - ``pb``: Bubble point pressure (psia, or barsa if metric)
+  - ``rsb``: Solution GOR at Pb (scf/stb, or sm3/sm3 if metric)
   - ``rsb_scale``: Scaling factor for Pb/Rsb harmonization
   - ``usat``: Undersaturated values [usat_p, usat_bo, usat_uo] (if pvto=True)
 
@@ -878,28 +889,28 @@ Returns dictionary of results with keys:
      - Description
    * - pi
      - float
-     - Initial reservoir pressure (psia)
+     - Initial reservoir pressure (psia, or barsa if metric=True)
    * - api
      - float
      - Stock tank oil density (deg API)
    * - degf
      - float
-     - Reservoir temperature (deg F)
+     - Reservoir temperature (deg F, or deg C if metric=True)
    * - sg_g
      - float
      - Weighted average specific gravity of surface gas (relative to air)
    * - pmax
      - float
-     - Maximum pressure for table (psia)
+     - Maximum pressure for table (psia, or barsa if metric=True)
    * - pb
      - float
-     - Bubble point pressure (psia). Default 0 (will be calculated from rsb)
+     - Bubble point pressure (psia, or barsa if metric=True). Default 0 (will be calculated from rsb)
    * - rsb
      - float
-     - Oil solution GOR at Pb (scf/stb). Default 0 (will be calculated from pb)
+     - Oil solution GOR at Pb (scf/stb, or sm3/sm3 if metric=True). Default 0 (will be calculated from pb)
    * - pmin
      - float
-     - Minimum pressure for table (psia). Default 25
+     - Minimum pressure for table (psia, or barsa if metric=True). Default 25
    * - nrows
      - int
      - Number of table rows. Default 20
@@ -915,6 +926,9 @@ Returns dictionary of results with keys:
    * - pvto
      - bool
      - If True, generates live oil PVTO format with undersaturated extensions. Default False
+   * - metric
+     - bool
+     - If True, inputs/outputs use Eclipse METRIC units (barsa, deg C, sm3/sm3, kg/m3, 1/bar). Eclipse keyword output uses METRIC format. Default False
 
 Examples:
 
@@ -931,7 +945,7 @@ pyrestoolbox.simtools.make_pvtw_table
 
 .. code-block:: python
 
-    make_pvtw_table(pi, degf, wt=0, ch4_sat=0, pmin=500, pmax=10000, nrows=20, export=False) -> dict
+    make_pvtw_table(pi, degf, wt=0, ch4_sat=0, pmin=500, pmax=10000, nrows=20, export=False, metric=False) -> dict
 
 Generates a PVTW (water PVT) table over a pressure range using brine_props (Spivey correlation), with optional ECLIPSE PVTW keyword export.
 
@@ -939,7 +953,7 @@ Generates a PVTW (water PVT) table over a pressure range using brine_props (Spiv
 
     This function was moved from the brine module to simtools in v3.0. A backward-compatible wrapper remains at ``brine.make_pvtw_table()`` that delegates to this function.
 
-Returns dictionary with keys: ``table`` (DataFrame), ``pref`` (psia), ``bw_ref``, ``cw_ref`` (1/psi), ``visw_ref`` (cP), ``rsw_ref`` (scf/stb), ``den_ref`` (sg).
+Returns dictionary with keys: ``table`` (DataFrame), ``pref`` (psia, or barsa if metric), ``bw_ref``, ``cw_ref`` (1/psi, or 1/bar if metric), ``visw_ref`` (cP), ``rsw_ref`` (scf/stb, or sm3/sm3 if metric), ``den_ref`` (sg).
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -950,10 +964,10 @@ Returns dictionary with keys: ``table`` (DataFrame), ``pref`` (psia), ``bw_ref``
      - Description
    * - pi
      - float
-     - Initial (reference) pressure (psia)
+     - Initial (reference) pressure (psia, or barsa if metric=True)
    * - degf
      - float
-     - Temperature (deg F)
+     - Temperature (deg F, or deg C if metric=True)
    * - wt
      - float
      - Salt wt% (0-100). Default 0
@@ -962,16 +976,19 @@ Returns dictionary with keys: ``table`` (DataFrame), ``pref`` (psia), ``bw_ref``
      - Degree of methane saturation (0-1). Default 0
    * - pmin
      - float
-     - Minimum pressure for table (psia). Default 500
+     - Minimum pressure for table (psia, or barsa if metric=True). Default 500
    * - pmax
      - float
-     - Maximum pressure for table (psia). Default 10000
+     - Maximum pressure for table (psia, or barsa if metric=True). Default 10000
    * - nrows
      - int
      - Number of rows in table. Default 20
    * - export
      - bool
      - If True, writes PVTW.INC and pvtw_table.xlsx. Default False
+   * - metric
+     - bool
+     - If True, inputs/outputs use Eclipse METRIC units (barsa, deg C, sm3/sm3, 1/bar). Eclipse keyword output uses METRIC format. Default False
 
 Examples:
 
