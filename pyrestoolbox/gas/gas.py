@@ -19,7 +19,40 @@
     and at  <https://www.gnu.org/licenses/>.
 
           Contact author at mark.w.burgoyne@gmail.com
+
+Gas PVT and flow rate calculations.
+
+Functions
+---------
+gas_z           Z-factor (DAK, HY, WYW, or BNS methods)
+gas_ug          Gas viscosity (cP)
+gas_bg          Gas formation volume factor (rcf/scf)
+gas_cg          Gas compressibility (1/psi)
+gas_den         Gas density (lb/cuft)
+gas_sg          Gas specific gravity from composition
+gas_tc_pc       Pseudocritical temperature & pressure
+gas_dmp         Gas pseudopressure difference
+gas_ponz2p      Convert P/Z to pressure
+gas_grad2sg     Invert gas gradient to SG
+gas_fws_sg      Fresh-water-saturated gas SG
+gas_water_content  Equilibrium water content of gas
+gas_rate_radial Radial gas flow rate (Mscf/d)
+gas_rate_linear Linear gas flow rate (Mscf/d)
+darcy_gas       Darcy gas rate from pseudopressure difference
+
+Classes
+-------
+GasPVT          Convenience wrapper storing gas composition & method choices
 """
+
+__all__ = [
+    'gas_z', 'gas_ug', 'gas_bg', 'gas_cg', 'gas_den', 'gas_sg',
+    'gas_tc_pc', 'gas_dmp', 'gas_ponz2p', 'gas_grad2sg', 'gas_fws_sg',
+    'gas_water_content', 'gas_rate_radial', 'gas_rate_linear', 'darcy_gas',
+    'GasPVT',
+    # Enum classes re-exported for convenience (gas.z_method.DAK, etc.)
+    'z_method', 'c_method',
+]
 
 import numpy as np
 import numpy.typing as npt

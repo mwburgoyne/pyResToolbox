@@ -19,7 +19,26 @@
     and at  <https://www.gnu.org/licenses/>.
 
           Contact author at mark.w.burgoyne@gmail.com
+
+Component critical property library with EOS-model-specific parameters.
+
+Provides pre-built module-level accessors for convenience:
+    prop(component, prop, model)  - Look up a property for a component
+    components(model)             - List available components
+    names(model)                  - List component names
+    property_list(model)          - List available properties
+    models()                      - List available EOS models
+    df(model)                     - Raw DataFrame for a model
+
+Classes
+-------
+component_library   Database loaded from component_library.xlsx
 """
+
+__all__ = [
+    'component_library',
+    'comp_library', 'prop', 'components', 'names', 'property_list', 'models', 'df',
+]
 
 from importlib.resources import files
 

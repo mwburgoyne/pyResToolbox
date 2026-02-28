@@ -19,7 +19,27 @@
     and at  <https://www.gnu.org/licenses/>.
 
           Contact author at mark.w.burgoyne@gmail.com
+
+Nodal analysis: VLP, IPR, and operating point calculations.
+
+Classes
+-------
+WellSegment         Single wellbore segment with uniform geometry and deviation
+Completion          Wellbore completion (legacy or multi-segment) for VLP calculations
+Reservoir           Reservoir description for IPR calculations
+
+Functions
+---------
+fbhp                Flowing bottom hole pressure via VLP correlation (HB, WG, GRAY, BB)
+outflow_curve       VLP outflow curve (BHP vs rate)
+ipr_curve           IPR inflow curve (rate vs Pwf)
+operating_point     VLP/IPR intersection via bisection
 """
+
+__all__ = [
+    'WellSegment', 'Completion', 'Reservoir',
+    'fbhp', 'outflow_curve', 'ipr_curve', 'operating_point',
+]
 
 import math
 import numpy as np
@@ -147,6 +167,8 @@ class Completion:
         if crough is None:
             crough = 0.01524 if metric else 0.0006
 
+        self._metric = metric
+
         if segments is not None:
             # Segment mode — segments already store oilfield units internally
             if tht is None or bht is None:
@@ -227,6 +249,114 @@ class Completion:
             frac = self.length / self.mpd
             return self.tht + (self.bht - self.tht) * frac
         return self.bht
+
+    def geometry_at_md(self, md):
+        """Return wellbore geometry at a given measured depth.
+
+        Args:
+            md: Measured depth from surface (ft | m, matching Completion unit system)
+
+        Returns:
+            dict with keys: 'md', 'tvd', 'id', 'deviation', 'roughness'
+            Values in oilfield units (ft, inches) or metric (m, mm) matching
+            Completion construction.
+
+        Raises:
+            ValueError: if md < 0 or md > total_md
+        """
+        # Convert metric input to internal oilfield units
+        md_ft = md * M_TO_FT if self._metric else md
+        total = self.total_md
+        if md_ft < 0 or md_ft > total + 1e-9:
+            if self._metric:
+                raise ValueError(
+                    f"md must be between 0 and {total * FT_TO_M:.4f} m, got {md}"
+                )
+            raise ValueError(
+                f"md must be between 0 and {total:.4f} ft, got {md}"
+            )
+        # Clamp to total_md for floating-point edge case
+        md_ft = min(md_ft, total)
+
+        md_traversed = 0.0
+        tvd_traversed = 0.0
+        for seg in self._segments:
+            if md_traversed + seg.md >= md_ft - 1e-12:
+                delta_md = md_ft - md_traversed
+                tvd = tvd_traversed + delta_md * math.cos(math.radians(seg.deviation))
+                if self._metric:
+                    return {
+                        'md': md_ft * FT_TO_M,
+                        'tvd': tvd * FT_TO_M,
+                        'id': seg.id * IN_TO_MM,
+                        'deviation': seg.deviation,
+                        'roughness': seg.roughness * IN_TO_MM,
+                    }
+                return {
+                    'md': md_ft,
+                    'tvd': tvd,
+                    'id': seg.id,
+                    'deviation': seg.deviation,
+                    'roughness': seg.roughness,
+                }
+            md_traversed += seg.md
+            tvd_traversed += seg.tvd
+        # Should not reach here due to validation above
+        raise RuntimeError("Failed to locate md within segments")  # pragma: no cover
+
+    def profile(self):
+        """Return wellbore profile at all segment boundaries.
+
+        Returns:
+            pandas DataFrame with columns: 'MD', 'TVD', 'Deviation', 'ID', 'Roughness'
+            One row per node: surface (top of first segment), bottom of each
+            segment, and top of each subsequent segment at crossover points.
+            Units match Completion construction (oilfield or metric).
+        """
+        import pandas as pd
+
+        mds, tvds, devs, ids, roughs = [], [], [], [], []
+        md_cum = 0.0
+        tvd_cum = 0.0
+
+        for i, seg in enumerate(self._segments):
+            if i == 0:
+                # Top of first segment (surface)
+                mds.append(md_cum)
+                tvds.append(tvd_cum)
+                devs.append(seg.deviation)
+                ids.append(seg.id)
+                roughs.append(seg.roughness)
+            # Bottom of this segment
+            md_cum += seg.md
+            tvd_cum += seg.tvd
+            mds.append(md_cum)
+            tvds.append(tvd_cum)
+            devs.append(seg.deviation)
+            ids.append(seg.id)
+            roughs.append(seg.roughness)
+            # If there's a next segment, add its top at the same depth
+            if i + 1 < len(self._segments):
+                next_seg = self._segments[i + 1]
+                mds.append(md_cum)
+                tvds.append(tvd_cum)
+                devs.append(next_seg.deviation)
+                ids.append(next_seg.id)
+                roughs.append(next_seg.roughness)
+
+        if self._metric:
+            mds = [m * FT_TO_M for m in mds]
+            tvds = [t * FT_TO_M for t in tvds]
+            ids = [d * IN_TO_MM for d in ids]
+            roughs = [r * IN_TO_MM for r in roughs]
+
+        return pd.DataFrame({
+            'MD': mds,
+            'TVD': tvds,
+            'Deviation': devs,
+            'ID': ids,
+            'Roughness': roughs,
+        })
 
 
 class Reservoir:
@@ -1868,7 +1998,7 @@ def outflow_curve(thp, completion, vlpmethod='WG', well_type='gas',
                   wsg=1.07, injection=False,
                   gsg=0.65, pb=0, rsb=0, sgsp=0.65,
                   metric=False):
-    """ Returns VLP outflow curve as dict {'rates': [...], 'bhp': [...]}.
+    """ Returns VLP outflow curve as a dictionary.
 
         thp: Tubing head pressure (psia | barsa)
         completion: Completion object
@@ -1879,6 +2009,11 @@ def outflow_curve(thp, completion, vlpmethod='WG', well_type='gas',
         max_rate: Maximum rate for auto-generation
         Other parameters: Same as fbhp()
         metric: If True, inputs/outputs in Eclipse METRIC units. Default False.
+
+        Returns:
+            dict with keys:
+                'rates': list of flow rates (MMscf/d for gas, STB/d for oil; sm3/d if metric)
+                'bhp': list of flowing BHP values (psia; barsa if metric) at each rate
     """
     # Convert metric inputs to oilfield at the boundary
     if metric:

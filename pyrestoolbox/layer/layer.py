@@ -19,7 +19,22 @@
     and at  <https://www.gnu.org/licenses/>.
 
           Contact author at mark.w.burgoyne@gmail.com
+
+Lorenz heterogeneity framework and permeability distribution generation.
+
+Functions
+---------
+lorenz2b                Convert Lorenz coefficient to B-factor (exponential or Langmuir)
+lorenzfromb             Convert B-factor to Lorenz coefficient
+lorenz_from_flow_fraction  Compute Lorenz coefficient from a flow fraction
+lorenz_2_flow_frac      Convert Lorenz coefficient to flow fraction at a given phi-h fraction
+lorenz_2_layers         Generate permeability distribution from Lorenz coefficient
 """
+
+__all__ = [
+    'lorenz2b', 'lorenzfromb', 'lorenz_from_flow_fraction',
+    'lorenz_2_flow_frac', 'lorenz_2_layers',
+]
 
 import numpy as np
 import numpy.typing as npt

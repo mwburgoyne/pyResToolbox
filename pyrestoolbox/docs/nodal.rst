@@ -505,6 +505,125 @@ Multi-segment deviated well using WellSegment:
     8121.3
 
 
+Completion.geometry_at_md
+--------------------------
+
+.. code-block:: python
+
+    completion.geometry_at_md(md)
+
+Returns wellbore geometry at a given measured depth as a dictionary with keys ``'md'``, ``'tvd'``, ``'id'``, ``'deviation'``, and ``'roughness'``. All values are returned in the same unit system used to construct the Completion (oilfield or metric). Raises ``ValueError`` if ``md`` is outside the range ``[0, total_md]``.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - md
+     - float
+     - Measured depth from surface (ft, or m if metric=True)
+
+.. list-table:: Returns (dict)
+   :widths: 10 40
+   :header-rows: 1
+
+   * - Key
+     - Description
+   * - ``md``
+     - Queried measured depth (ft | m)
+   * - ``tvd``
+     - True vertical depth at this MD (ft | m)
+   * - ``id``
+     - Internal diameter at this MD (inches | mm)
+   * - ``deviation``
+     - Deviation from vertical at this MD (degrees)
+   * - ``roughness``
+     - Pipe roughness at this MD (inches | mm)
+
+Examples:
+
+Query geometry within a multi-segment deviated well:
+
+.. code-block:: python
+
+    >>> segs = [nodal.WellSegment(md=5000, id=2.441, deviation=0), nodal.WellSegment(md=3000, id=2.441, deviation=45), nodal.WellSegment(md=2000, id=4.0, deviation=60)]
+    >>> c = nodal.Completion(segments=segs, tht=100, bht=250)
+    >>> g = c.geometry_at_md(6500)
+    >>> round(g['tvd'], 1)
+    6060.7
+    >>> g['id']
+    2.441
+    >>> g['deviation']
+    45
+
+Query geometry in a legacy completion with casing section:
+
+.. code-block:: python
+
+    >>> c2 = nodal.Completion(tid=2.441, length=9000, tht=100, bht=200, cid=6.184, mpd=10000)
+    >>> g2 = c2.geometry_at_md(9500)
+    >>> g2['id']
+    6.184
+    >>> g2['tvd']
+    9500.0
+
+
+Completion.profile
+-------------------
+
+.. code-block:: python
+
+    completion.profile()
+
+Returns a pandas DataFrame showing the wellbore profile at all segment boundaries. Crossover points (where ID or deviation changes) appear as two rows at the same MD/TVD with different properties, showing the transition from one segment to the next. Units match the Completion construction unit system.
+
+.. list-table:: Output Columns
+   :widths: 10 40
+   :header-rows: 1
+
+   * - Column
+     - Description
+   * - ``MD``
+     - Measured depth (ft | m)
+   * - ``TVD``
+     - True vertical depth (ft | m)
+   * - ``Deviation``
+     - Deviation from vertical (degrees)
+   * - ``ID``
+     - Internal diameter (inches | mm)
+   * - ``Roughness``
+     - Pipe roughness (inches | mm)
+
+Examples:
+
+Profile of a multi-segment deviated well:
+
+.. code-block:: python
+
+    >>> segs = [nodal.WellSegment(md=5000, id=2.441, deviation=0), nodal.WellSegment(md=3000, id=2.441, deviation=45), nodal.WellSegment(md=2000, id=4.0, deviation=60)]
+    >>> c = nodal.Completion(segments=segs, tht=100, bht=250)
+    >>> df = c.profile()
+    >>> len(df)
+    6
+    >>> list(df.columns)
+    ['MD', 'TVD', 'Deviation', 'ID', 'Roughness']
+
+Profile of a legacy completion with casing section:
+
+.. code-block:: python
+
+    >>> c2 = nodal.Completion(tid=2.441, length=9000, tht=100, bht=200, cid=6.184, mpd=10000)
+    >>> df2 = c2.profile()
+    >>> len(df2)
+    4
+    >>> df2['ID'].iloc[1]
+    2.441
+    >>> df2['ID'].iloc[2]
+    6.184
+
+
 pyrestoolbox.nodal.Reservoir
 ============================
 

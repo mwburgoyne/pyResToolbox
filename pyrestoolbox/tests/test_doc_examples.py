@@ -824,6 +824,42 @@ def test_doc_nodal_completion_segments():
     assert c3.total_md == 10000
     assert round(c3.total_tvd, 1) == 8121.3
 
+def test_doc_nodal_geometry_at_md_deviated():
+    """nodal.rst: geometry_at_md on multi-segment deviated well"""
+    segs = [nodal.WellSegment(md=5000, id=2.441, deviation=0),
+            nodal.WellSegment(md=3000, id=2.441, deviation=45),
+            nodal.WellSegment(md=2000, id=4.0, deviation=60)]
+    c = nodal.Completion(segments=segs, tht=100, bht=250)
+    g = c.geometry_at_md(6500)
+    assert round(g['tvd'], 1) == 6060.7
+    assert g['id'] == 2.441
+    assert g['deviation'] == 45
+
+def test_doc_nodal_geometry_at_md_casing():
+    """nodal.rst: geometry_at_md on legacy completion with casing"""
+    c2 = nodal.Completion(tid=2.441, length=9000, tht=100, bht=200, cid=6.184, mpd=10000)
+    g2 = c2.geometry_at_md(9500)
+    assert g2['id'] == 6.184
+    assert g2['tvd'] == 9500.0
+
+def test_doc_nodal_profile_deviated():
+    """nodal.rst: profile on multi-segment deviated well"""
+    segs = [nodal.WellSegment(md=5000, id=2.441, deviation=0),
+            nodal.WellSegment(md=3000, id=2.441, deviation=45),
+            nodal.WellSegment(md=2000, id=4.0, deviation=60)]
+    c = nodal.Completion(segments=segs, tht=100, bht=250)
+    df = c.profile()
+    assert len(df) == 6
+    assert list(df.columns) == ['MD', 'TVD', 'Deviation', 'ID', 'Roughness']
+
+def test_doc_nodal_profile_casing():
+    """nodal.rst: profile on legacy completion with casing"""
+    c2 = nodal.Completion(tid=2.441, length=9000, tht=100, bht=200, cid=6.184, mpd=10000)
+    df2 = c2.profile()
+    assert len(df2) == 4
+    assert df2['ID'].iloc[1] == 2.441
+    assert df2['ID'].iloc[2] == 6.184
+
 def test_doc_nodal_fbhp_deviated():
     """nodal.rst: fbhp deviated well using WellSegment"""
     segs = [nodal.WellSegment(md=5000, id=2.441, deviation=0),
