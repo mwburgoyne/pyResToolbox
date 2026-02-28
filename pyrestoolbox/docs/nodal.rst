@@ -589,7 +589,7 @@ Deviated well using WellSegment:
     >>> segs = [nodal.WellSegment(md=5000, id=2.441, deviation=0), nodal.WellSegment(md=5000, id=2.441, deviation=45)]
     >>> c_dev = nodal.Completion(segments=segs, tht=100, bht=200)
     >>> nodal.fbhp(thp=500, completion=c_dev, vlpmethod='HB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    920.8903232471756
+    923.092017723091
 
 .. note::
 

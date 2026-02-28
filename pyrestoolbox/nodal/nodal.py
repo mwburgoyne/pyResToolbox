@@ -1756,19 +1756,21 @@ def fbhp(thp, completion, vlpmethod='WG', well_type='gas',
                 rsb_scale=1.0, injection=injection, theta=theta)
 
     # Loop over wellbore segments
-    total_md = completion.total_md
-    md_traversed = 0.0
+    # Temperature interpolated over TVD (not MD) since geothermal
+    # gradient is a function of vertical depth
+    total_tvd = completion.total_tvd
+    tvd_traversed = 0.0
     p_current = thp
 
     for seg in completion.segments:
-        frac_start = md_traversed / total_md if total_md > 0 else 0.0
-        frac_end = (md_traversed + seg.md) / total_md if total_md > 0 else 1.0
+        frac_start = tvd_traversed / total_tvd if total_tvd > 0 else 0.0
+        frac_end = (tvd_traversed + seg.tvd) / total_tvd if total_tvd > 0 else 1.0
         tht_seg = completion.tht + (completion.bht - completion.tht) * frac_start
         bht_seg = completion.tht + (completion.bht - completion.tht) * frac_end
 
         p_current = _run_section(p_current, seg.id, seg.roughness, seg.md,
                                  tht_seg, bht_seg, seg.theta)
-        md_traversed += seg.md
+        tvd_traversed += seg.tvd
 
     if not math.isfinite(p_current):
         raise RuntimeError(f"VLP calculation produced non-finite BHP: {p_current}")
