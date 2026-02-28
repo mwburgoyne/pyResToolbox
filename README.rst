@@ -2,14 +2,14 @@
 ``pyrestoolbox``
 ===================================
 
------------------------------
+--------------------------------------------------
 A collection of Reservoir Engineering Utilities
------------------------------
+--------------------------------------------------
 
 This set of functions focuses on those that the author uses often while crafting programming solutions.
 These are the scripts that are often copy/pasted from previous work - sometimes slightly modified - resulting in a trail of slightly different versions over the years. Some attempt has been made here to make this implementation flexible enough such that it can be relied on as-is going forward.
 
-Note: Version 3.0 consolidates simulation-oriented functions under the simtools module, adds nodal analysis (VLP/IPR), VFP table generation, and relative permeability curve fitting.
+Note: Version 3.0 consolidates simulation-oriented functions under the simtools module, adds nodal analysis (VLP/IPR), VFP table generation, relative permeability curve fitting, and Eclipse METRIC unit support across all modules.
 
 Includes functions to perform calculations including;
 
@@ -27,7 +27,9 @@ Includes functions to perform calculations including;
 - Creation of Corey, LET and Jerauld relative permeability tables in Eclipse format, with curve fitting support
 - Calculation of Methane, CO2 and multicomponent gas saturated brine properties (Soreide-Whitson VLE)
 
-`Changelist <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/changelist.rst>`_
+All public PVT, flow rate, and simulation table functions support both oilfield (psia, deg F, ft) and Eclipse METRIC (barsa, deg C, m) unit systems via an optional ``metric=False`` parameter. See individual module documentation for unit mapping details.
+
+`Changelist <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/changelist.rst>`_
 
 Upgrade previous installations with
 
@@ -39,70 +41,23 @@ Upgrade previous installations with
 Module List
 =============
 
-+----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `gas <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/gas.rst>`_            | - Gas Tc & Pc Calculation                                       |
-|                                                                                                    | - Gas Z-Factor Calculation                                      |
-|                                                                                                    | - Gas Viscosity                                                 |
-|                                                                                                    | - Gas Viscosity * Z                                             |
-|                                                                                                    | - Gas Compressibility                                           |
-|                                                                                                    | - Gas Formation Volume Factor                                   |
-|                                                                                                    | - Gas Density                                                   |
-|                                                                                                    | - Gas Water of Condensation                                     |
-|                                                                                                    | - Convert P/Z to P                                              |
-|                                                                                                    | - Convert Gas Gradient to SG                                    |
-|                                                                                                    | - Delta Pseudopressure                                          |
-|                                                                                                    | - Gas Condensate FWS SG                                         |
-|                                                                                                    | - Gas Flow Rate Radial                                          |
-|                                                                                                    | - Gas Flow Rate Linear                                          |
-+----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `oil <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/oil.rst>`_            | - Oil Density from MW                                           |
-|                                                                                                    | - Oil Critical Properties with Twu                              |
-|                                                                                                    | - Incrememtal GOR post Separation                               |
-|                                                                                                    | - Oil Bubble Point Pressure                                     |
-|                                                                                                    | - Oil GOR at Pb                                                 |
-|                                                                                                    | - Oil GOR at P                                                  |
-|                                                                                                    | - Oil Compressibility                                           |
-|                                                                                                    | - Oil Density                                                   |
-|                                                                                                    | - Oil Formation Volume Factor                                   |
-|                                                                                                    | - Oil Viscosity                                                 |
-|                                                                                                    | - Harmonize Pb and Rsb                                          |
-|                                                                                                    | - Estimate soln gas SG from oil                                 |
-|                                                                                                    | - Estimate SG of gas post separator                             |
-|                                                                                                    | - Calculate weighted average surface gas SG                     |
-|                                                                                                    | - Oil API to SG                                                 |
-|                                                                                                    | - Oil SG to API                                                 |
-|                                                                                                    | - Oil Flow Rate Radial                                          |
-|                                                                                                    | - Oil Flow Rate Linear                                          |
-+----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `nodal <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/nodal.rst>`_        | - Flowing BHP (4 VLP methods)                                   |
-|                                                                                                    | - Outflow (VLP) curves                                          |
-|                                                                                                    | - Inflow (IPR) curves                                           |
-|                                                                                                    | - Operating point analysis                                      |
-|                                                                                                    | - Multi-segment deviated/horizontal wells                       |
-|                                                                                                    | - GasPVT and OilPVT convenience classes                         |
-+----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `library <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/library.rst>`_    | - Return critical parameters for typical single components      |
-+----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `brine <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/brine.rst>`_        | - Calculate suite of brine properties with variable methane     |
-|                                                                                                    | - Calculate suite of CO2 saturated brine properties             |
-|                                                                                                    | - Multicomponent gas-saturated brine (Soreide-Whitson VLE)      |
-+----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `layer <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/layer.rst>`_        | - Lorenz coefficient from Beta value                            |
-|                                                                                                    | - Lorenz coefficient from flow fraction                         |
-|                                                                                                    | - Lorenz coefficient to flow fraction                           |
-|                                                                                                    | - Lorenz coefficient to permeability array                      |
-+----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
-| `simtools <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/simtools.rst>`_  | - Summarize IX convergence errors from PRT file                 |
-|                                                                                                    | - Create Aquifer Influence Functions                            |
-|                                                                                                    | - Perform recursive ECL or IX deck zip/check for INCLUDE files  |
-|                                                                                                    | - Solve Rachford Rice for user specified feed Zis and Ki's      |
-|                                                                                                    | - Create sets of rel perm tables (Corey, LET, Jerauld)         |
-|                                                                                                    | - Fit relative permeability models to measured data             |
-|                                                                                                    | - Generate Eclipse VFPPROD lift curve tables                    |
-|                                                                                                    | - Generate Eclipse VFPINJ injection curve tables                |
-|                                                                                                    | - Create Black Oil tables (PVDO, PVDG, PVTO)                   |
-|                                                                                                    | - Create PVTW water PVT tables                                  |
-+----------------------------------------------------------------------------------------------------+-----------------------------------------------------------------+
+.. list-table::
+   :widths: 30 70
+
+   * - `gas <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/gas.rst>`_
+     - Gas Tc & Pc Calculation, Gas Z-Factor Calculation, Gas Viscosity, Gas Viscosity \* Z, Gas Compressibility, Gas Formation Volume Factor, Gas Density, Gas Water of Condensation, Convert P/Z to P, Convert Gas Gradient to SG, Delta Pseudopressure, Gas Condensate FWS SG, Gas Flow Rate Radial, Gas Flow Rate Linear
+   * - `oil <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/oil.rst>`_
+     - Oil Density from MW, Oil Critical Properties with Twu, Incremental GOR post Separation, Oil Bubble Point Pressure, Oil GOR at Pb, Oil GOR at P, Oil Compressibility, Oil Density, Oil Formation Volume Factor, Oil Viscosity, Harmonize Pb and Rsb, Estimate soln gas SG from oil, Estimate SG of gas post separator, Calculate weighted average surface gas SG, Oil API to SG, Oil SG to API, Oil Flow Rate Radial, Oil Flow Rate Linear
+   * - `nodal <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/nodal.rst>`_
+     - Flowing BHP (4 VLP methods), Outflow (VLP) curves, Inflow (IPR) curves, Operating point analysis, Multi-segment deviated/horizontal wells, GasPVT and OilPVT convenience classes
+   * - `library <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/library.rst>`_
+     - Return critical parameters for typical single components
+   * - `brine <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/brine.rst>`_
+     - Calculate suite of brine properties with variable methane, Calculate suite of CO2 saturated brine properties, Multicomponent gas-saturated brine (Soreide-Whitson VLE)
+   * - `layer <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/layer.rst>`_
+     - Lorenz coefficient from Beta value, Lorenz coefficient from flow fraction, Lorenz coefficient to flow fraction, Lorenz coefficient to permeability array
+   * - `simtools <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/simtools.rst>`_
+     - Summarize IX convergence errors from PRT file, Create Aquifer Influence Functions, Perform recursive ECL or IX deck zip/check for INCLUDE files, Solve Rachford Rice for user specified feed Zis and Ki's, Create sets of rel perm tables (Corey, LET, Jerauld), Fit relative permeability models to measured data, Generate Eclipse VFPPROD lift curve tables, Generate Eclipse VFPINJ injection curve tables, Create Black Oil tables (PVDO, PVDG, PVTO), Create PVTW water PVT tables
 
 
 Getting Started
@@ -328,4 +283,4 @@ With ability to generate Live Oil PVTO style table data as well
 
 Development
 ===========
-``pyrestoolbox`` is maintained by Mark W. Burgoyne (`<https://github.com/mwburgoyne>`_).
+``pyrestoolbox`` is maintained by Mark W. Burgoyne (`github.com/mwburgoyne <https://github.com/mwburgoyne>`_).
