@@ -19,7 +19,23 @@
     and at  <https://www.gnu.org/licenses/>.
 
           Contact author at mark.w.burgoyne@gmail.com
+
+Brine property calculations with three models.
+
+Functions
+---------
+brine_props         Methane-saturated brine properties (Bw, density, viscosity, Cw, Rs)
+make_pvtw_table     Water PVT table generation (backward-compatible wrapper)
+
+Classes
+-------
+CO2_Brine_Mixture   CO2-saturated brine via Spycher-Pruess phase partitioning
+SoreideWhitson      Multicomponent gas-saturated brine via Soreide-Whitson VLE
 """
+
+__all__ = [
+    'brine_props', 'CO2_Brine_Mixture', 'SoreideWhitson', 'make_pvtw_table',
+]
 
 import numpy as np
 import numpy.typing as npt

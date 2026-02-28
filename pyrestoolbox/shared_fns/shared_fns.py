@@ -19,7 +19,23 @@
     and at  <https://www.gnu.org/licenses/>.
 
           Contact author at mark.w.burgoyne@gmail.com
+
+Shared utility functions used across pyResToolbox modules.
+
+Functions
+---------
+bisect_solve        Generic bisection root-finder
+convert_to_numpy    Normalize scalar/list/array inputs to numpy arrays
+process_output      Convert results back to scalar or array based on input type
+check_2_inputs      Validate matched float/list inputs
+validate_pe_inputs  Centralized petroleum engineering input validation
+halley_solve_cubic  Halley's method cubic equation solver
 """
+
+__all__ = [
+    'bisect_solve', 'convert_to_numpy', 'process_output',
+    'check_2_inputs', 'validate_pe_inputs', 'halley_solve_cubic',
+]
 
 import numpy as np
 from typing import Union, List

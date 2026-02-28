@@ -619,6 +619,189 @@ def test_multi_segment_oil_all_methods():
         assert bhp > 200, f"Method {method}: BHP {bhp:.2f} should exceed THP"
 
 
+# ============================================================================
+#  geometry_at_md() Tests
+# ============================================================================
+
+def test_geometry_at_md_single_segment():
+    """Single vertical segment: geometry at surface, midpoint, and bottom."""
+    c = Completion(tid=2.441, length=10000, tht=100, bht=200)
+    # Surface
+    g0 = c.geometry_at_md(0)
+    assert abs(g0['md']) < 1e-10
+    assert abs(g0['tvd']) < 1e-10
+    assert abs(g0['id'] - 2.441) < 1e-6
+    assert g0['deviation'] == 0
+    # Midpoint
+    g5 = c.geometry_at_md(5000)
+    assert abs(g5['md'] - 5000) < 1e-6
+    assert abs(g5['tvd'] - 5000) < 1e-6  # vertical: tvd == md
+    assert abs(g5['id'] - 2.441) < 1e-6
+    # Bottom
+    g10 = c.geometry_at_md(10000)
+    assert abs(g10['md'] - 10000) < 1e-6
+    assert abs(g10['tvd'] - 10000) < 1e-6
+
+
+def test_geometry_at_md_multi_segment():
+    """3-segment deviated well: geometry within each segment and at crossovers."""
+    segs = [
+        WellSegment(md=3000, id=2.441, deviation=0),    # vertical
+        WellSegment(md=4000, id=2.441, deviation=45),   # build section
+        WellSegment(md=3000, id=4.0, deviation=60),     # near-horizontal
+    ]
+    c = Completion(segments=segs, tht=100, bht=250)
+    # Within first segment (md=1500)
+    g1 = c.geometry_at_md(1500)
+    assert abs(g1['tvd'] - 1500) < 0.1  # vertical
+    assert abs(g1['id'] - 2.441) < 1e-6
+    assert g1['deviation'] == 0
+    # At crossover point (md=3000 — end of first, start of second)
+    g2 = c.geometry_at_md(3000)
+    assert abs(g2['tvd'] - 3000) < 0.1
+    assert abs(g2['id'] - 2.441) < 1e-6
+    assert g2['deviation'] == 0  # still in first segment
+    # Within second segment (md=5000 — 2000 ft into 45-degree segment)
+    g3 = c.geometry_at_md(5000)
+    expected_tvd = 3000 + 2000 * math.cos(math.radians(45))
+    assert abs(g3['tvd'] - expected_tvd) < 0.1
+    assert g3['deviation'] == 45
+    # Within third segment (md=8000 — 1000 ft into 60-degree segment)
+    g4 = c.geometry_at_md(8000)
+    tvd_seg1 = 3000
+    tvd_seg2 = 4000 * math.cos(math.radians(45))
+    tvd_seg3_partial = 1000 * math.cos(math.radians(60))
+    expected_tvd = tvd_seg1 + tvd_seg2 + tvd_seg3_partial
+    assert abs(g4['tvd'] - expected_tvd) < 0.1
+    assert abs(g4['id'] - 4.0) < 1e-6
+    assert g4['deviation'] == 60
+    # At total_md (md=10000)
+    g5 = c.geometry_at_md(10000)
+    total_tvd = tvd_seg1 + tvd_seg2 + 3000 * math.cos(math.radians(60))
+    assert abs(g5['tvd'] - total_tvd) < 0.1
+
+
+def test_geometry_at_md_out_of_range():
+    """md < 0 and md > total_md should raise ValueError."""
+    c = Completion(tid=2.441, length=10000, tht=100, bht=200)
+    try:
+        c.geometry_at_md(-1)
+        assert False, "Should have raised ValueError for md < 0"
+    except ValueError:
+        pass
+    try:
+        c.geometry_at_md(10001)
+        assert False, "Should have raised ValueError for md > total_md"
+    except ValueError:
+        pass
+
+
+def test_geometry_at_md_metric():
+    """Metric Completion: input and output should be in metric units."""
+    segs = [WellSegment(md=3000, id=62, deviation=0, metric=True),
+            WellSegment(md=2000, id=100, deviation=45, metric=True)]
+    c = Completion(segments=segs, tht=50, bht=90, metric=True)
+    # Query at 1000 m (within first segment)
+    g = c.geometry_at_md(1000)
+    assert abs(g['md'] - 1000) < 0.1
+    assert abs(g['tvd'] - 1000) < 0.1  # vertical
+    assert abs(g['id'] - 62) < 0.1  # mm
+    assert g['deviation'] == 0
+    # Query at 4000 m (within second segment, 1000 m into it)
+    g2 = c.geometry_at_md(4000)
+    expected_tvd = 3000 + 1000 * math.cos(math.radians(45))
+    assert abs(g2['tvd'] - expected_tvd) < 0.5
+    assert abs(g2['id'] - 100) < 0.1
+    assert g2['deviation'] == 45
+
+
+# ============================================================================
+#  profile() Tests
+# ============================================================================
+
+def test_profile_single_segment():
+    """Single segment profile has 2 rows: top and bottom."""
+    c = Completion(tid=2.441, length=10000, tht=100, bht=200)
+    df = c.profile()
+    assert len(df) == 2
+    assert abs(df['MD'].iloc[0]) < 1e-10
+    assert abs(df['TVD'].iloc[0]) < 1e-10
+    assert abs(df['MD'].iloc[1] - 10000) < 1e-6
+    assert abs(df['TVD'].iloc[1] - 10000) < 1e-6
+    assert abs(df['ID'].iloc[0] - 2.441) < 1e-6
+    assert abs(df['ID'].iloc[1] - 2.441) < 1e-6
+    assert 'Roughness' in df.columns
+    assert abs(df['Roughness'].iloc[0] - 0.0006) < 1e-8
+    assert abs(df['Roughness'].iloc[1] - 0.0006) < 1e-8
+
+
+def test_profile_multi_segment():
+    """3-segment well: crossover rows have same MD/TVD but different ID/deviation."""
+    segs = [
+        WellSegment(md=3000, id=2.441, deviation=0),
+        WellSegment(md=4000, id=2.441, deviation=45),
+        WellSegment(md=3000, id=4.0, deviation=60),
+    ]
+    c = Completion(segments=segs, tht=100, bht=250)
+    df = c.profile()
+    # 3 segments: top + (bottom + crossover_top)*2 + bottom = 1 + 2 + 2 + 1 = 6 rows
+    # Actually: top(0), bottom(0)/top(1) = 2 rows, bottom(1)/top(2) = 2 rows, bottom(2) = 1 row
+    # Total = 1 + 2 + 2 + 1 = 6? Let's count:
+    #   i=0: top of seg0, bottom of seg0, top of seg1 = 3 rows
+    #   i=1: bottom of seg1, top of seg2 = 2 rows
+    #   i=2: bottom of seg2 = 1 row
+    # Total = 3 + 2 + 1 = 6
+    assert len(df) == 6, f"Expected 6 rows, got {len(df)}"
+    # Check crossover at md=3000: rows 1 and 2 should have same MD/TVD but different deviation
+    assert abs(df['MD'].iloc[1] - df['MD'].iloc[2]) < 1e-6
+    assert abs(df['TVD'].iloc[1] - df['TVD'].iloc[2]) < 1e-6
+    assert df['Deviation'].iloc[1] == 0   # end of segment 0
+    assert df['Deviation'].iloc[2] == 45  # start of segment 1
+    # Check crossover at md=7000: rows 3 and 4
+    assert abs(df['MD'].iloc[3] - df['MD'].iloc[4]) < 1e-6
+    assert df['Deviation'].iloc[3] == 45  # end of segment 1
+    assert df['Deviation'].iloc[4] == 60  # start of segment 2
+    assert abs(df['ID'].iloc[4] - 4.0) < 1e-6
+
+
+def test_profile_legacy_with_casing():
+    """Legacy completion with casing section shows tubing->casing transition."""
+    c = Completion(tid=2.441, length=8000, tht=100, bht=250,
+                   cid=6.0, crough=0.001, mpd=10000)
+    df = c.profile()
+    # 2 segments -> top, bottom/crossover_top, bottom = 4 rows
+    assert len(df) == 4, f"Expected 4 rows, got {len(df)}"
+    # Crossover at 8000 ft
+    assert abs(df['MD'].iloc[1] - 8000) < 1e-6
+    assert abs(df['ID'].iloc[1] - 2.441) < 1e-6  # tubing
+    assert abs(df['MD'].iloc[2] - 8000) < 1e-6
+    assert abs(df['ID'].iloc[2] - 6.0) < 1e-6    # casing
+    # Bottom at 10000 ft
+    assert abs(df['MD'].iloc[3] - 10000) < 1e-6
+    assert abs(df['ID'].iloc[3] - 6.0) < 1e-6
+    # Roughness: tubing=0.0006, casing=0.001
+    assert abs(df['Roughness'].iloc[0] - 0.0006) < 1e-8
+    assert abs(df['Roughness'].iloc[2] - 0.001) < 1e-8
+
+
+def test_profile_metric():
+    """Metric Completion profile should have values in metric units."""
+    segs = [WellSegment(md=3000, id=62, deviation=0, metric=True),
+            WellSegment(md=2000, id=100, deviation=45, metric=True)]
+    c = Completion(segments=segs, tht=50, bht=90, metric=True)
+    df = c.profile()
+    # Check first row is surface in metric
+    assert abs(df['MD'].iloc[0]) < 1e-6
+    assert abs(df['TVD'].iloc[0]) < 1e-6
+    assert abs(df['ID'].iloc[0] - 62) < 0.1  # mm
+    # Check last row total MD ~ 5000 m
+    assert abs(df['MD'].iloc[-1] - 5000) < 0.5
+    # Check ID of second segment ~ 100 mm
+    assert abs(df['ID'].iloc[-1] - 100) < 0.1
+    # Roughness should be in mm (default 0.01524 mm)
+    assert abs(df['Roughness'].iloc[0] - 0.01524) < 0.001
+
+
 if __name__ == '__main__':
     import traceback
     tests = [(k, v) for k, v in list(globals().items()) if k.startswith('test_') and callable(v)]

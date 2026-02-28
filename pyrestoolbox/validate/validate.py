@@ -1,6 +1,16 @@
+"""
+Method string-to-Enum validation with legacy name mapping.
+
+Functions
+---------
+validate_methods    Convert string method specifications to Enum instances
+"""
+
+__all__ = ['validate_methods']
+
 from pyrestoolbox.classes import z_method, c_method, pb_method, rs_method, bo_method, uo_method, deno_method, co_method, kr_family, kr_table, class_dic
 
-        
+
 def validate_methods(names, variables):
     # Backward compatibility mapping
     legacy_map = {'BUR': 'BNS'}

@@ -1,3 +1,13 @@
+Changelist in 3.0.1:
+
+- **Completion.geometry_at_md()**: New method returning wellbore geometry (TVD, ID, deviation, roughness) at any measured depth along the completion. Supports both oilfield and metric unit systems.
+- **Completion.profile()**: New method returning a pandas DataFrame of the wellbore profile at all segment boundaries, including crossover rows where geometry changes. Columns: MD, TVD, Deviation, ID, Roughness.
+- Stored ``_metric`` flag on ``Completion`` to enable unit-aware output from new methods.
+- 12 new tests (8 nodal module + 4 doc example) covering single/multi-segment, legacy casing, metric, and out-of-range scenarios.
+- Updated ``nodal.rst`` documentation with parameter tables and examples for both new methods.
+- **Agentic/MCP usability improvements**: Added explicit ``__all__`` exports to all modules (gas, oil, brine, nodal, simtools, layer, library, classes, constants, shared_fns, validate) so that ``dir()`` and programmatic introspection return only the intended public API. Added concise function-index docstrings to each module for discoverability via ``help()``. Documented ``outflow_curve()`` return dict keys in code docstring.
+
+
 Changelist in 3.0.0:
 
 - **Nodal Analysis module**: Added VLP (Vertical Lift Performance), IPR (Inflow Performance Relationship), and operating point analysis with four multiphase flow correlations (Hagedorn-Brown, Woldesemayat-Ghajar, Gray, Beggs & Brill). Supports gas and oil wells with multi-segment deviated/horizontal wellbores via the new ``WellSegment`` and ``Completion`` classes. PVT convenience wrappers ``GasPVT`` and ``OilPVT`` for use with nodal and VFP functions.

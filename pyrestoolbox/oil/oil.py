@@ -19,7 +19,46 @@
     and at  <https://www.gnu.org/licenses/>.
 
           Contact author at mark.w.burgoyne@gmail.com
+
+Oil PVT, flow rate, and black oil table calculations.
+
+Functions
+---------
+oil_pbub            Bubble point pressure (Standing, Valko-McCain, Velarde)
+oil_rs_bub          Solution GOR at bubble point
+oil_rs              Solution GOR at any pressure
+oil_bo              Oil formation volume factor (McCain, Standing)
+oil_deno            Live oil density
+oil_viso            Oil viscosity (saturated and undersaturated)
+oil_co              Oil compressibility
+oil_sg              Oil specific gravity from API
+oil_api             API gravity from specific gravity
+oil_ja_sg           Jacoby aromaticity SG
+oil_twu_props       Twu critical property correlations
+oil_rs_st           Standing Rs correlation
+oil_rate_radial     Radial oil flow rate (STB/d)
+oil_rate_linear     Linear oil flow rate (STB/d)
+oil_harmonize_pb_rsb  Harmonize consistent Pb and Rsb
+sg_evolved_gas      Evolved gas specific gravity
+sg_st_gas           Stock-tank gas specific gravity
+sgg_wt_avg          Weighted average gas SG from separator stages
+check_sgs           Validate separator/stock-tank gas SG consistency
+make_bot_og         Black oil table generation (backward-compatible wrapper)
+
+Classes
+-------
+OilPVT              Convenience wrapper storing oil characterization & method choices
 """
+
+__all__ = [
+    'oil_pbub', 'oil_rs_bub', 'oil_rs', 'oil_bo', 'oil_deno', 'oil_viso',
+    'oil_co', 'oil_sg', 'oil_api', 'oil_ja_sg', 'oil_twu_props', 'oil_rs_st',
+    'oil_rate_radial', 'oil_rate_linear', 'oil_harmonize_pb_rsb',
+    'sg_evolved_gas', 'sg_st_gas', 'sgg_wt_avg', 'check_sgs',
+    'make_bot_og', 'OilPVT',
+    # Enum classes re-exported for convenience (oil.pb_method.STAN, etc.)
+    'pb_method', 'rs_method', 'bo_method', 'co_method',
+]
 
 import numpy as np
 import numpy.typing as npt

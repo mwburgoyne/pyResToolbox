@@ -19,7 +19,33 @@
     and at  <https://www.gnu.org/licenses/>.
 
           Contact author at mark.w.burgoyne@gmail.com
+
+Enum classes for method selection and class_dic registry.
+
+Enums
+-----
+z_method      Z-factor calculation method (DAK, HY, WYW, BNS)
+c_method      Critical property method (PMC, SUT, BNS)
+pb_method     Bubble point method (STAN, VALMC, VELAR)
+rs_method     Solution GOR method (VELAR, STAN, VALMC)
+bo_method     Oil FVF method (MCAIN, STAN)
+uo_method     Oil viscosity method (BR)
+deno_method   Oil density method (SWMH)
+co_method     Oil compressibility method (NUM)
+kr_family     Relative permeability model family (COR, LET, JER)
+kr_table      Relative permeability table type (SWOF, SGOF, SGWFN)
+vlp_method    VLP multiphase flow correlation (HB, WG, GRAY, BB)
+
+Variables
+---------
+class_dic     Dict mapping method parameter names to their Enum classes
 """
+
+__all__ = [
+    'z_method', 'c_method', 'pb_method', 'rs_method', 'bo_method',
+    'uo_method', 'deno_method', 'co_method', 'kr_family', 'kr_table',
+    'vlp_method', 'class_dic',
+]
 
 from enum import Enum
 

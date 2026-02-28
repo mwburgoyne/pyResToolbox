@@ -19,7 +19,48 @@
     and at  <https://www.gnu.org/licenses/>.
 
           Contact author at mark.w.burgoyne@gmail.com
+
+Physical constants, molecular weights, and unit conversion factors.
+
+Constants
+---------
+R, psc, tsc, degF2R, tscr, scf_per_mol, CUFTperBBL, WDEN
+MW_AIR, MW_CO2, MW_H2S, MW_N2, MW_H2
+
+Unit Conversions (FIELD <-> Eclipse METRIC)
+-------------------------------------------
+PSI_TO_BAR, BAR_TO_PSI, FT_TO_M, M_TO_FT, IN_TO_MM, MM_TO_IN,
+BBL_TO_M3, M3_TO_BBL, MSCF_TO_SM3, SM3_TO_MSCF, MMSCF_TO_SM3, SM3_TO_MMSCF,
+STB_TO_SM3, SM3_TO_STB, LBCUFT_TO_KGM3, KGM3_TO_LBCUFT,
+SCF_PER_STB_TO_SM3_PER_SM3, SM3_PER_SM3_TO_SCF_PER_STB, and others.
+
+Functions
+---------
+degf_to_degc    Convert degrees Fahrenheit to Celsius
+degc_to_degf    Convert degrees Celsius to Fahrenheit
 """
+
+__all__ = [
+    # Physical constants
+    'R', 'psc', 'tsc', 'degF2R', 'tscr', 'scf_per_mol', 'CUFTperBBL', 'WDEN',
+    'MW_AIR', 'MW_CO2', 'MW_H2S', 'MW_N2', 'MW_H2',
+    # Temperature conversion functions
+    'degf_to_degc', 'degc_to_degf',
+    # Unit conversion constants
+    'PSI_TO_BAR', 'BAR_TO_PSI', 'FT_TO_M', 'M_TO_FT', 'IN_TO_MM', 'MM_TO_IN',
+    'BBL_TO_M3', 'M3_TO_BBL', 'CUFT_TO_M3', 'M3_TO_CUFT',
+    'MSCF_TO_SM3', 'SM3_TO_MSCF', 'MMSCF_TO_SM3', 'SM3_TO_MMSCF',
+    'STB_TO_SM3', 'SM3_TO_STB',
+    'SCF_PER_STB_TO_SM3_PER_SM3', 'SM3_PER_SM3_TO_SCF_PER_STB',
+    'STB_PER_MSCF_TO_SM3_PER_SM3', 'SM3_PER_SM3_TO_STB_PER_MSCF',
+    'STB_PER_MMSCF_TO_SM3_PER_SM3', 'SM3_PER_SM3_TO_STB_PER_MMSCF',
+    'LBCUFT_TO_KGM3', 'KGM3_TO_LBCUFT',
+    'INVPSI_TO_INVBAR', 'INVBAR_TO_INVPSI',
+    'PSI2CP_TO_BAR2CP', 'BAR2CP_TO_PSI2CP',
+    'PSIFT_TO_BARM', 'BARM_TO_PSIFT',
+    'SQFT_TO_SQM', 'SQM_TO_SQFT',
+    'D_PER_MSCF_TO_D_PER_SM3', 'D_PER_SM3_TO_D_PER_MSCF',
+]
 
 
 # Constants
