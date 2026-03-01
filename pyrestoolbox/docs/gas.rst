@@ -109,7 +109,9 @@ Function List
      - `pyrestoolbox.gas.gas_sg`_
    * - Gas Flow Rate Linear
      - `pyrestoolbox.gas.gas_rate_linear`_
-  
+   * - Gas PVT Wrapper
+     - `pyrestoolbox.gas.GasPVT`_
+
 
 pyrestoolbox.gas.gas_tc_pc
 ======================
@@ -785,10 +787,12 @@ pyrestoolbox.gas.gas_rate_radial
 
 .. code-block:: python
 
-    gas_rate_radial(k, h, pr, pwf, r_w, r_ext, degf, zmethod='DAK, cmethod='PMC', S = 0, D = 0, sg = 0.75, n2 = 0, co2 = 0, h2s = 0, tc  = 0, pc = 0, metric = False) -> float or np.array
+    gas_rate_radial(k, h, pr, pwf, r_w, r_ext, degf, zmethod='DAK', cmethod='PMC', S=0, D=0, sg=0.75, co2=0, h2s=0, n2=0, h2=0, tc=0, pc=0, gas_pvt=None, metric=False) -> float or np.array
 
 Returns gas rate (Mscf/day, or sm3/d if metric=True) for radial flow using Darcy pseudo steady state equation & gas pseudopressure.
 Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D array of rates. Using more than one input array -- while not prohibited -- will not return expected results.
+
+A ``gas_pvt`` object can be provided instead of individual gas composition parameters. When ``gas_pvt`` is used, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, and pc are extracted from the object.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -848,6 +852,9 @@ Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D a
    * - sg
      - float
      - Gas SG relative to air, Defaults to 0.75 if undefined
+   * - gas_pvt
+     - GasPVT
+     - GasPVT object. If provided, sg/co2/h2s/n2/h2/zmethod/cmethod/tc/pc are extracted from it
    * - metric
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
@@ -861,6 +868,14 @@ Examples:
 
     >>> gas.gas_rate_radial(k=1, h=50, pr=[2000,1000], pwf=750, r_w=0.3, r_ext=1500, degf=180, sg = 0.75, D = 0.01, S=5)
     array([704.29202227, 135.05317439])
+
+Using a GasPVT object:
+
+.. code-block:: python
+
+    >>> gpvt = gas.GasPVT(sg=0.75, co2=0.05)
+    >>> gas.gas_rate_radial(k=5, h=50, pr=2000, pwf=750, r_w=0.3, r_ext=1500, degf=180, gas_pvt=gpvt, S=5, D=0.01)
+    2072.675775394653
     
 
 pyrestoolbox.gas.gas_sg
@@ -911,11 +926,12 @@ pyrestoolbox.gas.gas_rate_linear
 
 .. code-block:: python
 
-    gas_rate_linear(k, pr, pwf, area, length, degf, zmethod='DAK, cmethod='PMC', sg = 0.75, n2 = 0, co2 = 0, h2s = 0, tc  = 0, pc = 0, metric = False) -> float or np.array
+    gas_rate_linear(k, pr, pwf, area, length, degf, zmethod='DAK', cmethod='PMC', sg=0.75, co2=0, h2s=0, n2=0, h2=0, tc=0, pc=0, gas_pvt=None, metric=False) -> float or np.array
 
 Returns gas rate (Mscf/day, or sm3/d if metric=True) for linear flow using Darcy steady state equation & gas pseudopressure.
 Arrays can be used for any one of k, pr, pwf or area, returning corresponding 1-D array of rates. Using more than one input array -- while not prohibited -- will not return expected results.
 
+A ``gas_pvt`` object can be provided instead of individual gas composition parameters.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -966,6 +982,9 @@ Arrays can be used for any one of k, pr, pwf or area, returning corresponding 1-
    * - sg
      - float
      - Gas SG relative to air, Defaults to 0.75 if undefined
+   * - gas_pvt
+     - GasPVT
+     - GasPVT object. If provided, sg/co2/h2s/n2/h2/zmethod/cmethod/tc/pc are extracted from it
    * - metric
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
@@ -979,4 +998,94 @@ Examples:
 
     >>> gas.gas_rate_linear(k=0.1, area=50, length=200, pr=[2000, 1000, 500], pwf=250, degf=180, sg = 0.8)
     array([8.20220032, 2.10691337, 0.42685002])
-    
+
+Using a GasPVT object:
+
+.. code-block:: python
+
+    >>> gpvt = gas.GasPVT(sg=0.8)
+    >>> gas.gas_rate_linear(k=0.1, area=50, length=200, pr=2000, pwf=250, degf=180, gas_pvt=gpvt)
+    8.202199932859799
+
+
+pyrestoolbox.gas.GasPVT
+========================
+
+.. code-block:: python
+
+    GasPVT(sg=0.75, co2=0, h2s=0, n2=0, h2=0, zmethod='DAK', cmethod='PMC', metric=False)
+
+Stores gas composition and method choices. Pre-computes critical temperature and pressure via ``gas_tc_pc()`` so they are not recalculated per call. Automatically selects BNS zmethod/cmethod when h2 > 0. Can be passed directly to ``fbhp()`` and ``operating_point()`` for VLP calculations, and to ``gas_rate_radial()`` and ``gas_rate_linear()`` for IPR rate calculations.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - sg
+     - float
+     - Gas SG relative to air. Defaults to 0.75
+   * - co2
+     - float
+     - Molar fraction of CO2. Defaults to 0
+   * - h2s
+     - float
+     - Molar fraction of H2S. Defaults to 0
+   * - n2
+     - float
+     - Molar fraction of Nitrogen. Defaults to 0
+   * - h2
+     - float
+     - Molar fraction of Hydrogen. Defaults to 0. If positive, overrides zmethod and cmethod to 'BNS'
+   * - zmethod
+     - string or z_method
+     - Method for Z-factor calculation. Defaults to 'DAK'
+   * - cmethod
+     - string or c_method
+     - Method for critical property calculation. Defaults to 'PMC'
+   * - metric
+     - bool
+     - If True, methods accept/return Eclipse METRIC units (barsa, deg C, kg/m3, rm3/sm3). Defaults to False
+
+.. list-table:: Methods
+   :widths: 15 40
+   :header-rows: 1
+
+   * - Method
+     - Description
+   * - ``z(p, degf)``
+     - Returns Z-factor at pressure p (psia, or barsa if metric=True) and temperature degf (deg F, or deg C if metric=True)
+   * - ``viscosity(p, degf)``
+     - Returns gas viscosity (cP)
+   * - ``density(p, degf)``
+     - Returns gas density (lb/cuft, or kg/m3 if metric=True)
+   * - ``bg(p, degf)``
+     - Returns gas formation volume factor (rcf/scf, or rm3/sm3 if metric=True)
+
+Examples:
+
+.. code-block:: python
+
+    >>> from pyrestoolbox import gas
+    >>> gpvt = gas.GasPVT(sg=0.65, co2=0.1)
+    >>> gpvt.z(2000, 180)
+    0.9026719828498643
+    >>> gpvt.viscosity(2000, 180)
+    0.016666761192334678
+    >>> gpvt.density(2000, 180)
+    6.077743278791424
+    >>> gpvt.bg(2000, 180)
+    0.008164459661048012
+
+Using metric units (pressure in barsa, temperature in deg C):
+
+.. code-block:: python
+
+    >>> gpvt_m = gas.GasPVT(sg=0.65, co2=0.1, metric=True)
+    >>> gpvt_m.z(137.9, 82.2)
+    0.9026433033953588
+    >>> gpvt_m.density(137.9, 82.2)
+    97.36871728783241
+

@@ -802,6 +802,23 @@ def test_profile_metric():
     assert abs(df['Roughness'].iloc[0] - 0.01524) < 0.001
 
 
+# ============================================================================
+#  vis_frac tests
+# ============================================================================
+
+def test_fbhp_oil_vis_frac():
+    """Higher vis_frac should increase BHP (more friction from higher viscosity)."""
+    c = Completion(tid=2.441, length=8000, tht=100, bht=180)
+    opvt_base = OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    opvt_high = OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500, vis_frac=3.0)
+    bhp_base = fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil',
+                    oil_pvt=opvt_base, qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65)
+    bhp_high = fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil',
+                    oil_pvt=opvt_high, qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65)
+    assert bhp_high > bhp_base, \
+        f"Higher vis_frac should increase BHP: base={bhp_base}, high={bhp_high}"
+
+
 if __name__ == '__main__':
     import traceback
     tests = [(k, v) for k, v in list(globals().items()) if k.startswith('test_') and callable(v)]

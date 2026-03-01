@@ -428,10 +428,43 @@ def test_doc_make_bot_og():
     """oil.rst: make_bot_og returns correct structure"""
     results = oil.make_bot_og(pvto=False, pi=4000, api=38, degf=175, sg_g=0.68, pmax=5500, pb=4500, nrows=10, export=False)
     assert isinstance(results, dict)
-    for key in ['bot', 'deno', 'deng', 'denw', 'cw', 'uw', 'pb', 'rsb', 'rsb_scale', 'usat']:
+    for key in ['bot', 'deno', 'deng', 'denw', 'cw', 'uw', 'pb', 'rsb', 'rsb_scale', 'vis_frac', 'usat']:
         assert key in results, f"Missing key: {key}"
     assert results['pb'] == 4500
     assert results['bot'].shape[0] == 10
+
+def test_doc_oil_harmonize_pb_only():
+    """oil.rst: oil_harmonize with pb only — calculate rsb"""
+    pb, rsb, frac, vf = oil.oil_harmonize(pb=3500, degf=175, api=38, sg_g=0.68)
+    assert pb == 3500
+    assert abs(rsb - 790) < 1  # Rsb={rsb:.0f} => ~790
+    assert frac == 1.0
+    assert vf == 1.0
+
+def test_doc_oil_harmonize_both():
+    """oil.rst: oil_harmonize with both pb and rsb"""
+    pb, rsb, frac, vf = oil.oil_harmonize(pb=3500, rsb=1200, degf=175, api=38, sg_sp=0.68, sg_g=0.68)
+    assert abs(frac - 1.5095) < 0.001
+
+def test_doc_oil_harmonize_viscosity():
+    """oil.rst: oil_harmonize with viscosity target"""
+    pb, rsb, frac, vf = oil.oil_harmonize(pb=3000, rsb=500, degf=200, api=35, sg_sp=0.75, sg_g=0.75, uo_target=1.0, p_uo=3000)
+    assert abs(vf - 1.7675) < 0.001
+
+def test_doc_oilpvt_from_harmonize_pb_only():
+    """nodal.rst: OilPVT.from_harmonize with pb only"""
+    opvt = oil.OilPVT.from_harmonize(degf=200, api=35, sg_g=0.75, pb=3000)
+    rs_val = opvt.rs(2000, 200)
+    vis_val = opvt.viscosity(2000, 200)
+    assert abs(rs_val - 446.2641527532) / 446.2641527532 < RTOL
+    assert abs(vis_val - 0.6000045445) / 0.6000045445 < RTOL
+
+def test_doc_oilpvt_from_harmonize_full():
+    """nodal.rst: OilPVT.from_harmonize with Pb, Rsb, and viscosity target"""
+    opvt = oil.OilPVT.from_harmonize(degf=200, api=35, sg_sp=0.75, sg_g=0.75,
+                                      pb=3000, rsb=500, uo_target=1.0, p_uo=3000)
+    assert abs(opvt.vis_frac - 1.7675446945) / 1.7675446945 < RTOL
+    assert abs(opvt.rsb_frac - 0.7622708012) / 0.7622708012 < RTOL
 
 # =============================================================================
 # Brine Module Documentation Examples (docs/brine.rst)
@@ -630,6 +663,92 @@ def test_doc_library_models():
 # =============================================================================
 # Nodal Module Documentation Examples (docs/nodal.rst)
 # =============================================================================
+
+def test_doc_oil_rate_radial_with_pvt():
+    """oil.rst: oil_rate_radial using OilPVT object"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    result = oil.oil_rate_radial(k=20, h=20, pr=3000, pwf=2000, r_w=0.3, r_ext=1500, oil_pvt=opvt, degf=180)
+    assert abs(result - 423.031513775435) / 423.031513775435 < RTOL
+
+def test_doc_oil_rate_radial_with_vis_tuned_pvt():
+    """oil.rst: oil_rate_radial using viscosity-tuned OilPVT"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500, degf=180, uo_target=1.0, p_uo=2500)
+    result = oil.oil_rate_radial(k=20, h=20, pr=3000, pwf=2000, r_w=0.3, r_ext=1500, oil_pvt=opvt, degf=180)
+    assert abs(result - 270.5491761896866) / 270.5491761896866 < RTOL
+
+def test_doc_oil_rate_linear_with_pvt():
+    """oil.rst: oil_rate_linear using OilPVT object"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    result = oil.oil_rate_linear(k=0.1, area=15000, pr=3000, pwf=500, length=500, oil_pvt=opvt, degf=180)
+    assert abs(result - 7.342528629971546) / 7.342528629971546 < RTOL
+
+def test_doc_oilpvt_auto_harmonize_pb_only():
+    """oil.rst: OilPVT auto-harmonization with pb only"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.75, pb=3000, degf=200)
+    assert abs(opvt.rsb - 655.9348987842939) / 655.9348987842939 < RTOL
+    assert abs(opvt.rs(2000, 200) - 448.8232454688821) / 448.8232454688821 < RTOL
+
+def test_doc_oilpvt_auto_harmonize_both():
+    """oil.rst: OilPVT auto-harmonization with pb and rsb"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.75, pb=3000, rsb=500, degf=200)
+    assert abs(opvt.rsb_frac - 0.7130969275743666) / 0.7130969275743666 < RTOL
+
+def test_doc_oilpvt_auto_harmonize_with_vis():
+    """oil.rst: OilPVT auto-harmonization with viscosity target"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.75, pb=3000, rsb=500, degf=200, uo_target=1.0, p_uo=3000)
+    assert abs(opvt.vis_frac - 1.767544694464309) / 1.767544694464309 < RTOL
+
+def test_doc_gas_rate_radial_with_pvt():
+    """gas.rst: gas_rate_radial using GasPVT object"""
+    gpvt = gas.GasPVT(sg=0.75, co2=0.05)
+    result = gas.gas_rate_radial(k=5, h=50, pr=2000, pwf=750, r_w=0.3, r_ext=1500, degf=180, gas_pvt=gpvt, S=5, D=0.01)
+    assert abs(result - 2072.675775394653) / 2072.675775394653 < RTOL
+
+def test_doc_gas_rate_linear_with_pvt():
+    """gas.rst: gas_rate_linear using GasPVT object"""
+    gpvt = gas.GasPVT(sg=0.8)
+    result = gas.gas_rate_linear(k=0.1, area=50, length=200, pr=2000, pwf=250, degf=180, gas_pvt=gpvt)
+    assert abs(result - 8.202199932859799) / 8.202199932859799 < RTOL
+
+# =============================================================================
+# Gas/Oil Module GasPVT/OilPVT Documentation Examples (docs/gas.rst, docs/oil.rst)
+# =============================================================================
+
+def test_doc_gas_pvt_z():
+    """gas.rst: GasPVT z-factor"""
+    gpvt = gas.GasPVT(sg=0.65, co2=0.1)
+    result = gpvt.z(2000, 180)
+    assert abs(result - 0.9026719828498643) / 0.9026719828498643 < RTOL
+
+def test_doc_gas_pvt_viscosity():
+    """gas.rst: GasPVT viscosity"""
+    gpvt = gas.GasPVT(sg=0.65, co2=0.1)
+    result = gpvt.viscosity(2000, 180)
+    assert abs(result - 0.016666761192334678) / 0.016666761192334678 < RTOL
+
+def test_doc_gas_pvt_density():
+    """gas.rst: GasPVT density"""
+    gpvt = gas.GasPVT(sg=0.65, co2=0.1)
+    result = gpvt.density(2000, 180)
+    assert abs(result - 6.077743278791424) / 6.077743278791424 < RTOL
+
+def test_doc_gas_pvt_bg():
+    """gas.rst: GasPVT bg"""
+    gpvt = gas.GasPVT(sg=0.65, co2=0.1)
+    result = gpvt.bg(2000, 180)
+    assert abs(result - 0.008164459661048012) / 0.008164459661048012 < RTOL
+
+def test_doc_gas_pvt_metric_z():
+    """gas.rst: GasPVT metric z-factor"""
+    gpvt_m = gas.GasPVT(sg=0.65, co2=0.1, metric=True)
+    result = gpvt_m.z(137.9, 82.2)
+    assert abs(result - 0.9026433033953588) / 0.9026433033953588 < RTOL
+
+def test_doc_gas_pvt_metric_density():
+    """gas.rst: GasPVT metric density"""
+    gpvt_m = gas.GasPVT(sg=0.65, co2=0.1, metric=True)
+    result = gpvt_m.density(137.9, 82.2)
+    assert abs(result - 97.36871728783241) / 97.36871728783241 < RTOL
 
 def test_doc_nodal_gas_pvt_z():
     """nodal.rst: GasPVT z-factor"""

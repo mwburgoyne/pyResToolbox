@@ -139,6 +139,7 @@ def gas_rate_radial(
     h2: float = 0,
     tc: float = 0,
     pc: float = 0,
+    gas_pvt = None,
     metric: bool = False,
 ) -> np.ndarray:
     """ Returns gas rate for radial flow (mscf/day) using Darcy pseudo steady state equation & gas pseudopressure
@@ -169,8 +170,14 @@ def gas_rate_radial(
         h2: Molar fraction of Hydrogen. Defaults to zero if undefined. If > 0, will change zmethod to 'BNS'
         tc: Critical gas temperature (deg R | K). Uses cmethod correlation if not specified
         pc: Critical gas pressure (psia | barsa). Uses cmethod correlation if not specified
+        gas_pvt: GasPVT object. If provided, sg/co2/h2s/n2/h2/zmethod/cmethod/tc/pc are extracted from it
         metric: If True, input/output in Eclipse METRIC units (barsa, degC, m, sm3/d). Defaults to False (FIELD)
     """
+    if gas_pvt is not None:
+        sg = gas_pvt.sg
+        co2, h2s, n2, h2 = gas_pvt.co2, gas_pvt.h2s, gas_pvt.n2, gas_pvt.h2
+        zmethod, cmethod = gas_pvt.zmethod, gas_pvt.cmethod
+        tc, pc = gas_pvt.tc, gas_pvt.pc  # already in oilfield units
     if metric:
         pr = np.asarray(pr) * BAR_TO_PSI if not isinstance(pr, (int, float)) else pr * BAR_TO_PSI
         pwf = np.asarray(pwf) * BAR_TO_PSI if not isinstance(pwf, (int, float)) else pwf * BAR_TO_PSI
@@ -180,17 +187,19 @@ def gas_rate_radial(
         r_ext = r_ext * M_TO_FT
         if D > 0:
             D = D * D_PER_SM3_TO_D_PER_MSCF  # day/sm3 -> day/Mscf
-        if tc > 0:
-            tc = tc * 1.8  # K to deg R
-        if pc > 0:
-            pc = pc * BAR_TO_PSI
+        if gas_pvt is None:  # tc/pc from gas_pvt are already oilfield units
+            if tc > 0:
+                tc = tc * 1.8  # K to deg R
+            if pc > 0:
+                pc = pc * BAR_TO_PSI
     if r_w <= 0:
         raise ValueError("Wellbore radius r_w must be positive")
     if r_ext <= r_w:
         raise ValueError("External radius r_ext must be greater than wellbore radius r_w")
 
     k, h, pr, pwf = np.asarray(k), np.asarray(h), np.asarray(pr), np.asarray(pwf)
-    zmethod, cmethod, tc, pc = _prepare_gas_rate_inputs(degf, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, pc)
+    if gas_pvt is None:
+        zmethod, cmethod, tc, pc = _prepare_gas_rate_inputs(degf, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, pc)
     direction, delta_mp = _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s)
 
     qg = darcy_gas(delta_mp, k, h, degf, r_w, r_ext, S, D, radial=True)
@@ -215,6 +224,7 @@ def gas_rate_linear(
     h2: float = 0,
     tc: float = 0,
     pc: float = 0,
+    gas_pvt = None,
     metric: bool = False,
 ) -> np.ndarray:
     """ Returns gas rate for linear flow (mscf/day) using Darcy steady state equation & gas pseudopressure
@@ -242,23 +252,31 @@ def gas_rate_linear(
         h2: Molar fraction of Hydrogen. Defaults to zero if not specified
         tc: Critical gas temperature (deg R | K). Uses cmethod correlation if not specified
         pc: Critical gas pressure (psia | barsa). Uses cmethod correlation if not specified
+        gas_pvt: GasPVT object. If provided, sg/co2/h2s/n2/h2/zmethod/cmethod/tc/pc are extracted from it
         metric: If True, input/output in Eclipse METRIC units (barsa, degC, m, m2, sm3/d). Defaults to False (FIELD)
     """
+    if gas_pvt is not None:
+        sg = gas_pvt.sg
+        co2, h2s, n2, h2 = gas_pvt.co2, gas_pvt.h2s, gas_pvt.n2, gas_pvt.h2
+        zmethod, cmethod = gas_pvt.zmethod, gas_pvt.cmethod
+        tc, pc = gas_pvt.tc, gas_pvt.pc  # already in oilfield units
     if metric:
         pr = np.asarray(pr) * BAR_TO_PSI if not isinstance(pr, (int, float)) else pr * BAR_TO_PSI
         pwf = np.asarray(pwf) * BAR_TO_PSI if not isinstance(pwf, (int, float)) else pwf * BAR_TO_PSI
         area = np.asarray(area) * SQM_TO_SQFT if not isinstance(area, (int, float)) else area * SQM_TO_SQFT
         degf = degc_to_degf(degf)
         length = length * M_TO_FT
-        if tc > 0:
-            tc = tc * 1.8  # K to deg R
-        if pc > 0:
-            pc = pc * BAR_TO_PSI
+        if gas_pvt is None:  # tc/pc from gas_pvt are already oilfield units
+            if tc > 0:
+                tc = tc * 1.8  # K to deg R
+            if pc > 0:
+                pc = pc * BAR_TO_PSI
     if length <= 0:
         raise ValueError("Flow length must be positive")
 
     k, area, pr, pwf = np.asarray(k), np.asarray(area), np.asarray(pr), np.asarray(pwf)
-    zmethod, cmethod, tc, pc = _prepare_gas_rate_inputs(degf, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, pc)
+    if gas_pvt is None:
+        zmethod, cmethod, tc, pc = _prepare_gas_rate_inputs(degf, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, pc)
     direction, delta_mp = _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s)
 
     qg = darcy_gas(delta_mp, k, 1, degf, area, length, 0, 0, radial=False)

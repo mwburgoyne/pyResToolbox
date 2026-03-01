@@ -157,8 +157,8 @@ Function List
      - `pyrestoolbox.oil.oil_bo`_
    * - Oil Viscosity
      - `pyrestoolbox.oil.oil_viso`_
-   * - Harmonize Pb and Rsb (find consistent values and scaling factor)
-     - `pyrestoolbox.oil.oil_harmonize_pb_rsb`_
+   * - Harmonize Pb, Rsb, and viscosity (find consistent values and scaling factors)
+     - `pyrestoolbox.oil.oil_harmonize`_
    * - Generate Black Oil Table data (v3.0: see also simtools.make_bot_og)
      - `pyrestoolbox.oil.make_bot_og`_
    * - Estimate soln gas SG from oil
@@ -175,6 +175,8 @@ Function List
      - `pyrestoolbox.oil.oil_rate_radial`_
    * - Oil Flow Rate Linear
      - `pyrestoolbox.oil.oil_rate_linear`_
+   * - Oil PVT Wrapper
+     - `pyrestoolbox.oil.OilPVT`_
 
 pyrestoolbox.oil.oil_ja_sg
 ======================
@@ -702,16 +704,20 @@ Examples:
     0.416858469042502
     
 
-pyrestoolbox.oil.oil_harmonize_pb_rsb
+pyrestoolbox.oil.oil_harmonize
 =====================
 
 .. code-block:: python
 
-    oil_harmonize_pb_rsb(pb=0, rsb=0, degf=0, api=0, sg_sp=0, sg_g=0, rsmethod='VELAR', pbmethod='VELAR', metric = False) -> tuple
+    oil_harmonize(pb=0, rsb=0, degf=0, api=0, sg_sp=0, sg_g=0, uo_target=0, p_uo=0, rsmethod='VELAR', pbmethod='VELAR', metric=False) -> tuple
 
-Resolves consistent Pb, Rsb, and rsb_frac from user inputs. If only one of Pb or Rsb is specified, the other is calculated using the selected correlation. If both are specified, an iterative procedure finds an ``rsb_frac`` scaling factor that allows the correlations to honor both values simultaneously.
+Resolves consistent Pb, Rsb, rsb_frac, and vis_frac from user inputs. If only one of Pb or Rsb is specified, the other is calculated using the selected correlation. If both are specified, an iterative procedure finds an ``rsb_frac`` scaling factor that allows the correlations to honor both values simultaneously. If ``uo_target`` and ``p_uo`` are specified, computes a ``vis_frac`` scaling factor to match the target viscosity.
 
-Returns tuple of ``(pb, rsb, rsb_frac)`` where rsb_frac is 1.0 when only one value was specified, or the scaling factor needed to harmonize both. Pb is in psia (or barsa if metric=True), Rsb in scf/stb (or sm3/sm3 if metric=True).
+Returns tuple of ``(pb, rsb, rsb_frac, vis_frac)`` where rsb_frac is 1.0 when only one value was specified, and vis_frac is 1.0 when no target viscosity is specified. Pb is in psia (or barsa if metric=True), Rsb in scf/stb (or sm3/sm3 if metric=True).
+
+.. note::
+
+    The deprecated ``oil_harmonize_pb_rsb()`` wrapper remains available for backward compatibility. It calls ``oil_harmonize()`` internally and returns the original 3-tuple ``(pb, rsb, rsb_frac)``.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -738,6 +744,12 @@ Returns tuple of ``(pb, rsb, rsb_frac)`` where rsb_frac is 1.0 when only one val
    * - sg_g
      - float
      - Weighted average surface gas specific gravity
+   * - uo_target
+     - float
+     - Target oil viscosity (cP) at pressure p_uo. 0 = no viscosity tuning (default)
+   * - p_uo
+     - float
+     - Pressure at which uo_target was measured (psia, or barsa if metric=True). Required if uo_target > 0
    * - rsmethod
      - str or rs_method
      - Rs calculation method. Default 'VELAR'
@@ -754,11 +766,14 @@ Examples:
 
     >>> from pyrestoolbox import oil
     >>> # Calculate rsb from pb
-    >>> pb, rsb, frac = oil.oil_harmonize_pb_rsb(pb=3500, degf=175, api=38, sg_g=0.68)
-    >>> print(f'Pb={pb:.0f}, Rsb={rsb:.0f}, frac={frac:.4f}')
+    >>> pb, rsb, frac, vf = oil.oil_harmonize(pb=3500, degf=175, api=38, sg_g=0.68)
+    >>> print(f'Pb={pb:.0f}, Rsb={rsb:.0f}, frac={frac:.4f}, vis_frac={vf:.4f}')
     >>> # Harmonize both user-specified values
-    >>> pb, rsb, frac = oil.oil_harmonize_pb_rsb(pb=3500, rsb=1200, degf=175, api=38, sg_sp=0.68, sg_g=0.68)
+    >>> pb, rsb, frac, vf = oil.oil_harmonize(pb=3500, rsb=1200, degf=175, api=38, sg_sp=0.68, sg_g=0.68)
     >>> print(f'frac={frac:.4f}')
+    >>> # Harmonize with viscosity target
+    >>> pb, rsb, frac, vf = oil.oil_harmonize(pb=3000, rsb=500, degf=200, api=35, sg_sp=0.75, sg_g=0.75, uo_target=1.0, p_uo=3000)
+    >>> print(f'vis_frac={vf:.4f}')
 
 
 pyrestoolbox.oil.make_bot_og
@@ -1041,10 +1056,12 @@ pyrestoolbox.oil.oil_rate_radial
 
 .. code-block:: python
 
-    oil_rate_radial(k, h, pr, pwf, r_w, r_ext, uo, bo, S = 0, vogel = False, pb = 0, metric = False) -> float or np.array
+    oil_rate_radial(k, h, pr, pwf, r_w, r_ext, uo=0, bo=0, S=0, vogel=False, pb=0, oil_pvt=None, degf=0, metric=False) -> float or np.array
 
 Returns liquid rate (stb/d, or sm3/d if metric=True) for radial flow using Darcy pseudo steady state equation with optional Vogel correction.
 Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D array of rates. Using more than one input array -- while not prohibited -- will not return expected results.
+
+Either ``uo`` and ``bo`` must be provided explicitly, or an ``oil_pvt`` object with ``degf`` can be provided to calculate them automatically. When ``oil_pvt`` is provided, Vogel correction is automatically enabled using the PVT object's bubble point.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -1073,19 +1090,25 @@ Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D a
      - External Reservoir Radius (ft, or m if metric=True).
    * - uo
      - float
-     - Liquid viscosity (cP).
+     - Liquid viscosity (cP). Not required if oil_pvt is provided
    * - bo
      - float
-     - Liquid formation volume factor (rb/stb or rm3/sm3)
+     - Liquid formation volume factor (rb/stb or rm3/sm3). Not required if oil_pvt is provided
    * - S
      - float
      - Skin. Defaults to zero if undefined
    * - vogel
      - bool
-     - Boolean flag indicating whether to use vogel Pb correction. Defaults to False
+     - Boolean flag indicating whether to use vogel Pb correction. Defaults to False. Auto-enabled when oil_pvt is provided
    * - pb
      - float
-     - Bubble point pressure (psia, or barsa if metric=True). Used only when Vogel correction is invoked
+     - Bubble point pressure (psia, or barsa if metric=True). Used only when Vogel correction is invoked. Auto-set when oil_pvt is provided
+   * - oil_pvt
+     - OilPVT
+     - OilPVT object. If provided, uo and bo are calculated from the PVT object at reservoir pressure
+   * - degf
+     - float
+     - Reservoir temperature (deg F, or deg C if metric=True). Required when oil_pvt is provided
    * - metric
      - bool
      - Use Eclipse METRIC units for inputs/outputs. Default False
@@ -1096,19 +1119,37 @@ Examples:
 
     >>> oil.oil_rate_radial(k=20, h=20, pr=1500, pwf=250, r_w=0.3, r_ext=1500, uo=0.8, bo=1.4, vogel=True, pb=1800)
     213.8147848023242
-    
+
     >>> oil.oil_rate_radial(k=20, h=20, pr=[1500, 2000], pwf=250, r_w=0.3, r_ext=1500, uo=0.8, bo=1.4, vogel=True, pb=1800)
     array([213.8147848 , 376.58731835])
-    
+
+Using an OilPVT object (uo, bo, pb, and Vogel correction handled automatically):
+
+.. code-block:: python
+
+    >>> opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    >>> oil.oil_rate_radial(k=20, h=20, pr=3000, pwf=2000, r_w=0.3, r_ext=1500, oil_pvt=opvt, degf=180)
+    423.031513775435
+
+Using a viscosity-tuned OilPVT object (auto-harmonization sets vis_frac from measured viscosity):
+
+.. code-block:: python
+
+    >>> opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500, degf=180, uo_target=1.0, p_uo=2500)
+    >>> oil.oil_rate_radial(k=20, h=20, pr=3000, pwf=2000, r_w=0.3, r_ext=1500, oil_pvt=opvt, degf=180)
+    270.5491761896866
+
 pyrestoolbox.oil.oil_rate_linear
 ======================
 
 .. code-block:: python
 
-    oil_rate_linear(k, pr, pwf, area, length, uo, bo, vogel = False, pb = 0, metric = False) -> float or np.array
+    oil_rate_linear(k, pr, pwf, area, length, uo=0, bo=0, vogel=False, pb=0, oil_pvt=None, degf=0, metric=False) -> float or np.array
 
 Returns liquid rate (stb/d, or sm3/d if metric=True) for linear flow using Darcy steady state equation with optional Vogel correction.
 Arrays can be used for any one of k, pr, pwf or area, returning corresponding 1-D array of rates. Using more than one input array -- while not prohibited -- will not return expected results.
+
+Either ``uo`` and ``bo`` must be provided explicitly, or an ``oil_pvt`` object with ``degf`` can be provided to calculate them automatically.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -1134,26 +1175,196 @@ Arrays can be used for any one of k, pr, pwf or area, returning corresponding 1-
      - Linear distance of fluid flow (ft, or m if metric=True)
    * - uo
      - float
-     - Liquid viscosity (cP).
+     - Liquid viscosity (cP). Not required if oil_pvt is provided
    * - bo
      - float
-     - Liquid formation volume factor (rb/stb or rm3/sm3)
+     - Liquid formation volume factor (rb/stb or rm3/sm3). Not required if oil_pvt is provided
    * - vogel
      - bool
-     - Boolean flag indicating whether to use vogel Pb correction. Defaults to False
+     - Boolean flag indicating whether to use vogel Pb correction. Defaults to False. Auto-enabled when oil_pvt is provided
    * - pb
      - float
-     - Bubble point pressure (psia, or barsa if metric=True). Used only when Vogel correction is invoked
+     - Bubble point pressure (psia, or barsa if metric=True). Used only when Vogel correction is invoked. Auto-set when oil_pvt is provided
+   * - oil_pvt
+     - OilPVT
+     - OilPVT object. If provided, uo and bo are calculated from the PVT object at reservoir pressure
+   * - degf
+     - float
+     - Reservoir temperature (deg F, or deg C if metric=True). Required when oil_pvt is provided
    * - metric
      - bool
      - Use Eclipse METRIC units for inputs/outputs. Default False
-     
+
 Examples:
 
 .. code-block:: python
 
     >>> oil.oil_rate_linear(k=0.1, area=15000, pr=3000, pwf=500, length=500, uo=0.4, bo=1.5)
     14.08521246363274
-    
+
     >>> oil.oil_rate_linear(k=[0.1, 1, 5, 10], area=15000, pr=3000, pwf=500, length=500, uo=0.4, bo=1.5)
     array([  14.08521246,  140.85212464,  704.26062318, 1408.52124636])
+
+Using an OilPVT object:
+
+.. code-block:: python
+
+    >>> opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    >>> oil.oil_rate_linear(k=0.1, area=15000, pr=3000, pwf=500, length=500, oil_pvt=opvt, degf=180)
+    7.342528629971546
+
+pyrestoolbox.oil.OilPVT
+========================
+
+.. code-block:: python
+
+    OilPVT(api, sg_sp, pb, rsb=0, sg_g=0, degf=0, uo_target=0, p_uo=0, vis_frac=1.0, rsb_frac=1.0, rsmethod='VELAR', pbmethod='VALMC', bomethod='MCAIN', metric=False)
+
+Stores oil characterization parameters and method choices. Computes ``sg_o`` from API in constructor. Can be passed directly to ``fbhp()`` and ``operating_point()`` for VLP calculations, and to ``oil_rate_radial()`` and ``oil_rate_linear()`` for IPR rate calculations.
+
+**Auto-harmonization:** When ``degf`` is provided (> 0), the constructor automatically calls ``oil_harmonize()`` to resolve consistent Pb, Rsb, rsb_frac, and vis_frac. This means ``rsb`` becomes optional — if omitted, it is calculated from ``pb`` using the selected correlation. If both ``pb`` and ``rsb`` are provided along with ``degf``, ``rsb_frac`` is computed to honor both values. If ``uo_target`` and ``p_uo`` are also provided, ``vis_frac`` is computed to match the target viscosity. Without ``degf``, ``rsb`` must be provided explicitly (legacy behavior).
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - api
+     - float
+     - Stock tank oil density (deg API)
+   * - sg_sp
+     - float
+     - Separator gas specific gravity (relative to air)
+   * - pb
+     - float
+     - Bubble point pressure (psia, or barsa if metric=True)
+   * - rsb
+     - float
+     - Solution GOR at Pb (scf/STB, or sm3/sm3 if metric=True). Default 0 — calculated from pb when degf is provided
+   * - sg_g
+     - float
+     - Weighted average surface gas SG. Estimated from sg_sp if not provided
+   * - degf
+     - float
+     - Reservoir temperature (deg F, or deg C if metric=True). If > 0, triggers auto-harmonization. Default 0
+   * - uo_target
+     - float
+     - Target oil viscosity (cP) at p_uo. Used for viscosity tuning during auto-harmonization. Default 0
+   * - p_uo
+     - float
+     - Pressure at which uo_target was measured (psia, or barsa if metric=True). Required if uo_target > 0
+   * - vis_frac
+     - float
+     - Viscosity scaling factor. All viscosity outputs are multiplied by this value. Default 1.0. Overridden by auto-harmonization when uo_target is specified
+   * - rsb_frac
+     - float
+     - Rs scaling factor from ``oil.oil_harmonize()``. Rs is computed as ``oil_rs(rsb=rsb/rsb_frac) * rsb_frac``. Default 1.0. Overridden by auto-harmonization when both pb and rsb are specified
+   * - rsmethod
+     - string or rs_method
+     - Method for Rs calculation. Defaults to 'VELAR'
+   * - pbmethod
+     - string or pb_method
+     - Method for Pb calculation. Defaults to 'VALMC'
+   * - bomethod
+     - string or bo_method
+     - Method for Bo calculation. Defaults to 'MCAIN'
+   * - metric
+     - bool
+     - If True, constructor inputs (pb, rsb) and method inputs/outputs use Eclipse METRIC units. Defaults to False
+
+.. list-table:: Methods
+   :widths: 15 40
+   :header-rows: 1
+
+   * - Method
+     - Description
+   * - ``rs(p, degf)``
+     - Returns solution GOR (scf/STB, or sm3/sm3 if metric=True) at pressure p and temperature degf
+   * - ``bo(p, degf, rs=None)``
+     - Returns oil FVF (rb/STB, or rm3/sm3 if metric=True). Optionally pass pre-calculated rs
+   * - ``density(p, degf, rs=None)``
+     - Returns live oil density (lb/cuft, or kg/m3 if metric=True)
+   * - ``viscosity(p, degf, rs=None)``
+     - Returns oil viscosity (cP), scaled by vis_frac
+
+Examples:
+
+Legacy construction (explicit rsb):
+
+.. code-block:: python
+
+    >>> from pyrestoolbox import oil
+    >>> opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    >>> opvt.rs(2000, 180)
+    403.58333168879415
+    >>> opvt.bo(2000, 180)
+    1.22370082673546
+    >>> opvt.density(2000, 180)
+    46.23700811760461
+    >>> opvt.viscosity(2000, 180)
+    0.7187504436478858
+
+Auto-harmonization (rsb calculated from pb):
+
+.. code-block:: python
+
+    >>> opvt = oil.OilPVT(api=35, sg_sp=0.75, pb=3000, degf=200)
+    >>> opvt.rsb
+    655.9348987842939
+    >>> opvt.rs(2000, 200)
+    448.8232454688821
+
+Auto-harmonization with both pb and rsb (rsb_frac computed):
+
+.. code-block:: python
+
+    >>> opvt = oil.OilPVT(api=35, sg_sp=0.75, pb=3000, rsb=500, degf=200)
+    >>> opvt.rsb_frac
+    0.7130969275743666
+
+Auto-harmonization with viscosity target:
+
+.. code-block:: python
+
+    >>> opvt = oil.OilPVT(api=35, sg_sp=0.75, pb=3000, rsb=500, degf=200, uo_target=1.0, p_uo=3000)
+    >>> opvt.vis_frac
+    1.767544694464309
+
+Using metric units (pb in barsa, rsb in sm3/sm3):
+
+.. code-block:: python
+
+    >>> opvt_m = oil.OilPVT(api=35, sg_sp=0.65, pb=172.4, rsb=89, metric=True)
+    >>> opvt_m.rs(137.9, 82.2)
+    71.82727018664512
+    >>> opvt_m.density(137.9, 82.2)
+    740.7086089268661
+
+
+OilPVT.from_harmonize
+~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    OilPVT.from_harmonize(degf, api, sg_sp=0, sg_g=0, pb=0, rsb=0, uo_target=0, p_uo=0, rsmethod='VELAR', pbmethod='VELAR', bomethod='MCAIN', metric=False)
+
+.. note::
+
+    Deprecated: use ``OilPVT(degf=...)`` directly for auto-harmonization.
+
+Convenience class method that calls ``oil.oil_harmonize()`` internally to resolve consistent Pb, Rsb, rsb_frac, and vis_frac, then constructs an ``OilPVT`` object with all values populated.
+
+.. code-block:: python
+
+    >>> from pyrestoolbox import oil
+    >>> # Create from Pb only — Rsb calculated automatically
+    >>> opvt = oil.OilPVT.from_harmonize(degf=200, api=35, sg_g=0.75, pb=3000)
+    >>> opvt.rs(2000, 200)
+    >>> opvt.viscosity(2000, 200)
+    >>> # Create with both Pb and Rsb plus a viscosity target
+    >>> opvt = oil.OilPVT.from_harmonize(degf=200, api=35, sg_sp=0.75, sg_g=0.75,
+    ...                                   pb=3000, rsb=500, uo_target=1.0, p_uo=3000)
+    >>> opvt.vis_frac   # computed to match uo_target
+    >>> opvt.rsb_frac   # computed to honor both Pb and Rsb

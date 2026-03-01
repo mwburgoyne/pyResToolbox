@@ -860,7 +860,7 @@ pyrestoolbox.simtools.make_bot_og
 
 .. code-block:: python
 
-    make_bot_og(pi, api, degf, sg_g, pmax, pb=0, rsb=0, pmin=25, nrows=20, wt=0, ch4_sat=0, comethod='EXPLT', zmethod='DAK', rsmethod='VELAR', cmethod='PMC', denomethod='SWMH', bomethod='MCAIN', pbmethod='VELAR', export=False, pvto=False, metric=False) -> dict
+    make_bot_og(pi, api, degf, sg_g, pmax, pb=0, rsb=0, pmin=25, nrows=20, wt=0, ch4_sat=0, comethod='EXPLT', zmethod='DAK', rsmethod='VELAR', cmethod='PMC', denomethod='SWMH', bomethod='MCAIN', pbmethod='VELAR', export=False, pvto=False, vis_frac=1.0, metric=False) -> dict
 
 Creates data required for Oil-Gas-Water black oil tables (PVDO, PVDG, optionally PVTO).
 
@@ -878,6 +878,7 @@ Returns dictionary of results with keys:
   - ``pb``: Bubble point pressure (psia, or barsa if metric)
   - ``rsb``: Solution GOR at Pb (scf/stb, or sm3/sm3 if metric)
   - ``rsb_scale``: Scaling factor for Pb/Rsb harmonization
+  - ``vis_frac``: Viscosity scaling factor applied to all oil viscosity outputs
   - ``usat``: Undersaturated values [usat_p, usat_bo, usat_uo] (if pvto=True)
 
 .. list-table:: Inputs
@@ -926,6 +927,9 @@ Returns dictionary of results with keys:
    * - pvto
      - bool
      - If True, generates live oil PVTO format with undersaturated extensions. Default False
+   * - vis_frac
+     - float
+     - Viscosity scaling factor applied to all oil viscosity outputs. Default 1.0. Use ``oil.oil_harmonize()`` to compute from a measured viscosity
    * - metric
      - bool
      - If True, inputs/outputs use Eclipse METRIC units (barsa, deg C, sm3/sm3, kg/m3, 1/bar). Eclipse keyword output uses METRIC format. Default False

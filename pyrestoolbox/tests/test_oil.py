@@ -245,6 +245,232 @@ def test_regression_pb_velar():
     expected = _FROZEN_BASELINES['pb_velar']
     assert abs(pb - expected) / expected < 1e-6, f"Pb VELAR changed: {pb} vs frozen {expected}"
 
+# =============================================================================
+# oil_harmonize and vis_frac tests
+# =============================================================================
+
+def test_oil_harmonize_returns_4_tuple():
+    """oil_harmonize returns (pb, rsb, rsb_frac, vis_frac)"""
+    result = oil.oil_harmonize(pb=3500, degf=175, api=38, sg_g=0.68)
+    assert len(result) == 4, f"Expected 4-tuple, got {len(result)}"
+    pb, rsb, rsb_frac, vis_frac = result
+    assert pb == 3500
+    assert rsb > 0
+    assert rsb_frac == 1.0
+    assert vis_frac == 1.0
+
+def test_oil_harmonize_vis_frac_no_target():
+    """vis_frac == 1.0 when uo_target is not specified"""
+    _pb, _rsb, _frac, vis_frac = oil.oil_harmonize(
+        pb=3500, rsb=1200, degf=175, api=38, sg_sp=0.68, sg_g=0.68
+    )
+    assert vis_frac == 1.0
+
+def test_oil_harmonize_vis_frac_with_target():
+    """vis_frac should scale viscosity to match target"""
+    pb, rsb, rsb_frac, vis_frac = oil.oil_harmonize(
+        pb=3000, rsb=500, degf=200, api=35, sg_sp=0.75, sg_g=0.75,
+        uo_target=1.0, p_uo=3000
+    )
+    # Verify: oil_viso at p_uo * vis_frac should equal uo_target
+    rs_at_p = oil.oil_rs(api=35, degf=200, sg_sp=0.75, p=3000, pb=pb,
+                         rsb=rsb / rsb_frac) * rsb_frac
+    uo_corr = oil.oil_viso(p=3000, api=35, degf=200, pb=pb, rs=rs_at_p)
+    assert abs(uo_corr * vis_frac - 1.0) < 1e-10, \
+        f"Scaled viscosity should equal target 1.0, got {uo_corr * vis_frac}"
+
+def test_oil_harmonize_pb_rsb_compat():
+    """Deprecated oil_harmonize_pb_rsb returns 3-tuple"""
+    result = oil.oil_harmonize_pb_rsb(pb=3500, degf=175, api=38, sg_g=0.68)
+    assert len(result) == 3, f"Expected 3-tuple, got {len(result)}"
+    pb, rsb, rsb_frac = result
+    assert pb == 3500
+    assert rsb > 0
+    assert rsb_frac == 1.0
+
+def test_oilpvt_vis_frac():
+    """OilPVT(vis_frac=2.0).viscosity() should be 2x unscaled"""
+    opvt_base = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    opvt_scaled = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500, vis_frac=2.0)
+    uo_base = opvt_base.viscosity(2000, 180)
+    uo_scaled = opvt_scaled.viscosity(2000, 180)
+    assert abs(uo_scaled - 2.0 * uo_base) < 1e-10, \
+        f"vis_frac=2.0 should double viscosity: {uo_scaled} vs {2.0 * uo_base}"
+
+def test_oilpvt_vis_frac_default():
+    """Default vis_frac=1.0 leaves results unchanged"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    assert opvt.vis_frac == 1.0
+    uo = opvt.viscosity(2000, 180)
+    uo_direct = oil.oil_viso(p=2000, api=35, degf=180, pb=2500,
+                             rs=oil.oil_rs(api=35, degf=180, sg_sp=0.65, p=2000,
+                                           pb=2500, rsb=500))
+    assert abs(uo - uo_direct) < 1e-10
+
+def test_oilpvt_vis_frac_validation():
+    """OilPVT should reject vis_frac <= 0"""
+    try:
+        oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500, vis_frac=0)
+        assert False, "Should have raised ValueError"
+    except ValueError:
+        pass
+    try:
+        oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500, vis_frac=-1.0)
+        assert False, "Should have raised ValueError"
+    except ValueError:
+        pass
+
+# =============================================================================
+# OilPVT rsb_frac and from_harmonize tests
+# =============================================================================
+
+def test_oilpvt_rsb_frac_default():
+    """Default rsb_frac=1.0 leaves rs unchanged"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    assert opvt.rsb_frac == 1.0
+    rs = opvt.rs(2000, 180)
+    rs_direct = oil.oil_rs(api=35, degf=180, sg_sp=0.65, p=2000, pb=2500, rsb=500)
+    assert abs(rs - rs_direct) < 1e-10
+
+def test_oilpvt_rsb_frac_stored():
+    """rsb_frac is stored and accessible on OilPVT"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500, rsb_frac=0.85)
+    assert opvt.rsb_frac == 0.85
+    # Rs should still be computable
+    rs = opvt.rs(2000, 180)
+    assert rs > 0
+
+def test_oilpvt_rsb_frac_at_pb():
+    """With rsb_frac, Rs at Pb should still equal rsb (the physical value)"""
+    rsb = 500
+    rsb_frac = 0.85
+    opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=rsb, rsb_frac=rsb_frac)
+    rs_at_pb = opvt.rs(2500, 180)
+    # Rs at Pb: oil_rs returns rsb/rsb_frac (which is rsb at the unscaled pb),
+    # then multiplied by rsb_frac, giving back rsb
+    assert abs(rs_at_pb - rsb) < 1.0, \
+        f"Rs at Pb should be ~rsb={rsb}, got {rs_at_pb}"
+
+def test_oilpvt_rsb_frac_validation():
+    """OilPVT should reject rsb_frac <= 0"""
+    try:
+        oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500, rsb_frac=0)
+        assert False, "Should have raised ValueError"
+    except ValueError:
+        pass
+
+def test_oilpvt_from_harmonize_pb_only():
+    """from_harmonize with pb only should compute rsb"""
+    opvt = oil.OilPVT.from_harmonize(degf=200, api=35, sg_g=0.75, pb=3000)
+    assert opvt.pb == 3000
+    assert opvt.rsb > 0
+    assert opvt.rsb_frac == 1.0
+    assert opvt.vis_frac == 1.0
+    # Rs at Pb should equal rsb
+    rs_at_pb = opvt.rs(3000, 200)
+    assert abs(rs_at_pb - opvt.rsb) < 1.0
+
+def test_oilpvt_from_harmonize_both():
+    """from_harmonize with both pb and rsb should set rsb_frac"""
+    opvt = oil.OilPVT.from_harmonize(degf=200, api=35, sg_sp=0.75, sg_g=0.75,
+                                      pb=3000, rsb=500)
+    assert opvt.pb == 3000
+    assert opvt.rsb == 500
+    # rsb_frac may or may not be 1.0 depending on correlation match
+
+def test_oilpvt_from_harmonize_with_viscosity():
+    """from_harmonize with uo_target should set vis_frac"""
+    opvt = oil.OilPVT.from_harmonize(degf=200, api=35, sg_sp=0.75, sg_g=0.75,
+                                      pb=3000, rsb=500, uo_target=1.0, p_uo=3000)
+    assert opvt.vis_frac != 1.0
+    # Viscosity at p_uo should be close to target
+    uo = opvt.viscosity(3000, 200)
+    assert abs(uo - 1.0) < 0.01, f"Viscosity should be ~1.0, got {uo}"
+
+
+# =============================================================================
+# OilPVT auto-harmonization tests
+# =============================================================================
+
+def test_oilpvt_auto_harmonize_pb_only():
+    """OilPVT with degf and no rsb should calculate rsb from correlation"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.75, pb=3000, degf=200)
+    assert opvt.pb == 3000
+    assert opvt.rsb > 0
+    assert opvt.rsb_frac == 1.0
+    assert opvt.vis_frac == 1.0
+    # Rs at Pb should equal rsb
+    rs_at_pb = opvt.rs(3000, 200)
+    assert abs(rs_at_pb - opvt.rsb) < 1.0
+
+def test_oilpvt_auto_harmonize_both():
+    """OilPVT with degf and both pb and rsb should compute rsb_frac"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.75, pb=3000, rsb=500, degf=200)
+    assert opvt.pb == 3000
+    assert opvt.rsb == 500
+
+def test_oilpvt_auto_harmonize_with_vis():
+    """OilPVT with degf, uo_target, and p_uo should compute vis_frac"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.75, pb=3000, rsb=500, degf=200,
+                      uo_target=1.0, p_uo=3000)
+    assert opvt.vis_frac != 1.0
+    uo = opvt.viscosity(3000, 200)
+    assert abs(uo - 1.0) < 0.01, f"Viscosity should be ~1.0, got {uo}"
+
+def test_oilpvt_no_rsb_no_degf_raises():
+    """OilPVT with rsb=0 and degf=0 should raise ValueError"""
+    try:
+        oil.OilPVT(api=35, sg_sp=0.75, pb=3000)
+        assert False, "Should have raised ValueError"
+    except ValueError:
+        pass
+
+def test_oilpvt_legacy_with_rsb():
+    """OilPVT with rsb>0 and no degf should work as before"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    assert opvt.pb == 2500
+    assert opvt.rsb == 500
+    rs = opvt.rs(2000, 180)
+    assert rs > 0
+
+def test_oilpvt_auto_harmonize_matches_from_harmonize():
+    """OilPVT(degf=...) should produce same result as from_harmonize"""
+    opvt1 = oil.OilPVT(api=35, sg_sp=0.75, pb=3000, degf=200, sg_g=0.75)
+    opvt2 = oil.OilPVT.from_harmonize(degf=200, api=35, sg_sp=0.75, sg_g=0.75, pb=3000)
+    assert abs(opvt1.rsb - opvt2.rsb) < 1e-6
+    assert abs(opvt1.rsb_frac - opvt2.rsb_frac) < 1e-6
+    assert abs(opvt1.vis_frac - opvt2.vis_frac) < 1e-6
+
+# =============================================================================
+# oil_rate_radial/linear with oil_pvt tests
+# =============================================================================
+
+def test_oil_rate_radial_with_pvt():
+    """oil_rate_radial with oil_pvt should produce valid results"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    q = oil.oil_rate_radial(k=100, h=50, pr=3000, pwf=2000, r_w=0.35, r_ext=1000,
+                            oil_pvt=opvt, degf=180)
+    q_val = float(q) if isinstance(q, np.ndarray) else q
+    assert q_val > 0, f"Rate should be positive, got {q_val}"
+
+def test_oil_rate_radial_pvt_no_degf_raises():
+    """oil_rate_radial with oil_pvt but no degf should raise"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    try:
+        oil.oil_rate_radial(k=100, h=50, pr=3000, pwf=2000, r_w=0.35, r_ext=1000,
+                            oil_pvt=opvt)
+        assert False, "Should have raised ValueError"
+    except ValueError:
+        pass
+
+def test_oil_rate_linear_with_pvt():
+    """oil_rate_linear with oil_pvt should produce valid results"""
+    opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    q = oil.oil_rate_linear(k=100, pr=3000, pwf=2000, area=10000, length=5000,
+                            oil_pvt=opvt, degf=180)
+    q_val = float(q) if isinstance(q, np.ndarray) else q
+    assert q_val > 0, f"Rate should be positive, got {q_val}"
+
 
 if __name__ == '__main__':
     print("=" * 70)
