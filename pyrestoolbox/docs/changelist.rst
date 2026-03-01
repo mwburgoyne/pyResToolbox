@@ -1,19 +1,16 @@
 Changelist in 3.0.1:
 
 - **OilPVT auto-harmonization**: ``rsb`` is now optional (default 0). When ``degf`` is provided (> 0), the constructor calls ``oil_harmonize()`` internally to resolve consistent Pb, Rsb, rsb_frac, and vis_frac from a single call. Accepts ``uo_target`` and ``p_uo`` for viscosity tuning. ``OilPVT.from_harmonize()`` remains as a deprecated thin wrapper.
-- **oil_rate_radial / oil_rate_linear**: Accept ``oil_pvt`` and ``degf`` parameters. When an ``OilPVT`` object is provided, uo, bo, and pb are extracted automatically, and Vogel correction is enabled. Eliminates manual PVT lookups for rate calculations.
-- **gas_rate_radial / gas_rate_linear**: Accept ``gas_pvt`` parameter. When a ``GasPVT`` object is provided, sg, composition, method choices, and pre-computed Tc/Pc are extracted automatically.
-- **OilPVT / GasPVT documentation**: Full API reference for ``OilPVT`` moved from ``nodal.rst`` to ``oil.rst``; ``GasPVT`` moved from ``nodal.rst`` to ``gas.rst``. Brief cross-references remain in ``nodal.rst``.
-- **oil_harmonize()**: New function (replaces ``oil_harmonize_pb_rsb``) that resolves consistent Pb, Rsb, rsb_frac, and now also a ``vis_frac`` viscosity scaling factor from user inputs. Accepts ``uo_target`` and ``p_uo`` parameters to compute vis_frac = uo_target / uo_corr. The deprecated ``oil_harmonize_pb_rsb()`` wrapper remains for backward compatibility, returning the original 3-tuple.
+- **oil_harmonize()**: New function (replaces ``oil_harmonize_pb_rsb``) that resolves consistent Pb, Rsb, rsb_frac, and ``vis_frac`` viscosity scaling factor from user inputs. Accepts ``uo_target`` and ``p_uo`` parameters to compute vis_frac = uo_target / uo_corr. The deprecated ``oil_harmonize_pb_rsb()`` wrapper remains for backward compatibility, returning the original 3-tuple.
 - **OilPVT.vis_frac and OilPVT.rsb_frac**: New ``vis_frac`` and ``rsb_frac`` parameters on ``OilPVT`` constructor (both default 1.0). All ``viscosity()`` outputs are multiplied by vis_frac, and ``rs()`` applies rsb_frac scaling. Both factors flow through to VLP segment calculations (``fbhp()``, ``outflow_curve()``, ``operating_point()``) and ``make_bot_og()`` BOT generation.
+- **oil_rate_radial / oil_rate_linear**: Accept ``oil_pvt`` and ``degf`` parameters. When an ``OilPVT`` object is provided, uo, bo, and pb are extracted automatically, and Vogel correction is enabled.
+- **gas_rate_radial / gas_rate_linear**: Accept ``gas_pvt`` parameter. When a ``GasPVT`` object is provided, sg, composition, method choices, and pre-computed Tc/Pc are extracted automatically.
 - **make_bot_og()**: New ``vis_frac`` parameter (default 1.0) that scales all oil viscosity values in generated black oil tables (PVDO, PVTO). Results dict now includes ``vis_frac`` key.
 - **Completion.geometry_at_md()**: New method returning wellbore geometry (TVD, ID, deviation, roughness) at any measured depth along the completion. Supports both oilfield and metric unit systems.
 - **Completion.profile()**: New method returning a pandas DataFrame of the wellbore profile at all segment boundaries, including crossover rows where geometry changes. Columns: MD, TVD, Deviation, ID, Roughness.
-- Stored ``_metric`` flag on ``Completion`` to enable unit-aware output from new methods.
-- 12 new tests (8 nodal module + 4 doc example) covering single/multi-segment, legacy casing, metric, and out-of-range scenarios.
-- 20 new tests for vis_frac/rsb_frac (15 oil module, 1 nodal module, 5 doc examples covering ``oil_harmonize``, ``OilPVT`` scaling, and ``OilPVT.from_harmonize``). Total test suite: 350 tests.
-- Updated ``nodal.rst`` documentation with parameter tables and examples for both new methods.
-- **Agentic/MCP usability improvements**: Added explicit ``__all__`` exports to all modules (gas, oil, brine, nodal, simtools, layer, library, classes, constants, shared_fns, validate) so that ``dir()`` and programmatic introspection return only the intended public API. Added concise function-index docstrings to each module for discoverability via ``help()``. Documented ``outflow_curve()`` return dict keys in code docstring.
+- Added explicit ``__all__`` exports and module docstrings to all modules for improved discoverability via ``dir()`` and ``help()``.
+- ``OilPVT`` docs moved to ``oil.rst``; ``GasPVT`` docs moved to ``gas.rst``. Cross-references remain in ``nodal.rst``.
+- 375 validation tests (up from 318 in 3.0.0).
 
 
 Changelist in 3.0.0:
