@@ -38,7 +38,8 @@ oil_twu_props       Twu critical property correlations
 oil_rs_st           Standing Rs correlation
 oil_rate_radial     Radial oil flow rate (STB/d)
 oil_rate_linear     Linear oil flow rate (STB/d)
-oil_harmonize_pb_rsb  Harmonize consistent Pb and Rsb
+oil_harmonize         Harmonize consistent Pb, Rsb, and viscosity
+oil_harmonize_pb_rsb  Deprecated wrapper for oil_harmonize (returns 3-tuple)
 sg_evolved_gas      Evolved gas specific gravity
 sg_st_gas           Stock-tank gas specific gravity
 sgg_wt_avg          Weighted average gas SG from separator stages
@@ -53,7 +54,7 @@ OilPVT              Convenience wrapper storing oil characterization & method ch
 __all__ = [
     'oil_pbub', 'oil_rs_bub', 'oil_rs', 'oil_bo', 'oil_deno', 'oil_viso',
     'oil_co', 'oil_sg', 'oil_api', 'oil_ja_sg', 'oil_twu_props', 'oil_rs_st',
-    'oil_rate_radial', 'oil_rate_linear', 'oil_harmonize_pb_rsb',
+    'oil_rate_radial', 'oil_rate_linear', 'oil_harmonize', 'oil_harmonize_pb_rsb',
     'sg_evolved_gas', 'sg_st_gas', 'sgg_wt_avg', 'check_sgs',
     'make_bot_og', 'OilPVT',
     # Enum classes re-exported for convenience (oil.pb_method.STAN, etc.)
@@ -102,11 +103,13 @@ def oil_rate_radial(
     pwf: npt.ArrayLike,
     r_w: float,
     r_ext: float,
-    uo: float,
-    bo: float,
+    uo: float = 0,
+    bo: float = 0,
     S: float = 0,
     vogel: bool = False,
     pb: float = 0,
+    oil_pvt = None,
+    degf: float = 0,
     metric: bool = False,
 ) -> np.ndarray:
     """ Returns liquid rate for radial flow (stb/day | sm3/day) using Darcy pseudo steady state equation
@@ -116,11 +119,13 @@ def oil_rate_radial(
         pwf: BHFP (psia | barsa)
         r_w: Wellbore Radius (ft | m)
         r_ext: External Reservoir Radius (ft | m)
-        uo: Liquid viscosity (cP)
-        bo: Liquid Formation Volume Factor (rb/stb | rm3/sm3)
+        uo: Liquid viscosity (cP). Not required if oil_pvt is provided
+        bo: Liquid Formation Volume Factor (rb/stb | rm3/sm3). Not required if oil_pvt is provided
         S: Wellbore Skin (Dimensionless). Defaults to zero if not specified
         vogel: (True / False). Invokes the Vogel model that reduces inflow below bubble point pressure. Defaults to False if undefined
         pb: Bubble point pressure (psia | barsa). Defaults to zero if not specified. Not used unless Vogel option is invoked
+        oil_pvt: OilPVT object. If provided, uo and bo are calculated from the PVT object at reservoir pressure
+        degf: Reservoir temperature (deg F | deg C). Required when oil_pvt is provided
         metric: If True, input/output in Eclipse METRIC units (barsa, m, sm3/d). Defaults to False (FIELD)
     """
     if metric:
@@ -139,6 +144,21 @@ def oil_rate_radial(
         np.asarray(pwf),
     )
 
+    if oil_pvt is not None:
+        if degf <= 0:
+            raise ValueError("degf required when using oil_pvt")
+        degf_f = degc_to_degf(degf) if metric else degf
+        p_rep = float(np.asarray(pr).ravel()[0])
+        rs_rep = oil_pvt._rs_field(p_rep, degf_f)
+        uo = oil_viso(p=p_rep, api=oil_pvt.api, degf=degf_f, pb=oil_pvt.pb, rs=rs_rep) * oil_pvt.vis_frac
+        bo = oil_bo(p=p_rep, pb=oil_pvt.pb, degf=degf_f, rs=rs_rep, rsb=oil_pvt.rsb,
+                    sg_o=oil_pvt.sg_o, sg_g=oil_pvt.sg_g, sg_sp=oil_pvt.sg_sp,
+                    bomethod=oil_pvt.bomethod)
+        pb = oil_pvt.pb
+        vogel = True
+    elif uo <= 0 or bo <= 0:
+        raise ValueError("Either oil_pvt or both uo and bo must be specified")
+
     if pwf.size > 1:
         pb = np.array([max(pb, pwf[i]) for i in range(pwf.size)])
 
@@ -146,10 +166,6 @@ def oil_rate_radial(
         raise ValueError("Wellbore radius r_w must be positive")
     if r_ext <= r_w:
         raise ValueError("External radius r_ext must be greater than wellbore radius r_w")
-    if uo <= 0:
-        raise ValueError("Viscosity uo must be positive")
-    if bo <= 0:
-        raise ValueError("Formation volume factor bo must be positive")
 
     J = (
         0.00708 * k * h / (uo * bo * (np.log(r_ext / r_w) + S - 0.75))
@@ -174,10 +190,12 @@ def oil_rate_linear(
     pwf: npt.ArrayLike,
     area: npt.ArrayLike,
     length: float,
-    uo: float,
-    bo: float,
+    uo: float = 0,
+    bo: float = 0,
     vogel: bool = False,
     pb: float = 0,
+    oil_pvt = None,
+    degf: float = 0,
     metric: bool = False,
 ) -> np.ndarray:
     """ Returns liquid rate for linear flow (stb/day | sm3/day) using Darcy steady state equation
@@ -186,10 +204,12 @@ def oil_rate_linear(
         pwf: BHFP (psia | barsa)
         area: Net cross sectional area perpendicular to direction of flow (ft2 | m2).
         length: Length over which flow takes place (ft | m)
-        uo: Liquid viscosity (cP)
-        bo: Liquid Formation Volume Factor (rb/stb | rm3/sm3)
+        uo: Liquid viscosity (cP). Not required if oil_pvt is provided
+        bo: Liquid Formation Volume Factor (rb/stb | rm3/sm3). Not required if oil_pvt is provided
         vogel: (True / False). Invokes the Vogel model that reduces inflow below bubble point pressure. Defaults to False if undefined
         pb: Bubble point pressure (psia | barsa). Defaults to zero if not specified. Not used unless Vogel option is invoked
+        oil_pvt: OilPVT object. If provided, uo and bo are calculated from the PVT object at reservoir pressure
+        degf: Reservoir temperature (deg F | deg C). Required when oil_pvt is provided
         metric: If True, input/output in Eclipse METRIC units (barsa, m, m2, sm3/d). Defaults to False (FIELD)
     """
     if metric:
@@ -207,12 +227,23 @@ def oil_rate_linear(
         np.asarray(pwf),
     )
 
+    if oil_pvt is not None:
+        if degf <= 0:
+            raise ValueError("degf required when using oil_pvt")
+        degf_f = degc_to_degf(degf) if metric else degf
+        p_rep = float(np.asarray(pr).ravel()[0])
+        rs_rep = oil_pvt._rs_field(p_rep, degf_f)
+        uo = oil_viso(p=p_rep, api=oil_pvt.api, degf=degf_f, pb=oil_pvt.pb, rs=rs_rep) * oil_pvt.vis_frac
+        bo = oil_bo(p=p_rep, pb=oil_pvt.pb, degf=degf_f, rs=rs_rep, rsb=oil_pvt.rsb,
+                    sg_o=oil_pvt.sg_o, sg_g=oil_pvt.sg_g, sg_sp=oil_pvt.sg_sp,
+                    bomethod=oil_pvt.bomethod)
+        pb = oil_pvt.pb
+        vogel = True
+    elif uo <= 0 or bo <= 0:
+        raise ValueError("Either oil_pvt or both uo and bo must be specified")
+
     if length <= 0:
         raise ValueError("Flow length must be positive")
-    if uo <= 0:
-        raise ValueError("Viscosity uo must be positive")
-    if bo <= 0:
-        raise ValueError("Formation volume factor bo must be positive")
 
     J = (
         0.00708 * k * area / (2 * np.pi * uo * bo * length)
@@ -1398,19 +1429,42 @@ class OilPVT:
         api: Stock tank oil density (deg API)
         sg_sp: Separator gas specific gravity (relative to air)
         pb: Bubble point pressure (psia | barsa)
-        rsb: Solution GOR at Pb (scf/stb | sm3/sm3)
+        rsb: Solution GOR at Pb (scf/stb | sm3/sm3). If 0 and degf > 0, calculated from pb via oil_harmonize()
         sg_g: Weighted average specific gravity of surface gas (relative to air). Estimated from sg_sp if not provided
+        degf: Reservoir temperature (deg F | deg C). If > 0, triggers auto-harmonization via oil_harmonize()
+        uo_target: Target oil viscosity (cP) at p_uo. Used with degf for auto-harmonization. Default 0 (no tuning)
+        p_uo: Pressure at which uo_target was measured (psia | barsa). Required if uo_target > 0
+        vis_frac: Viscosity scaling factor. All viscosity outputs are multiplied by this value. Default 1.0
+        rsb_frac: Rs scaling factor from oil_harmonize(). Rs = oil_rs(rsb=rsb/rsb_frac) * rsb_frac. Default 1.0
         rsmethod: Method for Rs calculation. Defaults to 'VELAR'
         pbmethod: Method for Pb calculation. Defaults to 'VALMC'
         bomethod: Method for Bo calculation. Defaults to 'MCAIN'
         metric: If True, constructor inputs (pb, rsb) and method inputs/outputs use Eclipse METRIC units. Defaults to False (FIELD)
     """
-    def __init__(self, api, sg_sp, pb, rsb, sg_g=0,
+    def __init__(self, api, sg_sp, pb, rsb=0, sg_g=0, degf=0,
+                 uo_target=0, p_uo=0,
+                 vis_frac=1.0, rsb_frac=1.0,
                  rsmethod='VELAR', pbmethod='VALMC', bomethod='MCAIN',
                  metric=False):
         self.api = api
         self.sg_sp = sg_sp
         self.metric = metric
+        # Auto-harmonize when degf is provided
+        if degf > 0:
+            pb_h, rsb_h, rsb_frac_h, vis_frac_h = oil_harmonize(
+                pb=pb, rsb=rsb, degf=degf, api=api, sg_sp=sg_sp, sg_g=sg_g,
+                uo_target=uo_target, p_uo=p_uo,
+                rsmethod=rsmethod, pbmethod=pbmethod, metric=metric)
+            pb, rsb = pb_h, rsb_h
+            rsb_frac, vis_frac = rsb_frac_h, vis_frac_h
+        elif rsb <= 0:
+            raise ValueError("Either rsb or degf must be specified")
+        if vis_frac <= 0:
+            raise ValueError("vis_frac must be positive")
+        if rsb_frac <= 0:
+            raise ValueError("rsb_frac must be positive")
+        self.vis_frac = vis_frac
+        self.rsb_frac = rsb_frac
         if metric:
             self.pb = pb * BAR_TO_PSI
             self.rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
@@ -1423,14 +1477,33 @@ class OilPVT:
         self.pbmethod = validate_methods(["pbmethod"], [pbmethod])
         self.bomethod = validate_methods(["bomethod"], [bomethod])
 
+    @classmethod
+    def from_harmonize(cls, degf, api, sg_sp=0, sg_g=0, pb=0, rsb=0,
+                       uo_target=0, p_uo=0,
+                       rsmethod='VELAR', pbmethod='VELAR', bomethod='MCAIN',
+                       metric=False):
+        """Deprecated: use OilPVT(degf=...) directly.
+
+        Convenience constructor that calls oil_harmonize() internally.
+        """
+        return cls(api=api, sg_sp=sg_sp, pb=pb, rsb=rsb, sg_g=sg_g, degf=degf,
+                   uo_target=uo_target, p_uo=p_uo,
+                   rsmethod=rsmethod, pbmethod=pbmethod, bomethod=bomethod,
+                   metric=metric)
+
+    def _rs_field(self, p_field, degf_field):
+        """Internal: compute Rs in oilfield units applying rsb_frac scaling."""
+        raw = oil_rs(api=self.api, degf=degf_field, sg_sp=self.sg_sp, p=p_field,
+                     pb=self.pb, rsb=self.rsb / self.rsb_frac,
+                     rsmethod=self.rsmethod, pbmethod=self.pbmethod)
+        return raw * self.rsb_frac
+
     def rs(self, p, degf):
         """ Returns solution GOR (scf/stb | sm3/sm3) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
         if self.metric:
             p = p * BAR_TO_PSI
             degf = degc_to_degf(degf)
-        result = oil_rs(api=self.api, degf=degf, sg_sp=self.sg_sp, p=p,
-                      pb=self.pb, rsb=self.rsb, rsmethod=self.rsmethod,
-                      pbmethod=self.pbmethod)
+        result = self._rs_field(p, degf)
         if self.metric:
             return result * SCF_PER_STB_TO_SM3_PER_SM3
         return result
@@ -1444,9 +1517,7 @@ class OilPVT:
             p_field = p
             degf_field = degf
         if rs is None:
-            rs_field = oil_rs(api=self.api, degf=degf_field, sg_sp=self.sg_sp, p=p_field,
-                              pb=self.pb, rsb=self.rsb, rsmethod=self.rsmethod,
-                              pbmethod=self.pbmethod)
+            rs_field = self._rs_field(p_field, degf_field)
         else:
             rs_field = rs * SM3_PER_SM3_TO_SCF_PER_STB if self.metric else rs
         return oil_bo(p=p_field, pb=self.pb, degf=degf_field, rs=rs_field, rsb=self.rsb,
@@ -1462,9 +1533,7 @@ class OilPVT:
             p_field = p
             degf_field = degf
         if rs is None:
-            rs_field = oil_rs(api=self.api, degf=degf_field, sg_sp=self.sg_sp, p=p_field,
-                              pb=self.pb, rsb=self.rsb, rsmethod=self.rsmethod,
-                              pbmethod=self.pbmethod)
+            rs_field = self._rs_field(p_field, degf_field)
         else:
             rs_field = rs * SM3_PER_SM3_TO_SCF_PER_STB if self.metric else rs
         result = oil_deno(p=p_field, degf=degf_field, rs=rs_field, rsb=self.rsb,
@@ -1483,33 +1552,35 @@ class OilPVT:
             p_field = p
             degf_field = degf
         if rs is None:
-            rs_field = oil_rs(api=self.api, degf=degf_field, sg_sp=self.sg_sp, p=p_field,
-                              pb=self.pb, rsb=self.rsb, rsmethod=self.rsmethod,
-                              pbmethod=self.pbmethod)
+            rs_field = self._rs_field(p_field, degf_field)
         else:
             rs_field = rs * SM3_PER_SM3_TO_SCF_PER_STB if self.metric else rs
-        return oil_viso(p=p_field, api=self.api, degf=degf_field, pb=self.pb, rs=rs_field)
+        return oil_viso(p=p_field, api=self.api, degf=degf_field, pb=self.pb, rs=rs_field) * self.vis_frac
 
 
-def oil_harmonize_pb_rsb(
+def oil_harmonize(
     pb: float = 0,
     rsb: float = 0,
     degf: float = 0,
     api: float = 0,
     sg_sp: float = 0,
     sg_g: float = 0,
+    uo_target: float = 0,
+    p_uo: float = 0,
     rsmethod: rs_method = rs_method.VELAR,
     pbmethod: pb_method = pb_method.VELAR,
     metric: bool = False,
 ) -> Tuple:
-    """Resolves consistent Pb, Rsb, and rsb_frac from user inputs.
+    """Resolves consistent Pb, Rsb, rsb_frac, and vis_frac from user inputs.
 
     Given one or both of Pb and Rsb, returns values that are mutually consistent
-    with the selected oil PVT correlations.
+    with the selected oil PVT correlations. Optionally computes a viscosity scaling
+    factor (vis_frac) to match a known viscosity measurement.
 
     - If only pb is specified (rsb=0): calculates rsb from pb
     - If only rsb is specified (pb=0): calculates pb from rsb
     - If both are specified: finds rsb_frac scaling factor that honors both values
+    - If uo_target and p_uo are specified: computes vis_frac = uo_target / uo_corr
 
     pb: Bubble point pressure (psia | barsa). Default 0 (unknown)
     rsb: Solution GOR at Pb (scf/stb | sm3/sm3). Default 0 (unknown)
@@ -1517,15 +1588,18 @@ def oil_harmonize_pb_rsb(
     api: Stock tank oil density (deg API)
     sg_sp: Separator gas specific gravity
     sg_g: Weighted average surface gas specific gravity
+    uo_target: Target oil viscosity (cP) at pressure p_uo. Default 0 (no viscosity tuning)
+    p_uo: Pressure at which uo_target was measured (psia | barsa). Required if uo_target > 0
     rsmethod: Rs calculation method. Default VELAR
     pbmethod: Pb calculation method. Default VELAR
     metric: If True, input/output in Eclipse METRIC units (barsa, degC, sm3/sm3). Defaults to False (FIELD)
 
-    Returns tuple of (pb, rsb, rsb_frac) where:
+    Returns tuple of (pb, rsb, rsb_frac, vis_frac) where:
       - pb: Bubble point pressure (psia | barsa)
       - rsb: Solution GOR at bubble point (scf/stb | sm3/sm3)
       - rsb_frac: Scaling factor applied to Rs correlation to honor user Pb and Rsb
                   (1.0 if only one was specified)
+      - vis_frac: Multiplicative viscosity scaling factor (1.0 if no target specified)
     """
     if metric:
         degf = degc_to_degf(degf)
@@ -1533,6 +1607,10 @@ def oil_harmonize_pb_rsb(
             pb = pb * BAR_TO_PSI
         if rsb > 0:
             rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
+        if p_uo > 0:
+            p_uo = p_uo * BAR_TO_PSI
+
+    sg_g, sg_sp = check_sgs(sg_g=sg_g, sg_sp=sg_sp)
 
     rsmethod, pbmethod = validate_methods(
         ["rsmethod", "pbmethod"], [rsmethod, pbmethod]
@@ -1579,21 +1657,40 @@ def oil_harmonize_pb_rsb(
                 )
         rsb_frac = rsb_i / rsbnew
 
+    # Compute vis_frac if target viscosity specified
+    vis_frac = 1.0
+    if uo_target > 0 and p_uo > 0:
+        rs_at_p = oil_rs(
+            api=api, degf=degf, sg_sp=sg_sp, p=p_uo,
+            pb=pb, rsb=rsb / rsb_frac, rsmethod=rsmethod, pbmethod=pbmethod,
+        ) * rsb_frac
+        uo_corr = oil_viso(p=p_uo, api=api, degf=degf, pb=pb, rs=rs_at_p)
+        vis_frac = uo_target / uo_corr
+
     if metric:
-        return pb * PSI_TO_BAR, rsb * SCF_PER_STB_TO_SM3_PER_SM3, rsb_frac
+        return pb * PSI_TO_BAR, rsb * SCF_PER_STB_TO_SM3_PER_SM3, rsb_frac, vis_frac
+    return pb, rsb, rsb_frac, vis_frac
+
+
+def oil_harmonize_pb_rsb(*args, **kwargs) -> Tuple:
+    """Deprecated: Use oil_harmonize() instead.
+
+    Returns (pb, rsb, rsb_frac) — the original 3-tuple without vis_frac.
+    """
+    pb, rsb, rsb_frac, _vis_frac = oil_harmonize(*args, **kwargs)
     return pb, rsb, rsb_frac
 
 
 def _resolve_pb_rsb(pb, rsb, degf, api, sg_sp, sg_g, pvto, pmax,
                      rsmethod, pbmethod):
-    """Internal helper: resolves Pb/Rsb using oil_harmonize_pb_rsb plus PVTO extension.
+    """Internal helper: resolves Pb/Rsb using oil_harmonize plus PVTO extension.
 
     Returns (pb, rsb, rsb_frac, rsb_max, pb_i, rsb_i).
     """
     pb_i = pb
     rsb_i = rsb
 
-    pb, rsb, rsb_frac = oil_harmonize_pb_rsb(
+    pb, rsb, rsb_frac, _vis_frac = oil_harmonize(
         pb=pb, rsb=rsb, degf=degf, api=api, sg_sp=sg_sp, sg_g=sg_g,
         rsmethod=rsmethod, pbmethod=pbmethod,
     )
@@ -1633,7 +1730,8 @@ def _resolve_pb_rsb(pb, rsb, degf, api, sg_sp, sg_g, pvto, pmax,
 
 def _build_bot_tables(pressures, pb, rsb, rsb_frac, rsb_max, sg_o, sg_g, sg_sp,
                       api, degf, pvto, wt, ch4_sat,
-                      zmethod, rsmethod, cmethod, denomethod, bomethod, pbmethod):
+                      zmethod, rsmethod, cmethod, denomethod, bomethod, pbmethod,
+                      vis_frac=1.0):
     """Compute all PVT properties over the pressure array.
 
     Returns (rss, bos, denos, uos, co, gz, gfvf, cg, visg, bws, visws,
@@ -1671,7 +1769,7 @@ def _build_bot_tables(pressures, pb, rsb, rsb_frac, rsb_max, sg_o, sg_g, sg_sp,
                 sg_g=sg_g, sg_sp=sg_sp, pb=pb, sg_o=sg_o, api=api,
             )
         )
-        uos.append(oil_viso(p=p, api=api, degf=degf, pb=pb, rs=rss[-1]))
+        uos.append(oil_viso(p=p, api=api, degf=degf, pb=pb, rs=rss[-1]) * vis_frac)
         co.append(
             oil_co(
                 p=p, api=api, sg_sp=sg_sp, sg_g=sg_g, degf=degf,
@@ -1717,7 +1815,7 @@ def _build_bot_tables(pressures, pb, rsb, rsb_frac, rsb_max, sg_o, sg_g, sg_sp,
                 )
                 usat_uo.append(
                     [
-                        oil_viso(p=pusat, api=api, degf=degf, pb=p, rs=rss[i])
+                        oil_viso(p=pusat, api=api, degf=degf, pb=p, rs=rss[i]) * vis_frac
                         for pusat in usat_p[-1]
                     ]
                 )
@@ -1731,7 +1829,8 @@ def _build_bot_tables(pressures, pb, rsb, rsb_frac, rsb_max, sg_o, sg_g, sg_sp,
 def _format_bot_results(pressures, rss, bos, denos, uos, co, gz, gfvf, cg,
                         visg, bws, visws, usat_p, usat_bo, usat_uo,
                         sg_o, sg_g, pi, degf, wt, ch4_sat, pb_i, rsb_i,
-                        rsb_frac, pvto, export, zmethod, cmethod):
+                        rsb_frac, pvto, export, zmethod, cmethod,
+                        vis_frac=1.0):
     """Assemble DataFrame, optionally export Eclipse files, and return results dict."""
     st_deno = sg_o * WDEN
     st_deng = gas.gas_den(
@@ -1824,6 +1923,7 @@ def _format_bot_results(pressures, rss, bos, denos, uos, co, gz, gfvf, cg,
         "pb": pb_i,
         "rsb": rsb_i,
         "rsb_scale": rsb_frac,
+        "vis_frac": vis_frac,
         "usat": [],
     }
     if pvto:

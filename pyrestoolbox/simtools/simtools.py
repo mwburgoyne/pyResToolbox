@@ -1753,6 +1753,7 @@ def make_bot_og(
     pbmethod: pb_method = pb_method.VELAR,
     export: bool = False,
     pvto: bool = False,
+    vis_frac: float = 1.0,
     metric: bool = False,
 ) -> dict:
     """
@@ -1856,6 +1857,7 @@ def make_bot_og(
         pressures, pb, rsb, rsb_frac, rsb_max, sg_o, sg_g, sg_sp,
         api, degf, pvto, wt, ch4_sat,
         zmethod, rsmethod, cmethod, denomethod, bomethod, pbmethod,
+        vis_frac=vis_frac,
     )
 
     # Step 4: Assemble results and optionally export
@@ -1863,6 +1865,7 @@ def make_bot_og(
         pressures, rss, bos, denos, uos, co, gz, gfvf, cg, visg, bws, visws,
         usat_p, usat_bo, usat_uo, sg_o, sg_g, pi, degf, wt, ch4_sat,
         pb_i, rsb_i, rsb_frac, pvto, export, zmethod, cmethod,
+        vis_frac=vis_frac,
     )
 
     # --- Metric output conversion ---

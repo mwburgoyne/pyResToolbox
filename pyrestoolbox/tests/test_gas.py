@@ -416,6 +416,33 @@ def test_gas_water_content_salinity():
     actual_ratio = wc_saline / wc_fresh
     assert abs(actual_ratio - expected_ratio) < 0.001, f"Salinity correction ratio {actual_ratio} != {expected_ratio}"
 
+# =============================================================================
+# gas_rate_radial/linear with gas_pvt tests
+# =============================================================================
+
+def test_gas_rate_radial_with_pvt():
+    """gas_rate_radial with gas_pvt should match manual params"""
+    gpvt = gas.GasPVT(sg=0.75, co2=0.05)
+    # Using gas_pvt
+    q_pvt = gas.gas_rate_radial(k=10, h=50, pr=3000, pwf=1500, r_w=0.35, r_ext=1000,
+                                degf=200, gas_pvt=gpvt)
+    # Using manual params
+    q_manual = gas.gas_rate_radial(k=10, h=50, pr=3000, pwf=1500, r_w=0.35, r_ext=1000,
+                                   degf=200, sg=0.75, co2=0.05)
+    assert abs(float(q_pvt) - float(q_manual)) / float(q_manual) < 1e-10, \
+        f"gas_pvt result {q_pvt} != manual {q_manual}"
+
+def test_gas_rate_linear_with_pvt():
+    """gas_rate_linear with gas_pvt should match manual params"""
+    gpvt = gas.GasPVT(sg=0.8)
+    q_pvt = gas.gas_rate_linear(k=0.1, area=50, length=200, pr=2000, pwf=250,
+                                degf=180, gas_pvt=gpvt)
+    q_manual = gas.gas_rate_linear(k=0.1, area=50, length=200, pr=2000, pwf=250,
+                                   degf=180, sg=0.8)
+    assert abs(float(q_pvt) - float(q_manual)) / float(q_manual) < 1e-10, \
+        f"gas_pvt result {q_pvt} != manual {q_manual}"
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("GAS MODULE VALIDATION TESTS")

@@ -534,9 +534,9 @@ def _oil_density_mccain(rs, sgsp, sgsto, press_psia, temp_f):
     return rhobs - drhot
 
 
-def _oil_viscosity_full(sgsp, api, temp_f, rsb, pb, press_psia):
+def _oil_viscosity_full(sgsp, api, temp_f, rsb, pb, press_psia, vis_frac=1.0, rsb_frac=1.0):
     """Oil viscosity (Beggs-Robinson + undersaturated correction) (cP)."""
-    rs = _velarde_rs(sgsp, api, temp_f, pb, rsb, press_psia)
+    rs = _velarde_rs(sgsp, api, temp_f, pb, rsb / rsb_frac, press_psia) * rsb_frac
     c = 10.0 ** (3.0324 - 0.02023 * api) * temp_f ** (-1.163)
     mu_od = 10.0 ** c - 1.0
     a = 10.715 * (rs + 100.0) ** (-0.515)
@@ -552,7 +552,7 @@ def _oil_viscosity_full(sgsp, api, temp_f, rsb, pb, press_psia):
               1.15036 * log_mu ** 3)
         mu_or = mu_orb + 0.0013449 * (press_psia - pb) * 10.0 ** aa
 
-    return max(mu_or, 0.001)
+    return max(mu_or, 0.001) * vis_frac
 
 
 # ============================================================================
@@ -848,7 +848,8 @@ def _hb_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
 
 def _hb_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
-                  rsb_scale=1.0, injection=False, theta=math.pi / 2.0):
+                  rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
+                  vis_frac=1.0, rsb_frac=1.0):
     wc_adj = max(wc, 1e-9)
     if qt_stbpd < 1e-7:
         return _static_oil_column_pressure(
@@ -900,7 +901,7 @@ def _hb_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
             free_gas = max(gor - rs_local, 0.0)
             qg_mmscfd = max(free_gas * qo / 1e6, 1e-9)
 
-            oil_vis_seg = _oil_viscosity_full(sgsp, api, temp_f_i, rsb, pb, p_avg)
+            oil_vis_seg = _oil_viscosity_full(sgsp, api, temp_f_i, rsb, pb, p_avg, vis_frac, rsb_frac)
             rho_oil_local = _oil_density_mccain(rs_local, sgsp, sgsto,
                                                  min(p_avg, pb), temp_f_i)
 
@@ -1168,7 +1169,8 @@ def _wg_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
 
 def _wg_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
-                  rsb_scale=1.0, injection=False, theta=math.pi / 2.0):
+                  rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
+                  vis_frac=1.0, rsb_frac=1.0):
     wc_adj = max(wc, 1e-9)
     if qt_stbpd < 1e-7:
         return _static_oil_column_pressure(
@@ -1201,7 +1203,7 @@ def _wg_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
             free_gas = max(gor - rs_local, 0.0)
             qg_mmscfd = max(free_gas * qo / 1e6, 1e-9)
 
-            oil_vis_seg = _oil_viscosity_full(sgsp, api, temp_f_i, rsb, pb, p_avg)
+            oil_vis_seg = _oil_viscosity_full(sgsp, api, temp_f_i, rsb, pb, p_avg, vis_frac, rsb_frac)
             rho_oil_lbft3 = _oil_density_mccain(rs_local, sgsp, osg,
                                                   min(p_avg, pb), temp_f_i)
             rho_oil_kgm3 = rho_oil_lbft3 * _LBFT3_TO_KGM3
@@ -1412,7 +1414,8 @@ def _gray_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
 
 def _gray_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
                     wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
-                    rsb_scale=1.0, injection=False, theta=math.pi / 2.0):
+                    rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
+                    vis_frac=1.0, rsb_frac=1.0):
     wc_adj = max(wc, 1e-9)
     if qt_stbpd < 1e-7:
         return _static_oil_column_pressure(
@@ -1445,7 +1448,7 @@ def _gray_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
             free_gas = max(gor - rs_local, 0.0)
             qg_mmscfd = max(free_gas * qo / 1e6, 1e-9)
 
-            oil_vis_seg = _oil_viscosity_full(sgsp, api, temp_f_i, rsb, pb, p_avg)
+            oil_vis_seg = _oil_viscosity_full(sgsp, api, temp_f_i, rsb, pb, p_avg, vis_frac, rsb_frac)
             rho_oil_local = _oil_density_mccain(rs_local, sgsp, osg,
                                                  min(p_avg, pb), temp_f_i)
 
@@ -1725,7 +1728,8 @@ def _bb_core_gas(thp, api, gsg, tid, rough, length, tht, bht,
 
 def _bb_core_oil(thp, api, gsg, tid, rough, length, tht, bht,
                  wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
-                 rsb_scale, injection, theta=math.pi / 2.0):
+                 rsb_scale, injection, theta=math.pi / 2.0,
+                 vis_frac=1.0, rsb_frac=1.0):
     """Beggs & Brill core for oil wells."""
     wc_adj = max(wc, 1e-9)
     if qt_stbpd < 1e-7:
@@ -1760,7 +1764,7 @@ def _bb_core_oil(thp, api, gsg, tid, rough, length, tht, bht,
             free_gas = max(gor - rs_local, 0.0)
             qg_mmscfd = max(free_gas * qo / 1e6, 1e-9)
 
-            oil_vis_seg = _oil_viscosity_full(sgsp, api, temp_f_i, rsb, pb, p_avg)
+            oil_vis_seg = _oil_viscosity_full(sgsp, api, temp_f_i, rsb, pb, p_avg, vis_frac, rsb_frac)
             rho_oil_local = _oil_density_mccain(rs_local, sgsp, osg,
                                                  min(p_avg, pb), temp_f_i)
 
@@ -1937,11 +1941,15 @@ def fbhp(thp, completion, vlpmethod='WG', well_type='gas',
     vlpmethod = validate_methods(["vlpmethod"], [vlpmethod])
 
     # Extract oil PVT parameters if provided (already in oilfield units from OilPVT)
+    vis_frac = 1.0
+    rsb_frac = 1.0
     if oil_pvt is not None and well_type == 'oil':
         api = oil_pvt.api
         sgsp = oil_pvt.sg_sp
         pb = oil_pvt.pb
         rsb = oil_pvt.rsb
+        vis_frac = oil_pvt.vis_frac
+        rsb_frac = oil_pvt.rsb_frac
         if oil_pvt.sg_g > 0:
             gsg = oil_pvt.sg_g
 
@@ -1958,7 +1966,8 @@ def fbhp(thp, completion, vlpmethod='WG', well_type='gas',
                 length=length, tht=tht_seg, bht=bht_seg, wsg=wsg,
                 qt_stbpd=qt_stbpd, gor=gor, wc=wc,
                 pb=pb, rsb=rsb, sgsp=sgsp,
-                rsb_scale=1.0, injection=injection, theta=theta)
+                rsb_scale=rsb_frac, injection=injection, theta=theta,
+                vis_frac=vis_frac, rsb_frac=rsb_frac)
 
     # Loop over wellbore segments
     # Temperature interpolated over TVD (not MD) since geothermal
