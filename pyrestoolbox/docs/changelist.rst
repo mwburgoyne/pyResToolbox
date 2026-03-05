@@ -1,3 +1,11 @@
+Changelist in 3.0.2:
+
+- **gas_hydrate()**: New function for gas hydrate formation prediction and thermodynamic inhibitor calculations. Returns a ``HydrateResult`` dataclass with hydrate formation temperature (HFT), hydrate formation pressure (HFP), subcooling, hydrate window assessment, inhibitor temperature depression, and required inhibitor concentration. Two HFT correlations: Motiee (1991) and Towler & Mokhatab (2005). Inhibitor depression via Østergaard et al. (2005). Supports five inhibitor types (MeOH, MEG, DEG, TEG, EtOH). Full Eclipse METRIC unit support.
+- **hyd_method enum**: New enum for hydrate formation correlation selection (MOTIEE, TOWLER).
+- **inhibitor enum**: New enum for thermodynamic hydrate inhibitor selection (MEOH, MEG, DEG, TEG, ETOH).
+- 392 validation tests (up from 375 in 3.0.1).
+
+
 Changelist in 3.0.1:
 
 - **OilPVT auto-harmonization**: ``rsb`` is now optional (default 0). When ``degf`` is provided (> 0), the constructor calls ``oil_harmonize()`` internally to resolve consistent Pb, Rsb, rsb_frac, and vis_frac from a single call. Accepts ``uo_target`` and ``p_uo`` for viscosity tuning. ``OilPVT.from_harmonize()`` remains as a deprecated thin wrapper.

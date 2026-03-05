@@ -27,7 +27,22 @@ pyResToolBox uses class objects to track calculation options through the functio
        Options are:
         + 'SUT': Sutton with Wichert & Aziz non-hydrocarbon corrections
         + 'PMC': Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-        + 'BUR': Correlation tuned to return the critical properties of the pure hydrocarbon component of a mixture, required for the 'BUR' (tuned Peng Robinson) Z-Factor method. More information about the method can be found `here <https://github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor>`_ 
+        + 'BUR': Correlation tuned to return the critical properties of the pure hydrocarbon component of a mixture, required for the 'BUR' (tuned Peng Robinson) Z-Factor method. More information about the method can be found `here <https://github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor>`_
+   * - hydmethod
+     - hyd_method
+     - Method for calculating gas hydrate formation temperature. Defaults to 'MOTIEE'.
+       Options are:
+        + 'MOTIEE': Motiee (1991) — T-explicit, gas gravity based. Hydrocarbon Processing 70, pp 98-99
+        + 'TOWLER': Towler & Mokhatab (2005) — T-explicit, gas gravity based. Hydrocarbon Processing 84, pp 61-62
+   * - inhibitor_type
+     - inhibitor
+     - Thermodynamic hydrate inhibitor type. Optional (None = no inhibitor).
+       Options are:
+        + 'MEOH': Methanol
+        + 'MEG': Monoethylene Glycol
+        + 'DEG': Diethylene Glycol
+        + 'TEG': Triethylene Glycol
+        + 'ETOH': Ethanol
 
 
 Users can specify which calculation method to use either by passing an option string, or a class object to any given function. The implementation of class objects should make it easier to program in an IDE that supports type hinting
@@ -109,6 +124,8 @@ Function List
      - `pyrestoolbox.gas.gas_sg`_
    * - Gas Flow Rate Linear
      - `pyrestoolbox.gas.gas_rate_linear`_
+   * - Gas Hydrate Prediction
+     - `pyrestoolbox.gas.gas_hydrate`_
    * - Gas PVT Wrapper
      - `pyrestoolbox.gas.GasPVT`_
 
@@ -1006,6 +1023,113 @@ Using a GasPVT object:
     >>> gpvt = gas.GasPVT(sg=0.8)
     >>> gas.gas_rate_linear(k=0.1, area=50, length=200, pr=2000, pwf=250, degf=180, gas_pvt=gpvt)
     8.202199932859799
+
+
+pyrestoolbox.gas.gas_hydrate
+=============================
+
+.. code-block:: python
+
+    gas_hydrate(p, degf, sg, hydmethod='MOTIEE', inhibitor_type=None, inhibitor_wt_pct=0, metric=False) -> HydrateResult
+
+Returns a ``HydrateResult`` dataclass with gas hydrate formation temperature (HFT), hydrate formation pressure (HFP), subcooling, hydrate window assessment, and thermodynamic inhibitor calculations.
+
+Two HFT correlations are available: Motiee (1991) and Towler & Mokhatab (2005). Hydrate formation pressure is computed by bisection inversion of the HFT correlation. Inhibitor temperature depression uses the Østergaard et al. (2005) cubic polynomial, and required inhibitor concentration is computed by Newton-Raphson inversion of the same polynomial.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - p
+     - float
+     - Operating pressure (psia, or barsa if metric=True)
+   * - degf
+     - float
+     - Operating temperature (deg F, or deg C if metric=True)
+   * - sg
+     - float
+     - Gas specific gravity (air = 1.0)
+   * - hydmethod
+     - string or hyd_method
+     - Hydrate formation correlation. 'MOTIEE' (default) or 'TOWLER'. `Calculation Methods and Class Objects`_.
+   * - inhibitor_type
+     - string or inhibitor
+     - Thermodynamic hydrate inhibitor. 'MEOH', 'MEG', 'DEG', 'TEG', 'ETOH', or None (default = no inhibitor). `Calculation Methods and Class Objects`_.
+   * - inhibitor_wt_pct
+     - float
+     - Weight percent of inhibitor in aqueous phase (0-100). Defaults to 0
+   * - metric
+     - bool
+     - If True, inputs/outputs use Eclipse METRIC units (barsa, deg C). Defaults to False
+
+.. list-table:: HydrateResult Attributes
+   :widths: 15 40
+   :header-rows: 1
+
+   * - Attribute
+     - Description
+   * - hft
+     - Hydrate formation temperature at operating pressure (deg F | deg C)
+   * - hfp
+     - Hydrate formation pressure at operating temperature (psia | barsa)
+   * - subcooling
+     - HFT minus operating temperature (deg F | deg C delta). Positive = in hydrate window
+   * - in_hydrate_window
+     - True if operating temperature is below HFT
+   * - inhibited_hft
+     - HFT after inhibitor depression (deg F | deg C), or NaN if no inhibitor specified
+   * - inhibitor_depression
+     - Temperature depression from inhibitor (deg F | deg C delta), or 0
+   * - required_inhibitor_wt_pct
+     - Wt% inhibitor needed to bring HFT below operating temperature, or 0
+
+Examples:
+
+.. code-block:: python
+
+    >>> from pyrestoolbox import gas
+    >>> r = gas.gas_hydrate(p=1000, degf=60, sg=0.65)
+    >>> r.hft
+    96.20360674625366
+    >>> r.hfp
+    149.60397973632814
+    >>> r.subcooling
+    36.203606746253655
+    >>> r.in_hydrate_window
+    True
+
+Using Towler & Mokhatab method:
+
+.. code-block:: python
+
+    >>> r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, hydmethod='TOWLER')
+    >>> r.hft
+    62.918902535978695
+
+With MEG inhibitor (25 wt%):
+
+.. code-block:: python
+
+    >>> r = gas.gas_hydrate(p=2000, degf=80, sg=0.7, inhibitor_type='MEG', inhibitor_wt_pct=25)
+    >>> r.inhibited_hft
+    97.97592063045367
+    >>> r.inhibitor_depression
+    11.0109375
+    >>> r.required_inhibitor_wt_pct
+    58.27975454526845
+
+Using metric units (barsa, deg C):
+
+.. code-block:: python
+
+    >>> r = gas.gas_hydrate(p=100, degf=20, sg=0.7, metric=True)
+    >>> r.hft
+    40.52282684214039
+    >>> r.hfp
+    11.52975136123869
 
 
 pyrestoolbox.gas.GasPVT

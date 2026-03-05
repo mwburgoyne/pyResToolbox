@@ -711,6 +711,36 @@ def test_doc_gas_rate_linear_with_pvt():
     assert abs(result - 8.202199932859799) / 8.202199932859799 < RTOL
 
 # =============================================================================
+# Gas Hydrate Documentation Examples (docs/gas.rst)
+# =============================================================================
+
+def test_doc_gas_hydrate_basic():
+    """gas.rst: gas_hydrate basic Motiee example"""
+    r = gas.gas_hydrate(p=1000, degf=60, sg=0.65)
+    assert abs(r.hft - 96.20360674625366) / 96.20360674625366 < RTOL
+    assert abs(r.hfp - 149.60397973632814) / 149.60397973632814 < RTOL
+    assert abs(r.subcooling - 36.203606746253655) / 36.203606746253655 < RTOL
+    assert r.in_hydrate_window is True
+
+def test_doc_gas_hydrate_towler():
+    """gas.rst: gas_hydrate with Towler method"""
+    r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, hydmethod='TOWLER')
+    assert abs(r.hft - 62.918902535978695) / 62.918902535978695 < RTOL
+
+def test_doc_gas_hydrate_meg_inhibitor():
+    """gas.rst: gas_hydrate with MEG 25wt%"""
+    r = gas.gas_hydrate(p=2000, degf=80, sg=0.7, inhibitor_type='MEG', inhibitor_wt_pct=25)
+    assert abs(r.inhibited_hft - 97.97592063045367) / 97.97592063045367 < RTOL
+    assert abs(r.inhibitor_depression - 11.0109375) / 11.0109375 < RTOL
+    assert abs(r.required_inhibitor_wt_pct - 58.27975454526845) / 58.27975454526845 < RTOL
+
+def test_doc_gas_hydrate_metric():
+    """gas.rst: gas_hydrate with metric units"""
+    r = gas.gas_hydrate(p=100, degf=20, sg=0.7, metric=True)
+    assert abs(r.hft - 40.52282684214039) / 40.52282684214039 < RTOL
+    assert abs(r.hfp - 11.52975136123869) / 11.52975136123869 < RTOL
+
+# =============================================================================
 # Gas/Oil Module GasPVT/OilPVT Documentation Examples (docs/gas.rst, docs/oil.rst)
 # =============================================================================
 

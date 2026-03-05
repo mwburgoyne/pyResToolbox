@@ -35,6 +35,8 @@ co_method     Oil compressibility method (NUM)
 kr_family     Relative permeability model family (COR, LET, JER)
 kr_table      Relative permeability table type (SWOF, SGOF, SGWFN)
 vlp_method    VLP multiphase flow correlation (HB, WG, GRAY, BB)
+hyd_method    Hydrate formation correlation (MOTIEE, TOWLER)
+inhibitor     Thermodynamic hydrate inhibitor (MEOH, MEG, DEG, TEG, ETOH)
 
 Variables
 ---------
@@ -44,7 +46,7 @@ class_dic     Dict mapping method parameter names to their Enum classes
 __all__ = [
     'z_method', 'c_method', 'pb_method', 'rs_method', 'bo_method',
     'uo_method', 'deno_method', 'co_method', 'kr_family', 'kr_table',
-    'vlp_method', 'class_dic',
+    'vlp_method', 'hyd_method', 'inhibitor', 'class_dic',
 ]
 
 from enum import Enum
@@ -101,6 +103,17 @@ class vlp_method(Enum):  # VLP multiphase flow correlation
     GRAY = 2    # Gray
     BB = 3      # Beggs & Brill
 
+class hyd_method(Enum):  # Hydrate formation correlation
+    MOTIEE = 0  # Motiee (1991)
+    TOWLER = 1  # Towler & Mokhatab (2005)
+
+class inhibitor(Enum):  # Thermodynamic hydrate inhibitor
+    MEOH = 0    # Methanol
+    MEG = 1     # Monoethylene Glycol
+    DEG = 2     # Diethylene Glycol
+    TEG = 3     # Triethylene Glycol
+    ETOH = 4    # Ethanol
+
 class_dic = {
     "zmethod": z_method,
     "cmethod": c_method,
@@ -113,5 +126,7 @@ class_dic = {
     "krfamily": kr_family,
     "krtable": kr_table,
     "vlpmethod": vlp_method,
+    "hydmethod": hyd_method,
+    "inhibitor": inhibitor,
 }
 
