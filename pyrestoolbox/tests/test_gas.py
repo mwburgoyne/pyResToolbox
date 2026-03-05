@@ -443,6 +443,157 @@ def test_gas_rate_linear_with_pvt():
         f"gas_pvt result {q_pvt} != manual {q_manual}"
 
 
+# =============================================================================
+# Gas hydrate prediction tests
+# =============================================================================
+
+# Frozen regression baselines captured 2026-03-05
+_HYDRATE_BASELINES = {
+    'motiee_hft_1000_065': 96.20360674625366,     # Motiee HFT at 1000 psia, sg=0.65
+    'motiee_hfp_60_065': 149.60397973632814,       # Motiee HFP at 60 degF, sg=0.65
+    'towler_hft_1000_065': 62.918902535978695,      # Towler HFT at 1000 psia, sg=0.65
+    'meoh_depression_25wt': 17.958375,              # Østergaard MEOH 25wt% depression (degF)
+    'meoh_inhibited_hft': 91.02848313045367,        # Inhibited HFT at 2000 psia, sg=0.7, MEOH 25wt%
+}
+
+def test_hydrate_frozen_baselines():
+    """Frozen regression baselines for hydrate calculations"""
+    r1 = gas.gas_hydrate(p=1000, degf=60, sg=0.65)
+    assert abs(r1.hft - _HYDRATE_BASELINES['motiee_hft_1000_065']) < 1e-10, \
+        f"Motiee HFT: {r1.hft} != {_HYDRATE_BASELINES['motiee_hft_1000_065']}"
+    assert abs(r1.hfp - _HYDRATE_BASELINES['motiee_hfp_60_065']) < 1e-6, \
+        f"Motiee HFP: {r1.hfp} != {_HYDRATE_BASELINES['motiee_hfp_60_065']}"
+
+    r2 = gas.gas_hydrate(p=1000, degf=60, sg=0.65, hydmethod='TOWLER')
+    assert abs(r2.hft - _HYDRATE_BASELINES['towler_hft_1000_065']) < 1e-10, \
+        f"Towler HFT: {r2.hft} != {_HYDRATE_BASELINES['towler_hft_1000_065']}"
+
+    r3 = gas.gas_hydrate(p=2000, degf=80, sg=0.7, inhibitor_type='MEOH', inhibitor_wt_pct=25)
+    assert abs(r3.inhibitor_depression - _HYDRATE_BASELINES['meoh_depression_25wt']) < 1e-10, \
+        f"MEOH depression: {r3.inhibitor_depression} != {_HYDRATE_BASELINES['meoh_depression_25wt']}"
+    assert abs(r3.inhibited_hft - _HYDRATE_BASELINES['meoh_inhibited_hft']) < 1e-10, \
+        f"MEOH inhibited HFT: {r3.inhibited_hft} != {_HYDRATE_BASELINES['meoh_inhibited_hft']}"
+
+def test_hydrate_hft_increases_with_pressure():
+    """HFT should increase monotonically with pressure"""
+    pressures = [200, 500, 1000, 2000, 4000, 8000]
+    hfts = [gas.gas_hydrate(p=p, degf=60, sg=0.7).hft for p in pressures]
+    for i in range(1, len(hfts)):
+        assert hfts[i] > hfts[i-1], \
+            f"HFT not monotonic: {hfts[i]:.2f} <= {hfts[i-1]:.2f} at P={pressures[i]} vs {pressures[i-1]}"
+
+def test_hydrate_hfp_round_trip():
+    """HFT at P -> HFP at that HFT should recover P within 1 psia"""
+    for p_test in [300, 500, 1000, 2000, 5000]:
+        r1 = gas.gas_hydrate(p=p_test, degf=60, sg=0.7)
+        r2 = gas.gas_hydrate(p=p_test, degf=r1.hft, sg=0.7)
+        assert abs(r2.hfp - p_test) < 1.0, \
+            f"HFP round-trip: P={p_test}, HFT={r1.hft:.2f}, recovered HFP={r2.hfp:.2f}"
+
+def test_hydrate_subcooling_and_window():
+    """Subcooling and in_hydrate_window should be consistent"""
+    # Operating below HFT -> in window
+    r_cold = gas.gas_hydrate(p=2000, degf=60, sg=0.7)
+    assert r_cold.in_hydrate_window, "Should be in hydrate window at 60F, 2000 psia"
+    assert r_cold.subcooling > 0, "Subcooling should be positive in hydrate window"
+
+    # Operating above HFT -> not in window
+    r_hot = gas.gas_hydrate(p=200, degf=150, sg=0.6)
+    assert not r_hot.in_hydrate_window, "Should NOT be in hydrate window at 150F, 200 psia"
+    assert r_hot.subcooling < 0, "Subcooling should be negative outside hydrate window"
+
+def test_hydrate_inhibitor_depression():
+    """Inhibitor should reduce HFT; depression should increase with concentration"""
+    r_base = gas.gas_hydrate(p=1000, degf=60, sg=0.65)
+    r_inh = gas.gas_hydrate(p=1000, degf=60, sg=0.65, inhibitor_type='MEG', inhibitor_wt_pct=30)
+    assert r_inh.inhibited_hft < r_base.hft, "Inhibited HFT should be lower"
+    assert r_inh.inhibitor_depression > 0, "Depression should be positive"
+
+    # Higher concentration -> more depression
+    r_low = gas.gas_hydrate(p=1000, degf=60, sg=0.65, inhibitor_type='MEG', inhibitor_wt_pct=10)
+    r_high = gas.gas_hydrate(p=1000, degf=60, sg=0.65, inhibitor_type='MEG', inhibitor_wt_pct=40)
+    assert r_high.inhibitor_depression > r_low.inhibitor_depression, \
+        "Higher concentration should give more depression"
+
+def test_hydrate_required_concentration_round_trip():
+    """Required concentration should round-trip through depression calculation"""
+    r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, inhibitor_type='MEG', inhibitor_wt_pct=20)
+    # Compute what 20wt% gives as depression, then check required_concentration for that depression
+    from pyrestoolbox.gas.gas import _ostergaard_depression, _required_concentration
+    from pyrestoolbox.classes import inhibitor as inh_enum
+    dep_c = _ostergaard_depression(20, inh_enum.MEG)
+    conc = _required_concentration(dep_c, inh_enum.MEG)
+    assert abs(conc - 20.0) < 1e-4, f"Round-trip concentration: {conc} != 20.0"
+
+def test_hydrate_no_inhibitor():
+    """Without inhibitor, inhibited_hft should be NaN and depression should be 0"""
+    r = gas.gas_hydrate(p=1000, degf=60, sg=0.65)
+    assert np.isnan(r.inhibited_hft), "inhibited_hft should be NaN without inhibitor"
+    assert r.inhibitor_depression == 0, "depression should be 0 without inhibitor"
+    assert r.required_inhibitor_wt_pct == 0, "required wt% should be 0 without inhibitor"
+
+def test_hydrate_metric():
+    """Metric results should match oilfield results after conversion"""
+    r_f = gas.gas_hydrate(p=1000, degf=60, sg=0.65)
+    r_m = gas.gas_hydrate(p=1000 * 0.0689475729, degf=(60 - 32) * 5 / 9, sg=0.65, metric=True)
+    # HFT: convert field degF to degC
+    hft_degc = (r_f.hft - 32) * 5 / 9
+    assert abs(r_m.hft - hft_degc) < 0.01, f"Metric HFT {r_m.hft:.4f} != {hft_degc:.4f}"
+    # HFP: convert field psia to barsa
+    hfp_bar = r_f.hfp * 0.0689475729
+    assert abs(r_m.hfp - hfp_bar) < 0.01, f"Metric HFP {r_m.hfp:.4f} != {hfp_bar:.4f}"
+
+def test_hydrate_metric_with_inhibitor():
+    """Metric inhibitor results should be consistent with oilfield"""
+    r_f = gas.gas_hydrate(p=2000, degf=80, sg=0.7, inhibitor_type='MEG', inhibitor_wt_pct=20)
+    r_m = gas.gas_hydrate(p=2000 * 0.0689475729, degf=(80 - 32) * 5 / 9, sg=0.7,
+                          inhibitor_type='MEG', inhibitor_wt_pct=20, metric=True)
+    # Depression: field degF delta -> degC delta
+    dep_degc = r_f.inhibitor_depression * 5 / 9
+    assert abs(r_m.inhibitor_depression - dep_degc) < 0.01, \
+        f"Metric depression {r_m.inhibitor_depression:.4f} != {dep_degc:.4f}"
+    # Required wt% should be identical (unit-independent)
+    assert abs(r_m.required_inhibitor_wt_pct - r_f.required_inhibitor_wt_pct) < 0.01, \
+        f"Metric required wt% {r_m.required_inhibitor_wt_pct:.2f} != {r_f.required_inhibitor_wt_pct:.2f}"
+
+def test_hydrate_towler_vs_motiee():
+    """Both methods should give physically reasonable HFT; may differ numerically"""
+    r_m = gas.gas_hydrate(p=2000, degf=80, sg=0.7, hydmethod='MOTIEE')
+    r_t = gas.gas_hydrate(p=2000, degf=80, sg=0.7, hydmethod='TOWLER')
+    # Both should be reasonable (between 30 and 200 degF at 2000 psia)
+    assert 30 < r_m.hft < 200, f"Motiee HFT out of range: {r_m.hft}"
+    assert 30 < r_t.hft < 200, f"Towler HFT out of range: {r_t.hft}"
+
+def test_hydrate_all_inhibitors():
+    """All five inhibitor types should work and give positive depression"""
+    for inh_name in ['MEOH', 'MEG', 'DEG', 'TEG', 'ETOH']:
+        r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, inhibitor_type=inh_name, inhibitor_wt_pct=15)
+        assert r.inhibitor_depression > 0, f"{inh_name}: depression should be positive"
+        assert r.inhibited_hft < r.hft, f"{inh_name}: inhibited HFT should be < uninhibited"
+
+def test_hydrate_bad_inputs():
+    """Invalid inputs should raise ValueError"""
+    bad_cases = [
+        dict(p=-100, degf=60, sg=0.65),          # negative pressure
+        dict(p=1000, degf=60, sg=-0.5),           # negative SG
+        dict(p=1000, degf=60, sg=0.65, inhibitor_wt_pct=-5),   # negative wt%
+        dict(p=1000, degf=60, sg=0.65, inhibitor_wt_pct=100),  # wt% = 100
+        dict(p=1000, degf=60, sg=0.65, hydmethod='INVALID'),   # bad method
+    ]
+    for kwargs in bad_cases:
+        try:
+            gas.gas_hydrate(**kwargs)
+            raise AssertionError(f"Expected ValueError for {kwargs}")
+        except ValueError:
+            pass
+
+def test_hydrate_zero_inhibitor_wt_pct():
+    """Inhibitor type with 0 wt% should give no depression"""
+    r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, inhibitor_type='MEG', inhibitor_wt_pct=0)
+    assert r.inhibitor_depression == 0, "Depression should be 0 at 0 wt%"
+    assert r.inhibited_hft == r.hft, "Inhibited HFT should equal uninhibited at 0 wt%"
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("GAS MODULE VALIDATION TESTS")

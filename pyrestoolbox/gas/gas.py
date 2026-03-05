@@ -39,27 +39,32 @@ gas_water_content  Equilibrium water content of gas
 gas_rate_radial Radial gas flow rate (Mscf/d)
 gas_rate_linear Linear gas flow rate (Mscf/d)
 darcy_gas       Darcy gas rate from pseudopressure difference
+gas_hydrate     Gas hydrate formation prediction and inhibitor calculations
 
 Classes
 -------
 GasPVT          Convenience wrapper storing gas composition & method choices
+HydrateResult   Dataclass returned by gas_hydrate()
 """
 
 __all__ = [
     'gas_z', 'gas_ug', 'gas_bg', 'gas_cg', 'gas_den', 'gas_sg',
     'gas_tc_pc', 'gas_dmp', 'gas_ponz2p', 'gas_grad2sg', 'gas_fws_sg',
     'gas_water_content', 'gas_rate_radial', 'gas_rate_linear', 'darcy_gas',
-    'GasPVT',
+    'gas_hydrate',
+    'GasPVT', 'HydrateResult',
     # Enum classes re-exported for convenience (gas.z_method.DAK, etc.)
-    'z_method', 'c_method',
+    'z_method', 'c_method', 'hyd_method', 'inhibitor',
 ]
 
+import math
 import numpy as np
 import numpy.typing as npt
 from typing import Tuple
+from dataclasses import dataclass
 
 import pandas as pd
-from pyrestoolbox.classes import z_method, c_method, pb_method, rs_method, bo_method, uo_method, deno_method, co_method, kr_family, kr_table, class_dic
+from pyrestoolbox.classes import z_method, c_method, pb_method, rs_method, bo_method, uo_method, deno_method, co_method, kr_family, kr_table, hyd_method, inhibitor, class_dic
 from pyrestoolbox.shared_fns import convert_to_numpy, process_output, check_2_inputs, bisect_solve, validate_pe_inputs
 from pyrestoolbox.validate import validate_methods
 from pyrestoolbox.constants import (R, psc, tsc, degF2R, tscr, scf_per_mol, CUFTperBBL, WDEN, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2,
@@ -1506,3 +1511,278 @@ def gas_water_content(p: float, degf: float, salinity: float = 0, metric: bool =
     if metric:
         return content * STB_PER_MMSCF_TO_SM3_PER_SM3  # stb/MMscf -> sm3/sm3
     return content
+
+
+# =============================================================================
+# Gas Hydrate Formation Prediction
+# =============================================================================
+
+_PSI_TO_KPA = 6.894757  # psia to kPa
+
+# Hammerschmidt (1934) inhibitor constants: (K, MW, w_max as fraction)
+_HAMMERSCHMIDT = {
+    inhibitor.MEOH: (2335, 32.04, 0.25),
+    inhibitor.MEG:  (2700, 62.07, 0.70),
+    inhibitor.DEG:  (2700, 106.12, 0.70),
+    inhibitor.TEG:  (5400, 150.17, 0.50),
+    inhibitor.ETOH: (1297, 46.07, 0.30),
+}
+
+# Østergaard et al. (2005) coefficients: delta_T(degC) = C1*w + C2*w^2 + C3*w^3, w in wt% (0-100)
+_OSTERGAARD = {
+    inhibitor.MEOH: (0.4411, -0.0033, 6.476e-5),
+    inhibitor.MEG:  (0.2533, -0.0009, 2.222e-5),
+    inhibitor.DEG:  (0.1833, -0.0004, 6.667e-6),
+    inhibitor.TEG:  (0.1333, -0.0002, 3.333e-6),
+    inhibitor.ETOH: (0.3750, -0.0020, 3.500e-5),
+}
+
+
+@dataclass
+class HydrateResult:
+    """Result of gas hydrate formation prediction.
+
+    Attributes
+    ----------
+    hft : float
+        Hydrate formation temperature at operating pressure (degF | degC).
+    hfp : float
+        Hydrate formation pressure at operating temperature (psia | barsa).
+    subcooling : float
+        HFT - T_operating (degF | degC delta). Positive means inside hydrate window.
+    in_hydrate_window : bool
+        True if operating temperature is below the hydrate formation temperature.
+    inhibited_hft : float
+        HFT after inhibitor depression (degF | degC), or NaN if no inhibitor.
+    inhibitor_depression : float
+        Temperature depression from inhibitor (degF | degC delta), or 0.
+    required_inhibitor_wt_pct : float
+        Wt% inhibitor needed to bring HFT below operating temperature, or 0.
+    """
+    hft: float
+    hfp: float
+    subcooling: float
+    in_hydrate_window: bool
+    inhibited_hft: float
+    inhibitor_depression: float
+    required_inhibitor_wt_pct: float
+
+
+def _motiee_hft(p_psia, sg):
+    """Motiee (1991) hydrate formation temperature.
+
+    Published form uses degC and kPa with log10.
+    T(degC) = -283.24469 + 78.99667*log10(P_kPa) - 5.352544*log10(P_kPa)^2
+              + 349.473877*gamma - 150.854675*gamma^2 - 27.604065*gamma*log10(P_kPa)
+
+    Reference: Motiee, M. (1991). Hydrocarbon Processing 70, pp 98-99.
+    """
+    p_kpa = p_psia * _PSI_TO_KPA
+    log_p = math.log10(p_kpa)
+    t_c = (-283.24469
+           + 78.99667 * log_p
+           - 5.352544 * log_p * log_p
+           + 349.473877 * sg
+           - 150.854675 * sg * sg
+           - 27.604065 * sg * log_p)
+    return t_c * 9.0 / 5.0 + 32.0  # degC -> degF
+
+
+def _towler_mokhatab_hft(p_psia, sg):
+    """Towler & Mokhatab (2005) hydrate formation temperature.
+
+    T(degF) = 13.47*ln(P_psia) + 34.27*ln(gamma) - 1.675*ln(P_psia)*ln(gamma) - 20.35
+
+    Reference: Towler, B.F. & Mokhatab, S. (2005). Hydrocarbon Processing 84, pp 61-62.
+    """
+    ln_p = math.log(p_psia)
+    ln_sg = math.log(sg)
+    return 13.47 * ln_p + 34.27 * ln_sg - 1.675 * ln_p * ln_sg - 20.35
+
+
+def _hydrate_formation_press(degf_target, sg, hft_fn):
+    """Invert HFT correlation to find hydrate formation pressure via bisection.
+
+    Uses Motiee for inversion (consistent with ResToolbox3).
+    Returns pressure in psia, or NaN if target T is outside correlation range.
+    """
+    p_lo = 14.696   # ~1 atm
+    p_hi = 15000.0  # upper search bound
+
+    t_lo = hft_fn(p_lo, sg)
+    t_hi = hft_fn(p_hi, sg)
+
+    # Check that solution exists within bounds
+    if degf_target < t_lo or degf_target > t_hi:
+        return float('nan')
+
+    for _ in range(100):
+        p_mid = (p_lo + p_hi) / 2.0
+        t_mid = hft_fn(p_mid, sg)
+        if abs(t_mid - degf_target) < 0.001:
+            break
+        if t_mid < degf_target:
+            p_lo = p_mid
+        else:
+            p_hi = p_mid
+
+    return (p_lo + p_hi) / 2.0
+
+
+def _ostergaard_depression(wt_pct, inh):
+    """Østergaard et al. (2005) temperature depression in degC.
+
+    delta_T(degC) = C1*w + C2*w^2 + C3*w^3, where w = wt% (0-100 scale).
+
+    Reference: Østergaard, K.K. et al. (2005). J. Pet. Sci. Eng. 48, pp 70-80.
+    """
+    c1, c2, c3 = _OSTERGAARD[inh]
+    return c1 * wt_pct + c2 * wt_pct**2 + c3 * wt_pct**3
+
+
+def _required_concentration(depression_degc, inh):
+    """Newton-Raphson inversion of Østergaard cubic to find required wt%.
+
+    Returns wt% (0-100 scale). Returns 0 if depression <= 0.
+    """
+    if depression_degc <= 0:
+        return 0.0
+
+    c1, c2, c3 = _OSTERGAARD[inh]
+
+    # Initial guess from linear term
+    w = depression_degc / c1 if c1 > 0 else 20.0
+
+    for _ in range(50):
+        f = c1 * w + c2 * w**2 + c3 * w**3 - depression_degc
+        fp = c1 + 2 * c2 * w + 3 * c3 * w**2
+        if abs(fp) < 1e-15:
+            break
+        w_new = w - f / fp
+        if w_new < 0:
+            w_new = w / 2.0
+        if abs(w_new - w) < 1e-6:
+            w = w_new
+            break
+        w = w_new
+
+    return max(float(w), 0.0)
+
+
+def gas_hydrate(
+    p: float,
+    degf: float,
+    sg: float,
+    hydmethod: str = 'MOTIEE',
+    inhibitor_type: str = None,
+    inhibitor_wt_pct: float = 0,
+    metric: bool = False,
+) -> HydrateResult:
+    """ Returns gas hydrate formation prediction and inhibitor calculations.
+
+        p: Operating pressure (psia | barsa if metric=True)
+        degf: Operating temperature (degF | degC if metric=True)
+        sg: Gas specific gravity (air = 1.0)
+        hydmethod: Hydrate formation correlation.
+                   'MOTIEE': Motiee (1991)
+                   'TOWLER': Towler & Mokhatab (2005)
+                   Defaults to 'MOTIEE'
+        inhibitor_type: Thermodynamic hydrate inhibitor type (optional).
+                        'MEOH' (Methanol), 'MEG' (Monoethylene Glycol),
+                        'DEG' (Diethylene Glycol), 'TEG' (Triethylene Glycol),
+                        'ETOH' (Ethanol). None = no inhibitor
+        inhibitor_wt_pct: Weight percent of inhibitor in aqueous phase (0-100).
+                          Defaults to 0
+        metric: If True, input/output in Eclipse METRIC units (barsa, degC).
+                Defaults to False (FIELD: psia, degF)
+
+    Returns a HydrateResult dataclass with:
+        hft:                     Hydrate formation temperature at operating P
+        hfp:                     Hydrate formation pressure at operating T
+        subcooling:              HFT - operating T (positive = in hydrate window)
+        in_hydrate_window:       True if operating T < HFT
+        inhibited_hft:           HFT after inhibitor depression, or NaN
+        inhibitor_depression:    Temperature depression from inhibitor, or 0
+        required_inhibitor_wt_pct: Wt% to bring HFT below operating T, or 0
+    """
+    # Convert metric inputs to oilfield
+    if metric:
+        p_psia = p * BAR_TO_PSI
+        degf_of = degc_to_degf(degf)
+    else:
+        p_psia = p
+        degf_of = degf
+
+    # Validate inputs
+    if p_psia <= 0:
+        raise ValueError("Pressure must be positive")
+    if sg <= 0:
+        raise ValueError("Gas specific gravity must be positive")
+    if inhibitor_wt_pct < 0 or inhibitor_wt_pct >= 100:
+        raise ValueError("Inhibitor wt% must be in range [0, 100)")
+
+    # Resolve hydrate method
+    hydmethod = validate_methods(["hydmethod"], [hydmethod])
+
+    # Select HFT function
+    if hydmethod == hyd_method.MOTIEE:
+        hft_fn = _motiee_hft
+    else:
+        hft_fn = _towler_mokhatab_hft
+
+    # Compute HFT and HFP
+    hft_degf = hft_fn(p_psia, sg)
+    hfp_psia = _hydrate_formation_press(degf_of, sg, hft_fn)
+
+    # Subcooling and hydrate window
+    subcooling_degf = hft_degf - degf_of
+    in_window = degf_of < hft_degf
+
+    # Inhibitor calculations
+    inhibited_hft_degf = float('nan')
+    depression_degf = 0.0
+    required_wt_pct = 0.0
+
+    if inhibitor_type is not None:
+        # Resolve inhibitor enum
+        inh = validate_methods(["inhibitor"], [inhibitor_type])
+
+        if inhibitor_wt_pct > 0:
+            # Østergaard depression (in degC), convert to degF delta
+            depression_degc = _ostergaard_depression(inhibitor_wt_pct, inh)
+            depression_degf = depression_degc * 9.0 / 5.0
+            inhibited_hft_degf = hft_degf - depression_degf
+        else:
+            inhibited_hft_degf = hft_degf
+            depression_degf = 0.0
+
+        # Required concentration to bring HFT below operating T
+        if degf_of < hft_degf:
+            needed_depression_degc = (hft_degf - degf_of) * 5.0 / 9.0
+            required_wt_pct = _required_concentration(needed_depression_degc, inh)
+        else:
+            required_wt_pct = 0.0
+
+    # Convert outputs if metric
+    if metric:
+        hft_out = degf_to_degc(hft_degf)
+        hfp_out = hfp_psia * PSI_TO_BAR if not math.isnan(hfp_psia) else float('nan')
+        subcooling_out = subcooling_degf * 5.0 / 9.0
+        depression_out = depression_degf * 5.0 / 9.0
+        inhibited_hft_out = degf_to_degc(inhibited_hft_degf) if not math.isnan(inhibited_hft_degf) else float('nan')
+    else:
+        hft_out = hft_degf
+        hfp_out = hfp_psia
+        subcooling_out = subcooling_degf
+        depression_out = depression_degf
+        inhibited_hft_out = inhibited_hft_degf
+
+    return HydrateResult(
+        hft=hft_out,
+        hfp=hfp_out,
+        subcooling=subcooling_out,
+        in_hydrate_window=in_window,
+        inhibited_hft=inhibited_hft_out,
+        inhibitor_depression=depression_out,
+        required_inhibitor_wt_pct=required_wt_pct,
+    )
