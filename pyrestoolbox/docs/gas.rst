@@ -1115,7 +1115,7 @@ Two HFT correlations are available: Motiee (1991) and Towler & Mokhatab (2005). 
    * - max_inhibitor_wt_pct
      - Maximum valid wt% for selected inhibitor type (MEOH: 25, MEG: 70, DEG: 70, TEG: 50, ETOH: 30). 0 if no inhibitor specified
    * - inhibitor_underdosed
-     - True if the required depression exceeds the maximum achievable at max concentration
+     - True if ``required_inhibitor_wt_pct`` exceeds ``max_inhibitor_wt_pct`` for the selected inhibitor type — meaning this inhibitor **cannot** provide sufficient depression even at its physical maximum concentration. This does NOT indicate whether the *applied* ``inhibitor_wt_pct`` is sufficient; compare ``inhibited_hft`` to the operating temperature to determine if the applied dose provides protection
    * - water_vaporized_res
      - Vaporized water content at reservoir P,T (stb/MMscf | sm3/sm3). This is the water the gas picked up in the reservoir
    * - water_vaporized_op

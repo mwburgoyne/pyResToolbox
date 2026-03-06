@@ -1595,8 +1595,12 @@ class HydrateResult:
         Maximum valid wt% for the selected inhibitor type (MEOH: 25%, MEG: 70%,
         DEG: 70%, TEG: 50%, ETOH: 30%). 0 if no inhibitor specified.
     inhibitor_underdosed : bool
-        True if the required depression exceeds the maximum achievable at max
-        concentration for the selected inhibitor.
+        True if required_inhibitor_wt_pct exceeds max_inhibitor_wt_pct,
+        meaning this inhibitor type cannot provide sufficient depression
+        even at its physical maximum concentration. Does NOT indicate
+        whether the applied inhibitor_wt_pct is sufficient — compare
+        inhibited_hft to operating temperature to check applied-dose
+        protection.
 
     Attributes — Water Balance
     --------------------------
