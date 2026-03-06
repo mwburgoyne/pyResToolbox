@@ -715,21 +715,21 @@ def test_doc_gas_rate_linear_with_pvt():
 # =============================================================================
 
 def test_doc_gas_hydrate_basic():
-    """gas.rst: gas_hydrate basic Motiee example"""
+    """gas.rst: gas_hydrate basic Towler example (default)"""
     r = gas.gas_hydrate(p=1000, degf=60, sg=0.65)
-    assert abs(r.hft - 96.20360674625366) / 96.20360674625366 < RTOL
-    assert abs(r.hfp - 149.60397973632814) / 149.60397973632814 < RTOL
-    assert abs(r.subcooling - 36.203606746253655) / 36.203606746253655 < RTOL
+    assert abs(r.hft - 62.918902535978695) / 62.918902535978695 < RTOL
+    assert abs(r.hfp - 814.0829443359373) / 814.0829443359373 < RTOL
+    assert abs(r.subcooling - 2.9189025359786953) / 2.9189025359786953 < RTOL
     assert r.in_hydrate_window is True
 
-def test_doc_gas_hydrate_towler():
-    """gas.rst: gas_hydrate with Towler method"""
-    r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, hydmethod='TOWLER')
-    assert abs(r.hft - 62.918902535978695) / 62.918902535978695 < RTOL
+def test_doc_gas_hydrate_motiee():
+    """gas.rst: gas_hydrate with Motiee method"""
+    r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, hydmethod='MOTIEE')
+    assert abs(r.hft - 96.20360674625366) / 96.20360674625366 < RTOL
 
 def test_doc_gas_hydrate_meg_inhibitor():
     """gas.rst: gas_hydrate with MEG 25wt%"""
-    r = gas.gas_hydrate(p=2000, degf=80, sg=0.7, inhibitor_type='MEG', inhibitor_wt_pct=25)
+    r = gas.gas_hydrate(p=2000, degf=80, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEG', inhibitor_wt_pct=25)
     assert abs(r.inhibited_hft - 97.97592063045367) / 97.97592063045367 < RTOL
     assert abs(r.inhibitor_depression - 11.0109375) / 11.0109375 < RTOL
     assert abs(r.required_inhibitor_wt_pct - 58.27975454526845) / 58.27975454526845 < RTOL
@@ -737,12 +737,12 @@ def test_doc_gas_hydrate_meg_inhibitor():
 def test_doc_gas_hydrate_metric():
     """gas.rst: gas_hydrate with metric units"""
     r = gas.gas_hydrate(p=100, degf=20, sg=0.7, metric=True)
-    assert abs(r.hft - 40.52282684214039) / 40.52282684214039 < RTOL
-    assert abs(r.hfp - 11.52975136123869) / 11.52975136123869 < RTOL
+    assert abs(r.hft - 21.017623569244456) / 21.017623569244456 < RTOL
+    assert abs(r.hfp - 87.78593833339396) / 87.78593833339396 < RTOL
 
 def test_doc_gas_hydrate_meoh_capped():
     """gas.rst: gas_hydrate with MEOH inhibitor capping and injection rate"""
-    r = gas.gas_hydrate(p=2000, degf=60, sg=0.7, inhibitor_type='MEOH',
+    r = gas.gas_hydrate(p=2000, degf=60, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH',
                          p_res=4000, degf_res=250)
     assert r.inhibitor_underdosed is True
     assert r.required_inhibitor_wt_pct == 25.0
@@ -753,7 +753,7 @@ def test_doc_gas_hydrate_meoh_capped():
 
 def test_doc_gas_hydrate_composition():
     """gas.rst: gas_hydrate with CO2 composition and reservoir P,T"""
-    r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, inhibitor_type='MEG', co2=0.05,
+    r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, hydmethod='MOTIEE', inhibitor_type='MEG', co2=0.05,
                          p_res=3000, degf_res=200)
     assert abs(r.water_vaporized_res - 0.9105104447421333) / 0.9105104447421333 < RTOL
     assert abs(r.water_condensed - 0.8606277674562288) / 0.8606277674562288 < RTOL
@@ -762,7 +762,7 @@ def test_doc_gas_hydrate_composition():
 
 def test_doc_gas_hydrate_reservoir_pt():
     """gas.rst: gas_hydrate with reservoir P,T for water balance"""
-    r = gas.gas_hydrate(p=500, degf=40, sg=0.7, inhibitor_type='MEG',
+    r = gas.gas_hydrate(p=500, degf=40, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEG',
                          p_res=4000, degf_res=250)
     assert abs(r.water_vaporized_res - 1.651022101177945) / 1.651022101177945 < RTOL
     assert abs(r.inhibitor_mass_rate - 1314.312441059706) / 1314.312441059706 < RTOL

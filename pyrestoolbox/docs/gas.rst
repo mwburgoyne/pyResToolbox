@@ -30,10 +30,10 @@ pyResToolBox uses class objects to track calculation options through the functio
         + 'BUR': Correlation tuned to return the critical properties of the pure hydrocarbon component of a mixture, required for the 'BUR' (tuned Peng Robinson) Z-Factor method. More information about the method can be found `here <https://github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor>`_
    * - hydmethod
      - hyd_method
-     - Method for calculating gas hydrate formation temperature. Defaults to 'MOTIEE'.
+     - Method for calculating gas hydrate formation temperature. Defaults to 'TOWLER'.
        Options are:
-        + 'MOTIEE': Motiee (1991) — T-explicit, gas gravity based. Hydrocarbon Processing 70, pp 98-99
         + 'TOWLER': Towler & Mokhatab (2005) — T-explicit, gas gravity based. Hydrocarbon Processing 84, pp 61-62
+        + 'MOTIEE': Motiee (1991) — T-explicit, gas gravity based. Hydrocarbon Processing 70, pp 98-99
    * - inhibitor_type
      - inhibitor
      - Thermodynamic hydrate inhibitor type. Optional (None = no inhibitor).
@@ -1030,7 +1030,7 @@ pyrestoolbox.gas.gas_hydrate
 
 .. code-block:: python
 
-    gas_hydrate(p, degf, sg, hydmethod='MOTIEE', inhibitor_type=None, inhibitor_wt_pct=0,
+    gas_hydrate(p, degf, sg, hydmethod='TOWLER', inhibitor_type=None, inhibitor_wt_pct=0,
                 co2=0, h2s=0, n2=0, h2=0, p_res=None, degf_res=None,
                 additional_water=0, metric=False) -> HydrateResult
 
@@ -1060,7 +1060,7 @@ Two HFT correlations are available: Motiee (1991) and Towler & Mokhatab (2005). 
      - Gas specific gravity (air = 1.0)
    * - hydmethod
      - string or hyd_method
-     - Hydrate formation correlation. 'MOTIEE' (default) or 'TOWLER'. `Calculation Methods and Class Objects`_.
+     - Hydrate formation correlation. 'TOWLER' (default) or 'MOTIEE'. `Calculation Methods and Class Objects`_.
    * - inhibitor_type
      - string or inhibitor
      - Thermodynamic hydrate inhibitor. 'MEOH', 'MEG', 'DEG', 'TEG', 'ETOH', or None (default = no inhibitor). `Calculation Methods and Class Objects`_.
@@ -1138,27 +1138,27 @@ Examples:
     >>> from pyrestoolbox import gas
     >>> r = gas.gas_hydrate(p=1000, degf=60, sg=0.65)
     >>> r.hft
-    96.20360674625366
+    62.918902535978695
     >>> r.hfp
-    149.60397973632814
+    814.0829443359373
     >>> r.subcooling
-    36.203606746253655
+    2.9189025359786953
     >>> r.in_hydrate_window
     True
 
-Using Towler & Mokhatab method:
+Using Motiee method:
 
 .. code-block:: python
 
-    >>> r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, hydmethod='TOWLER')
+    >>> r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, hydmethod='MOTIEE')
     >>> r.hft
-    62.918902535978695
+    96.20360674625366
 
 With MEG inhibitor (25 wt%):
 
 .. code-block:: python
 
-    >>> r = gas.gas_hydrate(p=2000, degf=80, sg=0.7, inhibitor_type='MEG', inhibitor_wt_pct=25)
+    >>> r = gas.gas_hydrate(p=2000, degf=80, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEG', inhibitor_wt_pct=25)
     >>> r.inhibited_hft
     97.97592063045367
     >>> r.inhibitor_depression
@@ -1172,15 +1172,15 @@ Using metric units (barsa, deg C):
 
     >>> r = gas.gas_hydrate(p=100, degf=20, sg=0.7, metric=True)
     >>> r.hft
-    40.52282684214039
+    21.017623569244456
     >>> r.hfp
-    11.52975136123869
+    87.78593833339396
 
 MEOH inhibitor with capping and injection rate (reservoir P,T specified, MEOH max = 25 wt%):
 
 .. code-block:: python
 
-    >>> r = gas.gas_hydrate(p=2000, degf=60, sg=0.7, inhibitor_type='MEOH',
+    >>> r = gas.gas_hydrate(p=2000, degf=60, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH',
     ...                      p_res=4000, degf_res=250)
     >>> r.inhibitor_underdosed
     True
@@ -1199,7 +1199,7 @@ With CO2 composition and reservoir P,T (SoreideWhitson water content):
 
 .. code-block:: python
 
-    >>> r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, inhibitor_type='MEG', co2=0.05,
+    >>> r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, hydmethod='MOTIEE', inhibitor_type='MEG', co2=0.05,
     ...                      p_res=3000, degf_res=200)
     >>> r.water_vaporized_res
     0.9105104447421333
@@ -1214,7 +1214,7 @@ With reservoir P,T (gas equilibrated at reservoir, hydrate assessment at wellhea
 
 .. code-block:: python
 
-    >>> r = gas.gas_hydrate(p=500, degf=40, sg=0.7, inhibitor_type='MEG',
+    >>> r = gas.gas_hydrate(p=500, degf=40, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEG',
     ...                      p_res=4000, degf_res=250)
     >>> r.water_vaporized_res
     1.651022101177945

@@ -1,10 +1,11 @@
-Changelist in 3.0.2:
+Changelist in 3.0.3:
 
 - **gas_hydrate()**: New function for gas hydrate formation prediction and thermodynamic inhibitor calculations. Returns a ``HydrateResult`` dataclass with hydrate formation temperature (HFT), hydrate formation pressure (HFP), subcooling, hydrate window assessment, inhibitor temperature depression, and required inhibitor concentration. Two HFT correlations: Motiee (1991) and Towler & Mokhatab (2005). Inhibitor depression via Østergaard et al. (2005). Supports five inhibitor types (MeOH, MEG, DEG, TEG, EtOH). Full Eclipse METRIC unit support.
 - **gas_hydrate() water content**: Computes equilibrium water content of the gas. Uses the SoreideWhitson VLE model when gas composition (``co2``, ``h2s``, ``n2``, ``h2``) is provided, otherwise uses the Danesh correlation. Separate ``p_res``/``degf_res`` parameters allow specifying reservoir conditions for water content (where gas equilibrated with water) independently of the hydrate assessment point.
 - **gas_hydrate() inhibitor capping**: ``required_inhibitor_wt_pct`` is now capped at the physical maximum for each inhibitor type (MEOH: 25%, MEG: 70%, DEG: 70%, TEG: 50%, ETOH: 30%). New ``max_inhibitor_wt_pct`` and ``inhibitor_underdosed`` fields indicate whether the required concentration exceeds the achievable maximum.
 - **gas_hydrate() water balance**: Full water balance between reservoir and operating conditions. Reports vaporized water at both reservoir P,T (``water_vaporized_res``) and operating P,T (``water_vaporized_op``), condensed water (``water_condensed``), free water (``free_water``), and total liquid water (``total_liquid_water``). Only liquid water (condensed + free) needs inhibitor treatment.
 - **gas_hydrate() injection rate**: New ``inhibitor_mass_rate`` (lb/MMscf | kg/sm3) and ``inhibitor_vol_rate`` (gal/MMscf | L/sm3) fields compute the required inhibitor injection rate from total liquid water (condensed + ``additional_water``) and required concentration.
+- **gas_hydrate() default method**: Changed default ``hydmethod`` from ``'MOTIEE'`` to ``'TOWLER'`` (Towler & Mokhatab 2005).
 - **hyd_method enum**: New enum for hydrate formation correlation selection (MOTIEE, TOWLER).
 - **inhibitor enum**: New enum for thermodynamic hydrate inhibitor selection (MEOH, MEG, DEG, TEG, ETOH).
 - New unit conversion constants in ``constants``: ``LB_TO_KG``, ``GAL_TO_LITER``, ``LB_PER_MMSCF_TO_KG_PER_SM3``, ``GAL_PER_MMSCF_TO_L_PER_SM3`` and their inverses.
