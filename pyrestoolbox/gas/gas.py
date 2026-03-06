@@ -73,7 +73,9 @@ from pyrestoolbox.constants import (R, psc, tsc, degF2R, tscr, scf_per_mol, CUFT
     LBCUFT_TO_KGM3, KGM3_TO_LBCUFT, INVPSI_TO_INVBAR, INVBAR_TO_INVPSI,
     PSI2CP_TO_BAR2CP, BAR2CP_TO_PSI2CP, BARM_TO_PSIFT, PSIFT_TO_BARM,
     MSCF_TO_SM3, SM3_TO_MSCF, STB_PER_MMSCF_TO_SM3_PER_SM3,
-    SM3_PER_SM3_TO_STB_PER_MSCF, D_PER_SM3_TO_D_PER_MSCF, D_PER_MSCF_TO_D_PER_SM3)
+    SM3_PER_SM3_TO_STB_PER_MSCF, SM3_PER_SM3_TO_STB_PER_MMSCF,
+    D_PER_SM3_TO_D_PER_MSCF, D_PER_MSCF_TO_D_PER_SM3,
+    LB_PER_MMSCF_TO_KG_PER_SM3, GAL_PER_MMSCF_TO_L_PER_SM3)
 
 # Precomputed Gauss-Legendre nodes/weights for pseudopressure integration
 _GL7_NODES, _GL7_WEIGHTS = np.polynomial.legendre.leggauss(7)
@@ -1538,12 +1540,41 @@ _OSTERGAARD = {
 }
 
 
+# Inhibitor physical density at 20 degC (g/cm3) — for volumetric injection rate
+_INHIBITOR_DENSITY = {
+    inhibitor.MEOH: 0.791,
+    inhibitor.MEG:  1.110,
+    inhibitor.DEG:  1.117,
+    inhibitor.TEG:  1.125,
+    inhibitor.ETOH: 0.789,
+}
+
+# Conversion: g/cm3 to lb/gal
+_GCM3_TO_LB_PER_GAL = 8.34540445
+
+# Water mass at standard conditions: lb per stb
+_WATER_LB_PER_STB = 350.2
+
+# Maximum valid wt% for each inhibitor (aqueous phase concentration)
+_MAX_WT_PCT = {
+    inhibitor.MEOH: 25.0,
+    inhibitor.MEG:  70.0,
+    inhibitor.DEG:  70.0,
+    inhibitor.TEG:  50.0,
+    inhibitor.ETOH: 30.0,
+}
+
+
 @dataclass
 class HydrateResult:
     """Result of gas hydrate formation prediction.
 
-    Attributes
-    ----------
+    Hydrate assessment (HFT, HFP, subcooling, inhibitor) is evaluated at the
+    operating point (p, degf). Water balance is evaluated between reservoir
+    conditions (p_res, degf_res) and the operating point.
+
+    Attributes — Hydrate Assessment
+    --------------------------------
     hft : float
         Hydrate formation temperature at operating pressure (degF | degC).
     hfp : float
@@ -1557,7 +1588,52 @@ class HydrateResult:
     inhibitor_depression : float
         Temperature depression from inhibitor (degF | degC delta), or 0.
     required_inhibitor_wt_pct : float
-        Wt% inhibitor needed to bring HFT below operating temperature, or 0.
+        Wt% inhibitor in aqueous phase (water + inhibitor) needed to bring HFT
+        below operating temperature, or 0. Capped at the physical maximum for
+        the selected inhibitor type.
+    max_inhibitor_wt_pct : float
+        Maximum valid wt% for the selected inhibitor type (MEOH: 25%, MEG: 70%,
+        DEG: 70%, TEG: 50%, ETOH: 30%). 0 if no inhibitor specified.
+    inhibitor_underdosed : bool
+        True if the required depression exceeds the maximum achievable at max
+        concentration for the selected inhibitor.
+
+    Attributes — Water Balance
+    --------------------------
+    The gas leaves the reservoir saturated with vaporized water at reservoir
+    P,T. At the operating point (lower P,T), the gas can hold less water vapor,
+    so the excess condenses as liquid. Free water is any additional liquid water
+    entrained in the gas stream from the reservoir (user-specified).
+
+    water_vaporized_res : float
+        Equilibrium vaporized water in the gas at reservoir P,T
+        (stb/MMscf | sm3/sm3). When p_res/degf_res not provided, equals
+        water_vaporized_op (no temperature/pressure change, no condensation).
+    water_vaporized_op : float
+        Equilibrium vaporized water in the gas at operating P,T
+        (stb/MMscf | sm3/sm3).
+    water_condensed : float
+        Water condensed from vapor between reservoir and operating conditions
+        = max(water_vaporized_res - water_vaporized_op, 0) (stb/MMscf | sm3/sm3).
+    free_water : float
+        Free liquid water influx from reservoir (= additional_water input)
+        (stb/MMscf | sm3/sm3).
+    total_liquid_water : float
+        Total liquid water at operating point = water_condensed + free_water
+        (stb/MMscf | sm3/sm3). This is the water that must be treated with
+        inhibitor to prevent hydrate formation.
+
+    Attributes — Inhibitor Injection Rate
+    --------------------------------------
+    Injection rate is based on the total liquid water at the operating point
+    and the required inhibitor concentration (wt% in the aqueous phase).
+
+    inhibitor_mass_rate : float
+        Required inhibitor mass injection rate (lb/MMscf | kg/sm3 if metric).
+        Zero when outside hydrate window, no inhibitor, or no liquid water.
+    inhibitor_vol_rate : float
+        Required inhibitor volume injection rate (gal/MMscf | L/sm3 if metric).
+        Zero when outside hydrate window, no inhibitor, or no liquid water.
     """
     hft: float
     hfp: float
@@ -1566,6 +1642,15 @@ class HydrateResult:
     inhibited_hft: float
     inhibitor_depression: float
     required_inhibitor_wt_pct: float
+    max_inhibitor_wt_pct: float
+    inhibitor_underdosed: bool
+    water_vaporized_res: float
+    water_vaporized_op: float
+    water_condensed: float
+    free_water: float
+    total_liquid_water: float
+    inhibitor_mass_rate: float
+    inhibitor_vol_rate: float
 
 
 def _motiee_hft(p_psia, sg):
@@ -1676,12 +1761,28 @@ def gas_hydrate(
     hydmethod: str = 'MOTIEE',
     inhibitor_type: str = None,
     inhibitor_wt_pct: float = 0,
+    co2: float = 0,
+    h2s: float = 0,
+    n2: float = 0,
+    h2: float = 0,
+    p_res: float = None,
+    degf_res: float = None,
+    additional_water: float = 0,
     metric: bool = False,
 ) -> HydrateResult:
-    """ Returns gas hydrate formation prediction and inhibitor calculations.
+    """ Returns gas hydrate formation prediction, water balance, and inhibitor calculations.
 
-        p: Operating pressure (psia | barsa if metric=True)
-        degf: Operating temperature (degF | degC if metric=True)
+        Hydrate assessment (HFT, HFP, subcooling, inhibitor) is evaluated at
+        the operating point (p, degf) — typically the wellhead or coldest point
+        in the production system. Water balance is evaluated between reservoir
+        conditions (p_res, degf_res) and the operating point to determine how
+        much water condenses from vapor, how much was always liquid (free water),
+        and the total liquid water that must be treated with inhibitor.
+
+        p: Operating pressure at hydrate assessment point, e.g. wellhead
+           (psia | barsa if metric=True)
+        degf: Operating temperature at hydrate assessment point
+              (degF | degC if metric=True)
         sg: Gas specific gravity (air = 1.0)
         hydmethod: Hydrate formation correlation.
                    'MOTIEE': Motiee (1991)
@@ -1691,35 +1792,66 @@ def gas_hydrate(
                         'MEOH' (Methanol), 'MEG' (Monoethylene Glycol),
                         'DEG' (Diethylene Glycol), 'TEG' (Triethylene Glycol),
                         'ETOH' (Ethanol). None = no inhibitor
-        inhibitor_wt_pct: Weight percent of inhibitor in aqueous phase (0-100).
-                          Defaults to 0
+        inhibitor_wt_pct: Weight percent of inhibitor in aqueous phase (water
+                          + inhibitor, 0-100). Defaults to 0
+        co2: CO2 mole fraction (0-1). For composition-aware water content via
+             SoreideWhitson. Defaults to 0
+        h2s: H2S mole fraction (0-1). Defaults to 0
+        n2: N2 mole fraction (0-1). Defaults to 0
+        h2: H2 mole fraction (0-1). Defaults to 0
+        p_res: Reservoir pressure where gas was last in equilibrium with water
+               (psia | barsa if metric=True). Determines how much water the gas
+               carries as vapor from the reservoir. If None, uses p (operating
+               pressure — no condensation). Defaults to None
+        degf_res: Reservoir temperature where gas was last in equilibrium with
+                  water (degF | degC if metric=True). Determines how much water
+                  the gas carries as vapor from the reservoir. If None, uses degf
+                  (operating temperature — no condensation). Defaults to None
+        additional_water: Free liquid water entrained in the gas stream from the
+                          reservoir, e.g. from mobile formation water
+                          (stb/MMscf | sm3/sm3 if metric). This water was never
+                          vaporized — it travels with the gas as liquid. Added to
+                          condensed water for inhibitor dosing. Defaults to 0
         metric: If True, input/output in Eclipse METRIC units (barsa, degC).
                 Defaults to False (FIELD: psia, degF)
 
-    Returns a HydrateResult dataclass with:
-        hft:                     Hydrate formation temperature at operating P
-        hfp:                     Hydrate formation pressure at operating T
-        subcooling:              HFT - operating T (positive = in hydrate window)
-        in_hydrate_window:       True if operating T < HFT
-        inhibited_hft:           HFT after inhibitor depression, or NaN
-        inhibitor_depression:    Temperature depression from inhibitor, or 0
-        required_inhibitor_wt_pct: Wt% to bring HFT below operating T, or 0
+    Returns a HydrateResult dataclass. See HydrateResult docstring for full
+    field descriptions.
     """
     # Convert metric inputs to oilfield
     if metric:
         p_psia = p * BAR_TO_PSI
         degf_of = degc_to_degf(degf)
+        additional_water_stb = additional_water * SM3_PER_SM3_TO_STB_PER_MMSCF
+        p_res_psia = p_res * BAR_TO_PSI if p_res is not None else None
+        degf_res_of = degc_to_degf(degf_res) if degf_res is not None else None
     else:
         p_psia = p
         degf_of = degf
+        additional_water_stb = additional_water
+        p_res_psia = p_res
+        degf_res_of = degf_res
+
+    # Water content P,T: use reservoir conditions if provided, else operating
+    p_wc = p_res_psia if p_res_psia is not None else p_psia
+    degf_wc = degf_res_of if degf_res_of is not None else degf_of
 
     # Validate inputs
     if p_psia <= 0:
         raise ValueError("Pressure must be positive")
+    if p_wc <= 0:
+        raise ValueError("Reservoir pressure must be positive")
     if sg <= 0:
         raise ValueError("Gas specific gravity must be positive")
     if inhibitor_wt_pct < 0 or inhibitor_wt_pct >= 100:
         raise ValueError("Inhibitor wt% must be in range [0, 100)")
+    for name, val in [('co2', co2), ('h2s', h2s), ('n2', n2), ('h2', h2)]:
+        if val < 0:
+            raise ValueError(f"{name} mole fraction must be >= 0")
+    if co2 + h2s + n2 + h2 > 1.0:
+        raise ValueError("Sum of co2 + h2s + n2 + h2 must be <= 1.0")
+    if additional_water < 0:
+        raise ValueError("additional_water must be >= 0")
 
     # Resolve hydrate method
     hydmethod = validate_methods(["hydmethod"], [hydmethod])
@@ -1738,14 +1870,57 @@ def gas_hydrate(
     subcooling_degf = hft_degf - degf_of
     in_window = degf_of < hft_degf
 
-    # Inhibitor calculations
+    # --- Water balance ---
+    # Compute vaporized water at both reservoir and operating conditions.
+    # Condensed water = what dropped out of vapor between the two points.
+    # Free water = liquid water entrained from reservoir (user input).
+    # Total liquid = condensed + free = what needs inhibitor treatment.
+    has_composition = co2 > 0 or h2s > 0 or n2 > 0 or h2 > 0
+
+    def _water_content_at(p_eval, degf_eval):
+        """Compute equilibrium vaporized water content at given P,T (stb/MMscf)."""
+        if has_composition:
+            from pyrestoolbox.brine import SoreideWhitson
+            sw = SoreideWhitson(
+                pres=p_eval, temp=degf_eval, ppm=0,
+                y_CO2=co2, y_H2S=h2s, y_N2=n2, y_H2=h2,
+                sg=sg, metric=False,
+            )
+            return float(sw.water_content['stb_mmscf'])
+        else:
+            return float(gas_water_content(p=p_eval, degf=degf_eval, salinity=0, metric=False))
+
+    # Vaporized water at operating point (always needed)
+    wc_op = _water_content_at(p_psia, degf_of)
+
+    # Vaporized water at reservoir (= operating if no reservoir P,T given)
+    if p_res_psia is not None or degf_res_of is not None:
+        wc_res = _water_content_at(p_wc, degf_wc)
+    else:
+        wc_res = wc_op  # no reservoir specified → no condensation
+
+    # Condensed water: what dropped out of the gas between reservoir and operating
+    condensed = max(wc_res - wc_op, 0.0)
+
+    # Free water: liquid water entrained from reservoir (user input)
+    free_water_stb = additional_water_stb
+
+    # Total liquid water at operating point: this is what needs inhibitor
+    total_liquid = condensed + free_water_stb
+
+    # --- Inhibitor calculations ---
     inhibited_hft_degf = float('nan')
     depression_degf = 0.0
     required_wt_pct = 0.0
+    max_wt_pct = 0.0
+    underdosed = False
+    inh_mass_rate = 0.0
+    inh_vol_rate = 0.0
 
     if inhibitor_type is not None:
         # Resolve inhibitor enum
         inh = validate_methods(["inhibitor"], [inhibitor_type])
+        max_wt_pct = _MAX_WT_PCT[inh]
 
         if inhibitor_wt_pct > 0:
             # Østergaard depression (in degC), convert to degF delta
@@ -1756,26 +1931,56 @@ def gas_hydrate(
             inhibited_hft_degf = hft_degf
             depression_degf = 0.0
 
-        # Required concentration to bring HFT below operating T
+        # Required concentration to bring HFT below operating T (with capping)
         if degf_of < hft_degf:
             needed_depression_degc = (hft_degf - degf_of) * 5.0 / 9.0
-            required_wt_pct = _required_concentration(needed_depression_degc, inh)
+            raw_wt_pct = _required_concentration(needed_depression_degc, inh)
+            if raw_wt_pct > max_wt_pct:
+                required_wt_pct = max_wt_pct
+                underdosed = True
+            else:
+                required_wt_pct = raw_wt_pct
+                underdosed = False
         else:
             required_wt_pct = 0.0
 
+        # --- Injection rate ---
+        # Inhibitor treats the total liquid water at operating conditions
+        if in_window and required_wt_pct > 0 and total_liquid > 0:
+            w_frac = required_wt_pct / 100.0
+            liquid_mass_lb = total_liquid * _WATER_LB_PER_STB  # lb per MMscf gas
+            inh_mass_rate = liquid_mass_lb * w_frac / (1.0 - w_frac)  # lb/MMscf
+            density_lb_per_gal = _INHIBITOR_DENSITY[inh] * _GCM3_TO_LB_PER_GAL
+            inh_vol_rate = inh_mass_rate / density_lb_per_gal  # gal/MMscf
+
     # Convert outputs if metric
+    _wc_conv = STB_PER_MMSCF_TO_SM3_PER_SM3
     if metric:
         hft_out = degf_to_degc(hft_degf)
         hfp_out = hfp_psia * PSI_TO_BAR if not math.isnan(hfp_psia) else float('nan')
         subcooling_out = subcooling_degf * 5.0 / 9.0
         depression_out = depression_degf * 5.0 / 9.0
         inhibited_hft_out = degf_to_degc(inhibited_hft_degf) if not math.isnan(inhibited_hft_degf) else float('nan')
+        wc_res_out = wc_res * _wc_conv
+        wc_op_out = wc_op * _wc_conv
+        condensed_out = condensed * _wc_conv
+        free_water_out = free_water_stb * _wc_conv
+        total_liquid_out = total_liquid * _wc_conv
+        inh_mass_rate_out = inh_mass_rate * LB_PER_MMSCF_TO_KG_PER_SM3
+        inh_vol_rate_out = inh_vol_rate * GAL_PER_MMSCF_TO_L_PER_SM3
     else:
         hft_out = hft_degf
         hfp_out = hfp_psia
         subcooling_out = subcooling_degf
         depression_out = depression_degf
         inhibited_hft_out = inhibited_hft_degf
+        wc_res_out = wc_res
+        wc_op_out = wc_op
+        condensed_out = condensed
+        free_water_out = free_water_stb
+        total_liquid_out = total_liquid
+        inh_mass_rate_out = inh_mass_rate
+        inh_vol_rate_out = inh_vol_rate
 
     return HydrateResult(
         hft=hft_out,
@@ -1785,4 +1990,13 @@ def gas_hydrate(
         inhibited_hft=inhibited_hft_out,
         inhibitor_depression=depression_out,
         required_inhibitor_wt_pct=required_wt_pct,
+        max_inhibitor_wt_pct=max_wt_pct,
+        inhibitor_underdosed=underdosed,
+        water_vaporized_res=wc_res_out,
+        water_vaporized_op=wc_op_out,
+        water_condensed=condensed_out,
+        free_water=free_water_out,
+        total_liquid_water=total_liquid_out,
+        inhibitor_mass_rate=inh_mass_rate_out,
+        inhibitor_vol_rate=inh_vol_rate_out,
     )

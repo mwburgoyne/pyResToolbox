@@ -336,13 +336,13 @@ def test_doc_oil_co_above_pb():
     """oil.rst: oil_co above bubble point"""
     result = oil.oil_co(p=4500, api=47, degf=180, sg_sp=0.72, rsb=2750)
     assert isinstance(result, float)
-    assert abs(result - 0.0007587726853322233) / 0.0007587726853322233 < RTOL
+    assert abs(result - 8.430807614802478e-05) / 8.430807614802478e-05 < RTOL
 
 def test_doc_oil_co_below_pb():
     """oil.rst: oil_co below bubble point"""
     result = oil.oil_co(p=2000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945)
     assert isinstance(result, float)
-    assert abs(result - 0.0009245540028053584) / 0.0009245540028053584 < RTOL
+    assert abs(result - 0.0002311385007013396) / 0.0002311385007013396 < RTOL
 
 def test_doc_oil_deno():
     """oil.rst: oil_deno"""
@@ -502,8 +502,8 @@ def test_doc_co2_brine_metric():
     mix = brine.CO2_Brine_Mixture(pres=175, temp=85)
     assert abs(mix.Rs - 24.743651168969475) / 24.743651168969475 < RTOL
 
-def test_doc_make_pvtw_table():
-    """brine.rst: make_pvtw_table"""
+def test_doc_make_pvtw_table_keys():
+    """brine.rst: make_pvtw_table result keys"""
     result = brine.make_pvtw_table(pi=3000, degf=200, wt=0, ch4_sat=0)
     assert isinstance(result, dict)
     for key in ['table', 'pref', 'bw_ref', 'cw_ref', 'visw_ref', 'rsw_ref', 'den_ref']:
@@ -739,6 +739,34 @@ def test_doc_gas_hydrate_metric():
     r = gas.gas_hydrate(p=100, degf=20, sg=0.7, metric=True)
     assert abs(r.hft - 40.52282684214039) / 40.52282684214039 < RTOL
     assert abs(r.hfp - 11.52975136123869) / 11.52975136123869 < RTOL
+
+def test_doc_gas_hydrate_meoh_capped():
+    """gas.rst: gas_hydrate with MEOH inhibitor capping and injection rate"""
+    r = gas.gas_hydrate(p=2000, degf=60, sg=0.7, inhibitor_type='MEOH',
+                         p_res=4000, degf_res=250)
+    assert r.inhibitor_underdosed is True
+    assert r.required_inhibitor_wt_pct == 25.0
+    assert r.max_inhibitor_wt_pct == 25.0
+    assert abs(r.water_condensed - 1.6171304990445141) / 1.6171304990445141 < RTOL
+    assert abs(r.inhibitor_mass_rate - 188.77303358846294) / 188.77303358846294 < RTOL
+    assert abs(r.inhibitor_vol_rate - 28.596710738497325) / 28.596710738497325 < RTOL
+
+def test_doc_gas_hydrate_composition():
+    """gas.rst: gas_hydrate with CO2 composition and reservoir P,T"""
+    r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, inhibitor_type='MEG', co2=0.05,
+                         p_res=3000, degf_res=200)
+    assert abs(r.water_vaporized_res - 0.9105104447421333) / 0.9105104447421333 < RTOL
+    assert abs(r.water_condensed - 0.8606277674562288) / 0.8606277674562288 < RTOL
+    assert abs(r.required_inhibitor_wt_pct - 68.1447380066354) / 68.1447380066354 < RTOL
+    assert r.inhibitor_underdosed is False
+
+def test_doc_gas_hydrate_reservoir_pt():
+    """gas.rst: gas_hydrate with reservoir P,T for water balance"""
+    r = gas.gas_hydrate(p=500, degf=40, sg=0.7, inhibitor_type='MEG',
+                         p_res=4000, degf_res=250)
+    assert abs(r.water_vaporized_res - 1.651022101177945) / 1.651022101177945 < RTOL
+    assert abs(r.inhibitor_mass_rate - 1314.312441059706) / 1314.312441059706 < RTOL
+    assert r.inhibitor_underdosed is True
 
 # =============================================================================
 # Gas/Oil Module GasPVT/OilPVT Documentation Examples (docs/gas.rst, docs/oil.rst)

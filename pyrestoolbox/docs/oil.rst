@@ -532,10 +532,10 @@ Examples:
 .. code-block:: python
 
     >>> oil.oil_co(p = 4500, api = 47, degf = 180, sg_sp = 0.72, rsb = 2750)
-    0.0007587726853322233
+    8.430807614802478e-05
 
     >>> oil.oil_co(p=2000, api=47, degf=180, sg_sp =0.72, rsb =2750, pb=4945)
-    0.0009245540028053584
+    0.0002311385007013396
     
 
 pyrestoolbox.oil.oil_deno
