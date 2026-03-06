@@ -1030,11 +1030,17 @@ pyrestoolbox.gas.gas_hydrate
 
 .. code-block:: python
 
-    gas_hydrate(p, degf, sg, hydmethod='MOTIEE', inhibitor_type=None, inhibitor_wt_pct=0, metric=False) -> HydrateResult
+    gas_hydrate(p, degf, sg, hydmethod='MOTIEE', inhibitor_type=None, inhibitor_wt_pct=0,
+                co2=0, h2s=0, n2=0, h2=0, p_res=None, degf_res=None,
+                additional_water=0, metric=False) -> HydrateResult
 
-Returns a ``HydrateResult`` dataclass with gas hydrate formation temperature (HFT), hydrate formation pressure (HFP), subcooling, hydrate window assessment, and thermodynamic inhibitor calculations.
+Returns a ``HydrateResult`` dataclass with gas hydrate formation temperature (HFT), hydrate formation pressure (HFP), subcooling, hydrate window assessment, thermodynamic inhibitor calculations, a full water balance between reservoir and operating conditions, and inhibitor injection rates.
 
-Two HFT correlations are available: Motiee (1991) and Towler & Mokhatab (2005). Hydrate formation pressure is computed by bisection inversion of the HFT correlation. Inhibitor temperature depression uses the Østergaard et al. (2005) cubic polynomial, and required inhibitor concentration is computed by Newton-Raphson inversion of the same polynomial.
+Two HFT correlations are available: Motiee (1991) and Towler & Mokhatab (2005). Hydrate formation pressure is computed by bisection inversion of the HFT correlation. Inhibitor temperature depression uses the Østergaard et al. (2005) cubic polynomial, and required inhibitor concentration is computed by Newton-Raphson inversion of the same polynomial. The required concentration is capped at the physical maximum for each inhibitor type.
+
+**Water balance.** The gas leaves the reservoir saturated with vaporized water at reservoir P,T (``p_res``, ``degf_res``). At the operating point (lower P,T), the gas can hold less water vapor — the excess condenses as liquid. The function computes vaporized water at both conditions and reports the condensed amount. Any free liquid water entrained from the reservoir (``additional_water``) is added to the condensed water to give the total liquid water at the operating point. When gas composition is provided (``co2``/``h2s``/``n2``/``h2``), the SoreideWhitson VLE model is used; otherwise the Danesh correlation. If ``p_res``/``degf_res`` are not provided, the operating ``p``/``degf`` are used for both (no condensation).
+
+**Inhibitor injection rate** is calculated from the **total liquid water** at the operating point (condensed + free water) and the required inhibitor concentration. Only liquid water needs treatment — vaporized water does not form hydrates. The ``inhibitor_wt_pct`` parameter represents the concentration of inhibitor in the aqueous phase (water + inhibitor mixture), not the mass fraction of the total stream. Injection rates are reported in lb/MMscf and gal/MMscf (oilfield) or kg/sm3 and L/sm3 (metric).
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -1045,10 +1051,10 @@ Two HFT correlations are available: Motiee (1991) and Towler & Mokhatab (2005). 
      - Description
    * - p
      - float
-     - Operating pressure (psia, or barsa if metric=True)
+     - Operating pressure at hydrate assessment point, e.g. wellhead (psia | barsa)
    * - degf
      - float
-     - Operating temperature (deg F, or deg C if metric=True)
+     - Operating temperature at hydrate assessment point (deg F | deg C)
    * - sg
      - float
      - Gas specific gravity (air = 1.0)
@@ -1061,6 +1067,27 @@ Two HFT correlations are available: Motiee (1991) and Towler & Mokhatab (2005). 
    * - inhibitor_wt_pct
      - float
      - Weight percent of inhibitor in aqueous phase (0-100). Defaults to 0
+   * - co2
+     - float
+     - CO2 mole fraction (0-1). Enables composition-aware water content via SoreideWhitson. Defaults to 0
+   * - h2s
+     - float
+     - H2S mole fraction (0-1). Defaults to 0
+   * - n2
+     - float
+     - N2 mole fraction (0-1). Defaults to 0
+   * - h2
+     - float
+     - H2 mole fraction (0-1). Defaults to 0
+   * - p_res
+     - float or None
+     - Reservoir pressure where gas equilibrated with water (psia | barsa). Controls water content. If None, uses ``p``. Defaults to None
+   * - degf_res
+     - float or None
+     - Reservoir temperature where gas equilibrated with water (deg F | deg C). Controls water content. If None, uses ``degf``. Defaults to None
+   * - additional_water
+     - float
+     - Free liquid water entrained in the gas stream from the reservoir, e.g. mobile formation water (stb/MMscf | sm3/sm3). Added to condensed water for inhibitor dosing. Defaults to 0
    * - metric
      - bool
      - If True, inputs/outputs use Eclipse METRIC units (barsa, deg C). Defaults to False
@@ -1084,7 +1111,25 @@ Two HFT correlations are available: Motiee (1991) and Towler & Mokhatab (2005). 
    * - inhibitor_depression
      - Temperature depression from inhibitor (deg F | deg C delta), or 0
    * - required_inhibitor_wt_pct
-     - Wt% inhibitor needed to bring HFT below operating temperature, or 0
+     - Wt% inhibitor in aqueous phase needed to bring HFT below operating temperature, capped at physical maximum for selected inhibitor. 0 if no inhibitor or outside hydrate window
+   * - max_inhibitor_wt_pct
+     - Maximum valid wt% for selected inhibitor type (MEOH: 25, MEG: 70, DEG: 70, TEG: 50, ETOH: 30). 0 if no inhibitor specified
+   * - inhibitor_underdosed
+     - True if the required depression exceeds the maximum achievable at max concentration
+   * - water_vaporized_res
+     - Vaporized water content at reservoir P,T (stb/MMscf | sm3/sm3). This is the water the gas picked up in the reservoir
+   * - water_vaporized_op
+     - Vaporized water content at operating P,T (stb/MMscf | sm3/sm3). This is the water the gas can still hold at the assessment point
+   * - water_condensed
+     - Water that condensed from vapor between reservoir and operating conditions (stb/MMscf | sm3/sm3). Equals max(water_vaporized_res - water_vaporized_op, 0)
+   * - free_water
+     - Free liquid water entrained from the reservoir (stb/MMscf | sm3/sm3). Equals the ``additional_water`` input
+   * - total_liquid_water
+     - Total liquid water at operating point: condensed + free water (stb/MMscf | sm3/sm3). This is the water that needs inhibitor treatment
+   * - inhibitor_mass_rate
+     - Required inhibitor mass injection rate based on total liquid water (lb/MMscf | kg/sm3). 0 if outside hydrate window or no inhibitor
+   * - inhibitor_vol_rate
+     - Required inhibitor volume injection rate based on total liquid water (gal/MMscf | L/sm3). 0 if outside hydrate window or no inhibitor
 
 Examples:
 
@@ -1130,6 +1175,53 @@ Using metric units (barsa, deg C):
     40.52282684214039
     >>> r.hfp
     11.52975136123869
+
+MEOH inhibitor with capping and injection rate (reservoir P,T specified, MEOH max = 25 wt%):
+
+.. code-block:: python
+
+    >>> r = gas.gas_hydrate(p=2000, degf=60, sg=0.7, inhibitor_type='MEOH',
+    ...                      p_res=4000, degf_res=250)
+    >>> r.inhibitor_underdosed
+    True
+    >>> r.required_inhibitor_wt_pct
+    25.0
+    >>> r.max_inhibitor_wt_pct
+    25.0
+    >>> r.water_condensed
+    1.6171304990445141
+    >>> r.inhibitor_mass_rate
+    188.77303358846294
+    >>> r.inhibitor_vol_rate
+    28.596710738497325
+
+With CO2 composition and reservoir P,T (SoreideWhitson water content):
+
+.. code-block:: python
+
+    >>> r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, inhibitor_type='MEG', co2=0.05,
+    ...                      p_res=3000, degf_res=200)
+    >>> r.water_vaporized_res
+    0.9105104447421333
+    >>> r.water_condensed
+    0.8606277674562288
+    >>> r.required_inhibitor_wt_pct
+    68.1447380066354
+    >>> r.inhibitor_underdosed
+    False
+
+With reservoir P,T (gas equilibrated at reservoir, hydrate assessment at wellhead):
+
+.. code-block:: python
+
+    >>> r = gas.gas_hydrate(p=500, degf=40, sg=0.7, inhibitor_type='MEG',
+    ...                      p_res=4000, degf_res=250)
+    >>> r.water_vaporized_res
+    1.651022101177945
+    >>> r.inhibitor_mass_rate
+    1314.312441059706
+    >>> r.inhibitor_underdosed
+    True
 
 
 pyrestoolbox.gas.GasPVT

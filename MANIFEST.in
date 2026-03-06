@@ -1,5 +1,6 @@
-include README.md
+include README.rst
 include LICENSE
 global-exclude *Zone.Identifier
 global-exclude *.pyc
 recursive-include pyrestoolbox *
+global-exclude __pycache__                                                                                                                                       

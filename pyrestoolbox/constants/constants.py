@@ -60,6 +60,9 @@ __all__ = [
     'PSIFT_TO_BARM', 'BARM_TO_PSIFT',
     'SQFT_TO_SQM', 'SQM_TO_SQFT',
     'D_PER_MSCF_TO_D_PER_SM3', 'D_PER_SM3_TO_D_PER_MSCF',
+    'LB_TO_KG', 'KG_TO_LB', 'GAL_TO_LITER', 'LITER_TO_GAL',
+    'LB_PER_MMSCF_TO_KG_PER_SM3', 'KG_PER_SM3_TO_LB_PER_MMSCF',
+    'GAL_PER_MMSCF_TO_L_PER_SM3', 'L_PER_SM3_TO_GAL_PER_MMSCF',
 ]
 
 
@@ -154,6 +157,20 @@ SM3_PER_SM3_TO_STB_PER_MMSCF = 1.0 / STB_PER_MMSCF_TO_SM3_PER_SM3
 # Gas rate: MMscf/d <-> sm3/d (1 MMscf = 28316.846592 sm3)
 MMSCF_TO_SM3 = 1000.0 * MSCF_TO_SM3  # 28316.846592
 SM3_TO_MMSCF = 1.0 / MMSCF_TO_SM3
+
+# Mass: lb <-> kg
+LB_TO_KG = 0.45359237
+KG_TO_LB = 1.0 / LB_TO_KG
+
+# Volume: gallon <-> liter
+GAL_TO_LITER = 3.785411784
+LITER_TO_GAL = 1.0 / GAL_TO_LITER
+
+# Inhibitor rate: lb/MMscf <-> kg/sm3, gal/MMscf <-> L/sm3
+LB_PER_MMSCF_TO_KG_PER_SM3 = LB_TO_KG / MMSCF_TO_SM3
+KG_PER_SM3_TO_LB_PER_MMSCF = 1.0 / LB_PER_MMSCF_TO_KG_PER_SM3
+GAL_PER_MMSCF_TO_L_PER_SM3 = GAL_TO_LITER / MMSCF_TO_SM3
+L_PER_SM3_TO_GAL_PER_MMSCF = 1.0 / GAL_PER_MMSCF_TO_L_PER_SM3
 
 # FVF: rb/stb (rcf/scf) <-> rm3/sm3 — both are dimensionless ratios, same numeric value
 # (reservoir volume / surface volume in consistent units = same ratio regardless of unit system)

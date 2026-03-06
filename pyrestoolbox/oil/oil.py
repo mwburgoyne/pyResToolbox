@@ -1070,19 +1070,27 @@ def oil_co(
             )
 
         dp = max(0.5, p * 0.001)  # Relative step size for numerical derivative
-        if p > pb - dp and p < pb + dp:
-            # Near bubble point, use one-sided derivative to avoid crossing Pb
-            dbodp = calc_dbodp(p) - calc_dbodp(p - dp)
-            drsdp = calc_drsdp(p) - calc_drsdp(p - dp)
-        elif p > dp:
-            dbodp = calc_dbodp(p + dp) - calc_dbodp(p - dp)
-            drsdp = calc_drsdp(p + dp) - calc_drsdp(p - dp)
-        else:
-            dbodp = calc_dbodp(p + dp) - calc_dbodp(p)
-            drsdp = calc_drsdp(p + dp) - calc_drsdp(p)
 
+        # Clamp stencil so it never crosses Pb (avoids mixing
+        # saturated/undersaturated physics in a single derivative)
+        if p > pb:
+            # Undersaturated: keep both stencil points above Pb
+            p_hi = p + dp
+            p_lo = max(p - dp, pb)
+        else:
+            # Saturated: keep both stencil points at or below Pb
+            p_hi = min(p + dp, pb)
+            p_lo = max(p - dp, psc)
+
+        span = p_hi - p_lo
+        if span < 1e-10:
+            span = dp  # fallback for degenerate cases
+
+        dbodp = (calc_dbodp(p_hi) - calc_dbodp(p_lo)) / span
         if p > pb:
             drsdp = 0
+        else:
+            drsdp = (calc_drsdp(p_hi) - calc_drsdp(p_lo)) / span
 
         bo = calc_dbodp(p)
         bg = (
@@ -1773,7 +1781,7 @@ def _build_bot_tables(pressures, pb, rsb, rsb_frac, rsb_max, sg_o, sg_g, sg_sp,
         co.append(
             oil_co(
                 p=p, api=api, sg_sp=sg_sp, sg_g=sg_g, degf=degf,
-                pb=pb, rsb=rss[-1], zmethod=zmethod, rsmethod=rsmethod,
+                pb=pb, rsb=rsb, zmethod=zmethod, rsmethod=rsmethod,
                 cmethod=cmethod, denomethod=denomethod, bomethod=bomethod,
             )
         )

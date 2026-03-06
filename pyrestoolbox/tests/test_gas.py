@@ -594,6 +594,234 @@ def test_hydrate_zero_inhibitor_wt_pct():
     assert r.inhibited_hft == r.hft, "Inhibited HFT should equal uninhibited at 0 wt%"
 
 
+# =============================================================================
+# Water balance, capping, injection rate, reservoir P/T tests
+# =============================================================================
+
+# Frozen regression baselines for water balance and injection (captured 2026-03-06)
+_HYDRATE_NEW_BASELINES = {
+    'danesh_wc_op_1000_60_065': 0.051307948560405346,    # Danesh vaporized water at operating
+    'sw_wc_op_2000_80_070_co2': 0.07027556282207788,     # SoreideWhitson vaporized at operating
+    'wc_res_3000_200': 0.821279572319976,                 # Vaporized at reservoir P=3000,T=200
+    'condensed_3000_200_to_1000_60': 0.7699716237595706,  # Condensed between res→op
+    'meg_mass_rate_res_to_op': 576.8222533381149,         # MEG injection lb/MMscf
+    'meg_vol_rate_res_to_op': 62.26896381181326,          # MEG injection gal/MMscf
+    'meoh_mass_rate_res_3000_200': 91.91442238644271,     # MEOH capped injection lb/MMscf
+}
+
+def test_hydrate_water_balance_no_reservoir():
+    """Without reservoir P,T: vaporized_res = vaporized_op, condensed = 0"""
+    r = gas.gas_hydrate(p=1000, degf=60, sg=0.65)
+    wc_direct = gas.gas_water_content(p=1000, degf=60, salinity=0)
+    assert abs(r.water_vaporized_op - wc_direct) < 1e-10, \
+        f"vaporized_op {r.water_vaporized_op} != gas_water_content {wc_direct}"
+    assert r.water_vaporized_res == r.water_vaporized_op, \
+        "Without reservoir P,T, vaporized_res should equal vaporized_op"
+    assert r.water_condensed == 0.0, "No condensation without reservoir P,T"
+    assert r.free_water == 0.0, "No free water without additional_water"
+    assert r.total_liquid_water == 0.0, "No liquid water without reservoir or free water"
+
+def test_hydrate_water_balance_with_reservoir():
+    """With reservoir P,T: condensed = vaporized_res - vaporized_op"""
+    r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, p_res=3000, degf_res=200)
+    assert r.water_vaporized_res > r.water_vaporized_op, \
+        "Reservoir (hotter) should have more vaporized water"
+    expected_condensed = r.water_vaporized_res - r.water_vaporized_op
+    assert abs(r.water_condensed - expected_condensed) < 1e-15, \
+        f"condensed {r.water_condensed} != res-op {expected_condensed}"
+    assert r.total_liquid_water == r.water_condensed + r.free_water, \
+        "total_liquid = condensed + free_water"
+
+def test_hydrate_water_balance_with_free_water():
+    """Free water (additional_water) adds to total liquid, not to vaporized"""
+    r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, p_res=3000, degf_res=200,
+                         additional_water=0.5)
+    assert r.free_water == 0.5, f"free_water should echo additional_water input"
+    assert abs(r.total_liquid_water - (r.water_condensed + 0.5)) < 1e-15, \
+        "total_liquid = condensed + free"
+
+def test_hydrate_water_content_soreide_whitson():
+    """Water content uses SoreideWhitson when composition provided"""
+    r = gas.gas_hydrate(p=2000, degf=80, sg=0.7, co2=0.1)
+    wc_danesh = gas.gas_water_content(p=2000, degf=80, salinity=0)
+    assert r.water_vaporized_op != wc_danesh, \
+        "With CO2 composition, should use SoreideWhitson, not Danesh"
+    assert r.water_vaporized_op > 0, "Vaporized water should be positive"
+
+def test_hydrate_water_balance_frozen_baselines():
+    """Frozen baselines for water balance fields"""
+    r1 = gas.gas_hydrate(p=1000, degf=60, sg=0.65)
+    assert abs(r1.water_vaporized_op - _HYDRATE_NEW_BASELINES['danesh_wc_op_1000_60_065']) < 1e-10
+
+    r2 = gas.gas_hydrate(p=2000, degf=80, sg=0.7, co2=0.1)
+    assert abs(r2.water_vaporized_op - _HYDRATE_NEW_BASELINES['sw_wc_op_2000_80_070_co2']) < 1e-10
+
+    r3 = gas.gas_hydrate(p=1000, degf=60, sg=0.65, p_res=3000, degf_res=200)
+    assert abs(r3.water_vaporized_res - _HYDRATE_NEW_BASELINES['wc_res_3000_200']) < 1e-10
+    assert abs(r3.water_condensed - _HYDRATE_NEW_BASELINES['condensed_3000_200_to_1000_60']) < 1e-10
+
+def test_hydrate_meoh_capping():
+    """MEOH should cap at 25wt% for high-subcooling scenario"""
+    r = gas.gas_hydrate(p=2000, degf=80, sg=0.7, inhibitor_type='MEOH', inhibitor_wt_pct=25)
+    assert r.required_inhibitor_wt_pct == 25.0, \
+        f"MEOH required should be capped at 25.0, got {r.required_inhibitor_wt_pct}"
+    assert r.max_inhibitor_wt_pct == 25.0, f"Max should be 25.0, got {r.max_inhibitor_wt_pct}"
+    assert r.inhibitor_underdosed is True, "Should be underdosed"
+
+def test_hydrate_meg_no_capping():
+    """MEG should NOT cap at moderate conditions"""
+    # At 1000 psia, 90F — small subcooling, MEG required should be < 70%
+    r = gas.gas_hydrate(p=1000, degf=90, sg=0.65, inhibitor_type='MEG')
+    assert r.required_inhibitor_wt_pct < r.max_inhibitor_wt_pct, \
+        f"MEG required {r.required_inhibitor_wt_pct} should be < max {r.max_inhibitor_wt_pct}"
+    assert r.inhibitor_underdosed is False, "Should NOT be underdosed"
+
+def test_hydrate_all_max_wt_pct():
+    """All 5 inhibitors report correct max_inhibitor_wt_pct"""
+    expected = {'MEOH': 25.0, 'MEG': 70.0, 'DEG': 70.0, 'TEG': 50.0, 'ETOH': 30.0}
+    for inh_name, exp_max in expected.items():
+        r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, inhibitor_type=inh_name)
+        assert r.max_inhibitor_wt_pct == exp_max, \
+            f"{inh_name}: max_wt_pct {r.max_inhibitor_wt_pct} != {exp_max}"
+
+def test_hydrate_injection_rate_algebra():
+    """Injection rate matches hand calculation based on total_liquid_water"""
+    # Need reservoir conditions for non-zero condensation and injection rate
+    r = gas.gas_hydrate(p=2000, degf=60, sg=0.7, inhibitor_type='MEOH',
+                         p_res=3000, degf_res=200)
+    # Hand calculation: inhibitor treats total liquid water
+    total_liquid = float(r.total_liquid_water)
+    liquid_mass_lb = total_liquid * 350.2  # lb/MMscf
+    w_frac = r.required_inhibitor_wt_pct / 100.0
+    expected_mass = liquid_mass_lb * w_frac / (1.0 - w_frac)
+    expected_vol = expected_mass / (0.791 * 8.34540445)
+    assert abs(r.inhibitor_mass_rate - expected_mass) < 1e-8, \
+        f"Mass rate {r.inhibitor_mass_rate} != hand calc {expected_mass}"
+    assert abs(r.inhibitor_vol_rate - expected_vol) < 1e-8, \
+        f"Vol rate {r.inhibitor_vol_rate} != hand calc {expected_vol}"
+
+def test_hydrate_injection_rate_frozen_baselines():
+    """Frozen baselines for injection rates"""
+    r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, inhibitor_type='MEG',
+                         p_res=3000, degf_res=200)
+    assert abs(r.inhibitor_mass_rate - _HYDRATE_NEW_BASELINES['meg_mass_rate_res_to_op']) < 1e-8, \
+        f"Mass rate: {r.inhibitor_mass_rate} != {_HYDRATE_NEW_BASELINES['meg_mass_rate_res_to_op']}"
+    assert abs(r.inhibitor_vol_rate - _HYDRATE_NEW_BASELINES['meg_vol_rate_res_to_op']) < 1e-8, \
+        f"Vol rate: {r.inhibitor_vol_rate} != {_HYDRATE_NEW_BASELINES['meg_vol_rate_res_to_op']}"
+
+    # MEOH capped with reservoir
+    r2 = gas.gas_hydrate(p=2000, degf=60, sg=0.7, inhibitor_type='MEOH',
+                          p_res=3000, degf_res=200)
+    assert abs(r2.inhibitor_mass_rate - _HYDRATE_NEW_BASELINES['meoh_mass_rate_res_3000_200']) < 1e-8
+
+def test_hydrate_injection_rate_increases_with_additional_water():
+    """Injection rate should increase with additional_water (free water)"""
+    r0 = gas.gas_hydrate(p=2000, degf=80, sg=0.7, inhibitor_type='MEOH',
+                          p_res=3000, degf_res=200)
+    r1 = gas.gas_hydrate(p=2000, degf=80, sg=0.7, inhibitor_type='MEOH',
+                          p_res=3000, degf_res=200, additional_water=1.0)
+    assert r1.inhibitor_mass_rate > r0.inhibitor_mass_rate, \
+        "Mass rate should increase with additional_water"
+    assert r1.free_water == 1.0, "free_water should reflect additional_water input"
+
+def test_hydrate_injection_rate_zero_outside_window():
+    """Injection rate should be 0 when outside hydrate window"""
+    r = gas.gas_hydrate(p=200, degf=150, sg=0.6, inhibitor_type='MEG',
+                         inhibitor_wt_pct=20, p_res=1000, degf_res=200)
+    assert not r.in_hydrate_window, "Should be outside hydrate window"
+    assert r.inhibitor_mass_rate == 0.0, f"Mass rate should be 0, got {r.inhibitor_mass_rate}"
+    assert r.inhibitor_vol_rate == 0.0, f"Vol rate should be 0, got {r.inhibitor_vol_rate}"
+
+def test_hydrate_injection_rate_zero_no_inhibitor():
+    """Injection rate should be 0 when no inhibitor specified"""
+    r = gas.gas_hydrate(p=2000, degf=80, sg=0.7, p_res=3000, degf_res=200)
+    assert r.inhibitor_mass_rate == 0.0, "Mass rate should be 0 without inhibitor"
+    assert r.inhibitor_vol_rate == 0.0, "Vol rate should be 0 without inhibitor"
+
+def test_hydrate_injection_rate_zero_no_liquid():
+    """Injection rate should be 0 when no liquid water (no reservoir, no free water)"""
+    r = gas.gas_hydrate(p=2000, degf=80, sg=0.7, inhibitor_type='MEOH')
+    assert r.total_liquid_water == 0.0, "No liquid without reservoir or free water"
+    assert r.inhibitor_mass_rate == 0.0, "No injection rate without liquid water"
+
+def test_hydrate_injection_rate_free_water_only():
+    """Injection rate should work with free water even without reservoir conditions"""
+    r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, inhibitor_type='MEG',
+                         additional_water=0.5)
+    assert r.water_condensed == 0.0, "No condensation without reservoir P,T"
+    assert r.free_water == 0.5
+    assert r.total_liquid_water == 0.5
+    assert r.inhibitor_mass_rate > 0, "Should have injection rate from free water"
+
+def test_hydrate_reservoir_pt_does_not_affect_hft():
+    """Reservoir P,T affects water balance but not hydrate assessment"""
+    r_default = gas.gas_hydrate(p=1000, degf=60, sg=0.65)
+    r_res = gas.gas_hydrate(p=1000, degf=60, sg=0.65, p_res=3000, degf_res=200)
+    assert abs(r_res.hft - r_default.hft) < 1e-10, \
+        "HFT should not change with reservoir P,T"
+    assert abs(r_res.hfp - r_default.hfp) < 1e-10, \
+        "HFP should not change with reservoir P,T"
+
+def test_hydrate_metric_water_balance():
+    """Metric water balance fields should be consistent with oilfield conversion"""
+    from pyrestoolbox.constants import STB_PER_MMSCF_TO_SM3_PER_SM3
+    r_f = gas.gas_hydrate(p=1000, degf=60, sg=0.65, p_res=3000, degf_res=200)
+    r_m = gas.gas_hydrate(p=1000 * 0.0689475729, degf=(60 - 32) * 5 / 9, sg=0.65,
+                           p_res=3000 * 0.0689475729, degf_res=(200 - 32) * 5 / 9, metric=True)
+    for field in ['water_vaporized_res', 'water_vaporized_op', 'water_condensed', 'total_liquid_water']:
+        f_val = getattr(r_f, field)
+        m_val = getattr(r_m, field)
+        expected = f_val * STB_PER_MMSCF_TO_SM3_PER_SM3
+        assert abs(m_val - expected) / expected < 1e-4, \
+            f"Metric {field}: {m_val} != converted {expected}"
+
+def test_hydrate_metric_injection_rate():
+    """Metric injection rates should be consistent with oilfield conversion"""
+    from pyrestoolbox.constants import LB_PER_MMSCF_TO_KG_PER_SM3, GAL_PER_MMSCF_TO_L_PER_SM3
+    r_f = gas.gas_hydrate(p=1000, degf=60, sg=0.65, inhibitor_type='MEG',
+                           p_res=3000, degf_res=200)
+    r_m = gas.gas_hydrate(p=1000 * 0.0689475729, degf=(60 - 32) * 5 / 9, sg=0.65,
+                           inhibitor_type='MEG', p_res=3000 * 0.0689475729,
+                           degf_res=(200 - 32) * 5 / 9, metric=True)
+    mass_kg = r_f.inhibitor_mass_rate * LB_PER_MMSCF_TO_KG_PER_SM3
+    vol_l = r_f.inhibitor_vol_rate * GAL_PER_MMSCF_TO_L_PER_SM3
+    assert abs(r_m.inhibitor_mass_rate - mass_kg) / mass_kg < 1e-4, \
+        f"Metric mass rate {r_m.inhibitor_mass_rate} != converted {mass_kg}"
+    assert abs(r_m.inhibitor_vol_rate - vol_l) / vol_l < 1e-4, \
+        f"Metric vol rate {r_m.inhibitor_vol_rate} != converted {vol_l}"
+
+def test_hydrate_composition_validation():
+    """Composition inputs should be validated"""
+    # Negative mole fraction
+    for param in ['co2', 'h2s', 'n2', 'h2']:
+        try:
+            gas.gas_hydrate(p=1000, degf=60, sg=0.65, **{param: -0.1})
+            raise AssertionError(f"Expected ValueError for negative {param}")
+        except ValueError:
+            pass
+    # Sum > 1
+    try:
+        gas.gas_hydrate(p=1000, degf=60, sg=0.65, co2=0.5, h2s=0.6)
+        raise AssertionError("Expected ValueError for sum > 1")
+    except ValueError:
+        pass
+    # Negative additional_water
+    try:
+        gas.gas_hydrate(p=1000, degf=60, sg=0.65, additional_water=-1)
+        raise AssertionError("Expected ValueError for negative additional_water")
+    except ValueError:
+        pass
+
+def test_hydrate_new_fields_no_inhibitor():
+    """New fields should have sensible defaults when no inhibitor"""
+    r = gas.gas_hydrate(p=1000, degf=60, sg=0.65)
+    assert r.max_inhibitor_wt_pct == 0.0, "max should be 0 without inhibitor"
+    assert r.inhibitor_underdosed is False, "underdosed should be False without inhibitor"
+    assert r.water_vaporized_op > 0, "vaporized water at operating should be positive"
+    assert r.inhibitor_mass_rate == 0.0, "mass rate should be 0 without inhibitor"
+    assert r.inhibitor_vol_rate == 0.0, "vol rate should be 0 without inhibitor"
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("GAS MODULE VALIDATION TESTS")
