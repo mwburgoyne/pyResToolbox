@@ -1762,7 +1762,7 @@ def gas_hydrate(
     p: float,
     degf: float,
     sg: float,
-    hydmethod: str = 'MOTIEE',
+    hydmethod: str = 'TOWLER',
     inhibitor_type: str = None,
     inhibitor_wt_pct: float = 0,
     co2: float = 0,
@@ -1789,9 +1789,9 @@ def gas_hydrate(
               (degF | degC if metric=True)
         sg: Gas specific gravity (air = 1.0)
         hydmethod: Hydrate formation correlation.
-                   'MOTIEE': Motiee (1991)
                    'TOWLER': Towler & Mokhatab (2005)
-                   Defaults to 'MOTIEE'
+                   'MOTIEE': Motiee (1991)
+                   Defaults to 'TOWLER'
         inhibitor_type: Thermodynamic hydrate inhibitor type (optional).
                         'MEOH' (Methanol), 'MEG' (Monoethylene Glycol),
                         'DEG' (Diethylene Glycol), 'TEG' (Triethylene Glycol),

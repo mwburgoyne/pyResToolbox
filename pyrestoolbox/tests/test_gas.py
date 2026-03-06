@@ -458,17 +458,17 @@ _HYDRATE_BASELINES = {
 
 def test_hydrate_frozen_baselines():
     """Frozen regression baselines for hydrate calculations"""
-    r1 = gas.gas_hydrate(p=1000, degf=60, sg=0.65)
+    r1 = gas.gas_hydrate(p=1000, degf=60, sg=0.65, hydmethod='MOTIEE')
     assert abs(r1.hft - _HYDRATE_BASELINES['motiee_hft_1000_065']) < 1e-10, \
         f"Motiee HFT: {r1.hft} != {_HYDRATE_BASELINES['motiee_hft_1000_065']}"
     assert abs(r1.hfp - _HYDRATE_BASELINES['motiee_hfp_60_065']) < 1e-6, \
         f"Motiee HFP: {r1.hfp} != {_HYDRATE_BASELINES['motiee_hfp_60_065']}"
 
-    r2 = gas.gas_hydrate(p=1000, degf=60, sg=0.65, hydmethod='TOWLER')
+    r2 = gas.gas_hydrate(p=1000, degf=60, sg=0.65)  # default is now TOWLER
     assert abs(r2.hft - _HYDRATE_BASELINES['towler_hft_1000_065']) < 1e-10, \
         f"Towler HFT: {r2.hft} != {_HYDRATE_BASELINES['towler_hft_1000_065']}"
 
-    r3 = gas.gas_hydrate(p=2000, degf=80, sg=0.7, inhibitor_type='MEOH', inhibitor_wt_pct=25)
+    r3 = gas.gas_hydrate(p=2000, degf=80, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH', inhibitor_wt_pct=25)
     assert abs(r3.inhibitor_depression - _HYDRATE_BASELINES['meoh_depression_25wt']) < 1e-10, \
         f"MEOH depression: {r3.inhibitor_depression} != {_HYDRATE_BASELINES['meoh_depression_25wt']}"
     assert abs(r3.inhibited_hft - _HYDRATE_BASELINES['meoh_inhibited_hft']) < 1e-10, \
@@ -662,7 +662,7 @@ def test_hydrate_water_balance_frozen_baselines():
 
 def test_hydrate_meoh_capping():
     """MEOH should cap at 25wt% for high-subcooling scenario"""
-    r = gas.gas_hydrate(p=2000, degf=80, sg=0.7, inhibitor_type='MEOH', inhibitor_wt_pct=25)
+    r = gas.gas_hydrate(p=2000, degf=80, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH', inhibitor_wt_pct=25)
     assert r.required_inhibitor_wt_pct == 25.0, \
         f"MEOH required should be capped at 25.0, got {r.required_inhibitor_wt_pct}"
     assert r.max_inhibitor_wt_pct == 25.0, f"Max should be 25.0, got {r.max_inhibitor_wt_pct}"
@@ -670,8 +670,8 @@ def test_hydrate_meoh_capping():
 
 def test_hydrate_meg_no_capping():
     """MEG should NOT cap at moderate conditions"""
-    # At 1000 psia, 90F — small subcooling, MEG required should be < 70%
-    r = gas.gas_hydrate(p=1000, degf=90, sg=0.65, inhibitor_type='MEG')
+    # At 1000 psia, 90F with MOTIEE — small subcooling, MEG required should be < 70%
+    r = gas.gas_hydrate(p=1000, degf=90, sg=0.65, hydmethod='MOTIEE', inhibitor_type='MEG')
     assert r.required_inhibitor_wt_pct < r.max_inhibitor_wt_pct, \
         f"MEG required {r.required_inhibitor_wt_pct} should be < max {r.max_inhibitor_wt_pct}"
     assert r.inhibitor_underdosed is False, "Should NOT be underdosed"
@@ -702,7 +702,7 @@ def test_hydrate_injection_rate_algebra():
 
 def test_hydrate_injection_rate_frozen_baselines():
     """Frozen baselines for injection rates"""
-    r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, inhibitor_type='MEG',
+    r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, hydmethod='MOTIEE', inhibitor_type='MEG',
                          p_res=3000, degf_res=200)
     assert abs(r.inhibitor_mass_rate - _HYDRATE_NEW_BASELINES['meg_mass_rate_res_to_op']) < 1e-8, \
         f"Mass rate: {r.inhibitor_mass_rate} != {_HYDRATE_NEW_BASELINES['meg_mass_rate_res_to_op']}"
@@ -710,15 +710,15 @@ def test_hydrate_injection_rate_frozen_baselines():
         f"Vol rate: {r.inhibitor_vol_rate} != {_HYDRATE_NEW_BASELINES['meg_vol_rate_res_to_op']}"
 
     # MEOH capped with reservoir
-    r2 = gas.gas_hydrate(p=2000, degf=60, sg=0.7, inhibitor_type='MEOH',
+    r2 = gas.gas_hydrate(p=2000, degf=60, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH',
                           p_res=3000, degf_res=200)
     assert abs(r2.inhibitor_mass_rate - _HYDRATE_NEW_BASELINES['meoh_mass_rate_res_3000_200']) < 1e-8
 
 def test_hydrate_injection_rate_increases_with_additional_water():
     """Injection rate should increase with additional_water (free water)"""
-    r0 = gas.gas_hydrate(p=2000, degf=80, sg=0.7, inhibitor_type='MEOH',
+    r0 = gas.gas_hydrate(p=2000, degf=80, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH',
                           p_res=3000, degf_res=200)
-    r1 = gas.gas_hydrate(p=2000, degf=80, sg=0.7, inhibitor_type='MEOH',
+    r1 = gas.gas_hydrate(p=2000, degf=80, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH',
                           p_res=3000, degf_res=200, additional_water=1.0)
     assert r1.inhibitor_mass_rate > r0.inhibitor_mass_rate, \
         "Mass rate should increase with additional_water"
