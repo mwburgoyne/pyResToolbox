@@ -722,7 +722,6 @@ def oil_rs_bub(
             
             new_rsb = intcpt
                 
-            #print('perr, pb_calc, rs_calc', new_err, new_pbcalc, new_rsb)
             if (i > 100):
                 import warnings
                 warnings.warn("oil_rs_bub: Valko-McCain did not converge after 100 iterations", RuntimeWarning)
@@ -868,29 +867,9 @@ def oil_rs(
         return rs_scaler * oil_rs_bub(api, degf, p, sg_g, sg_sp, rsmethod = 'VALMC')
             
                 
-    #def Rs_vasquezbegs(api, degf, sg_sp, p, pb, rsb):
-    #    sg_gs = sg_sp * (
-    #        1 + 5.912e-5 * api * degf_sep * np.log10(p_sep / 114.7)
-    #    )  # Gas sg normalized to 100 psig separator conditions
-    #    if api <= 30:
-    #        return (
-    #            0.0362
-    #            * sg_gs
-    #            * p ** 1.0937
-    #            * np.exp(25.7240 * (api / (degf + degF2R)))
-    #        )
-    #    else:
-    #        return (
-    #            0.0178
-    #            * sg_gs
-    #            * p ** 1.1870
-    #            * np.exp(23.9310 * (api / (degf + degF2R)))
-    #        )
-
     fn_dic = {
         "VELAR": Rs_velarde,
         "STAN": rs_standing,
-        #"VASBG": Rs_vasquezbegs,
         "VALMC": rs_valko_mccain,
     }
 

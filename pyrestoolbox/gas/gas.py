@@ -1001,8 +1001,11 @@ def gas_cg(
     pr = p / pc
     degR = (degf + degF2R)
     tr = degR / tc
-    zee1 = gas_z(p=p, sg=sg, degf=degf, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2=h2, tc=tc, pc=pc)
-    zee2 = gas_z(p=p+1, sg=sg, degf=degf,  zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2=h2, tc=tc, pc=pc)
+    p_both = np.concatenate([p, p + 1])
+    zee_both = gas_z(p=p_both, sg=sg, degf=degf, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2=h2, tc=tc, pc=pc)
+    n = len(p)
+    zee1 = zee_both[:n]
+    zee2 = zee_both[n:]
 
     vol1 = zee1*R*degR/p
     vol2 = zee2*R*degR/(p+1)

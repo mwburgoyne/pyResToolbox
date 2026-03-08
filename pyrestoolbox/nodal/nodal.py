@@ -27,6 +27,7 @@ Classes
 WellSegment         Single wellbore segment with uniform geometry and deviation
 Completion          Wellbore completion (legacy or multi-segment) for VLP calculations
 Reservoir           Reservoir description for IPR calculations
+NodalResult         Dict subclass returned by outflow_curve, ipr_curve, operating_point
 
 Functions
 ---------
@@ -37,7 +38,7 @@ operating_point     VLP/IPR intersection via bisection
 """
 
 __all__ = [
-    'WellSegment', 'Completion', 'Reservoir',
+    'WellSegment', 'Completion', 'Reservoir', 'NodalResult',
     'fbhp', 'outflow_curve', 'ipr_curve', 'operating_point',
 ]
 
@@ -58,6 +59,24 @@ from pyrestoolbox.constants import (BAR_TO_PSI, PSI_TO_BAR, degc_to_degf, degf_t
                                     STB_TO_SM3, SM3_TO_STB)
 import pyrestoolbox.gas as gas
 import pyrestoolbox.oil as oil
+
+
+class NodalResult(dict):
+    """Dict subclass returned by outflow_curve, ipr_curve, and operating_point.
+
+    Supports both dict-style access (result['rate']) and attribute-style
+    access (result.rate). Fully backward compatible with existing code
+    that treats results as plain dicts.
+    """
+    def __getattr__(self, key):
+        try:
+            return self[key]
+        except KeyError:
+            raise AttributeError(f"NodalResult has no attribute '{key}'")
+
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
+
 
 # ============================================================================
 #  Constants
@@ -408,14 +427,21 @@ class Reservoir:
 #  Used inside VLP segment loops for performance
 # ============================================================================
 
-def _z_factor(sg, temp_f, press_psia):
+def _sutton_tc_pc(sg):
+    """Sutton critical properties from gas SG."""
+    tpc = 169.2 + 349.5 * sg - 74.0 * sg * sg
+    ppc = 756.8 - 131.0 * sg - 3.6 * sg * sg
+    return tpc, ppc
+
+
+def _z_factor(sg, temp_f, press_psia, tc=None, pc=None):
     """Z-factor via Hall-Yarborough (1973)."""
     if press_psia < 1.0:
         return 1.0
-    tpc = 169.2 + 349.5 * sg - 74.0 * sg * sg
-    ppc = 756.8 - 131.0 * sg - 3.6 * sg * sg
-    tr = (temp_f + 459.67) / tpc
-    pr = press_psia / ppc
+    if tc is None or pc is None:
+        tc, pc = _sutton_tc_pc(sg)
+    tr = (temp_f + 459.67) / tc
+    pr = press_psia / pc
 
     t_inv = 1.0 / tr
     a = -0.06125 * t_inv * math.exp(-1.2 * (1.0 - t_inv) ** 2)
@@ -447,9 +473,10 @@ def _z_factor(sg, temp_f, press_psia):
     return _clamp(z, 0.1, 5.0)
 
 
-def _gas_viscosity(sg, temp_f, press_psia):
+def _gas_viscosity(sg, temp_f, press_psia, z=None, tc=None, pc=None):
     """Gas viscosity via Lee-Gonzalez-Eakin (1966) (cP)."""
-    z = _z_factor(sg, temp_f, press_psia)
+    if z is None:
+        z = _z_factor(sg, temp_f, press_psia, tc=tc, pc=pc)
     temp_r = temp_f + 459.67
     mw = _MW_AIR * sg
     rho_gcc = (_MW_AIR * sg * press_psia / (z * 10.732 * temp_r)) / 62.428
@@ -463,10 +490,10 @@ def _gas_viscosity(sg, temp_f, press_psia):
     return max(1e-4 * k_val * math.exp(exp_arg), 1e-6)
 
 
-def _gas_density(sg, temp_f, press_psia, z=None):
+def _gas_density(sg, temp_f, press_psia, z=None, tc=None, pc=None):
     """Gas density in lb/ft^3."""
     if z is None:
-        z = _z_factor(sg, temp_f, press_psia)
+        z = _z_factor(sg, temp_f, press_psia, tc=tc, pc=pc)
     return _MW_AIR * sg * press_psia / (z * 10.732 * (temp_f + 459.67))
 
 
@@ -656,6 +683,7 @@ def _condensate_vis(pr, cgr_local, gsg, api, temp_f, p_avg, oil_vis):
 
 
 def _static_gas_column_pressure(thp, length, tht, bht, gsg, theta=math.pi / 2.0):
+    tc, pc = _sutton_tc_pc(gsg)
     n_seg = 50
     d_len = length / n_seg
     sin_theta = math.sin(theta)
@@ -664,7 +692,7 @@ def _static_gas_column_pressure(thp, length, tht, bht, gsg, theta=math.pi / 2.0)
         frac = (i + 0.5) / n_seg
         temp_local = tht + (bht - tht) * frac
         temp_r = temp_local + 459.67
-        zee = _z_factor(gsg, temp_local, max(p, 14.7))
+        zee = _z_factor(gsg, temp_local, max(p, 14.7), tc=tc, pc=pc)
         rho_gas = _MW_AIR * gsg * p / (zee * 10.732 * temp_r)
         p += rho_gas / 144.0 * d_len * sin_theta
     return p
@@ -700,6 +728,7 @@ def _static_oil_column_pressure(thp, length, tht, bht, wc, wsg,
 def _hb_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                   injection=False, pr=0.0, theta=math.pi / 2.0):
+    tc, pc = _sutton_tc_pc(gsg)
     osg = 141.5 / (api + 131.5)
     total_mass = (0.0765 * gsg * qg_mmscfd * 1e6 +
                   osg * 62.4 * cgr * qg_mmscfd * 5.615 +
@@ -749,7 +778,7 @@ def _hb_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
             oil_vis_loc = _condensate_vis(pr, cgr_loc, gsg, api,
                                           temp_f_i, p_avg, oil_vis)
 
-            zee = _z_factor(gsg, temp_f_i, p_avg)
+            zee = _z_factor(gsg, temp_f_i, p_avg, tc=tc, pc=pc)
 
             mflow_o = osg * 62.4 * qo_loc * 5.615
             mflow_w = wsg * 62.4 * qw_bwpd * 5.615
@@ -824,7 +853,7 @@ def _hb_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                         yl = 1.0 - 0.5 * (1.0 + vm / vs - math.sqrt(disc))
                         yl = _clamp(yl, 0.0, 1.0)
 
-            mug = _gas_viscosity(gsg, temp_f_i, p_avg)
+            mug = _gas_viscosity(gsg, temp_f_i, p_avg, z=zee, tc=tc, pc=pc)
             nre = 96778.0 * (mflow / 86400.0) / ((tid / 12.0) *
                   mul ** yl * mug ** (1.0 - yl))
             if nre < 2100:
@@ -850,6 +879,7 @@ def _hb_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                   rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
                   vis_frac=1.0, rsb_frac=1.0):
+    tc, pc = _sutton_tc_pc(gsg)
     wc_adj = max(wc, 1e-9)
     if qt_stbpd < 1e-7:
         return _static_oil_column_pressure(
@@ -905,8 +935,8 @@ def _hb_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
             rho_oil_local = _oil_density_mccain(rs_local, sgsp, sgsto,
                                                  min(p_avg, pb), temp_f_i)
 
-            zee = _z_factor(gsg, temp_f_i, p_avg)
-            mug = _gas_viscosity(gsg, temp_f_i, p_avg)
+            zee = _z_factor(gsg, temp_f_i, p_avg, tc=tc, pc=pc)
+            mug = _gas_viscosity(gsg, temp_f_i, p_avg, z=zee, tc=tc, pc=pc)
 
             mflow_o = osg * 62.4 * qo * 5.615
             mflow_w = wsg * 62.4 * qw * 5.615
@@ -1083,6 +1113,7 @@ def _wg_friction_gradient_lm(m_flow_g, m_flow_l, rho_g, rho_l,
 def _wg_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                   injection=False, pr=0.0, theta=math.pi / 2.0):
+    tc, pc = _sutton_tc_pc(gsg)
     osg = 141.5 / (api + 131.5)
     total_mass = (0.0765 * gsg * qg_mmscfd * 1e6 +
                   osg * 62.4 * cgr * qg_mmscfd * 5.615 +
@@ -1123,8 +1154,8 @@ def _wg_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
             oil_vis_loc = _condensate_vis(pr, cgr_loc, gsg, api,
                                            temp_f_i, p_avg, oil_vis)
 
-            zee = _z_factor(gsg, temp_f_i, p_avg)
-            mu_g_cp = _gas_viscosity(gsg, temp_f_i, p_avg)
+            zee = _z_factor(gsg, temp_f_i, p_avg, tc=tc, pc=pc)
+            mu_g_cp = _gas_viscosity(gsg, temp_f_i, p_avg, z=zee, tc=tc, pc=pc)
 
             temp_r = temp_f_i + 459.67
             rho_g_lbft3 = _MW_AIR * gsg * p_avg / (zee * 10.732 * temp_r)
@@ -1171,6 +1202,7 @@ def _wg_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                   rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
                   vis_frac=1.0, rsb_frac=1.0):
+    tc, pc = _sutton_tc_pc(gsg)
     wc_adj = max(wc, 1e-9)
     if qt_stbpd < 1e-7:
         return _static_oil_column_pressure(
@@ -1208,8 +1240,8 @@ def _wg_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
                                                   min(p_avg, pb), temp_f_i)
             rho_oil_kgm3 = rho_oil_lbft3 * _LBFT3_TO_KGM3
 
-            zee = _z_factor(gsg, temp_f_i, p_avg)
-            mu_g_cp = _gas_viscosity(gsg, temp_f_i, p_avg)
+            zee = _z_factor(gsg, temp_f_i, p_avg, tc=tc, pc=pc)
+            mu_g_cp = _gas_viscosity(gsg, temp_f_i, p_avg, z=zee, tc=tc, pc=pc)
 
             temp_r = temp_f_i + 459.67
             rho_g_lbft3 = _MW_AIR * gsg * p_avg / (zee * 10.732 * temp_r)
@@ -1320,6 +1352,7 @@ def _gray_effective_roughness(rough_dry, sigma, rho_ns, v_m, lambda_l):
 def _gray_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                     wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                     injection=False, pr=0.0, theta=math.pi / 2.0):
+    tc, pc = _sutton_tc_pc(gsg)
     osg = 141.5 / (api + 131.5)
     total_mass = (0.0765 * gsg * qg_mmscfd * 1e6 +
                   osg * 62.4 * cgr * qg_mmscfd * 5.615 +
@@ -1359,8 +1392,8 @@ def _gray_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
             oil_vis_loc = _condensate_vis(pr, cgr_loc, gsg, api,
                                            temp_f_i, p_avg, oil_vis)
 
-            zee = _z_factor(gsg, temp_f_i, p_avg)
-            mu_g_cp = _gas_viscosity(gsg, temp_f_i, p_avg)
+            zee = _z_factor(gsg, temp_f_i, p_avg, tc=tc, pc=pc)
+            mu_g_cp = _gas_viscosity(gsg, temp_f_i, p_avg, z=zee, tc=tc, pc=pc)
 
             temp_r = temp_f_i + 459.67
             rho_g = _MW_AIR * gsg * p_avg / (zee * 10.732 * temp_r)
@@ -1416,6 +1449,7 @@ def _gray_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
                     wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                     rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
                     vis_frac=1.0, rsb_frac=1.0):
+    tc, pc = _sutton_tc_pc(gsg)
     wc_adj = max(wc, 1e-9)
     if qt_stbpd < 1e-7:
         return _static_oil_column_pressure(
@@ -1452,8 +1486,8 @@ def _gray_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
             rho_oil_local = _oil_density_mccain(rs_local, sgsp, osg,
                                                  min(p_avg, pb), temp_f_i)
 
-            zee = _z_factor(gsg, temp_f_i, p_avg)
-            mu_g_cp = _gas_viscosity(gsg, temp_f_i, p_avg)
+            zee = _z_factor(gsg, temp_f_i, p_avg, tc=tc, pc=pc)
+            mu_g_cp = _gas_viscosity(gsg, temp_f_i, p_avg, z=zee, tc=tc, pc=pc)
 
             temp_r = temp_f_i + 459.67
             rho_g = _MW_AIR * gsg * p_avg / (zee * 10.732 * temp_r)
@@ -1612,6 +1646,7 @@ def _bb_core_gas(thp, api, gsg, tid, rough, length, tht, bht,
                  wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                  injection, pr, theta=math.pi / 2.0):
     """Beggs & Brill core for gas wells."""
+    tc, pc = _sutton_tc_pc(gsg)
     osg = 141.5 / (api + 131.5)
     total_mass = (0.0765 * gsg * qg_mmscfd * 1e6 +
                   osg * 62.4 * cgr * qg_mmscfd * 5.615 +
@@ -1651,8 +1686,8 @@ def _bb_core_gas(thp, api, gsg, tid, rough, length, tht, bht,
             oil_vis_loc = _condensate_vis(pr, cgr_loc, gsg, api,
                                            temp_f_i, p_avg, oil_vis)
 
-            zee = _z_factor(gsg, temp_f_i, p_avg)
-            mu_g_cp = _gas_viscosity(gsg, temp_f_i, p_avg)
+            zee = _z_factor(gsg, temp_f_i, p_avg, tc=tc, pc=pc)
+            mu_g_cp = _gas_viscosity(gsg, temp_f_i, p_avg, z=zee, tc=tc, pc=pc)
 
             temp_r = temp_f_i + 459.67
             rho_g = _MW_AIR * gsg * p_avg / (zee * 10.732 * temp_r)
@@ -1731,6 +1766,7 @@ def _bb_core_oil(thp, api, gsg, tid, rough, length, tht, bht,
                  rsb_scale, injection, theta=math.pi / 2.0,
                  vis_frac=1.0, rsb_frac=1.0):
     """Beggs & Brill core for oil wells."""
+    tc, pc = _sutton_tc_pc(gsg)
     wc_adj = max(wc, 1e-9)
     if qt_stbpd < 1e-7:
         return _static_oil_column_pressure(
@@ -1768,8 +1804,8 @@ def _bb_core_oil(thp, api, gsg, tid, rough, length, tht, bht,
             rho_oil_local = _oil_density_mccain(rs_local, sgsp, osg,
                                                  min(p_avg, pb), temp_f_i)
 
-            zee = _z_factor(gsg, temp_f_i, p_avg)
-            mu_g_cp = _gas_viscosity(gsg, temp_f_i, p_avg)
+            zee = _z_factor(gsg, temp_f_i, p_avg, tc=tc, pc=pc)
+            mu_g_cp = _gas_viscosity(gsg, temp_f_i, p_avg, z=zee, tc=tc, pc=pc)
 
             temp_r = temp_f_i + 459.67
             rho_g = _MW_AIR * gsg * p_avg / (zee * 10.732 * temp_r)
@@ -2084,7 +2120,7 @@ def outflow_curve(thp, completion, vlpmethod='WG', well_type='gas',
             bhp_val = bhp_val * PSI_TO_BAR
         bhp_list.append(bhp_val)
 
-    return {'rates': list(rates), 'bhp': bhp_list}
+    return NodalResult({'rates': list(rates), 'bhp': bhp_list})
 
 
 # ============================================================================
@@ -2190,7 +2226,7 @@ def ipr_curve(reservoir, well_type='gas', gas_pvt=None, oil_pvt=None,
         elif well_type in ('oil', 'water'):
             rate_list = [r * STB_TO_SM3 for r in rate_list]  # STB/d -> sm3/d
 
-    return {'pwf': pwf_list, 'rate': rate_list}
+    return NodalResult({'pwf': pwf_list, 'rate': rate_list})
 
 
 # ============================================================================
@@ -2342,7 +2378,7 @@ def operating_point(thp, completion, reservoir,
         vlp = _convert_vlp_to_metric(vlp, well_type)
         ipr = _convert_ipr_to_metric(ipr, well_type)
 
-    return {'rate': op_rate_out, 'bhp': op_bhp, 'vlp': vlp, 'ipr': ipr}
+    return NodalResult({'rate': op_rate_out, 'bhp': op_bhp, 'vlp': vlp, 'ipr': ipr})
 
 
 def _convert_vlp_to_metric(vlp, well_type):
