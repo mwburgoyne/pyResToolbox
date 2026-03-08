@@ -1048,6 +1048,236 @@ def test_doc_nodal_fbhp_deviated():
 
 
 # =============================================================================
+# DCA Module Documentation Examples (docs/dca.rst)
+# =============================================================================
+
+import pyrestoolbox.dca as dca
+
+def test_doc_dca_arps_rate_exp():
+    """dca.rst: arps_rate exponential"""
+    result = dca.arps_rate(qi=1000, di=0.1, b=0, t=10)
+    assert abs(result - 367.87944117144235) / 367.87944117144235 < RTOL
+
+def test_doc_dca_arps_rate_hyp():
+    """dca.rst: arps_rate hyperbolic"""
+    result = dca.arps_rate(qi=1000, di=0.1, b=0.5, t=10)
+    assert abs(result - 444.44444444444446) / 444.44444444444446 < RTOL
+
+def test_doc_dca_arps_rate_har():
+    """dca.rst: arps_rate harmonic"""
+    result = dca.arps_rate(qi=1000, di=0.1, b=1.0, t=10)
+    assert abs(result - 500.0) / 500.0 < RTOL
+
+def test_doc_dca_arps_rate_array():
+    """dca.rst: arps_rate array input"""
+    result = dca.arps_rate(qi=1000, di=0.1, b=0, t=[0, 5, 10])
+    expected = np.array([1000., 606.53065971, 367.87944117])
+    np.testing.assert_allclose(result, expected, rtol=RTOL)
+
+def test_doc_dca_arps_cum_exp():
+    """dca.rst: arps_cum exponential"""
+    result = dca.arps_cum(qi=1000, di=0.1, b=0, t=10)
+    assert abs(result - 6321.205588285577) / 6321.205588285577 < RTOL
+
+def test_doc_dca_arps_cum_har():
+    """dca.rst: arps_cum harmonic"""
+    result = dca.arps_cum(qi=1000, di=0.1, b=1.0, t=10)
+    assert abs(result - 6931.471805599453) / 6931.471805599453 < RTOL
+
+def test_doc_dca_duong_rate_t1():
+    """dca.rst: duong_rate at t=1"""
+    result = dca.duong_rate(qi=500, a=1.5, m=1.2, t=1.0)
+    assert abs(result - 500.0) / 500.0 < RTOL
+
+def test_doc_dca_duong_rate_t10():
+    """dca.rst: duong_rate at t=10"""
+    result = dca.duong_rate(qi=500, a=1.5, m=1.2, t=10.0)
+    assert abs(result - 502.3644755843416) / 502.3644755843416 < RTOL
+
+def test_doc_dca_eur_exp():
+    """dca.rst: eur exponential"""
+    result = dca.eur(qi=1000, di=0.1, b=0, q_min=10)
+    assert abs(result - 9900.0) / 9900.0 < RTOL
+
+def test_doc_dca_eur_hyp():
+    """dca.rst: eur hyperbolic"""
+    result = dca.eur(qi=1000, di=0.1, b=0.5, q_min=10)
+    assert abs(result - 18000.0) / 18000.0 < RTOL
+
+def test_doc_dca_fit_decline():
+    """dca.rst: fit_decline exponential"""
+    t = np.arange(1, 51, dtype=float)
+    q = 1000 * np.exp(-0.05 * t)
+    result = dca.fit_decline(t, q, method='exponential')
+    assert result.method == 'exponential'
+    assert abs(result.qi - 1000.0000000000007) / 1000.0 < RTOL
+    assert abs(result.di - 0.05000000000000006) / 0.05 < RTOL
+    assert abs(result.r_squared - 1.0) < RTOL
+
+def test_doc_dca_fit_decline_cum():
+    """dca.rst: fit_decline_cum exponential"""
+    qi, di = 1000.0, 0.05
+    t = np.arange(1, 51, dtype=float)
+    q = qi * np.exp(-di * t)
+    Np = np.array([float(dca.arps_cum(qi, di, 0, ti)) for ti in t])
+    result = dca.fit_decline_cum(Np, q, method='exponential')
+    assert result.method == 'exponential'
+    assert abs(result.qi - 1000.0) / 1000.0 < 0.01
+    assert abs(result.di - 0.05) / 0.05 < 0.01
+    assert result.r_squared > 0.999
+
+def test_doc_dca_fit_ratio():
+    """dca.rst: fit_ratio linear"""
+    x = np.arange(1, 51, dtype=float)
+    ratio = 0.5 + 0.02 * x
+    rr = dca.fit_ratio(x, ratio, method='linear', domain='cum')
+    assert rr.method == 'linear'
+    assert abs(rr.a - 0.5000000000000001) / 0.5 < RTOL
+    assert abs(rr.b - 0.019999999999999993) / 0.02 < RTOL
+    assert abs(rr.r_squared - 1.0) < RTOL
+
+def test_doc_dca_ratio_forecast():
+    """dca.rst: ratio_forecast"""
+    rr = dca.RatioResult(method='linear', a=1.0, b=0.5, domain='cum')
+    result = dca.ratio_forecast(rr, 10.0)
+    assert abs(result - 6.0) / 6.0 < RTOL
+
+def test_doc_dca_forecast():
+    """dca.rst: forecast basic"""
+    dr = dca.DeclineResult(method='exponential', qi=1000, di=0.05, b=0)
+    fc = dca.forecast(dr, t_end=50, dt=1.0)
+    assert abs(fc.eur - 17903.167013322283) / 17903.167013322283 < RTOL
+
+def test_doc_dca_forecast_uptime():
+    """dca.rst: forecast with uptime"""
+    dr = dca.DeclineResult(method='exponential', qi=1000, di=0.05, b=0)
+    fc = dca.forecast(dr, t_end=50, dt=1.0, uptime=0.8)
+    assert abs(fc.eur - 14322.533610657827) / 14322.533610657827 < RTOL
+
+def test_doc_dca_forecast_ratio():
+    """dca.rst: forecast with ratio"""
+    dr = dca.DeclineResult(method='exponential', qi=1000, di=0.05, b=0)
+    rr = dca.RatioResult(method='linear', a=0.5, b=0.001, domain='cum')
+    fc = dca.forecast(dr, t_end=50, dt=1.0, ratios={'GOR': rr})
+    assert fc.secondary is not None
+    assert abs(fc.secondary['GOR']['ratio'][0] - 1.451229424500714) / 1.451229424500714 < RTOL
+
+
+# =============================================================================
+# Material Balance Module Documentation Examples (docs/matbal.rst)
+# =============================================================================
+
+import pyrestoolbox.matbal as matbal
+
+def test_doc_matbal_gas():
+    """matbal.rst: gas_matbal"""
+    r = matbal.gas_matbal(
+        p=[3000, 2700, 2400, 2100, 1800],
+        Gp=[0, 5, 12, 22, 35],
+        degf=200, sg=0.65
+    )
+    assert abs(r.ogip - 87.602774253829) / 87.602774253829 < RTOL
+    assert abs(r.z_initial - 0.9163208839373836) / 0.9163208839373836 < RTOL
+    assert abs(r.r_squared - 0.9734794008096929) / 0.9734794008096929 < RTOL
+
+def test_doc_matbal_oil():
+    """matbal.rst: oil_matbal"""
+    r = matbal.oil_matbal(
+        p=[4000, 3500, 3000, 2500],
+        Np=[0, 1e6, 3e6, 6e6],
+        degf=220, api=35, sg_sp=0.75,
+        pb=3500, rsb=500, cf=3e-6, sw_i=0.2, cw=3e-6
+    )
+    assert abs(r.ooip - 82793519.84914012) / 82793519.84914012 < RTOL
+    assert abs(r.drive_indices['DDI'][1] - 0.7108509458427899) / 0.7108509458427899 < RTOL
+
+
+# =============================================================================
+# Recommend Module Documentation Examples (docs/recommend.rst)
+# =============================================================================
+
+import pyrestoolbox.recommend as recommend
+
+def test_doc_recommend_gas_defaults():
+    """recommend.rst: recommend_gas_methods defaults"""
+    r = recommend.recommend_gas_methods()
+    assert r['zmethod'].recommended == 'DAK'
+    assert r['cmethod'].recommended == 'PMC'
+    assert r['zmethod'].alternatives == ['HY', 'WYW', 'BNS']
+
+def test_doc_recommend_gas_h2():
+    """recommend.rst: recommend_gas_methods with H2"""
+    r = recommend.recommend_gas_methods(h2=0.1)
+    assert r['zmethod'].recommended == 'BNS'
+    assert r['zmethod'].mandatory == True
+
+def test_doc_recommend_gas_high_inerts():
+    """recommend.rst: recommend_gas_methods high inerts"""
+    r = recommend.recommend_gas_methods(co2=0.3, n2=0.3)
+    assert r['zmethod'].recommended == 'BNS'
+
+def test_doc_recommend_oil():
+    """recommend.rst: recommend_oil_methods"""
+    r = recommend.recommend_oil_methods(api=35)
+    assert r['pbmethod'].recommended == 'VELAR'
+    assert r['rsmethod'].recommended == 'VELAR'
+    assert r['bomethod'].recommended == 'MCAIN'
+    assert r['pbmethod'].alternatives == ['VALMC', 'STAN']
+
+def test_doc_recommend_vlp_vertical():
+    """recommend.rst: recommend_vlp_method vertical"""
+    r = recommend.recommend_vlp_method(deviation=0)
+    assert r['vlp_method'].recommended == 'BB'
+    assert r['vlp_method'].alternatives == ['HB', 'WG', 'GRAY']
+
+def test_doc_recommend_vlp_deviated():
+    """recommend.rst: recommend_vlp_method deviated"""
+    r = recommend.recommend_vlp_method(deviation=60)
+    assert r['vlp_method'].recommended == 'BB'
+    assert r['vlp_method'].alternatives == ['WG']
+
+def test_doc_recommend_methods_combined():
+    """recommend.rst: recommend_methods combined"""
+    r = recommend.recommend_methods(sg=0.7, co2=0.05, api=30, deviation=45)
+    assert sorted(r.keys()) == ['bomethod', 'cmethod', 'pbmethod', 'rsmethod', 'vlp_method', 'zmethod']
+    assert r['zmethod'].recommended == 'DAK'
+    assert r['vlp_method'].recommended == 'BB'
+    assert r['vlp_method'].alternatives == ['WG']
+
+
+# =============================================================================
+# Sensitivity Module Documentation Examples (docs/sensitivity.rst)
+# =============================================================================
+
+import pyrestoolbox.sensitivity as sensitivity
+
+def test_doc_sensitivity_sweep():
+    """sensitivity.rst: sweep gas_z vs pressure"""
+    s = sensitivity.sweep(
+        func=gas.gas_z,
+        base_kwargs=dict(p=2000, sg=0.7, degf=200),
+        vary_param='p',
+        vary_values=[1000, 2000, 3000, 4000]
+    )
+    assert s.param == 'p'
+    assert abs(s.results[0] - 0.9260188251531628) / 0.9260188251531628 < RTOL
+    assert abs(s.results[3] - 0.9411603827082226) / 0.9411603827082226 < RTOL
+
+def test_doc_sensitivity_tornado():
+    """sensitivity.rst: tornado gas_z"""
+    t = sensitivity.tornado(
+        func=gas.gas_z,
+        base_kwargs=dict(p=2000, sg=0.7, degf=200),
+        ranges={'p': (1000, 4000), 'sg': (0.6, 0.8), 'degf': (150, 250)},
+    )
+    assert abs(t.base_result - 0.8886670011404194) / 0.8886670011404194 < RTOL
+    assert t.entries[0].param == 'sg'
+    assert abs(t.entries[0].sensitivity - 0.0886413428394408) / 0.0886413428394408 < RTOL
+    assert t.entries[1].param == 'degf'
+    assert t.entries[2].param == 'p'
+
+
+# =============================================================================
 # Main runner
 # =============================================================================
 
