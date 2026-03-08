@@ -12,7 +12,7 @@ Changelist in 3.0.4:
 - **fit_ratio() / ratio_forecast()**: New functions for fitting secondary phase ratio models (e.g. GOR, WOR) to production data. Four models: linear, exponential, power, and logistic. Returns ``RatioResult`` dataclass with ``domain`` field ('cum' or 'time') controlling how ``forecast()`` evaluates the ratio. ``ratio_forecast()`` evaluates fitted models at arbitrary x values.
 - **forecast() extensions**: New ``uptime`` parameter (default 1.0) scales capacity rate to calendar-effective rate. New ``ratios`` parameter accepts a dict of ``RatioResult`` objects for secondary phase forecasting — each ratio is evaluated against cumulative or time per its domain, producing per-phase rate and cumulative arrays in ``ForecastResult.secondary``. Fully backward compatible.
 - **RatioResult**: New dataclass for ratio fitting results with method, parameters (a, b, c), domain, R-squared, and residuals.
-- 505 validation tests (up from 416 in 3.0.3).
+- 533 validation tests (up from 416 in 3.0.3).
 
 
 Changelist in 3.0.3:
