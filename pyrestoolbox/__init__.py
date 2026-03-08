@@ -32,17 +32,28 @@ Modules
 - **library** — Component critical property database with EOS-model-specific parameters.
 - **simtools** — Simulation helpers: IX PRT parsing, rel-perm tables (Corey/LET),
   Van Everdingen-Hurst aquifer influence, Rachford-Rice flash, deck file checking.
+- **dca** — Decline curve analysis: Arps (exponential/hyperbolic/harmonic), Duong,
+  model fitting, forecasting, and EUR calculations.
+- **matbal** — Material balance: P/Z gas material balance and Havlena-Odeh oil
+  material balance for OGIP/OOIP estimation.
+- **recommend** — Method recommendation engine for selecting appropriate correlations
+  based on fluid composition, API gravity, and well deviation.
+- **sensitivity** — Sensitivity analysis framework: parameter sweeps and tornado charts.
 """
 
 submodules = [
     'brine',
     'classes',
     'constants',
+    'dca',
     'gas',
     'layer',
     'library',
+    'matbal',
     'nodal',
     'oil',
+    'recommend',
+    'sensitivity',
     'shared_fns',
     'simtools',
     'validate'

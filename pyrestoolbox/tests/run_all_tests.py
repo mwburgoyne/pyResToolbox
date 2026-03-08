@@ -61,6 +61,10 @@ def main():
         ('test_layer.py', 'Layer Module'),
         ('test_simtools.py', 'SimTools Module'),
         ('test_nodal.py', 'Nodal Module'),
+        ('test_dca.py', 'DCA Module'),
+        ('test_matbal.py', 'Material Balance Module'),
+        ('test_sensitivity.py', 'Sensitivity Module'),
+        ('test_recommend.py', 'Recommend Module'),
         ('test_doc_examples.py', 'Documentation Examples'),
     ]
 
