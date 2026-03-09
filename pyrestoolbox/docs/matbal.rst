@@ -2,7 +2,7 @@
 Material Balance
 ===================================
 
-Material balance functions for estimating original hydrocarbons in place from pressure-production history.
+Material balance functions for estimating original hydrocarbons in place from pressure-production history. Gas reservoirs use P/Z linear regression with optional Havlena-Odeh aquifer influx correction. Oil reservoirs use the Havlena-Odeh method with drive index decomposition and optional parameter regression.
 
 
 pyrestoolbox.matbal.gas_matbal

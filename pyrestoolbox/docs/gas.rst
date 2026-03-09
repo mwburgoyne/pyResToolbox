@@ -2,6 +2,8 @@
 Gas PVT & Flow
 ===================================
 
+Gas property calculations for hydrocarbon mixtures with optional impurity components (CO2, H2S, N2, H2). Includes Z-factor, viscosity, density, compressibility, formation volume factor, pseudopressure, gas flow rates (radial and linear), water content, and hydrate formation prediction with inhibitor dosing.
+
 Calculation Methods and Class Objects
 =====================================
 pyResToolBox uses class objects to track calculation options through the functions. Class objects can be set via strings or explicitly via object options

@@ -2,6 +2,8 @@
 Oil PVT & Flow Rates
 ===================================
 
+Oil property calculations including bubble point pressure, solution GOR, formation volume factor, density, viscosity, compressibility, and flow rates (radial and linear with Vogel correction). Provides correlation harmonization for consistent Pb/Rsb/viscosity matching and black oil table generation for reservoir simulation.
+
 Calculation Methods and Class Objects
 =====================================
 pyResToolBox uses class objects to track calculation options through the functions. Class objects can be set via strings or explicitly via object options
