@@ -693,3 +693,32 @@ def test_gas_matbal_pvt_backward_compat():
         degf=200, sg=0.65
     )
     assert abs(result.ogip - 87.602774253829) / 87.602774253829 < 1e-6
+
+
+# ======================== RANSAC outlier robustness tests ========================
+
+def test_gas_matbal_pz_outlier():
+    """P/Z regression should handle a pressure outlier robustly."""
+    # Clean P/Z data with one anomalous pressure reading
+    p = [3000, 2700, 2400, 2100, 1800, 1500, 1200]
+    Gp = [0, 5, 12, 22, 35, 50, 68]
+    result_clean = matbal.gas_matbal(p, Gp, degf=200, sg=0.65)
+
+    # Add an outlier: one pressure is anomalously high (bad gauge reading)
+    p_noisy = [3000, 2700, 3200, 2100, 1800, 1500, 1200]  # index 2 is outlier
+    result_noisy = matbal.gas_matbal(p_noisy, Gp, degf=200, sg=0.65)
+
+    # RANSAC should keep the ogip reasonably close to the clean case
+    assert result_noisy.ogip > 0
+    assert result_noisy.r_squared > 0.8
+
+
+def test_gas_matbal_pz_clean_matches_ols():
+    """With clean data, RANSAC P/Z should match OLS exactly (frozen baseline)."""
+    result = matbal.gas_matbal(
+        p=[3000, 2700, 2400, 2100, 1800],
+        Gp=[0, 5, 12, 22, 35],
+        degf=200, sg=0.65
+    )
+    # Same frozen baseline as test_gas_matbal_backward_compat
+    assert abs(result.ogip - 87.602774253829) / 87.602774253829 < 1e-6

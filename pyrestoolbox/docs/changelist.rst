@@ -17,7 +17,9 @@ Changelist in 3.0.4:
 - **oil_matbal() regression**: New ``regress`` parameter accepts a dict of parameter names and bounds (e.g. ``{'m': (0, 2), 'cf': (1e-6, 10e-6)}``). Optimizes to minimize the coefficient of variation of OOIP estimates across time steps using ``scipy.optimize.minimize`` with L-BFGS-B. Allowed keys: 'm', 'cf', 'cw', 'sw_i'. Results stored in ``OilMatbalResult.regressed``.
 - **oil_matbal() tabulated PVT**: New ``pvt_table`` parameter accepts ``{'p': [...], 'Rs': [...], 'Bo': [...], 'Bg': [...]}`` for user-supplied PVT. When provided, ``api`` and ``sg_sp`` are not required. Bubble point and Rs at Pb are inferred from the table when not explicitly specified.
 - **gas_matbal() tabulated PVT**: New ``pvt_table`` parameter accepts either ``{'p': [...], 'Z': [...]}`` or ``{'p': [...], 'Bg': [...]}``. Z and Bg are inter-converted internally. Providing both 'Z' and 'Bg' raises ValueError.
-- 580 validation tests (up from 416 in 3.0.3).
+- **RANSAC linear regression**: All linear regression in DCA fitting (``fit_decline()``, ``fit_decline_cum()``, ``fit_ratio()``) and gas material balance (``gas_matbal()`` P/Z regression) now uses RANSAC (Random Sample Consensus) with MAD-based outlier detection. Outlier-contaminated data produces robust fits; clean data reproduces ordinary least squares exactly. New ``ransac_linreg()`` utility in ``shared_fns``.
+- **Linearized hyperbolic fitting**: ``_fit_hyperbolic()`` and ``_fit_hyperbolic_cum()`` replaced scipy ``curve_fit`` with a grid-search-over-b linearization approach. For each trial b, the Arps equation becomes linear, and RANSAC regression recovers qi and di algebraically. Eliminates local minima from nonlinear optimization.
+- 588 validation tests (up from 580).
 
 
 Changelist in 3.0.3:

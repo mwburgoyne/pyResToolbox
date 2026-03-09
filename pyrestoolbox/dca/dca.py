@@ -53,7 +53,7 @@ import numpy as np
 from dataclasses import dataclass, field
 from typing import Optional
 
-from pyrestoolbox.shared_fns import convert_to_numpy, process_output
+from pyrestoolbox.shared_fns import convert_to_numpy, process_output, ransac_linreg
 
 
 @dataclass
@@ -335,11 +335,11 @@ def eur(qi, di, b, q_min):
 
 
 def _fit_exponential(t, q):
-    """Fit exponential decline via log-linear regression."""
+    """Fit exponential decline via log-linear RANSAC regression."""
     ln_q = np.log(q)
-    coeffs = np.polyfit(t, ln_q, 1)
-    di = -coeffs[0]
-    qi = np.exp(coeffs[1])
+    slope, intercept, _ = ransac_linreg(t, ln_q)
+    di = -slope
+    qi = np.exp(intercept)
     if di <= 0:
         return None
     q_pred = qi * np.exp(-di * t)
@@ -353,14 +353,14 @@ def _fit_exponential(t, q):
 
 
 def _fit_harmonic(t, q):
-    """Fit harmonic decline via 1/q linear regression."""
+    """Fit harmonic decline via 1/q RANSAC linear regression."""
     inv_q = 1.0 / q
-    coeffs = np.polyfit(t, inv_q, 1)
+    slope, intercept, _ = ransac_linreg(t, inv_q)
     # 1/q = 1/qi + di/qi * t  =>  slope = di/qi, intercept = 1/qi
-    if coeffs[1] <= 0:
+    if intercept <= 0:
         return None
-    qi = 1.0 / coeffs[1]
-    di = coeffs[0] * qi
+    qi = 1.0 / intercept
+    di = slope * qi
     if di <= 0:
         return None
     q_pred = qi / (1.0 + di * t)
@@ -374,27 +374,44 @@ def _fit_harmonic(t, q):
 
 
 def _fit_hyperbolic(t, q):
-    """Fit hyperbolic decline via scipy curve_fit."""
-    from scipy.optimize import curve_fit
+    """Fit hyperbolic decline via linearized grid search over b + RANSAC.
 
-    def hyp_func(t, qi, di, b):
-        return qi / (1.0 + b * di * t) ** (1.0 / b)
+    For a given b, q^(-b) = qi^(-b) + qi^(-b)*b*Di * t is linear in t.
+    Grid search over b finds the best R-squared, recovering qi and di
+    algebraically from intercept and slope.
+    """
+    best_r2 = -np.inf
+    best_result = None
 
-    try:
-        popt, _ = curve_fit(hyp_func, t, q, p0=[q[0], 0.1, 0.5],
-                            bounds=([0, 1e-6, 0.01], [q[0] * 3, 10.0, 0.99]),
-                            maxfev=5000)
-        qi, di, b = popt
-        q_pred = hyp_func(t, qi, di, b)
+    for b_trial in np.arange(0.05, 0.96, 0.01):
+        # Transform: Y = q^(-b) is linear in t
+        Y = q ** (-b_trial)
+        slope, intercept, _ = ransac_linreg(t, Y)
+
+        # intercept = qi^(-b), slope = qi^(-b) * b * di
+        if intercept <= 0:
+            continue
+        qi = intercept ** (-1.0 / b_trial)
+        if qi <= 0:
+            continue
+        di = slope / (intercept * b_trial)
+        if di <= 0:
+            continue
+
+        # Compute R-squared in original rate space
+        q_pred = qi / (1.0 + b_trial * di * t) ** (1.0 / b_trial)
         ss_res = np.sum((q - q_pred) ** 2)
         ss_tot = np.sum((q - np.mean(q)) ** 2)
         r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
-        return DeclineResult(
-            method='hyperbolic', qi=qi, di=di, b=b,
-            r_squared=r2, residuals=q - q_pred,
-        )
-    except (RuntimeError, ValueError):
-        return None
+
+        if r2 > best_r2:
+            best_r2 = r2
+            best_result = DeclineResult(
+                method='hyperbolic', qi=qi, di=di, b=b_trial,
+                r_squared=r2, residuals=q - q_pred,
+            )
+
+    return best_result
 
 
 def _fit_duong(t, q):
@@ -430,13 +447,13 @@ def _fit_duong(t, q):
 
 
 def _fit_exponential_cum(Np, q):
-    """Fit exponential decline via q-vs-Np linear regression.
+    """Fit exponential decline via q-vs-Np RANSAC linear regression.
 
     q = qi - di * Np  =>  slope = -di, intercept = qi
     """
-    coeffs = np.polyfit(Np, q, 1)
-    di = -coeffs[0]
-    qi = coeffs[1]
+    slope, intercept, _ = ransac_linreg(Np, q)
+    di = -slope
+    qi = intercept
     if di <= 0 or qi <= 0:
         return None
     q_pred = qi - di * Np
@@ -450,15 +467,15 @@ def _fit_exponential_cum(Np, q):
 
 
 def _fit_harmonic_cum(Np, q):
-    """Fit harmonic decline via log-linear q-vs-Np regression.
+    """Fit harmonic decline via log-linear q-vs-Np RANSAC regression.
 
     q = qi * exp(-di/qi * Np)  =>  ln(q) = ln(qi) - (di/qi) * Np
     """
     ln_q = np.log(q)
-    coeffs = np.polyfit(Np, ln_q, 1)
+    slope, intercept, _ = ransac_linreg(Np, ln_q)
     # slope = -di/qi, intercept = ln(qi)
-    qi = np.exp(coeffs[1])
-    di = -coeffs[0] * qi
+    qi = np.exp(intercept)
+    di = -slope * qi
     if di <= 0 or qi <= 0:
         return None
     q_pred = qi * np.exp(-di / qi * Np)
@@ -472,39 +489,56 @@ def _fit_harmonic_cum(Np, q):
 
 
 def _fit_hyperbolic_cum(Np, q):
-    """Fit hyperbolic decline via q-vs-Np curve_fit.
+    """Fit hyperbolic decline via linearized grid search over b + RANSAC.
 
-    q = qi * (1 - (1-b)*di*Np/qi)^(1/(1-b))
+    For a given b, Np = A + B * q^(1-b) where:
+      A = qi / ((1-b)*di)
+      B = -qi^b / ((1-b)*di)
+    Recover qi and di algebraically from regression coefficients.
     """
-    from scipy.optimize import curve_fit
+    best_r2 = -np.inf
+    best_result = None
 
-    def hyp_cum_func(Np, qi, di, b):
-        inner = 1.0 - (1.0 - b) * di * Np / qi
+    for b_trial in np.arange(0.05, 0.96, 0.01):
+        exp = 1.0 - b_trial
+        # Transform: Np = A + B * q^(1-b)
+        X = q ** exp
+        slope, intercept, _ = ransac_linreg(X, Np)
+
+        # A = intercept = qi / ((1-b)*di)
+        # B = slope = -qi^b / ((1-b)*di)
+        # B/A = -qi^b / qi = -qi^(b-1) = -1/qi^(1-b)
+        if abs(slope) < 1e-30 or abs(intercept) < 1e-30:
+            continue
+        ratio = slope / intercept  # = -1/qi^(1-b)
+        if ratio >= 0:
+            continue  # Need ratio < 0
+        qi_exp = -1.0 / ratio  # qi^(1-b)
+        if qi_exp <= 0:
+            continue
+        qi = qi_exp ** (1.0 / exp)
+        if qi <= 0:
+            continue
+        di = qi / (exp * intercept)
+        if di <= 0:
+            continue
+
+        # Compute R-squared in original rate space
+        inner = 1.0 - exp * di * Np / qi
         inner = np.maximum(inner, 1e-10)
-        return qi * inner ** (1.0 / (1.0 - b))
-
-    qi_guess = float(q[0]) * 1.1
-    Np_max = float(Np[-1])
-    # Dynamic upper bound for di to keep inner term positive
-    di_upper = qi_guess / ((1.0 - 0.01) * Np_max) if Np_max > 0 else 10.0
-    di_upper = max(di_upper, 0.01)
-
-    try:
-        popt, _ = curve_fit(hyp_cum_func, Np, q,
-                            p0=[qi_guess, 0.01, 0.5],
-                            bounds=([0, 1e-8, 0.01], [qi_guess * 3, di_upper, 0.99]),
-                            maxfev=5000)
-        qi, di, b = popt
-        q_pred = hyp_cum_func(Np, qi, di, b)
+        q_pred = qi * inner ** (1.0 / exp)
         ss_res = np.sum((q - q_pred) ** 2)
         ss_tot = np.sum((q - np.mean(q)) ** 2)
         r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
-        return DeclineResult(
-            method='hyperbolic', qi=qi, di=di, b=b,
-            r_squared=r2, residuals=q - q_pred,
-        )
-    except (RuntimeError, ValueError):
-        return None
+
+        if r2 > best_r2:
+            best_r2 = r2
+            best_result = DeclineResult(
+                method='hyperbolic', qi=qi, di=di, b=b_trial,
+                r_squared=r2, residuals=q - q_pred,
+            )
+
+    return best_result
 
 
 def fit_decline_cum(Np, q, method='best', t_calendar=None, Np_start=None, Np_end=None):
@@ -680,9 +714,8 @@ def fit_decline(t, q, method='best', t_start=None, t_end=None):
 
 
 def _fit_ratio_linear(x, ratio):
-    """Fit R = a + b*x via linear regression."""
-    coeffs = np.polyfit(x, ratio, 1)
-    a, b = coeffs[1], coeffs[0]
+    """Fit R = a + b*x via RANSAC linear regression."""
+    b, a, _ = ransac_linreg(x, ratio)
     r_pred = a + b * x
     ss_res = np.sum((ratio - r_pred) ** 2)
     ss_tot = np.sum((ratio - np.mean(ratio)) ** 2)
@@ -694,13 +727,12 @@ def _fit_ratio_linear(x, ratio):
 
 
 def _fit_ratio_exponential(x, ratio):
-    """Fit R = a * exp(b*x) via log-linear regression."""
+    """Fit R = a * exp(b*x) via log-linear RANSAC regression."""
     if np.any(ratio <= 0):
         return None
     ln_r = np.log(ratio)
-    coeffs = np.polyfit(x, ln_r, 1)
-    a = np.exp(coeffs[1])
-    b = coeffs[0]
+    b, ln_a, _ = ransac_linreg(x, ln_r)
+    a = np.exp(ln_a)
     r_pred = a * np.exp(b * x)
     ss_res = np.sum((ratio - r_pred) ** 2)
     ss_tot = np.sum((ratio - np.mean(ratio)) ** 2)
@@ -712,14 +744,13 @@ def _fit_ratio_exponential(x, ratio):
 
 
 def _fit_ratio_power(x, ratio):
-    """Fit R = a * x^b via log-log regression."""
+    """Fit R = a * x^b via log-log RANSAC regression."""
     if np.any(x <= 0) or np.any(ratio <= 0):
         return None
     ln_x = np.log(x)
     ln_r = np.log(ratio)
-    coeffs = np.polyfit(ln_x, ln_r, 1)
-    a = np.exp(coeffs[1])
-    b = coeffs[0]
+    b, ln_a, _ = ransac_linreg(ln_x, ln_r)
+    a = np.exp(ln_a)
     r_pred = a * x ** b
     ss_res = np.sum((ratio - r_pred) ** 2)
     ss_tot = np.sum((ratio - np.mean(ratio)) ** 2)

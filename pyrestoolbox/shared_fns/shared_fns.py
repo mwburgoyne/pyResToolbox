@@ -30,15 +30,18 @@ process_output      Convert results back to scalar or array based on input type
 check_2_inputs      Validate matched float/list inputs
 validate_pe_inputs  Centralized petroleum engineering input validation
 halley_solve_cubic  Halley's method cubic equation solver
+ransac_linreg       RANSAC-robust linear regression
 """
 
 __all__ = [
     'bisect_solve', 'convert_to_numpy', 'process_output',
     'check_2_inputs', 'validate_pe_inputs', 'halley_solve_cubic',
+    'ransac_linreg',
 ]
 
 import numpy as np
-from typing import Union, List
+from math import ceil
+from typing import Union, List, Tuple
 
 def bisect_solve(args, f, xmin, xmax, rtol):
     if xmin > xmax:
@@ -206,3 +209,108 @@ def check_2_inputs(x: Union[float, List[float]], y: Union[float, List[float]]) -
     if isinstance(x, (list, np.ndarray)) and isinstance(y, (list, np.ndarray)):
         return len(x) == len(y)
     return False
+
+
+def ransac_linreg(x: np.ndarray, y: np.ndarray,
+                  n_iter: int = 200, threshold_sigma: float = 3.0,
+                  seed: int = 42,
+                  through_origin: bool = False) -> Tuple[float, float, np.ndarray]:
+    """RANSAC-robust linear regression.
+
+    Fits y = slope * x + intercept (or y = slope * x if through_origin).
+    Uses MAD-based inlier threshold for outlier robustness. With clean data
+    the MAD threshold becomes very large, all points are inliers, and the
+    result matches ordinary least squares exactly.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        Independent variable.
+    y : np.ndarray
+        Dependent variable.
+    n_iter : int
+        Number of random sample iterations (default 200).
+    threshold_sigma : float
+        Inlier threshold in MAD-derived sigma units (default 3.0).
+    seed : int
+        Random seed for reproducibility (default 42).
+    through_origin : bool
+        If True, fit y = slope * x with zero intercept (default False).
+
+    Returns
+    -------
+    slope : float
+        Fitted slope.
+    intercept : float
+        Fitted intercept (0.0 if through_origin).
+    inlier_mask : np.ndarray
+        Boolean array identifying inlier points.
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    n = len(x)
+
+    if n < 2:
+        raise ValueError("Need at least 2 data points for linear regression")
+
+    min_samples = 1 if through_origin else 2
+    min_inliers = max(min_samples, ceil(0.5 * n))
+
+    def _fit_ols(x_s, y_s):
+        """OLS fit on subset. Returns (slope, intercept)."""
+        if through_origin:
+            # slope = sum(x*y) / sum(x^2)
+            denom = np.sum(x_s * x_s)
+            if abs(denom) < 1e-30:
+                return 0.0, 0.0
+            return float(np.sum(x_s * y_s) / denom), 0.0
+        else:
+            n_s = len(x_s)
+            sx = np.sum(x_s)
+            sy = np.sum(y_s)
+            sxx = np.sum(x_s * x_s)
+            sxy = np.sum(x_s * y_s)
+            denom = n_s * sxx - sx * sx
+            if abs(denom) < 1e-30:
+                return 0.0, float(np.mean(y_s))
+            slope = (n_s * sxy - sx * sy) / denom
+            intercept = (sy - slope * sx) / n_s
+            return float(slope), float(intercept)
+
+    # Compute MAD-based threshold from full-data OLS residuals
+    slope_full, intercept_full = _fit_ols(x, y)
+    residuals_full = y - (slope_full * x + intercept_full)
+    mad = np.median(np.abs(residuals_full - np.median(residuals_full)))
+    sigma_est = 1.4826 * mad  # MAD to std-dev for normal distribution
+    if sigma_est < 1e-15:
+        # Near-perfect fit (clean data) — all points are inliers
+        return slope_full, intercept_full, np.ones(n, dtype=bool)
+
+    threshold = threshold_sigma * sigma_est
+
+    rng = np.random.RandomState(seed)
+    best_n_inliers = 0
+    best_inlier_mask = np.ones(n, dtype=bool)
+    best_slope = slope_full
+    best_intercept = intercept_full
+
+    for _ in range(n_iter):
+        idx = rng.choice(n, size=min_samples, replace=False)
+        slope_t, intercept_t = _fit_ols(x[idx], y[idx])
+        residuals_t = np.abs(y - (slope_t * x + intercept_t))
+        inlier_mask = residuals_t < threshold
+        n_inliers = int(np.sum(inlier_mask))
+
+        if n_inliers > best_n_inliers and n_inliers >= min_inliers:
+            # Refit on all inliers
+            slope_r, intercept_r = _fit_ols(x[inlier_mask], y[inlier_mask])
+            best_slope = slope_r
+            best_intercept = intercept_r
+            best_n_inliers = n_inliers
+            best_inlier_mask = inlier_mask
+
+    if best_n_inliers < min_inliers:
+        # RANSAC couldn't find a good consensus — fall back to full OLS
+        return slope_full, intercept_full, np.ones(n, dtype=bool)
+
+    return best_slope, best_intercept, best_inlier_mask
