@@ -507,7 +507,7 @@ def _fit_hyperbolic_cum(Np, q):
         return None
 
 
-def fit_decline_cum(Np, q, method='best', t_calendar=None):
+def fit_decline_cum(Np, q, method='best', t_calendar=None, Np_start=None, Np_end=None):
     """Fit a decline model to rate-vs-cumulative data.
 
     Eliminates time from the Arps equations to fit q as a function of Np.
@@ -527,6 +527,10 @@ def fit_decline_cum(Np, q, method='best', t_calendar=None):
         Calendar time stamps corresponding to each data point. When provided,
         uptime fractions are inferred by comparing calendar-average rates to
         fitted capacity rates.
+    Np_start : float, optional
+        Start of fitting window on cumulative axis (inclusive).
+    Np_end : float, optional
+        End of fitting window on cumulative axis (inclusive).
 
     Returns
     -------
@@ -535,6 +539,20 @@ def fit_decline_cum(Np, q, method='best', t_calendar=None):
     """
     Np = np.asarray(Np, dtype=float)
     q = np.asarray(q, dtype=float)
+
+    if Np_start is not None or Np_end is not None:
+        mask = np.ones(len(Np), dtype=bool)
+        if Np_start is not None:
+            mask &= (Np >= Np_start)
+        if Np_end is not None:
+            mask &= (Np <= Np_end)
+        Np = Np[mask]
+        q = q[mask]
+        if t_calendar is not None:
+            t_calendar = np.asarray(t_calendar, dtype=float)[mask]
+        if len(Np) == 0:
+            raise ValueError("No data points within the specified Np_start/Np_end window")
+        Np = Np - Np[0]  # Shift so window starts at Np=0
 
     if len(Np) != len(q):
         raise ValueError(f"Np and q must have same length, got {len(Np)} and {len(q)}")
@@ -593,7 +611,7 @@ def fit_decline_cum(Np, q, method='best', t_calendar=None):
     return best
 
 
-def fit_decline(t, q, method='best'):
+def fit_decline(t, q, method='best', t_start=None, t_end=None):
     """Fit a decline model to production data.
 
     Parameters
@@ -605,6 +623,10 @@ def fit_decline(t, q, method='best'):
     method : str
         'exponential', 'harmonic', 'hyperbolic', 'duong', or 'best' (default).
         'best' tries all four and returns the one with highest R-squared.
+    t_start : float, optional
+        Start of fitting window (inclusive). Data before t_start is excluded.
+    t_end : float, optional
+        End of fitting window (inclusive). Data after t_end is excluded.
 
     Returns
     -------
@@ -612,6 +634,18 @@ def fit_decline(t, q, method='best'):
     """
     t = np.asarray(t, dtype=float)
     q = np.asarray(q, dtype=float)
+
+    if t_start is not None or t_end is not None:
+        mask = np.ones(len(t), dtype=bool)
+        if t_start is not None:
+            mask &= (t >= t_start)
+        if t_end is not None:
+            mask &= (t <= t_end)
+        t = t[mask]
+        q = q[mask]
+        if len(t) == 0:
+            raise ValueError("No data points within the specified t_start/t_end window")
+        t = t - t[0]  # Shift so window starts at t=0
 
     if len(t) != len(q):
         raise ValueError(f"t and q must have same length, got {len(t)} and {len(q)}")

@@ -12,7 +12,12 @@ Changelist in 3.0.4:
 - **fit_ratio() / ratio_forecast()**: New functions for fitting secondary phase ratio models (e.g. GOR, WOR) to production data. Four models: linear, exponential, power, and logistic. Returns ``RatioResult`` dataclass with ``domain`` field ('cum' or 'time') controlling how ``forecast()`` evaluates the ratio. ``ratio_forecast()`` evaluates fitted models at arbitrary x values.
 - **forecast() extensions**: New ``uptime`` parameter (default 1.0) scales capacity rate to calendar-effective rate. New ``ratios`` parameter accepts a dict of ``RatioResult`` objects for secondary phase forecasting — each ratio is evaluated against cumulative or time per its domain, producing per-phase rate and cumulative arrays in ``ForecastResult.secondary``. Fully backward compatible.
 - **RatioResult**: New dataclass for ratio fitting results with method, parameters (a, b, c), domain, R-squared, and residuals.
-- 533 validation tests (up from 416 in 3.0.3).
+- **gas_matbal() aquifer support**: New ``Wp``, ``Bw``, and ``We`` parameters for water production and aquifer influx. Cole plot diagnostics (``F/Et`` vs ``Gp``) computed for all cases. When ``We`` is provided, Havlena-Odeh forced-through-origin regression determines OGIP. ``GasMatbalResult`` extended with ``bg``, ``F``, ``Et``, ``cole_F_over_Et``, and ``method`` fields. Fully backward compatible.
+- **fit_decline()** / **fit_decline_cum()**: New ``t_start``/``t_end`` and ``Np_start``/``Np_end`` parameters for windowed fitting. Data outside the window is excluded and the window is shifted to start at zero, so the returned ``qi`` represents the rate at the window start.
+- **oil_matbal() regression**: New ``regress`` parameter accepts a dict of parameter names and bounds (e.g. ``{'m': (0, 2), 'cf': (1e-6, 10e-6)}``). Optimizes to minimize the coefficient of variation of OOIP estimates across time steps using ``scipy.optimize.minimize`` with L-BFGS-B. Allowed keys: 'm', 'cf', 'cw', 'sw_i'. Results stored in ``OilMatbalResult.regressed``.
+- **oil_matbal() tabulated PVT**: New ``pvt_table`` parameter accepts ``{'p': [...], 'Rs': [...], 'Bo': [...], 'Bg': [...]}`` for user-supplied PVT. When provided, ``api`` and ``sg_sp`` are not required. Bubble point and Rs at Pb are inferred from the table when not explicitly specified.
+- **gas_matbal() tabulated PVT**: New ``pvt_table`` parameter accepts either ``{'p': [...], 'Z': [...]}`` or ``{'p': [...], 'Bg': [...]}``. Z and Bg are inter-converted internally. Providing both 'Z' and 'Bg' raises ValueError.
+- 580 validation tests (up from 416 in 3.0.3).
 
 
 Changelist in 3.0.3:

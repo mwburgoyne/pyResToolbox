@@ -473,3 +473,119 @@ def test_forecast_backward_compat():
     assert fc.eur > 0
     # Rate should be declining
     assert fc.q[-1] < fc.q[0]
+
+
+# ======================== fit_decline windowing tests ========================
+
+def test_fit_decline_window_start_only():
+    """Window t_start=20 on exponential data. qi ≈ rate at t=20, di ≈ 0.05."""
+    t = np.arange(1, 101, dtype=float)
+    q = 1000 * np.exp(-0.05 * t)
+    result = dca.fit_decline(t, q, method='exponential', t_start=20)
+    expected_qi = 1000 * np.exp(-0.05 * 20)  # 367.879...
+    assert abs(result.qi - expected_qi) / expected_qi < 0.01
+    assert abs(result.di - 0.05) / 0.05 < 0.01
+    assert result.r_squared > 0.99
+
+
+def test_fit_decline_window_both():
+    """Window t_start=20, t_end=60. qi ≈ rate at t=20, R² > 0.99."""
+    t = np.arange(1, 101, dtype=float)
+    q = 1000 * np.exp(-0.05 * t)
+    result = dca.fit_decline(t, q, method='exponential', t_start=20, t_end=60)
+    expected_qi = 1000 * np.exp(-0.05 * 20)
+    assert abs(result.qi - expected_qi) / expected_qi < 0.01
+    assert abs(result.di - 0.05) / 0.05 < 0.01
+    assert result.r_squared > 0.99
+
+
+def test_fit_decline_window_end_only():
+    """Window t_end=50 only. Shift by t[0]. R² > 0.99."""
+    t = np.arange(1, 101, dtype=float)
+    q = 1000 * np.exp(-0.05 * t)
+    result = dca.fit_decline(t, q, method='exponential', t_end=50)
+    # t[0]=1, so qi ≈ rate at t=1
+    expected_qi = 1000 * np.exp(-0.05 * 1)
+    assert abs(result.qi - expected_qi) / expected_qi < 0.01
+    assert result.r_squared > 0.99
+
+
+def test_fit_decline_window_too_few():
+    """Window leaves < 3 points. ValueError."""
+    t = np.arange(1, 101, dtype=float)
+    q = 1000 * np.exp(-0.05 * t)
+    try:
+        dca.fit_decline(t, q, method='exponential', t_start=99, t_end=100)
+        assert False, "Should raise ValueError"
+    except ValueError:
+        pass
+
+
+def test_fit_decline_window_empty():
+    """Window outside data range. ValueError."""
+    t = np.arange(1, 101, dtype=float)
+    q = 1000 * np.exp(-0.05 * t)
+    try:
+        dca.fit_decline(t, q, method='exponential', t_start=200)
+        assert False, "Should raise ValueError"
+    except ValueError:
+        pass
+
+
+def test_fit_decline_window_backward_compat():
+    """No t_start/t_end. Same result as before."""
+    t = np.arange(1, 51, dtype=float)
+    q = 1000 * np.exp(-0.05 * t)
+    result = dca.fit_decline(t, q, method='exponential')
+    assert result.method == 'exponential'
+    assert abs(result.qi - 1000.0000000000007) / 1000.0 < 1e-4
+    assert abs(result.di - 0.05000000000000006) / 0.05 < 1e-4
+    assert abs(result.r_squared - 1.0) < 1e-6
+
+
+def test_fit_decline_window_best():
+    """Windowed with method='best'. Valid result."""
+    t = np.arange(1, 101, dtype=float)
+    q = 1000 * np.exp(-0.05 * t)
+    result = dca.fit_decline(t, q, method='best', t_start=20, t_end=60)
+    assert result.r_squared > 0.99
+    assert result.qi > 0
+
+
+def test_fit_decline_cum_window_basic():
+    """Cumulative window: Np_start at midpoint. R² > 0.95."""
+    qi, di = 1000.0, 0.05
+    t = np.arange(1, 101, dtype=float)
+    q = qi * np.exp(-di * t)
+    Np = np.array([float(dca.arps_cum(qi, di, 0, ti)) for ti in t])
+    Np_mid = Np[49]
+    result = dca.fit_decline_cum(Np, q, method='exponential', Np_start=Np_mid)
+    assert abs(result.di - 0.05) / 0.05 < 0.05
+    assert result.r_squared > 0.95
+
+
+def test_fit_decline_cum_window_both():
+    """Cumulative window: Np_start and Np_end. R² > 0.95."""
+    qi, di = 1000.0, 0.05
+    t = np.arange(1, 101, dtype=float)
+    q = qi * np.exp(-di * t)
+    Np = np.array([float(dca.arps_cum(qi, di, 0, ti)) for ti in t])
+    result = dca.fit_decline_cum(Np, q, method='exponential',
+                                  Np_start=Np[20], Np_end=Np[70])
+    assert abs(result.di - 0.05) / 0.05 < 0.05
+    assert result.r_squared > 0.95
+
+
+def test_fit_decline_cum_window_with_tcalendar():
+    """Windowed fit_decline_cum with t_calendar. uptime_history length correct."""
+    qi, di = 1000.0, 0.05
+    t = np.arange(1, 101, dtype=float)
+    q = qi * np.exp(-di * t)
+    Np = np.array([float(dca.arps_cum(qi, di, 0, ti)) for ti in t])
+    t_calendar = t.copy()
+    result = dca.fit_decline_cum(Np, q, method='exponential',
+                                  Np_start=Np[20], Np_end=Np[70],
+                                  t_calendar=t_calendar)
+    assert result.uptime_history is not None
+    # Window from index 20 to 70 = 51 points, uptime_history = n-1 = 50
+    assert len(result.uptime_history) == 50
