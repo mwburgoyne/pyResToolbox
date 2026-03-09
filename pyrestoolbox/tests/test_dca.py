@@ -589,3 +589,87 @@ def test_fit_decline_cum_window_with_tcalendar():
     assert result.uptime_history is not None
     # Window from index 20 to 70 = 51 points, uptime_history = n-1 = 50
     assert len(result.uptime_history) == 50
+
+
+# ======================== RANSAC outlier robustness tests ========================
+
+def test_fit_exponential_outliers():
+    """Exponential fit with outliers should still recover parameters.
+    RANSAC recovers correct qi/di even though R-squared (computed against
+    all points including outliers) may be low."""
+    t = np.arange(1, 101, dtype=float)
+    q = 1000 * np.exp(-0.05 * t)
+    # Add 5 large outliers
+    rng = np.random.RandomState(123)
+    outlier_idx = rng.choice(len(t), 5, replace=False)
+    q_noisy = q.copy()
+    q_noisy[outlier_idx] = q[outlier_idx] * rng.uniform(3, 10, 5)
+    result = dca.fit_decline(t, q_noisy, method='exponential')
+    assert abs(result.qi - 1000) / 1000 < 0.1
+    assert abs(result.di - 0.05) / 0.05 < 0.1
+
+
+def test_fit_harmonic_outliers():
+    """Harmonic fit with outliers should still recover parameters."""
+    t = np.arange(1, 101, dtype=float)
+    q = 1000 / (1 + 0.05 * t)
+    q_noisy = q.copy()
+    q_noisy[10] = q[10] * 5
+    q_noisy[50] = q[50] * 8
+    result = dca.fit_decline(t, q_noisy, method='harmonic')
+    assert abs(result.qi - 1000) / 1000 < 0.15
+
+
+def test_fit_hyperbolic_outliers():
+    """Hyperbolic fit with outliers should still recover reasonable b.
+    Rate outliers in the transformed q^(-b) space are compressed, so
+    parameter recovery is less precise than exponential/harmonic cases."""
+    t = np.arange(1, 101, dtype=float)
+    b_true = 0.5
+    q = 1000 / (1 + b_true * 0.1 * t) ** (1.0 / b_true)
+    q_noisy = q.copy()
+    q_noisy[5] = q[5] * 6
+    q_noisy[30] = q[30] * 4
+    q_noisy[70] = q[70] * 5
+    result = dca.fit_decline(t, q_noisy, method='hyperbolic')
+    assert 0.2 < result.b < 0.9
+    assert result.qi > 0
+    assert result.di > 0
+
+
+def test_fit_ratio_linear_outliers():
+    """Linear ratio fit with outliers should recover slope and intercept."""
+    x = np.arange(1, 51, dtype=float)
+    ratio = 0.5 + 0.02 * x
+    ratio_noisy = ratio.copy()
+    ratio_noisy[5] = 20.0  # big outlier
+    ratio_noisy[25] = -5.0  # big outlier
+    result = dca.fit_ratio(x, ratio_noisy, method='linear')
+    assert abs(result.a - 0.5) < 0.2
+    assert abs(result.b - 0.02) < 0.005
+
+
+def test_fit_cum_exponential_outliers():
+    """Cumulative exponential fit with outliers should recover di."""
+    qi, di = 1000.0, 0.05
+    t = np.arange(1, 101, dtype=float)
+    q = qi * np.exp(-di * t)
+    Np = np.array([float(dca.arps_cum(qi, di, 0, ti)) for ti in t])
+    q_noisy = q.copy()
+    q_noisy[20] = q[20] * 5
+    q_noisy[60] = q[60] * 4
+    result = dca.fit_decline_cum(Np, q_noisy, method='exponential')
+    assert abs(result.di - 0.05) / 0.05 < 0.15
+
+
+def test_fit_hyperbolic_cum_outliers():
+    """Cumulative hyperbolic fit with outliers should recover reasonable b."""
+    qi, di, b = 1000.0, 0.1, 0.5
+    t = np.arange(1, 101, dtype=float)
+    q = np.array([float(dca.arps_rate(qi, di, b, ti)) for ti in t])
+    Np = np.array([float(dca.arps_cum(qi, di, b, ti)) for ti in t])
+    q_noisy = q.copy()
+    q_noisy[15] = q[15] * 4
+    q_noisy[45] = q[45] * 3
+    result = dca.fit_decline_cum(Np, q_noisy, method='hyperbolic')
+    assert 0.1 < result.b < 0.9

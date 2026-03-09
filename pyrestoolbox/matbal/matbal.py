@@ -48,6 +48,7 @@ from pyrestoolbox.constants import CUFTperBBL, psc, tscr, degF2R
 from pyrestoolbox.constants import BAR_TO_PSI, degc_to_degf, PSI_TO_BAR
 from pyrestoolbox.constants import SCF_PER_STB_TO_SM3_PER_SM3, SM3_PER_SM3_TO_SCF_PER_STB
 from pyrestoolbox.classes import z_method, c_method, rs_method, bo_method
+from pyrestoolbox.shared_fns import ransac_linreg
 
 
 @dataclass
@@ -267,10 +268,8 @@ def gas_matbal(p, Gp, degf, sg=0.65, co2=0, h2s=0, n2=0, h2=0,
 
     pz = p / z
 
-    # Linear regression: P/Z = intercept + slope * Gp
-    coeffs = np.polyfit(Gp, pz, 1)
-    slope = coeffs[0]
-    intercept = coeffs[1]
+    # Linear regression: P/Z = intercept + slope * Gp (RANSAC for outlier robustness)
+    slope, intercept, _ = ransac_linreg(Gp, pz)
 
     # P/Z OGIP = -intercept / slope (where P/Z = 0)
     if abs(slope) < 1e-30:
@@ -278,7 +277,7 @@ def gas_matbal(p, Gp, degf, sg=0.65, co2=0, h2s=0, n2=0, h2=0,
     pz_ogip = -intercept / slope
 
     # R-squared
-    pz_pred = np.polyval(coeffs, Gp)
+    pz_pred = slope * Gp + intercept
     ss_res = np.sum((pz - pz_pred) ** 2)
     ss_tot = np.sum((pz - np.mean(pz)) ** 2)
     r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
