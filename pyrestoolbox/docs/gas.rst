@@ -174,6 +174,20 @@ Returns a tuple of critical temperature (deg R, or K if metric=True) and critica
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
 
+.. list-table:: Returns (tuple)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Index
+     - Type
+     - Description
+   * - [0]
+     - float
+     - Critical temperature (deg R, or K if metric=True)
+   * - [1]
+     - float
+     - Critical pressure (psia, or barsa if metric=True)
+
 Examples:
 
 .. code-block:: python
@@ -245,6 +259,17 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
    * - metric
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float or np.ndarray
+     - Gas Z-factor (dimensionless). Returns same type as input p
 
 Examples:
 
@@ -321,6 +346,17 @@ Furnishing a positive value for zee means it will be used instead of calculating
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float or np.ndarray
+     - Gas viscosity (cP), or viscosity * Z product if ugz=True. Returns same type as input p
+
 Examples:
 
 .. code-block:: python
@@ -383,6 +419,17 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
    * - metric
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float or np.ndarray
+     - Gas compressibility (1/psi, or 1/barsa if metric=True). Returns same type as input p
 
 Examples:
 
@@ -450,6 +497,17 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float or np.ndarray
+     - Gas formation volume factor (rcf/scf, or rm3/sm3 if metric=True). Returns same type as input p
+
 Examples:
 
 .. code-block:: python
@@ -515,6 +573,17 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float or np.ndarray
+     - Gas density (lb/cuft, or kg/m3 if metric=True). Returns same type as input p
+
 Examples:
 
 .. code-block:: python
@@ -551,6 +620,17 @@ Returns saturated volume of water vapor in natural gas (stb/mmscf). From 'PVT an
    * - metric
      - bool
      - If True, pressure in barsa, temperature in deg C. Defaults to False
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Saturated water vapor content (stb/mmscf)
 
 Examples:
 
@@ -620,6 +700,17 @@ A float or list / array can be used for poverz, returning corresponding 1-D arra
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float or np.ndarray
+     - Gas pressure (psia, or barsa if metric=True). Returns same type as input poverz
+
 Examples:
 
 .. code-block:: python
@@ -686,6 +777,17 @@ Returns gas specific gravity consistent with observed gas gradient. Calculated t
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Gas specific gravity (relative to air)
+
 Examples:
 
 .. code-block:: python
@@ -751,6 +853,17 @@ Integrates the equation: m(p) = 2 * p / (ug * z)
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Pseudo-pressure integral (psi2/cP, or bar2/cP if metric=True)
+
 Examples:
 
 .. code-block:: python
@@ -790,6 +903,17 @@ Returns SG of FWS gas
    * - metric
      - bool
      - If True, CGR input in sm3/sm3. Defaults to False
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Full wellstream gas specific gravity (relative to air)
 
 Examples:
 
@@ -876,6 +1000,17 @@ A ``gas_pvt`` object can be provided instead of individual gas composition param
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float or np.ndarray
+     - Gas rate (Mscf/day, or sm3/d if metric=True). Returns same type as the array input
+
 Examples:
 
 .. code-block:: python
@@ -926,6 +1061,17 @@ Returns specific gravity of a gas mixture (relative to air) given the hydrocarbo
    * - h2
      - float
      - Molar fraction of Hydrogen in the total gas mixture
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Gas mixture specific gravity (relative to air)
 
 Examples:
 
@@ -1005,6 +1151,17 @@ A ``gas_pvt`` object can be provided instead of individual gas composition param
    * - metric
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float or np.ndarray
+     - Gas rate (Mscf/day, or sm3/d if metric=True). Returns same type as the array input
 
 Examples:
 
@@ -1092,43 +1249,60 @@ Two HFT correlations are available: Motiee (1991) and Towler & Mokhatab (2005). 
      - bool
      - If True, inputs/outputs use Eclipse METRIC units (barsa, deg C). Defaults to False
 
-.. list-table:: HydrateResult Attributes
-   :widths: 15 40
+.. list-table:: Returns (HydrateResult)
+   :widths: 10 15 40
    :header-rows: 1
 
    * - Attribute
+     - Type
      - Description
    * - hft
+     - float
      - Hydrate formation temperature at operating pressure (deg F | deg C)
    * - hfp
+     - float
      - Hydrate formation pressure at operating temperature (psia | barsa)
    * - subcooling
+     - float
      - HFT minus operating temperature (deg F | deg C delta). Positive = in hydrate window
    * - in_hydrate_window
+     - bool
      - True if operating temperature is below HFT
    * - inhibited_hft
+     - float
      - HFT after inhibitor depression (deg F | deg C), or NaN if no inhibitor specified
    * - inhibitor_depression
+     - float
      - Temperature depression from inhibitor (deg F | deg C delta), or 0
    * - required_inhibitor_wt_pct
+     - float
      - Wt% inhibitor in aqueous phase needed to bring HFT below operating temperature, capped at physical maximum for selected inhibitor. 0 if no inhibitor or outside hydrate window
    * - max_inhibitor_wt_pct
+     - float
      - Maximum valid wt% for selected inhibitor type (MEOH: 25, MEG: 70, DEG: 70, TEG: 50, ETOH: 30). 0 if no inhibitor specified
    * - inhibitor_underdosed
+     - bool
      - True if ``required_inhibitor_wt_pct`` exceeds ``max_inhibitor_wt_pct`` for the selected inhibitor type — meaning this inhibitor **cannot** provide sufficient depression even at its physical maximum concentration. This does NOT indicate whether the *applied* ``inhibitor_wt_pct`` is sufficient; compare ``inhibited_hft`` to the operating temperature to determine if the applied dose provides protection
    * - water_vaporized_res
+     - float
      - Vaporized water content at reservoir P,T (stb/MMscf | sm3/sm3). This is the water the gas picked up in the reservoir
    * - water_vaporized_op
+     - float
      - Vaporized water content at operating P,T (stb/MMscf | sm3/sm3). This is the water the gas can still hold at the assessment point
    * - water_condensed
+     - float
      - Water that condensed from vapor between reservoir and operating conditions (stb/MMscf | sm3/sm3). Equals max(water_vaporized_res - water_vaporized_op, 0)
    * - free_water
+     - float
      - Free liquid water entrained from the reservoir (stb/MMscf | sm3/sm3). Equals the ``additional_water`` input
    * - total_liquid_water
+     - float
      - Total liquid water at operating point: condensed + free water (stb/MMscf | sm3/sm3). This is the water that needs inhibitor treatment
    * - inhibitor_mass_rate
+     - float
      - Required inhibitor mass injection rate based on total liquid water (lb/MMscf | kg/sm3). 0 if outside hydrate window or no inhibitor
    * - inhibitor_vol_rate
+     - float
      - Required inhibitor volume injection rate based on total liquid water (gal/MMscf | L/sm3). 0 if outside hydrate window or no inhibitor
 
 Examples:

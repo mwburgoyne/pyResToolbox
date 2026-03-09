@@ -54,6 +54,16 @@ Returns specified critical property of a component
      - str
      - The EOS model. Selections are 'PR79', 'PR77', 'SRK', 'RK', with default 'PR79'. Used for EOS specific critical properties for Acentric, VTran, Tb_F and SpGr.
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Specified critical property value for the component
 
 Examples:
 
@@ -76,8 +86,18 @@ pyrestoolbox.library.components
 
     pyrestoolbox.library.components -> list:
 
-Returns a list of all available components in the library    
+Returns a list of all available components in the library
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - list
+     - List of component shorthand names available in the library
 
 Example:
 
@@ -95,8 +115,18 @@ pyrestoolbox.library.names
 
     pyrestoolbox.library.names -> list:
 
-Returns a list of long-form names of all components available in the Library   
+Returns a list of long-form names of all components available in the Library
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - list
+     - List of long-form component names
 
 Example:
 
@@ -113,8 +143,18 @@ pyrestoolbox.library.property_list
 
     pyrestoolbox.library.property_list -> list:
 
-Returns a list of all critical properties available for components in the Library   
+Returns a list of all critical properties available for components in the Library
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - list
+     - List of critical property names available
 
 Example:
 
@@ -131,8 +171,18 @@ pyrestoolbox.library.models
 
     pyrestoolbox.library.models -> list:
 
-Returns a list of all valid EOS models in the Library   
+Returns a list of all valid EOS models in the Library
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - list
+     - List of valid EOS model names
 
 Example:
 
@@ -149,8 +199,18 @@ pyrestoolbox.library.df
 
     pyrestoolbox.library.df -> pandas.DataFrame:
 
-Returns a dataframe of the Library data   
+Returns a dataframe of the Library data
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - pandas.DataFrame
+     - Full library data with all components and properties
 
 Example:
 

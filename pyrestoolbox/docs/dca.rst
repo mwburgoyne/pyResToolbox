@@ -36,6 +36,17 @@ Arps decline rate at time t.
      - float or array
      - Time
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float or np.ndarray
+     - Rate at time t. Returns same type as input t
+
 Examples:
 
 .. code-block:: python
@@ -83,6 +94,17 @@ Arps cumulative production at time t.
      - float or array
      - Time
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float or np.ndarray
+     - Cumulative production at time t. Returns same type as input t
+
 Examples:
 
 .. code-block:: python
@@ -123,6 +145,17 @@ Duong decline rate for unconventional reservoirs. q(t) = qi * t^(-m) * exp(a/(1-
      - float or array
      - Time (must be > 0)
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float or np.ndarray
+     - Rate at time t. Returns same type as input t
+
 Examples:
 
 .. code-block:: python
@@ -162,6 +195,17 @@ Estimated ultimate recovery for Arps decline (cumulative production when rate re
    * - q_min
      - float
      - Economic limit rate
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - EUR (cumulative production when rate reaches q_min)
 
 Examples:
 
@@ -205,6 +249,38 @@ Fit a decline model to time-domain production data. Optional ``t_start`` and ``t
    * - t_end
      - float, optional
      - End of fitting window (inclusive). Data after t_end is excluded
+
+.. list-table:: Returns (DeclineResult)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Attribute
+     - Type
+     - Description
+   * - method
+     - str
+     - Decline model name ('exponential', 'harmonic', 'hyperbolic', or 'duong')
+   * - qi
+     - float
+     - Initial rate (volume/time)
+   * - di
+     - float
+     - Initial decline rate (1/time). 0 for Duong
+   * - b
+     - float
+     - Arps b-factor. 0 for exponential, 1 for harmonic. 0 for Duong
+   * - a
+     - float
+     - Duong 'a' parameter. 0 for Arps models
+   * - m
+     - float
+     - Duong 'm' parameter. 0 for Arps models
+   * - r_squared
+     - float
+     - Coefficient of determination of the fit
+   * - residuals
+     - np.ndarray
+     - Residual array (observed - predicted)
 
 Examples:
 
@@ -279,6 +355,38 @@ Optional ``Np_start`` and ``Np_end`` parameters restrict fitting to a cumulative
      - float, optional
      - End of fitting window on cumulative axis (inclusive)
 
+.. list-table:: Returns (DeclineResult)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Attribute
+     - Type
+     - Description
+   * - method
+     - str
+     - Decline model name ('exponential', 'harmonic', or 'hyperbolic')
+   * - qi
+     - float
+     - Initial rate (volume/time)
+   * - di
+     - float
+     - Initial decline rate (1/time)
+   * - b
+     - float
+     - Arps b-factor. 0 for exponential, 1 for harmonic
+   * - r_squared
+     - float
+     - Coefficient of determination of the fit
+   * - residuals
+     - np.ndarray
+     - Residual array (observed - predicted)
+   * - uptime_mean
+     - float or None
+     - Mean uptime fraction when t_calendar is provided
+   * - uptime_history
+     - np.ndarray or None
+     - Per-interval uptime fractions when t_calendar is provided
+
 Examples:
 
 .. code-block:: python
@@ -344,6 +452,35 @@ The ``domain`` parameter ('cum' or 'time') is stored in the result and controls 
      - str
      - 'cum' or 'time' — stored in result for use by forecast()
 
+.. list-table:: Returns (RatioResult)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Attribute
+     - Type
+     - Description
+   * - method
+     - str
+     - Ratio model name ('linear', 'exponential', 'power', or 'logistic')
+   * - a
+     - float
+     - Primary parameter (intercept / coefficient / Rmax for logistic)
+   * - b
+     - float
+     - Slope / exponent / growth rate
+   * - c
+     - float
+     - Logistic offset parameter (only used for logistic model, 0 otherwise)
+   * - domain
+     - str
+     - 'time' or 'cum' — tells forecast() which x-axis to use
+   * - r_squared
+     - float
+     - Coefficient of determination of the fit
+   * - residuals
+     - np.ndarray
+     - Residual array (observed - predicted)
+
 Examples:
 
 .. code-block:: python
@@ -383,6 +520,17 @@ Evaluate a fitted ratio model at given x values.
    * - x
      - float or array-like
      - Independent variable values to evaluate at
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float or np.ndarray
+     - Ratio value at x. Returns same type as input x
 
 Examples:
 
@@ -432,6 +580,29 @@ The ``ratios`` parameter accepts a dict mapping names to ``RatioResult`` objects
      - dict, optional
      - Maps names to RatioResult objects for secondary phase forecasting
 
+.. list-table:: Returns (ForecastResult)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Attribute
+     - Type
+     - Description
+   * - t
+     - np.ndarray
+     - Time array
+   * - q
+     - np.ndarray
+     - Rate array (calendar-effective, i.e. capacity * uptime)
+   * - Qcum
+     - np.ndarray
+     - Cumulative production array
+   * - eur
+     - float
+     - Estimated ultimate recovery (final cumulative value)
+   * - secondary
+     - dict or None
+     - Per-name dict with 'ratio', 'rate', 'cum' arrays when ratios are provided
+
 Examples:
 
 .. code-block:: python
@@ -461,8 +632,8 @@ Class Objects
    * - Class
      - Description
    * - DeclineResult
-     - Result from ``fit_decline()`` or ``fit_decline_cum()``. Attributes: method, qi, di, b, a, m, r_squared, residuals, uptime_mean (optional), uptime_history (optional)
+     - Result from ``fit_decline()`` or ``fit_decline_cum()``. See `Returns table above <#pyrestoolbox-dca-fit-decline>`__ for full attribute details
    * - ForecastResult
-     - Result from ``forecast()``. Attributes: t, q, Qcum, eur, secondary (optional dict)
+     - Result from ``forecast()``. See `Returns table above <#pyrestoolbox-dca-forecast>`__ for full attribute details
    * - RatioResult
-     - Result from ``fit_ratio()``. Attributes: method, a, b, c, domain, r_squared, residuals
+     - Result from ``fit_ratio()``. See `Returns table above <#pyrestoolbox-dca-fit-ratio>`__ for full attribute details

@@ -596,6 +596,17 @@ Returns flowing bottom hole pressure (psia, or barsa if metric=True) using the s
      - bool
      - If True, interpret inputs and return output in Eclipse METRIC units. Defaults to False
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Flowing bottom hole pressure (psia, or barsa if metric=True)
+
 Examples:
 
 Gas well:
@@ -682,6 +693,20 @@ Returns VLP outflow curve as a dictionary with keys ``'rates'`` and ``'bhp'``. E
      -
      - Same parameters as ``fbhp()``
 
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 'rates'
+     - list
+     - Rate values (MMscf/d for gas, STB/d for oil; sm3/d if metric)
+   * - 'bhp'
+     - list
+     - Flowing BHP at each rate (psia, or barsa if metric=True)
+
 Examples:
 
 .. code-block:: python
@@ -755,6 +780,20 @@ For oil wells with OilPVT: uses Darcy above Pb, Vogel below Pb. Without OilPVT: 
      - bool
      - If True, interpret inputs and return output in Eclipse METRIC units. Defaults to False
 
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 'pwf'
+     - list
+     - Flowing BHP values (psia, or barsa if metric=True)
+   * - 'rate'
+     - list
+     - Rate values (Mscf/d for gas, STB/d for oil; sm3/d if metric)
+
 Examples:
 
 .. code-block:: python
@@ -774,12 +813,7 @@ pyrestoolbox.nodal.operating_point
 
     operating_point(thp, completion, reservoir, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, gor=0, wc=0, wsg=1.07, gsg=0.65, pb=0, rsb=0, sgsp=0.65, bo=1.2, uo=1.0, n_points=25, metric=False) -> dict
 
-Finds the operating point where VLP outflow curve intersects the IPR inflow curve via bisection. Returns a dictionary with keys:
-
-- ``'rate'``: Operating rate (MMscf/d for gas / sm3/d if metric, STB/d for oil / sm3/d if metric)
-- ``'bhp'``: Operating flowing BHP (psia, or barsa if metric=True)
-- ``'vlp'``: VLP curve dict ``{'rates': [...], 'bhp': [...]}``
-- ``'ipr'``: IPR curve dict ``{'pwf': [...], 'rate': [...]}``
+Finds the operating point where VLP outflow curve intersects the IPR inflow curve via bisection.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -812,6 +846,26 @@ Finds the operating point where VLP outflow curve intersects the IPR inflow curv
    * - (other)
      -
      - Same parameters as ``fbhp()`` and ``ipr_curve()``
+
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 'rate'
+     - float
+     - Operating rate (MMscf/d for gas, STB/d for oil; sm3/d if metric)
+   * - 'bhp'
+     - float
+     - Operating flowing BHP (psia, or barsa if metric=True)
+   * - 'vlp'
+     - dict
+     - VLP curve: {'rates': [...], 'bhp': [...]}
+   * - 'ipr'
+     - dict
+     - IPR curve: {'pwf': [...], 'rate': [...]}
 
 Examples:
 

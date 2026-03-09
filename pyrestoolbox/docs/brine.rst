@@ -74,6 +74,29 @@ pyrestoolbox.brine.brine_props
      - bool
      - If True, treats input pressure & temperature as metric, otherwise treats as Field units. Default False
 
+.. list-table:: Returns (tuple)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Index
+     - Type
+     - Description
+   * - [0]
+     - float
+     - Bw — water formation volume factor (rb/stb)
+   * - [1]
+     - float
+     - Density (specific gravity relative to water)
+   * - [2]
+     - float
+     - Viscosity (cP)
+   * - [3]
+     - float
+     - Compressibility (1/psi, or 1/barsa if metric=True)
+   * - [4]
+     - float
+     - Rsw — solution gas-water ratio (scf/stb, or sm3/sm3 if metric=True)
+
 Examples:
 
 .. code-block:: python
@@ -127,46 +150,46 @@ pyrestoolbox.brine.CO2_Brine_Mixture
      - If True, will also calculate saturated brine compressibility (doubles calculation time). Default is False.
      
      
-.. list-table:: Results
+.. list-table:: Returns (CO2_Brine_Mixture)
    :widths: 10 15 40
    :header-rows: 1
 
-   * - Class Attribute
-     - Unit
+   * - Attribute
+     - Type
      - Description
    * - .x
-     - Mole fractions
+     - np.ndarray
      - CO2 and H2O in aqueous phase [xCO2, xH2O]
    * - .y
-     - Mole fractions
+     - np.ndarray
      - CO2 and H2O in vapor phase [yCO2, yH2O]
    * - .xSalt
-     - Mole Fraction
+     - float
      - Mole fraction of NaCl in brine
    * - .rhoGas
-     - (gm/cm3)
-     - CO2 rich gas density.
+     - float
+     - CO2 rich gas density (gm/cm3)
    * - .bDen
-     - (gm/cm3)
-     - Brine density [CO2 Saturated, Pure Brine, Freshwater]
+     - list
+     - Brine density [CO2 Saturated, Pure Brine, Freshwater] (gm/cm3)
    * - .bVis
-     - (cP)
-     - Brine viscosity [CO2 Saturated, Pure Brine, Freshwater]
+     - list
+     - Brine viscosity [CO2 Saturated, Pure Brine, Freshwater] (cP)
    * - .bVisblty
-     - (1/Bar or 1/psi)
-     - CO2 Saturated brine viscosibility.
+     - float
+     - CO2 Saturated brine viscosibility (1/Bar or 1/psi)
    * - .bw
-     - (rm3/smr or rb/stb)
-     - Brine formation volume factor  [CO2 Saturated, Pure Brine, Freshwater]
+     - list
+     - Brine formation volume factor [CO2 Saturated, Pure Brine, Freshwater] (rm3/sm3 or rb/stb)
    * - .Rs
-     - (sm3/sm3 or scf/stb)
-     - CO2 Saturated Brine solution gas ratio, relative to standard conditions
+     - float
+     - CO2 Saturated Brine solution gas ratio, relative to standard conditions (sm3/sm3 or scf/stb)
    * - .Cf_usat
-     - (1/Bar or 1/psi)
-     - Brine undersaturated compressibility 
+     - float
+     - Brine undersaturated compressibility (1/Bar or 1/psi)
    * - .Cf_ssat
-     - (1/Bar or 1/psi)
-     - Brine saturated compressibility. Requires cw_sat input to be set True to calculate
+     - float
+     - Brine saturated compressibility (1/Bar or 1/psi). Requires cw_sat input to be set True to calculate
 
                 
 Examples:
@@ -240,7 +263,7 @@ Optionally exports ECLIPSE PVTW keyword file and Excel spreadsheet.
      - bool
      - If True, inputs/outputs use Eclipse METRIC units (barsa, deg C, sm3/sm3, 1/bar). Default False
 
-.. list-table:: Return dict keys
+.. list-table:: Returns (dict)
    :widths: 10 15 40
    :header-rows: 1
 
@@ -353,12 +376,12 @@ based on the gas specific gravity using constrained exponential decay to match t
      - Boolean
      - If True, will also calculate saturated brine compressibility. Default False
 
-.. list-table:: Results
+.. list-table:: Returns (SoreideWhitson)
    :widths: 10 15 40
    :header-rows: 1
 
-   * - Class Attribute
-     - Unit
+   * - Attribute
+     - Type
      - Description
    * - .x
      - dict
@@ -376,35 +399,35 @@ based on the gas specific gravity using constrained exponential decay to match t
      - dict
      - Water content of gas: {'y_H2O': ..., 'stb_mmscf': ..., 'lb_mmscf': ...}
    * - .bDen
-     - (gm/cm3)
-     - Brine density [Gas Saturated, Gas-Free Brine, Freshwater]
+     - list
+     - Brine density [Gas Saturated, Gas-Free Brine, Freshwater] (gm/cm3)
    * - .bVis
-     - (cP)
-     - Brine viscosity [Gas Saturated, Gas-Free Brine, Freshwater]
+     - list
+     - Brine viscosity [Gas Saturated, Gas-Free Brine, Freshwater] (cP)
    * - .bVisblty
-     - (1/Bar or 1/psi)
-     - Gas-saturated brine viscosibility
+     - float
+     - Gas-saturated brine viscosibility (1/Bar or 1/psi)
    * - .bw
-     - (rm3/sm3 or rb/stb)
-     - Brine formation volume factor [Gas Saturated, Gas-Free Brine, Freshwater]
+     - list
+     - Brine formation volume factor [Gas Saturated, Gas-Free Brine, Freshwater] (rm3/sm3 or rb/stb)
    * - .Rs
-     - dict (sm3/sm3 or scf/stb)
-     - Per-gas solution ratios, e.g. {'CO2': 15.2, 'CH4': 2.1}
+     - dict
+     - Per-gas solution ratios, e.g. {'CO2': 15.2, 'CH4': 2.1} (sm3/sm3 or scf/stb)
    * - .Rs_total
-     - (sm3/sm3 or scf/stb)
-     - Total solution gas ratio (sum of all per-gas Rs)
+     - float
+     - Total solution gas ratio (sum of all per-gas Rs) (sm3/sm3 or scf/stb)
    * - .Cf_usat
-     - (1/Bar or 1/psi)
-     - Brine undersaturated compressibility
+     - float
+     - Brine undersaturated compressibility (1/Bar or 1/psi)
    * - .Cf_sat
-     - (1/Bar or 1/psi)
-     - Brine saturated compressibility. Requires cw_sat input to be set True to calculate
+     - float
+     - Brine saturated compressibility (1/Bar or 1/psi). Requires cw_sat input to be set True to calculate
    * - .gas_comp
      - dict
      - Normalized gas composition used (including estimated HC split from SG)
    * - .MwBrine
-     - (g/mol)
-     - Molecular weight of gas-free brine
+     - float
+     - Molecular weight of gas-free brine (g/mol)
 
 Examples:
 

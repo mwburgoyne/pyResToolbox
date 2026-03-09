@@ -70,6 +70,53 @@ P/Z gas material balance for OGIP estimation. Performs linear regression of P/Z 
      - dict, optional
      - Tabulated gas PVT. Either ``{'p': [...], 'Z': [...]}`` or ``{'p': [...], 'Bg': [...]}``. Providing both 'Z' and 'Bg' raises ValueError
 
+.. list-table:: Returns (GasMatbalResult)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Attribute
+     - Type
+     - Description
+   * - ogip
+     - float
+     - Original gas in place (same volume units as Gp input)
+   * - pz
+     - np.ndarray
+     - P/Z values at each pressure step
+   * - gp
+     - np.ndarray
+     - Cumulative gas production at each step
+   * - slope
+     - float
+     - Slope of the P/Z vs Gp regression line
+   * - intercept
+     - float
+     - Intercept of the P/Z vs Gp regression line
+   * - r_squared
+     - float
+     - Coefficient of determination of the linear fit
+   * - p_initial
+     - float
+     - Initial reservoir pressure
+   * - z_initial
+     - float
+     - Z-factor at initial pressure
+   * - bg
+     - np.ndarray
+     - Gas FVF (rcf/scf | rm3/sm3) at each pressure step
+   * - F
+     - np.ndarray
+     - Underground withdrawal at each step
+   * - Et
+     - np.ndarray
+     - Gas expansion term (Bg - Bgi) at each step
+   * - cole_F_over_Et
+     - np.ndarray
+     - Cole plot diagnostic: F/Et at each step (NaN at index 0)
+   * - method
+     - str
+     - OGIP determination method: 'pz' or 'havlena_odeh'
+
 P/Z Example:
 
 .. code-block:: python
@@ -233,6 +280,41 @@ Havlena-Odeh oil material balance for OOIP estimation. Computes underground with
      - dict, optional
      - Parameters to regress with bounds: ``{'m': (0, 2), 'cf': (1e-6, 10e-6)}``. Allowed keys: 'm', 'cf', 'cw', 'sw_i'. Minimizes coefficient of variation of OOIP estimates
 
+.. list-table:: Returns (OilMatbalResult)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Attribute
+     - Type
+     - Description
+   * - ooip
+     - float
+     - Original oil in place (STB | sm3)
+   * - F
+     - np.ndarray
+     - Underground withdrawal at each step
+   * - Eo
+     - np.ndarray
+     - Oil expansion term at each step
+   * - Eg
+     - np.ndarray
+     - Gas cap expansion term at each step
+   * - Efw
+     - np.ndarray
+     - Formation and water compressibility term at each step
+   * - drive_indices
+     - dict
+     - Drive index fractions at each step: 'DDI' (depletion), 'SDI' (segregation/gas cap), 'CDI' (compaction/water). Each maps to np.ndarray
+   * - p
+     - np.ndarray
+     - Pressure array used
+   * - pvt
+     - dict
+     - PVT properties at each step: 'Rs', 'Bo', 'Bg' arrays
+   * - regressed
+     - dict or None
+     - Optimized parameter values when ``regress`` is used, else None
+
 Examples:
 
 .. code-block:: python
@@ -298,6 +380,6 @@ Class Objects
    * - Class
      - Description
    * - GasMatbalResult
-     - Result from ``gas_matbal()``. Attributes: ogip, pz, gp, slope, intercept, r_squared, p_initial, z_initial, bg, F, Et, cole_F_over_Et, method
+     - Result from ``gas_matbal()``. See `Returns table above <#pyrestoolbox-matbal-gas-matbal>`__ for full attribute details
    * - OilMatbalResult
-     - Result from ``oil_matbal()``. Attributes: ooip, F, Eo, Eg, Efw, drive_indices (dict with DDI/SDI/CDI arrays), p, pvt (dict with Rs/Bo/Bg arrays), regressed (optional dict with optimized parameter values)
+     - Result from ``oil_matbal()``. See `Returns table above <#pyrestoolbox-matbal-oil-matbal>`__ for full attribute details

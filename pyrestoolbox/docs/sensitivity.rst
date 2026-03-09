@@ -37,6 +37,23 @@ Vary one parameter across a range, collecting results. Useful for generating sen
      - str, optional
      - Key or attribute to extract from each result. If None, the raw result is stored
 
+.. list-table:: Returns (SweepResult)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Attribute
+     - Type
+     - Description
+   * - param
+     - str
+     - Name of the parameter that was varied
+   * - values
+     - list
+     - Values that were assigned to the parameter
+   * - results
+     - list
+     - Function results at each parameter value
+
 Examples:
 
 .. code-block:: python
@@ -88,6 +105,20 @@ Sensitivity is defined as \|high_result - low_result\| / \|base_result\|.
      - str, optional
      - Key or attribute to extract a scalar from each result
 
+.. list-table:: Returns (TornadoResult)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Attribute
+     - Type
+     - Description
+   * - base_result
+     - float
+     - Function result at base parameter values
+   * - entries
+     - list
+     - List of TornadoEntry objects, sorted by decreasing sensitivity. Each has: param (str), low_value, high_value, low_result, high_result, sensitivity (float)
+
 Examples:
 
 .. code-block:: python
@@ -119,8 +150,8 @@ Class Objects
    * - Class
      - Description
    * - SweepResult
-     - Result from ``sweep()``. Attributes: param (str), values (list), results (list)
+     - Result from ``sweep()``. See `Returns table above <#pyrestoolbox-sensitivity-sweep>`__ for full attribute details
    * - TornadoEntry
      - Single parameter sensitivity. Attributes: param, low_value, high_value, low_result, high_result, sensitivity
    * - TornadoResult
-     - Result from ``tornado()``. Attributes: base_result (float), entries (list of TornadoEntry, sorted by decreasing sensitivity)
+     - Result from ``tornado()``. See `Returns table above <#pyrestoolbox-sensitivity-tornado>`__ for full attribute details

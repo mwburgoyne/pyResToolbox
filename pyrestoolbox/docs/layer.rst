@@ -40,6 +40,17 @@ Returns the Beta value consistent with the Lorenz coefficient given, and impleme
      - str
      - Implementation method. Can be either 'EXP' or 'LANG'. Default is 'EXP'
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Beta value consistent with the Lorenz coefficient
+
 Examples:
 
 .. code-block:: python
@@ -73,6 +84,17 @@ Returns the Lorenz coefficient consistent with the Beta value given, and impleme
    * - lrnz_method
      - str
      - Implementation method. Can be either 'EXP' or 'LANG'. Default is 'EXP'
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Lorenz coefficient (0 to 1)
 
 Examples:
 
@@ -109,6 +131,17 @@ Returns the Lorenz coefficient consistent with observed best flow fraction from 
    * - lrnz_method
      - str
      - Implementation method. Can be either 'EXP' or 'LANG'. Default is 'EXP'
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Lorenz coefficient (0 to 1)
 
 Examples:
 
@@ -150,7 +183,17 @@ If B is left default, then it will be calculated. If B is explictly specified > 
    * - B
      - float
      - Beta value (B > 0). Will calculate if only lorenz variable defined
-     
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Expected flow fraction from the best phi_h fraction (0 to 1)
 
 Examples:
 
@@ -200,7 +243,17 @@ If B is left default, then it will be calculated. If B is explictly specified > 
    * - phi_h_fracs
      - list
      - Optional ability to specify a sorted list of phi_h fractions to calculate permeabilities for. If this list does not add to unity, then one additional layer permeability will be returned. The list needs to be in sorted order of best flow capacity to worst. If list adds to more than 1, it will be normalized
-     
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - np.ndarray
+     - Permeability values (mD) honoring the specified average and heterogeneity
 
 Examples:
 
