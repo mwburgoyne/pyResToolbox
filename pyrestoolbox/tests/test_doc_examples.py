@@ -1162,6 +1162,25 @@ def test_doc_dca_forecast_ratio():
     assert fc.secondary is not None
     assert abs(fc.secondary['GOR']['ratio'][0] - 1.451229424500714) / 1.451229424500714 < RTOL
 
+def test_doc_dca_fit_decline_windowed():
+    """dca.rst: fit_decline windowed example"""
+    t = np.arange(1, 101, dtype=float)
+    q = 1000 * np.exp(-0.05 * t)
+    result = dca.fit_decline(t, q, method='exponential', t_start=20, t_end=60)
+    assert abs(result.qi - 367.87944117144156) / 367.87944117144156 < RTOL
+    assert abs(result.di - 0.049999999999999975) / 0.05 < RTOL
+    assert abs(result.r_squared - 1.0) < RTOL
+
+def test_doc_dca_fit_decline_cum_windowed():
+    """dca.rst: fit_decline_cum windowed example"""
+    t = np.arange(1, 101, dtype=float)
+    q = 1000 * np.exp(-0.05 * t)
+    Np = np.array([float(dca.arps_cum(1000, 0.05, 0, ti)) for ti in t])
+    result = dca.fit_decline_cum(Np, q, method='exponential', Np_start=5000, Np_end=15000)
+    assert abs(result.qi - 740.8182206817182) / 740.8182206817182 < RTOL
+    assert abs(result.di - 0.05000000000000003) / 0.05 < RTOL
+    assert abs(result.r_squared - 1.0) < RTOL
+
 
 # =============================================================================
 # Material Balance Module Documentation Examples (docs/matbal.rst)
@@ -1190,6 +1209,74 @@ def test_doc_matbal_oil():
     )
     assert abs(r.ooip - 82793519.84914012) / 82793519.84914012 < RTOL
     assert abs(r.drive_indices['DDI'][1] - 0.7108509458427899) / 0.7108509458427899 < RTOL
+
+def test_doc_matbal_gas_cole():
+    """matbal.rst: gas_matbal Cole plot example"""
+    r = matbal.gas_matbal(
+        p=[3000, 2700, 2400, 2100, 1800],
+        Gp=[0, 5, 12, 22, 35],
+        degf=200, sg=0.65
+    )
+    assert r.method == 'pz'
+    assert abs(r.cole_F_over_Et[1] - 53.34214259832056) / 53.34214259832056 < RTOL
+    assert abs(r.cole_F_over_Et[2] - 62.64134359331348) / 62.64134359331348 < RTOL
+
+def test_doc_matbal_gas_havlena_odeh():
+    """matbal.rst: gas_matbal Havlena-Odeh example"""
+    r = matbal.gas_matbal(
+        p=[3000, 2700, 2400, 2100, 1800],
+        Gp=[0, 5e9, 12e9, 22e9, 35e9],
+        degf=200, sg=0.65,
+        We=[0, 5e6, 15e6, 35e6, 60e6]
+    )
+    assert r.method == 'havlena_odeh'
+    assert abs(r.ogip - 67036445117.070206) / 67036445117.070206 < RTOL
+
+def test_doc_matbal_gas_pvt_z_table():
+    """matbal.rst: gas_matbal tabulated PVT (Z) example"""
+    import pyrestoolbox.gas as gas_mod
+    p_table = list(range(1500, 3501, 50))
+    Z_table = [gas_mod.gas_z(pi, 0.65, 200) for pi in p_table]
+    r = matbal.gas_matbal(
+        p=[3000, 2700, 2400, 2100, 1800],
+        Gp=[0, 5, 12, 22, 35],
+        degf=200, sg=0.65,
+        pvt_table={'p': p_table, 'Z': Z_table}
+    )
+    assert abs(r.ogip - 87.602774253829) / 87.602774253829 < RTOL
+    assert abs(r.z_initial - 0.9163208839373836) / 0.9163208839373836 < RTOL
+
+def test_doc_matbal_oil_regression():
+    """matbal.rst: oil_matbal regression example"""
+    r = matbal.oil_matbal(
+        p=[4000, 3500, 3000, 2500],
+        Np=[0, 500000, 1200000, 2100000],
+        degf=200, api=35, sg_sp=0.65,
+        pb=3500, rsb=500,
+        m=0, cf=0, sw_i=0.2, cw=3e-6,
+        regress={'m': (0, 2), 'cf': (1e-7, 50e-6)}
+    )
+    assert abs(r.regressed['m'] - 2.0) < RTOL
+    assert abs(r.regressed['cf'] - 5e-05) / 5e-05 < RTOL
+    assert abs(r.ooip - 1468306.5302524716) / 1468306.5302524716 < RTOL
+
+def test_doc_matbal_oil_pvt_table():
+    """matbal.rst: oil_matbal tabulated PVT example"""
+    import pyrestoolbox.oil as oil_mod
+    import pyrestoolbox.gas as gas_mod
+    from pyrestoolbox.constants import CUFTperBBL
+    api, sg_sp, pb, rsb, degf = 35, 0.75, 3500, 500, 220
+    sg_o = 141.5 / (api + 131.5)
+    p_table = list(range(2000, 5001, 100))
+    Rs_t = [oil_mod.oil_rs(api, degf, sg_sp, pi, pb=pb, rsb=rsb) for pi in p_table]
+    Bo_t = [oil_mod.oil_bo(pi, pb, degf, rs, rsb, sg_o, sg_sp=sg_sp) for pi, rs in zip(p_table, Rs_t)]
+    Bg_t = [gas_mod.gas_bg(pi, sg_sp, degf) / CUFTperBBL for pi in p_table]
+    r = matbal.oil_matbal(
+        p=[4000, 3500, 3000, 2500], Np=[0, 1e6, 3e6, 6e6], degf=degf,
+        pb=pb, rsb=rsb, cf=3e-6, sw_i=0.2, cw=3e-6,
+        pvt_table={'p': p_table, 'Rs': Rs_t, 'Bo': Bo_t, 'Bg': Bg_t}
+    )
+    assert abs(r.ooip - 82793519.84914012) / 82793519.84914012 < RTOL
 
 
 # =============================================================================

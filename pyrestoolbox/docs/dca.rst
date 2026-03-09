@@ -179,9 +179,9 @@ pyrestoolbox.dca.fit_decline
 
 .. code-block:: python
 
-    fit_decline(t, q, method='best') -> DeclineResult
+    fit_decline(t, q, method='best', t_start=None, t_end=None) -> DeclineResult
 
-Fit a decline model to time-domain production data.
+Fit a decline model to time-domain production data. Optional ``t_start`` and ``t_end`` parameters restrict fitting to a time window. Data outside the window is excluded, and the window is shifted to start at t=0, so the returned ``qi`` represents the rate at the window start.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -199,6 +199,12 @@ Fit a decline model to time-domain production data.
    * - method
      - str
      - 'exponential', 'harmonic', 'hyperbolic', 'duong', or 'best' (default). 'best' tries all four and returns the highest R-squared
+   * - t_start
+     - float, optional
+     - Start of fitting window (inclusive). Data before t_start is excluded
+   * - t_end
+     - float, optional
+     - End of fitting window (inclusive). Data after t_end is excluded
 
 Examples:
 
@@ -217,19 +223,35 @@ Examples:
     >>> result.r_squared
     1.0
 
+Windowed fitting example:
+
+.. code-block:: python
+
+    >>> t = np.arange(1, 101, dtype=float)
+    >>> q = 1000 * np.exp(-0.05 * t)
+    >>> result = dca.fit_decline(t, q, method='exponential', t_start=20, t_end=60)
+    >>> result.qi
+    367.87944117144156
+    >>> result.di
+    0.049999999999999975
+    >>> result.r_squared
+    1.0
+
 
 pyrestoolbox.dca.fit_decline_cum
 ======================
 
 .. code-block:: python
 
-    fit_decline_cum(Np, q, method='best', t_calendar=None) -> DeclineResult
+    fit_decline_cum(Np, q, method='best', t_calendar=None, Np_start=None, Np_end=None) -> DeclineResult
 
 Fit a decline model to rate-vs-cumulative data, eliminating time from the Arps equations. The returned ``qi`` and ``di`` are identical to time-domain parameters, so the result works directly with ``arps_rate()`` and ``forecast()``.
 
 Supports exponential, harmonic, and hyperbolic models. Duong is excluded (no analytical q-vs-Np form) and raises ``ValueError``.
 
 When ``t_calendar`` is provided, per-interval uptime fractions are inferred by comparing calendar-average rates to fitted capacity rates. Results are stored in ``uptime_mean`` and ``uptime_history`` on the returned ``DeclineResult``.
+
+Optional ``Np_start`` and ``Np_end`` parameters restrict fitting to a cumulative production window. The window is shifted to start at Np=0, so the returned ``qi`` represents the rate at the window start.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -250,6 +272,12 @@ When ``t_calendar`` is provided, per-interval uptime fractions are inferred by c
    * - t_calendar
      - array-like, optional
      - Calendar time stamps corresponding to each data point. When provided, uptime fractions are computed
+   * - Np_start
+     - float, optional
+     - Start of fitting window on cumulative axis (inclusive)
+   * - Np_end
+     - float, optional
+     - End of fitting window on cumulative axis (inclusive)
 
 Examples:
 
@@ -266,6 +294,21 @@ Examples:
     1000.0000000000002
     >>> result.di
     0.05000000000000004
+    >>> result.r_squared
+    1.0
+
+Windowed cumulative fitting example:
+
+.. code-block:: python
+
+    >>> t = np.arange(1, 101, dtype=float)
+    >>> q = 1000 * np.exp(-0.05 * t)
+    >>> Np = np.array([float(dca.arps_cum(1000, 0.05, 0, ti)) for ti in t])
+    >>> result = dca.fit_decline_cum(Np, q, method='exponential', Np_start=5000, Np_end=15000)
+    >>> result.qi
+    740.8182206817182
+    >>> result.di
+    0.05000000000000003
     >>> result.r_squared
     1.0
 

@@ -44,7 +44,7 @@ from typing import Optional, List
 
 import pyrestoolbox.gas as gas
 import pyrestoolbox.oil as oil
-from pyrestoolbox.constants import CUFTperBBL
+from pyrestoolbox.constants import CUFTperBBL, psc, tscr, degF2R
 from pyrestoolbox.constants import BAR_TO_PSI, degc_to_degf, PSI_TO_BAR
 from pyrestoolbox.constants import SCF_PER_STB_TO_SM3_PER_SM3, SM3_PER_SM3_TO_SCF_PER_STB
 from pyrestoolbox.classes import z_method, c_method, rs_method, bo_method
@@ -72,6 +72,16 @@ class GasMatbalResult:
         Initial reservoir pressure.
     z_initial : float
         Z-factor at initial pressure.
+    bg : np.ndarray
+        Gas FVF (rcf/scf) at each pressure step.
+    F : np.ndarray
+        Underground withdrawal at each step.
+    Et : np.ndarray
+        Gas expansion term (Bg - Bgi) at each step.
+    cole_F_over_Et : np.ndarray
+        Cole plot diagnostic: F/Et at each step (NaN at index 0).
+    method : str
+        OGIP determination method: 'pz' or 'havlena_odeh'.
     """
     ogip: float
     pz: np.ndarray
@@ -81,6 +91,11 @@ class GasMatbalResult:
     r_squared: float
     p_initial: float
     z_initial: float
+    bg: np.ndarray = field(default_factory=lambda: np.array([]))
+    F: np.ndarray = field(default_factory=lambda: np.array([]))
+    Et: np.ndarray = field(default_factory=lambda: np.array([]))
+    cole_F_over_Et: np.ndarray = field(default_factory=lambda: np.array([]))
+    method: str = 'pz'
 
 
 @dataclass
@@ -115,14 +130,19 @@ class OilMatbalResult:
     drive_indices: dict
     p: np.ndarray
     pvt: dict
+    regressed: Optional[dict] = None
 
 
 def gas_matbal(p, Gp, degf, sg=0.65, co2=0, h2s=0, n2=0, h2=0,
-               zmethod='DAK', cmethod='PMC', metric=False):
+               Wp=None, Bw=1.0, We=None,
+               zmethod='DAK', cmethod='PMC', metric=False,
+               pvt_table=None):
     """P/Z gas material balance for OGIP estimation.
 
     Performs linear regression of P/Z vs cumulative gas production to
-    determine original gas in place (OGIP = -intercept/slope).
+    determine original gas in place (OGIP = -intercept/slope). Optionally
+    computes Cole plot diagnostics (F/Et vs Gp) and Havlena-Odeh
+    regression when cumulative water influx (We) is provided.
 
     Parameters
     ----------
@@ -132,6 +152,8 @@ def gas_matbal(p, Gp, degf, sg=0.65, co2=0, h2s=0, n2=0, h2=0,
     Gp : array-like
         Cumulative gas production at each pressure survey. Same length as p.
         Units are user-defined (e.g. Bscf, MMscf) — OGIP will be in the same units.
+        When Wp or We are provided, Gp should be in scf (or sm3 if metric)
+        for dimensional consistency with Bg.
     degf : float
         Reservoir temperature (deg F | deg C).
     sg : float
@@ -144,12 +166,23 @@ def gas_matbal(p, Gp, degf, sg=0.65, co2=0, h2s=0, n2=0, h2=0,
         N2 mole fraction (default 0).
     h2 : float
         H2 mole fraction (default 0).
+    Wp : array-like, optional
+        Cumulative water production (STB | sm3). Same length as p.
+    Bw : float
+        Water FVF (rb/stb | rm3/sm3, default 1.0). Used when Wp provided.
+    We : array-like, optional
+        Cumulative water influx (rcf | rm3). Same length as p. When
+        provided, Havlena-Odeh regression is used for OGIP instead of P/Z.
     zmethod : str or z_method
         Z-factor method (default 'DAK').
     cmethod : str or c_method
         Critical property method (default 'PMC').
     metric : bool
         If True, p in barsa and degf in deg C (default False).
+    pvt_table : dict, optional
+        Tabulated gas PVT. Either ``{'p': [...], 'Z': [...]}`` or
+        ``{'p': [...], 'Bg': [...]}``. Pressures in psia|barsa, Bg in
+        rcf/scf|rm3/sm3. Providing both 'Z' and 'Bg' keys raises ValueError.
 
     Returns
     -------
@@ -163,13 +196,74 @@ def gas_matbal(p, Gp, degf, sg=0.65, co2=0, h2s=0, n2=0, h2=0,
     if len(p) < 2:
         raise ValueError("Need at least 2 pressure/production data points")
 
-    # Convert metric inputs for gas_z (which handles metric internally)
-    # gas_z signature: gas_z(p, sg, degf, ...)
-    z = np.array([
-        gas.gas_z(pi, sg, degf, co2=co2, h2s=h2s, n2=n2, h2=h2,
-                  zmethod=zmethod, cmethod=cmethod, metric=metric)
-        for pi in p
-    ])
+    n = len(p)
+
+    # Validate optional arrays
+    if Wp is not None:
+        Wp = np.asarray(Wp, dtype=float)
+        if len(Wp) != n:
+            raise ValueError(f"Wp must have same length as p, got {len(Wp)} and {n}")
+    if We is not None:
+        We = np.asarray(We, dtype=float)
+        if len(We) != n:
+            raise ValueError(f"We must have same length as p, got {len(We)} and {n}")
+
+    if pvt_table is not None:
+        # Validate pvt_table
+        has_z = 'Z' in pvt_table
+        has_bg = 'Bg' in pvt_table
+        if has_z and has_bg:
+            raise ValueError("pvt_table must contain either 'Z' or 'Bg', not both")
+        if not has_z and not has_bg:
+            raise ValueError("pvt_table must contain 'p' and either 'Z' or 'Bg'")
+        if 'p' not in pvt_table:
+            raise ValueError("pvt_table must contain 'p' key")
+
+        pvt_p = np.asarray(pvt_table['p'], dtype=float)
+        sort_idx = np.argsort(pvt_p)
+        pvt_p = pvt_p[sort_idx]
+
+        # Convert metric pressures for internal use
+        if metric:
+            degf_field = degc_to_degf(degf)
+            p_psia = p * BAR_TO_PSI
+            pvt_p_psia = pvt_p * BAR_TO_PSI
+        else:
+            degf_field = degf
+            p_psia = p
+            pvt_p_psia = pvt_p
+
+        degR = degf_field + degF2R
+
+        # Check survey pressures within table range
+        if np.any(p < pvt_p[0] - 1e-6) or np.any(p > pvt_p[-1] + 1e-6):
+            raise ValueError("Survey pressures must fall within pvt_table pressure range")
+
+        if has_z:
+            pvt_Z = np.asarray(pvt_table['Z'], dtype=float)[sort_idx]
+            z = np.interp(p, pvt_p, pvt_Z)
+            # Compute Bg from Z: Bg = Z * T_R / (p_psia * tscr/psc)  (rcf/scf)
+            bg = z * degR / (p_psia * (tscr / psc))
+        else:
+            pvt_Bg = np.asarray(pvt_table['Bg'], dtype=float)[sort_idx]
+            # rcf/scf and rm3/sm3 are numerically identical — no conversion
+            bg = np.interp(p, pvt_p, pvt_Bg)
+            # Back-compute Z from Bg
+            z = bg * p_psia * (tscr / psc) / degR
+    else:
+        # Z-factor at each pressure (gas_z handles metric internally)
+        z = np.array([
+            gas.gas_z(pi, sg, degf, co2=co2, h2s=h2s, n2=n2, h2=h2,
+                      zmethod=zmethod, cmethod=cmethod, metric=metric)
+            for pi in p
+        ])
+
+        # Bg at each pressure (rcf/scf — gas_bg handles metric internally)
+        bg = np.array([
+            gas.gas_bg(pi, sg, degf, co2=co2, h2s=h2s, n2=n2, h2=h2,
+                       zmethod=zmethod, cmethod=cmethod, metric=metric)
+            for pi in p
+        ])
 
     pz = p / z
 
@@ -178,16 +272,45 @@ def gas_matbal(p, Gp, degf, sg=0.65, co2=0, h2s=0, n2=0, h2=0,
     slope = coeffs[0]
     intercept = coeffs[1]
 
-    # OGIP = -intercept / slope (where P/Z = 0)
+    # P/Z OGIP = -intercept / slope (where P/Z = 0)
     if abs(slope) < 1e-30:
         raise RuntimeError("P/Z vs Gp regression has near-zero slope — cannot determine OGIP")
-    ogip = -intercept / slope
+    pz_ogip = -intercept / slope
 
     # R-squared
     pz_pred = np.polyval(coeffs, Gp)
     ss_res = np.sum((pz - pz_pred) ** 2)
     ss_tot = np.sum((pz - np.mean(pz)) ** 2)
     r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+
+    # Gas expansion: Et = Bg - Bgi
+    Et = bg - bg[0]
+
+    # Underground withdrawal: F = Gp * Bg (+ water term if Wp provided)
+    F = Gp * bg
+    if Wp is not None:
+        water_factor = 1.0 if metric else CUFTperBBL
+        F = F + Wp * Bw * water_factor
+
+    # Cole plot diagnostic: F / Et (NaN at index 0 where Et = 0)
+    cole_F_over_Et = np.full(n, np.nan)
+    nonzero_Et = np.abs(Et) > 1e-30
+    cole_F_over_Et[nonzero_Et] = F[nonzero_Et] / Et[nonzero_Et]
+
+    # OGIP determination
+    if We is not None:
+        # Havlena-Odeh: forced-through-origin regression
+        # (F - We) = G * Et  =>  G = sum((F-We)*Et) / sum(Et^2)
+        valid = np.abs(Et) > 1e-30
+        if not np.any(valid):
+            raise RuntimeError("Cannot compute Havlena-Odeh OGIP — all Et values are zero")
+        F_net = F[valid] - We[valid]
+        Et_valid = Et[valid]
+        ogip = float(np.sum(F_net * Et_valid) / np.sum(Et_valid ** 2))
+        method = 'havlena_odeh'
+    else:
+        ogip = pz_ogip
+        method = 'pz'
 
     return GasMatbalResult(
         ogip=float(ogip),
@@ -198,14 +321,20 @@ def gas_matbal(p, Gp, degf, sg=0.65, co2=0, h2s=0, n2=0, h2=0,
         r_squared=float(r_squared),
         p_initial=float(p[0]),
         z_initial=float(z[0]),
+        bg=bg,
+        F=F,
+        Et=Et,
+        cole_F_over_Et=cole_F_over_Et,
+        method=method,
     )
 
 
-def oil_matbal(p, Np, degf, api, sg_sp, sg_g=0, pb=0, rsb=0,
+def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
                Rp=None, Wp=None, Wi=None, Gi=None,
                Bw=1.0, m=0, cf=0, sw_i=0, cw=0,
                rsmethod='VELAR', bomethod='MCAIN',
-               zmethod='DAK', cmethod='PMC', metric=False):
+               zmethod='DAK', cmethod='PMC', metric=False,
+               pvt_table=None, regress=None):
     """Havlena-Odeh oil material balance for OOIP estimation.
 
     Parameters
@@ -219,9 +348,9 @@ def oil_matbal(p, Np, degf, api, sg_sp, sg_g=0, pb=0, rsb=0,
     degf : float
         Reservoir temperature (deg F | deg C).
     api : float
-        Stock tank oil API gravity.
+        Stock tank oil API gravity. Required when pvt_table is not provided.
     sg_sp : float
-        Separator gas specific gravity.
+        Separator gas specific gravity. Required when pvt_table is not provided.
     sg_g : float
         Weighted average surface gas specific gravity (default 0 = use sg_sp).
     pb : float
@@ -256,10 +385,18 @@ def oil_matbal(p, Np, degf, api, sg_sp, sg_g=0, pb=0, rsb=0,
         Critical property method for Bg (default 'PMC').
     metric : bool
         If True, inputs/outputs in Eclipse METRIC units (default False).
+    pvt_table : dict, optional
+        Tabulated oil PVT: ``{'p': [...], 'Rs': [...], 'Bo': [...], 'Bg': [...]}``.
+        Units follow the metric flag. When provided, api and sg_sp are not required.
+    regress : dict, optional
+        Parameters to regress with bounds: ``{'m': (0, 2), 'cf': (1e-6, 10e-6)}``.
+        Allowed keys: 'm', 'cf', 'cw', 'sw_i'. Optimizes to minimize the
+        coefficient of variation of OOIP estimates across time steps.
 
     Returns
     -------
     OilMatbalResult
+        With ``regressed`` dict populated when regress is used.
     """
     p = np.asarray(p, dtype=float)
     Np = np.asarray(Np, dtype=float)
@@ -269,6 +406,45 @@ def oil_matbal(p, Np, degf, api, sg_sp, sg_g=0, pb=0, rsb=0,
         raise ValueError(f"p and Np must have same length, got {len(p)} and {len(Np)}")
     if n < 2:
         raise ValueError("Need at least 2 pressure/production data points")
+
+    # Validate regress parameter
+    _ALLOWED_REGRESS = {'m', 'cf', 'cw', 'sw_i'}
+    if regress is not None:
+        for key, val in regress.items():
+            if key not in _ALLOWED_REGRESS:
+                raise ValueError(f"Invalid regress key '{key}'. Allowed: {sorted(_ALLOWED_REGRESS)}")
+            if not isinstance(val, (tuple, list)) or len(val) != 2:
+                raise ValueError(f"regress['{key}'] must be a (lower, upper) tuple, got {val}")
+            if val[0] >= val[1]:
+                raise ValueError(f"regress['{key}'] bounds must have lower < upper, got {val}")
+
+    # Validate PVT source
+    if pvt_table is not None:
+        # Validate pvt_table keys
+        required = {'p', 'Rs', 'Bo', 'Bg'}
+        missing = required - set(pvt_table.keys())
+        if missing:
+            raise ValueError(f"pvt_table missing required keys: {missing}")
+        pvt_p = np.asarray(pvt_table['p'], dtype=float)
+        pvt_Rs = np.asarray(pvt_table['Rs'], dtype=float)
+        pvt_Bo = np.asarray(pvt_table['Bo'], dtype=float)
+        pvt_Bg = np.asarray(pvt_table['Bg'], dtype=float)
+        if not (len(pvt_p) == len(pvt_Rs) == len(pvt_Bo) == len(pvt_Bg)):
+            raise ValueError("All pvt_table arrays must have the same length")
+        # Sort by pressure
+        sort_idx = np.argsort(pvt_p)
+        pvt_p = pvt_p[sort_idx]
+        pvt_Rs = pvt_Rs[sort_idx]
+        pvt_Bo = pvt_Bo[sort_idx]
+        pvt_Bg = pvt_Bg[sort_idx]
+        # Metric conversion
+        if metric:
+            pvt_p = pvt_p * BAR_TO_PSI
+            pvt_Rs = pvt_Rs * SM3_PER_SM3_TO_SCF_PER_STB
+            # Bo: rm3/sm3 = rb/stb numerically (ratio of like units). No conversion.
+            pvt_Bg = pvt_Bg / CUFTperBBL  # rm3/sm3 → rb/scf
+    elif api <= 0 or sg_sp <= 0:
+        raise ValueError("api and sg_sp are required when pvt_table is not provided")
 
     # Convert metric to oilfield for internal calculations
     if metric:
@@ -282,17 +458,6 @@ def oil_matbal(p, Np, degf, api, sg_sp, sg_g=0, pb=0, rsb=0,
         pb_field = pb
         rsb_field = rsb
 
-    sg_o = 141.5 / (api + 131.5)
-
-    # Resolve pb and rsb
-    if pb_field <= 0 and rsb_field <= 0:
-        raise ValueError("At least one of pb or rsb must be specified")
-    if pb_field <= 0:
-        pb_field = oil.oil_pbub(api, degf_field, rsb_field, sg_g=sg_g, sg_sp=sg_sp)
-    if rsb_field <= 0:
-        rsb_field = oil.oil_rs_bub(api, degf_field, pb_field, sg_g=sg_g, sg_sp=sg_sp,
-                                    rsmethod=rsmethod)
-
     # Default arrays
     if Rp is None:
         Rp_arr = None  # Will be set to Rs at each step
@@ -305,24 +470,46 @@ def oil_matbal(p, Np, degf, api, sg_sp, sg_g=0, pb=0, rsb=0,
     Wi_arr = np.zeros(n) if Wi is None else np.asarray(Wi, dtype=float)
     Gi_arr = np.zeros(n) if Gi is None else np.asarray(Gi, dtype=float)
 
-    # Compute PVT at each pressure (oil module is scalar-only)
-    Rs_arr = np.zeros(n)
-    Bo_arr = np.zeros(n)
-    Bg_arr = np.zeros(n)
+    if pvt_table is not None:
+        # Check survey pressures within table range
+        if np.any(p_field < pvt_p[0] - 1e-6) or np.any(p_field > pvt_p[-1] + 1e-6):
+            raise ValueError("Survey pressures must fall within pvt_table pressure range")
+        # Interpolate PVT from table
+        Rs_arr = np.interp(p_field, pvt_p, pvt_Rs)
+        Bo_arr = np.interp(p_field, pvt_p, pvt_Bo)
+        Bg_arr = np.interp(p_field, pvt_p, pvt_Bg)
+        # Infer pb/rsb from table if not specified
+        if pb_field <= 0:
+            pb_field = pvt_p[np.argmax(pvt_Rs)]
+        if rsb_field <= 0:
+            rsb_field = np.max(pvt_Rs)
+    else:
+        sg_o = 141.5 / (api + 131.5)
+        # Resolve pb and rsb
+        if pb_field <= 0 and rsb_field <= 0:
+            raise ValueError("At least one of pb or rsb must be specified")
+        if pb_field <= 0:
+            pb_field = oil.oil_pbub(api, degf_field, rsb_field, sg_g=sg_g, sg_sp=sg_sp)
+        if rsb_field <= 0:
+            rsb_field = oil.oil_rs_bub(api, degf_field, pb_field, sg_g=sg_g, sg_sp=sg_sp,
+                                        rsmethod=rsmethod)
+        # Compute PVT at each pressure (oil module is scalar-only)
+        Rs_arr = np.zeros(n)
+        Bo_arr = np.zeros(n)
+        Bg_arr = np.zeros(n)
 
-    for i, pi in enumerate(p_field):
-        rs_i = oil.oil_rs(api, degf_field, sg_sp, pi,
-                          pb=pb_field, rsb=rsb_field, rsmethod=rsmethod)
-        Rs_arr[i] = rs_i
+        for i, pi in enumerate(p_field):
+            rs_i = oil.oil_rs(api, degf_field, sg_sp, pi,
+                              pb=pb_field, rsb=rsb_field, rsmethod=rsmethod)
+            Rs_arr[i] = rs_i
 
-        bo_i = oil.oil_bo(pi, pb_field, degf_field, rs_i, rsb_field, sg_o,
-                          sg_g=sg_g, sg_sp=sg_sp, bomethod=bomethod)
-        Bo_arr[i] = bo_i
+            bo_i = oil.oil_bo(pi, pb_field, degf_field, rs_i, rsb_field, sg_o,
+                              sg_g=sg_g, sg_sp=sg_sp, bomethod=bomethod)
+            Bo_arr[i] = bo_i
 
-        # Bg in rcf/scf, convert to rb/scf
-        # gas_bg signature: gas_bg(p, sg, degf, ...)
-        bg_i = gas.gas_bg(pi, sg_sp, degf_field, zmethod=zmethod, cmethod=cmethod) / CUFTperBBL
-        Bg_arr[i] = bg_i
+            # Bg in rcf/scf, convert to rb/scf
+            bg_i = gas.gas_bg(pi, sg_sp, degf_field, zmethod=zmethod, cmethod=cmethod) / CUFTperBBL
+            Bg_arr[i] = bg_i
 
     # Initial conditions
     Boi = Bo_arr[0]
@@ -333,15 +520,12 @@ def oil_matbal(p, Np, degf, api, sg_sp, sg_g=0, pb=0, rsb=0,
     if Rp_arr is None:
         Rp_arr = Rs_arr.copy()
 
-    # Havlena-Odeh material balance
+    # Precompute F, Eo, Eg (these do NOT depend on regressable params)
     F = np.zeros(n)
     Eo = np.zeros(n)
     Eg = np.zeros(n)
-    Efw = np.zeros(n)
 
     for i in range(n):
-        dp = p_field[0] - p_field[i]
-
         # Underground withdrawal
         F[i] = (Np[i] * (Bo_arr[i] + (Rp_arr[i] - Rs_arr[i]) * Bg_arr[i])
                 + (Wp_arr[i] - Wi_arr[i]) * Bw
@@ -349,7 +533,6 @@ def oil_matbal(p, Np, degf, api, sg_sp, sg_g=0, pb=0, rsb=0,
 
         # Oil expansion + dissolved gas
         if p_field[i] >= pb_field:
-            # Above bubble point: no free gas, Rs = Rsi
             Eo[i] = Bo_arr[i] - Boi
         else:
             Eo[i] = (Bo_arr[i] - Boi) + (Rsi - Rs_arr[i]) * Bg_arr[i]
@@ -360,23 +543,75 @@ def oil_matbal(p, Np, degf, api, sg_sp, sg_g=0, pb=0, rsb=0,
         else:
             Eg[i] = 0.0
 
-        # Formation and water compressibility
-        if (1.0 - sw_i) > 0:
-            Efw[i] = Boi * (cw * sw_i + cf) / (1.0 - sw_i) * dp
-        else:
-            Efw[i] = 0.0
+    # Helper to compute Efw and OOIP for given (m_t, cf_t, cw_t, sw_t)
+    def _compute_result(m_t, cf_t, cw_t, sw_t):
+        Efw = np.zeros(n)
+        for i in range(n):
+            dp = p_field[0] - p_field[i]
+            if (1.0 - sw_t) > 0:
+                Efw[i] = Boi * (cw_t * sw_t + cf_t) / (1.0 - sw_t) * dp
+            else:
+                Efw[i] = 0.0
 
-    # Compute OOIP: N = F / (Eo + m*Eg + (1+m)*Efw)
-    denom = Eo + m * Eg + (1.0 + m) * Efw
+        denom = Eo + m_t * Eg + (1.0 + m_t) * Efw
+        valid = np.abs(denom) > 1e-30
+        if not np.any(valid):
+            return None, Efw, denom, valid
+        N_estimates = F[valid] / denom[valid]
+        ooip = float(np.mean(N_estimates))
+        return ooip, Efw, denom, valid
 
-    # Use points where denom > 0 (skip initial point where everything is zero)
-    valid = np.abs(denom) > 1e-30
-    if not np.any(valid):
+    # Regression
+    regressed_result = None
+    if regress is not None:
+        from scipy.optimize import minimize
+
+        param_names = list(regress.keys())
+        bounds = [regress[k] for k in param_names]
+        base_vals = {'m': m, 'cf': cf, 'cw': cw, 'sw_i': sw_i}
+
+        # Initial guess: use passed value if within bounds, else midpoint
+        x0 = []
+        for k, (lo, hi) in zip(param_names, bounds):
+            v = base_vals[k]
+            if lo <= v <= hi:
+                x0.append(v)
+            else:
+                x0.append((lo + hi) / 2.0)
+
+        def objective(x):
+            vals = dict(base_vals)
+            for k, v in zip(param_names, x):
+                vals[k] = v
+            Efw_t = np.zeros(n)
+            for i in range(n):
+                dp = p_field[0] - p_field[i]
+                if (1.0 - vals['sw_i']) > 0:
+                    Efw_t[i] = Boi * (vals['cw'] * vals['sw_i'] + vals['cf']) / (1.0 - vals['sw_i']) * dp
+            denom_t = Eo + vals['m'] * Eg + (1.0 + vals['m']) * Efw_t
+            valid_t = np.abs(denom_t) > 1e-30
+            if not np.any(valid_t):
+                return 1e10
+            N_est = F[valid_t] / denom_t[valid_t]
+            mean_N = np.mean(N_est)
+            if abs(mean_N) < 1e-30:
+                return 1e10
+            return float(np.std(N_est) / abs(mean_N))
+
+        opt_result = minimize(objective, x0, method='L-BFGS-B', bounds=bounds)
+        # Apply optimized values
+        for k, v in zip(param_names, opt_result.x):
+            base_vals[k] = v
+        m = base_vals['m']
+        cf = base_vals['cf']
+        cw = base_vals['cw']
+        sw_i = base_vals['sw_i']
+        regressed_result = {k: float(v) for k, v in zip(param_names, opt_result.x)}
+
+    # Final computation with (possibly regressed) params
+    ooip, Efw, denom, valid = _compute_result(m, cf, cw, sw_i)
+    if ooip is None:
         raise RuntimeError("Cannot compute OOIP — all expansion terms are zero")
-
-    # Weighted average OOIP (F/denom at each valid point)
-    N_estimates = F[valid] / denom[valid]
-    ooip = float(np.mean(N_estimates))
 
     # Drive indices at each valid point
     ddi = np.zeros(n)
@@ -398,4 +633,5 @@ def oil_matbal(p, Np, degf, api, sg_sp, sg_g=0, pb=0, rsb=0,
         drive_indices={'DDI': ddi, 'SDI': sdi, 'CDI': cdi},
         p=p,
         pvt={'Rs': Rs_arr, 'Bo': Bo_arr, 'Bg': Bg_arr},
+        regressed=regressed_result,
     )
