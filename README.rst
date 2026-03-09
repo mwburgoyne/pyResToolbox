@@ -9,16 +9,19 @@ A collection of Reservoir Engineering Utilities
 This set of functions focuses on those that the author uses often while crafting programming solutions.
 These are the scripts that are often copy/pasted from previous work - sometimes slightly modified - resulting in a trail of slightly different versions over the years. Some attempt has been made here to make this implementation flexible enough such that it can be relied on as-is going forward.
 
-Note: Version 3.0 consolidates simulation-oriented functions under the simtools module, adds nodal analysis (VLP/IPR), VFP table generation, relative permeability curve fitting, and Eclipse METRIC unit support across all modules.
+Note: Version 3.0 consolidates simulation-oriented functions under the simtools module, adds nodal analysis (VLP/IPR), VFP table generation, relative permeability curve fitting, and Eclipse METRIC unit support across all modules. Version 3.0.4 adds decline curve analysis, material balance, method recommendations, and sensitivity analysis.
 
 Includes functions to perform calculations including;
 
+- Decline Curve Analysis with Arps and Duong models — fitting, forecasting, EUR, windowed fitting, secondary phase ratio models, and uptime inference
+- Material Balance for gas (P/Z with Cole plot and Havlena-Odeh aquifer support) and oil (Havlena-Odeh with drive indices, parameter regression, and tabulated PVT)
 - Inflow Performance Relationships (IPR) for oil and gas wells
 - Vertical Lift Performance (VLP) with four multiphase flow correlations (Hagedorn-Brown, Woldesemayat-Ghajar, Gray, Beggs & Brill)
 - Nodal analysis operating point determination
 - Eclipse VFP table generation (VFPPROD and VFPINJ keywords)
 - PVT Calculations for oil
 - PVT calculation for gas, including up to 100% inerts for CO2, H2S, N2 and H2
+- Gas hydrate formation prediction with thermodynamic inhibitor calculations
 - Return critical parameters for typical components
 - Creation of Black Oil Table information (PVDO, PVDG, PVTO, PVTW keywords)
 - Creation of layered permeability distribution consistent with a Lorenz heterogeneity factor
@@ -26,6 +29,8 @@ Includes functions to perform calculations including;
 - Generation of AQUTAB include file influence functions for use in ECLIPSE
 - Creation of Corey, LET and Jerauld relative permeability tables in Eclipse format, with curve fitting support
 - Calculation of Methane, CO2 and multicomponent gas saturated brine properties (Soreide-Whitson VLE)
+- Method recommendation engine for selecting appropriate correlations based on fluid composition
+- Sensitivity analysis with parameter sweeps and tornado charts
 
 All public PVT, flow rate, and simulation table functions support both oilfield (psia, deg F, ft) and Eclipse METRIC (barsa, deg C, m) unit systems via an optional ``metric=False`` parameter. See individual module documentation for unit mapping details.
 
@@ -44,8 +49,12 @@ Module List
 .. list-table::
    :widths: 30 70
 
+   * - `dca <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/dca.rst>`_
+     - Arps and Duong decline rate and cumulative, EUR estimation, Decline model fitting (time-domain and cumulative, with windowing), Ratio model fitting (GOR/WOR), Forecasting with uptime and secondary phase ratios
+   * - `matbal <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/matbal.rst>`_
+     - Gas P/Z material balance (OGIP), Cole plot diagnostics, Havlena-Odeh with aquifer influx, Oil Havlena-Odeh material balance (OOIP) with drive indices, Parameter regression with bounds, Tabulated PVT support
    * - `gas <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/gas.rst>`_
-     - Gas Tc & Pc Calculation, Gas Z-Factor Calculation, Gas Viscosity, Gas Viscosity \* Z, Gas Compressibility, Gas Formation Volume Factor, Gas Density, Gas Water of Condensation, Convert P/Z to P, Convert Gas Gradient to SG, Delta Pseudopressure, Gas Condensate FWS SG, Gas Flow Rate Radial, Gas Flow Rate Linear
+     - Gas Tc & Pc Calculation, Gas Z-Factor Calculation, Gas Viscosity, Gas Viscosity \* Z, Gas Compressibility, Gas Formation Volume Factor, Gas Density, Gas Water of Condensation, Convert P/Z to P, Convert Gas Gradient to SG, Delta Pseudopressure, Gas Condensate FWS SG, Gas Flow Rate Radial, Gas Flow Rate Linear, Gas Hydrate Prediction
    * - `oil <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/oil.rst>`_
      - Oil Density from MW, Oil Critical Properties with Twu, Incremental GOR post Separation, Oil Bubble Point Pressure, Oil GOR at Pb, Oil GOR at P, Oil Compressibility, Oil Density, Oil Formation Volume Factor, Oil Viscosity, Harmonize Pb and Rsb, Estimate soln gas SG from oil, Estimate SG of gas post separator, Calculate weighted average surface gas SG, Oil API to SG, Oil SG to API, Oil Flow Rate Radial, Oil Flow Rate Linear
    * - `nodal <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/nodal.rst>`_
@@ -58,6 +67,10 @@ Module List
      - Lorenz coefficient from Beta value, Lorenz coefficient from flow fraction, Lorenz coefficient to flow fraction, Lorenz coefficient to permeability array
    * - `simtools <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/simtools.rst>`_
      - Summarize IX convergence errors from PRT file, Create Aquifer Influence Functions, Perform recursive ECL or IX deck zip/check for INCLUDE files, Solve Rachford Rice for user specified feed Zis and Ki's, Create sets of rel perm tables (Corey, LET, Jerauld), Fit relative permeability models to measured data, Generate Eclipse VFPPROD lift curve tables, Generate Eclipse VFPINJ injection curve tables, Create Black Oil tables (PVDO, PVDG, PVTO), Create PVTW water PVT tables
+   * - `recommend <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/recommend.rst>`_
+     - Recommend Z-factor, critical property, oil PVT, and VLP methods based on fluid composition and well configuration
+   * - `sensitivity <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/sensitivity.rst>`_
+     - Parameter sweeps and tornado chart sensitivity analysis
 
 
 Getting Started
@@ -79,6 +92,35 @@ A simple example below of estimating oil bubble point pressure.
     >>> from pyrestoolbox import oil
     >>> oil.oil_pbub(api=43, degf=185, rsb=2350, sg_g =0.72, pbmethod ='VALMC')
     5179.51086900132
+
+Fit a decline curve to production data and estimate ultimate recovery.
+
+.. code-block:: python
+
+    >>> import numpy as np
+    >>> from pyrestoolbox import dca
+    >>> t = np.arange(1, 51, dtype=float)
+    >>> q = 1000 * np.exp(-0.05 * t)
+    >>> result = dca.fit_decline(t, q, method='exponential')
+    >>> result.qi, result.di
+    (1000.0000000000007, 0.05000000000000006)
+    >>> dca.eur(qi=result.qi, di=result.di, b=0, q_min=10)
+    19799.99999999999
+
+Estimate gas in place from pressure-production history.
+
+.. code-block:: python
+
+    >>> from pyrestoolbox import matbal
+    >>> r = matbal.gas_matbal(
+    ...     p=[3000, 2700, 2400, 2100, 1800],
+    ...     Gp=[0, 5, 12, 22, 35],
+    ...     degf=200, sg=0.65
+    ... )
+    >>> r.ogip
+    87.602774253829
+    >>> r.r_squared
+    0.9734794008096929
 
 A set of Gas-Oil relative permeability curves with the LET method
 
