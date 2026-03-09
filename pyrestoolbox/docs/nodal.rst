@@ -2,143 +2,24 @@
 Nodal Analysis & VLP
 ===================================
 
-Vertical Lift Performance (VLP) calculations, Inflow Performance Relationships (IPR), and nodal operating point analysis for gas and oil wells.
+Vertical Lift Performance (VLP) calculations, Inflow Performance Relationships (IPR), and nodal operating point analysis for gas and oil wells. The typical workflow is: define a wellbore geometry using ``Completion`` (with optional ``WellSegment`` objects for deviated wells), define reservoir properties using ``Reservoir``, then find the operating point where VLP and IPR curves intersect using ``operating_point()``. Individual VLP and IPR curves can also be generated independently.
 
-Calculation Methods and Class Objects
-=====================================
-pyResToolBox uses class objects to track calculation options through the functions. Class objects can be set via strings or explicitly via object options
 
-.. list-table:: Method Variables & Class Objects
-   :widths: 10 15 40
-   :header-rows: 1
+Getting Started
+===============
 
-   * - Class Variable
-     - Class Object
-     - Class Description & Options
-   * - vlpmethod
-     - vlp_method
-     - Multiphase flow correlation for VLP calculations. Defaults to 'WG'.
-       Options are:
-        + 'HB': Hagedorn-Brown (1965) with Orkiszewski bubble flow correction
-        + 'WG': Woldesemayat-Ghajar (2007) drift-flux model
-        + 'GRAY': Gray (1978) effective roughness with acceleration term
-        + 'BB': Beggs & Brill (1973) with Payne et al. correction
-
-Users can specify which calculation method to use either by passing an option string, or a class object to any given function.
-
-Examples:
+A minimal example finding the operating point for a gas well:
 
 .. code-block:: python
 
     >>> from pyrestoolbox import nodal
     >>> c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
-    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    952.6868477414688
-
-Comparing all four VLP methods for the same gas well:
-
-.. code-block:: python
-
-    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    952.6868477414688
-    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='WG', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    1172.8626065704736
-    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='GRAY', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    1940.034905804135
-    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='BB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    1213.2399909265969
-
-
-VLP Method Suitability for Deviated and Horizontal Wells
-=========================================================
-
-.. warning::
-
-   The four VLP correlations implemented here were originally developed and validated against vertical or near-vertical well data. When applied to high-angle or horizontal wellbores, their accuracy varies significantly. Users should understand these limitations before relying on results for deviated completions.
-
-The deviation support in pyResToolbox applies a ``sin(theta)`` correction to the hydrostatic gradient term in each correlation and, where applicable, passes the inclination angle through to holdup and flow-pattern sub-models. This is the standard first-order treatment for inclined pipe, but it does not address all the physics that change at high angles.
-
-.. list-table:: Method Suitability by Inclination
-   :widths: 12 12 40
-   :header-rows: 1
-
-   * - Method
-     - Deviation Range
-     - Notes
-   * - **BB** (Beggs & Brill)
-     - 0 -- 90 deg
-     - The only correlation in this set originally developed for all inclinations. The flow-pattern map and inclination correction factor (Payne et al. 1979) were fitted to data covering the full range from vertical to horizontal. Preferred first choice for deviated and horizontal wells.
-   * - **WG** (Woldesemayat-Ghajar)
-     - 0 -- 90 deg
-     - Drift-flux formulation with an inclination-dependent drift velocity term. The void-fraction model explicitly includes ``sin(theta)`` and ``cos(theta)`` terms derived from a broad multi-angle dataset. Suitable across the full inclination range.
-   * - **HB** (Hagedorn-Brown)
-     - 0 -- ~30 deg
-     - Developed from vertical well data only. The holdup correlation charts were fitted to vertical upflow experiments. At moderate deviations the ``sin(theta)`` hydrostatic correction provides a reasonable approximation, but the holdup model itself has no inclination dependence. Use with caution beyond ~30 degrees from vertical; results become increasingly unreliable at high angles.
-   * - **GRAY** (Gray)
-     - 0 -- ~30 deg
-     - Developed for vertical gas-condensate wells. The effective roughness and liquid holdup models assume vertical counter-current film flow. Like HB, only the hydrostatic term is corrected for inclination. Not recommended for wells with significant deviation.
-
-**Recommendations for high-angle wells:**
-
-- For wells with deviation > 30 degrees, prefer **BB** or **WG**. Both have explicit inclination modelling in their holdup / void-fraction formulations.
-- For near-horizontal wells (deviation > 70 degrees), **BB** is the most widely validated choice. Flow-pattern transitions change fundamentally in horizontal pipe (stratified flow becomes dominant), and the Beggs & Brill flow-pattern map was designed to capture this.
-- For vertical and near-vertical wells (deviation < 30 degrees), all four methods are appropriate. HB and Gray were specifically developed for this regime and may give more accurate results than BB for gas and gas-condensate wells.
-- When in doubt, run multiple methods and compare. Large disagreement between BB/WG and HB/Gray at high angles is expected and indicates that the inclination-insensitive correlations are outside their validation envelope.
-- These correlations should not be used as a substitute for a calibrated mechanistic multiphase model when accurate pressure predictions are required for field development decisions in deviated or horizontal wells.
-
-
-Unit System Support
-===================
-
-All nodal classes and functions accept a ``metric=False`` parameter. When set to ``True``, inputs and outputs use Eclipse METRIC units:
-
-.. list-table:: Unit Convention
-   :widths: 15 20 20
-   :header-rows: 1
-
-   * - Quantity
-     - Field (metric=False)
-     - Metric (metric=True)
-   * - Pressure
-     - psia
-     - barsa
-   * - Temperature
-     - deg F
-     - deg C
-   * - Length / Depth
-     - ft
-     - m
-   * - Pipe diameter
-     - inches
-     - mm
-   * - Pipe roughness
-     - inches
-     - mm
-   * - Gas rate
-     - MMscf/d
-     - sm3/d
-   * - Liquid rate
-     - STB/d
-     - sm3/d
-   * - CGR
-     - STB/MMscf
-     - sm3/sm3
-   * - GOR
-     - scf/STB
-     - sm3/sm3
-   * - Non-Darcy D
-     - day/mscf
-     - day/sm3
-
-The data classes (``WellSegment``, ``Completion``, ``Reservoir``) convert metric inputs to oilfield units internally, so all calculation engines operate in field units regardless of the user-facing unit system. Standard conditions in metric mode are 1.01325 barsa and 15.0 deg C.
-
-
-PVT Wrapper Objects
-===================
-
-``GasPVT`` and ``OilPVT`` are convenience classes defined in the ``gas`` and ``oil`` modules respectively. See the `gas module documentation <gas.rst>`_ and `oil module documentation <oil.rst>`_ for full constructor signatures, parameter tables, and examples.
-
-They can be passed directly to ``fbhp()``, ``outflow_curve()``, ``ipr_curve()``, and ``operating_point()`` for property evaluation. They can also be passed to ``gas_rate_radial()``, ``gas_rate_linear()``, ``oil_rate_radial()``, and ``oil_rate_linear()`` for IPR rate calculations.
+    >>> r = nodal.Reservoir(pr=3000, degf=200, k=10, h=50, re=1500, rw=0.35, S=2, D=0.001)
+    >>> result = nodal.operating_point(thp=500, completion=c, reservoir=r, vlpmethod='HB', well_type='gas', gsg=0.65)
+    >>> round(result['rate'], 2)
+    10.61
+    >>> round(result['bhp'], 1)
+    1573.7
 
 
 Function List
@@ -894,3 +775,140 @@ Oil well operating point:
     1412.6
     >>> round(result['bhp'], 1)
     2193.0
+
+
+Calculation Methods and Class Objects
+=====================================
+pyResToolBox uses class objects to track calculation options through the functions. Class objects can be set via strings or explicitly via object options
+
+.. list-table:: Method Variables & Class Objects
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Class Variable
+     - Class Object
+     - Class Description & Options
+   * - vlpmethod
+     - vlp_method
+     - Multiphase flow correlation for VLP calculations. Defaults to 'WG'.
+       Options are:
+        + 'HB': Hagedorn-Brown (1965) with Orkiszewski bubble flow correction
+        + 'WG': Woldesemayat-Ghajar (2007) drift-flux model
+        + 'GRAY': Gray (1978) effective roughness with acceleration term
+        + 'BB': Beggs & Brill (1973) with Payne et al. correction
+
+Users can specify which calculation method to use either by passing an option string, or a class object to any given function.
+
+Examples:
+
+.. code-block:: python
+
+    >>> from pyrestoolbox import nodal
+    >>> c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
+    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
+    952.6868477414688
+
+Comparing all four VLP methods for the same gas well:
+
+.. code-block:: python
+
+    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
+    952.6868477414688
+    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='WG', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
+    1172.8626065704736
+    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='GRAY', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
+    1940.034905804135
+    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='BB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
+    1213.2399909265969
+
+
+VLP Method Suitability for Deviated and Horizontal Wells
+=========================================================
+
+.. warning::
+
+   The four VLP correlations implemented here were originally developed and validated against vertical or near-vertical well data. When applied to high-angle or horizontal wellbores, their accuracy varies significantly. Users should understand these limitations before relying on results for deviated completions.
+
+The deviation support in pyResToolbox applies a ``sin(theta)`` correction to the hydrostatic gradient term in each correlation and, where applicable, passes the inclination angle through to holdup and flow-pattern sub-models. This is the standard first-order treatment for inclined pipe, but it does not address all the physics that change at high angles.
+
+.. list-table:: Method Suitability by Inclination
+   :widths: 12 12 40
+   :header-rows: 1
+
+   * - Method
+     - Deviation Range
+     - Notes
+   * - **BB** (Beggs & Brill)
+     - 0 -- 90 deg
+     - The only correlation in this set originally developed for all inclinations. The flow-pattern map and inclination correction factor (Payne et al. 1979) were fitted to data covering the full range from vertical to horizontal. Preferred first choice for deviated and horizontal wells.
+   * - **WG** (Woldesemayat-Ghajar)
+     - 0 -- 90 deg
+     - Drift-flux formulation with an inclination-dependent drift velocity term. The void-fraction model explicitly includes ``sin(theta)`` and ``cos(theta)`` terms derived from a broad multi-angle dataset. Suitable across the full inclination range.
+   * - **HB** (Hagedorn-Brown)
+     - 0 -- ~30 deg
+     - Developed from vertical well data only. The holdup correlation charts were fitted to vertical upflow experiments. At moderate deviations the ``sin(theta)`` hydrostatic correction provides a reasonable approximation, but the holdup model itself has no inclination dependence. Use with caution beyond ~30 degrees from vertical; results become increasingly unreliable at high angles.
+   * - **GRAY** (Gray)
+     - 0 -- ~30 deg
+     - Developed for vertical gas-condensate wells. The effective roughness and liquid holdup models assume vertical counter-current film flow. Like HB, only the hydrostatic term is corrected for inclination. Not recommended for wells with significant deviation.
+
+**Recommendations for high-angle wells:**
+
+- For wells with deviation > 30 degrees, prefer **BB** or **WG**. Both have explicit inclination modelling in their holdup / void-fraction formulations.
+- For near-horizontal wells (deviation > 70 degrees), **BB** is the most widely validated choice. Flow-pattern transitions change fundamentally in horizontal pipe (stratified flow becomes dominant), and the Beggs & Brill flow-pattern map was designed to capture this.
+- For vertical and near-vertical wells (deviation < 30 degrees), all four methods are appropriate. HB and Gray were specifically developed for this regime and may give more accurate results than BB for gas and gas-condensate wells.
+- When in doubt, run multiple methods and compare. Large disagreement between BB/WG and HB/Gray at high angles is expected and indicates that the inclination-insensitive correlations are outside their validation envelope.
+- These correlations should not be used as a substitute for a calibrated mechanistic multiphase model when accurate pressure predictions are required for field development decisions in deviated or horizontal wells.
+
+
+Unit System Support
+===================
+
+All nodal classes and functions accept a ``metric=False`` parameter. When set to ``True``, inputs and outputs use Eclipse METRIC units:
+
+.. list-table:: Unit Convention
+   :widths: 15 20 20
+   :header-rows: 1
+
+   * - Quantity
+     - Field (metric=False)
+     - Metric (metric=True)
+   * - Pressure
+     - psia
+     - barsa
+   * - Temperature
+     - deg F
+     - deg C
+   * - Length / Depth
+     - ft
+     - m
+   * - Pipe diameter
+     - inches
+     - mm
+   * - Pipe roughness
+     - inches
+     - mm
+   * - Gas rate
+     - MMscf/d
+     - sm3/d
+   * - Liquid rate
+     - STB/d
+     - sm3/d
+   * - CGR
+     - STB/MMscf
+     - sm3/sm3
+   * - GOR
+     - scf/STB
+     - sm3/sm3
+   * - Non-Darcy D
+     - day/mscf
+     - day/sm3
+
+The data classes (``WellSegment``, ``Completion``, ``Reservoir``) convert metric inputs to oilfield units internally, so all calculation engines operate in field units regardless of the user-facing unit system. Standard conditions in metric mode are 1.01325 barsa and 15.0 deg C.
+
+
+PVT Wrapper Objects
+===================
+
+``GasPVT`` and ``OilPVT`` are convenience classes defined in the ``gas`` and ``oil`` modules respectively. See the `gas module documentation <gas.rst>`_ and `oil module documentation <oil.rst>`_ for full constructor signatures, parameter tables, and examples.
+
+They can be passed directly to ``fbhp()``, ``outflow_curve()``, ``ipr_curve()``, and ``operating_point()`` for property evaluation. They can also be passed to ``gas_rate_radial()``, ``gas_rate_linear()``, ``oil_rate_radial()``, and ``oil_rate_linear()`` for IPR rate calculations.

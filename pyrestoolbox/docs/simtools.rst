@@ -2,44 +2,84 @@
 Simulation Helpers
 ===================================
 
+Simulation-oriented utilities for deck management, aquifer modelling, phase equilibrium, relative permeability curve generation and fitting, and PVT/VFP table generation for Eclipse.
+
 Function List
 =============
 
-.. list-table:: Simulation Helpers
+**Deck Management**
+
+.. list-table::
    :widths: 15 40
    :header-rows: 1
 
    * - Task
      - Function
-   * - Extracting cells with convergence issues from IX PRT file
+   * - Extract convergence issue cells from IX PRT file
      - `pyrestoolbox.simtools.ix_extract_problem_cells`_
-   * - Solves Van Everdingin & Hurst Constant Terminal Rate solution via inverse Laplace transform and optionally writes out ECLIPSE styled AQUTAB include file
-     - `pyrestoolbox.simtools.influence_tables`_
-   * - Performs a recursive deck zip/check for all INCLUDE files in ECL and IX files
+   * - Recursive deck zip/check for INCLUDE files
      - `pyrestoolbox.simtools.zip_check_sim_deck`_
-   * - Solves the Rachford Rice equation
+
+**Aquifer Modelling**
+
+.. list-table::
+   :widths: 15 40
+   :header-rows: 1
+
+   * - Task
+     - Function
+   * - Van Everdingen-Hurst influence tables (AQUTAB)
+     - `pyrestoolbox.simtools.influence_tables`_
+
+**Phase Equilibrium**
+
+.. list-table::
+   :widths: 15 40
+   :header-rows: 1
+
+   * - Task
+     - Function
+   * - Rachford-Rice flash solver
      - `pyrestoolbox.simtools.rr_solver`_
-   * - Generates ECLIPSE style relative permeability tables (Corey, LET, Jerauld)
+
+**Relative Permeability**
+
+.. list-table::
+   :widths: 15 40
+   :header-rows: 1
+
+   * - Task
+     - Function
+   * - Generate Eclipse rel-perm tables (SWOF, SGOF, SGWFN)
      - `pyrestoolbox.simtools.rel_perm_table`_
    * - Corey relative permeability model
      - `pyrestoolbox.simtools.corey`_
    * - LET relative permeability model
      - `pyrestoolbox.simtools.LET`_
-   * - Jerauld (Arco) two-parameter relative permeability model
+   * - Jerauld (Arco) two-parameter model
      - `pyrestoolbox.simtools.jerauld`_
-   * - Checks LET curve physicality (monotonicity and concavity)
+   * - Check LET curve physicality
      - `pyrestoolbox.simtools.is_let_physical`_
-   * - Fits a relative permeability model to measured data
+   * - Fit a rel-perm model to data
      - `pyrestoolbox.simtools.fit_rel_perm`_
-   * - Fits all three kr models and returns the best fit
+   * - Fit all three models, return best
      - `pyrestoolbox.simtools.fit_rel_perm_best`_
-   * - Generates Eclipse VFPINJ keyword tables for injection wells
+
+**PVT & VFP Table Generation**
+
+.. list-table::
+   :widths: 15 40
+   :header-rows: 1
+
+   * - Task
+     - Function
+   * - Eclipse VFPINJ table (injection wells)
      - `pyrestoolbox.simtools.make_vfpinj`_
-   * - Generates Eclipse VFPPROD keyword tables for production wells
+   * - Eclipse VFPPROD table (production wells)
      - `pyrestoolbox.simtools.make_vfpprod`_
-   * - Creates Oil-Gas-Water Black Oil tables with optional ECLIPSE export (PVDO, PVDG, PVTO)
+   * - Black Oil tables (PVDO, PVDG, PVTO)
      - `pyrestoolbox.simtools.make_bot_og`_
-   * - Generates PVTW (water PVT) table with optional ECLIPSE export
+   * - Water PVT table (PVTW)
      - `pyrestoolbox.simtools.make_pvtw_table`_
 
 
