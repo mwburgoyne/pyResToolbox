@@ -44,6 +44,20 @@ Decision logic:
      - float
      - H2 mole fraction (default 0)
 
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 'zmethod'
+     - MethodRecommendation
+     - Recommended Z-factor method
+   * - 'cmethod'
+     - MethodRecommendation
+     - Recommended critical property method
+
 Examples:
 
 .. code-block:: python
@@ -86,6 +100,23 @@ Recommend oil PVT correlation methods based on API gravity. Returns a dict with 
      - float
      - Oil API gravity (default 35.0)
 
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 'pbmethod'
+     - MethodRecommendation
+     - Recommended bubble point method
+   * - 'rsmethod'
+     - MethodRecommendation
+     - Recommended solution GOR method
+   * - 'bomethod'
+     - MethodRecommendation
+     - Recommended oil FVF method
+
 Examples:
 
 .. code-block:: python
@@ -125,6 +156,17 @@ HB and Gray were developed for vertical flow data and become unreliable beyond ~
    * - well_type
      - str
      - 'gas' or 'oil' (default 'gas')
+
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 'vlp_method'
+     - MethodRecommendation
+     - Recommended VLP correlation
 
 Examples:
 
@@ -184,6 +226,32 @@ Master recommendation function combining gas, oil, and VLP recommendations. Oil 
    * - well_type
      - str
      - 'gas' or 'oil' (default 'gas')
+
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 'zmethod'
+     - MethodRecommendation
+     - Recommended Z-factor method
+   * - 'cmethod'
+     - MethodRecommendation
+     - Recommended critical property method
+   * - 'vlp_method'
+     - MethodRecommendation
+     - Recommended VLP correlation
+   * - 'pbmethod'
+     - MethodRecommendation
+     - Recommended bubble point method (only when api is provided)
+   * - 'rsmethod'
+     - MethodRecommendation
+     - Recommended solution GOR method (only when api is provided)
+   * - 'bomethod'
+     - MethodRecommendation
+     - Recommended oil FVF method (only when api is provided)
 
 Examples:
 

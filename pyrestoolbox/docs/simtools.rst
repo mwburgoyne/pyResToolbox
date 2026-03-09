@@ -68,6 +68,17 @@ List returned is [well_pressure_df, grid_pressure_df, sat_change_df, comp_change
      - bool
      - False will return only the list of dataframes, with nothing echoed to the terminal. True will print summary of worst entities to the terminal as well as returning the list.
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - list
+     - List of 4 sorted DataFrames: [well_pressure_df, grid_pressure_df, sat_change_df, comp_change_df]
+
 Examples:
 
 .. code-block:: python
@@ -129,6 +140,20 @@ Returns a tuple of;
      - bool
      - Boolean value that controls whether an include file with 'INFLUENCE.INC' name is created. Default: False
 
+.. list-table:: Returns (tuple)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Index
+     - Type
+     - Description
+   * - [0]
+     - list
+     - Dimensionless time values
+   * - [1]
+     - list of lists
+     - Dimensionless pressures at each time for each radius
+
 Examples:
 
 .. code-block:: python
@@ -189,6 +214,17 @@ If files2scrape list is NOT specified:
    * - console_summary
      - bool
      - True will return verbose summary to terminal. False will return only list of missing files with no terminal echo.
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - list or None
+     - List of missing include file paths, or None if all found
 
 Examples:
 
@@ -371,6 +407,16 @@ pyrestoolbox.simtools.rel_perm_table
         + SGOF: Gas / Oil table
         + SGFN: Gas / Water table
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - pd.DataFrame
+     - Relative permeability table with saturation and kr columns
 
 Examples:
 
@@ -430,6 +476,17 @@ Returns Corey relative permeability values: ``kr = S^n``.
      - float
      - Corey exponent
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - np.ndarray
+     - Relative permeability values
+
 Examples:
 
 .. code-block:: python
@@ -470,6 +527,17 @@ Returns LET relative permeability values (Lomeland, Ebeltoft & Thomas, 2005): ``
      - float
      - LET 'T' parameter
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - np.ndarray
+     - Relative permeability values
+
 Examples:
 
 .. code-block:: python
@@ -506,6 +574,17 @@ Returns Jerauld (Arco) relative permeability values for the two-parameter model:
    * - b
      - float
      - Jerauld 'b' parameter (> 0)
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - np.ndarray
+     - Relative permeability values
 
 Examples:
 
@@ -546,6 +625,17 @@ Checks if a LET relative permeability curve is physical - that it is monotonical
    * - T
      - float
      - LET 'T' parameter
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - bool
+     - True if curve is physical (monotonically increasing, no inflection reversals)
 
 Examples:
 
@@ -593,7 +683,34 @@ Fits a relative permeability model (Corey, LET, or Jerauld) to measured kr data 
      - float
      - Maximum saturation endpoint. Default 1.0
 
-Returns a dictionary with keys: ``params`` (dict of fitted parameter names and values), ``krmax``, ``sw_min``, ``sw_max``, ``residuals`` (array), ``ssq`` (sum of squared residuals), ``kr_pred`` (predicted kr at input points).
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 'params'
+     - dict
+     - Fitted parameter names and values
+   * - 'krmax'
+     - float
+     - Maximum kr endpoint value used
+   * - 'sw_min'
+     - float
+     - Minimum saturation endpoint used
+   * - 'sw_max'
+     - float
+     - Maximum saturation endpoint used
+   * - 'residuals'
+     - np.ndarray
+     - Residual array (observed - predicted)
+   * - 'ssq'
+     - float
+     - Sum of squared residuals
+   * - 'kr_pred'
+     - np.ndarray
+     - Predicted kr values at input saturation points
 
 Examples:
 
@@ -642,7 +759,40 @@ Fits all three relative permeability models (Corey, LET, Jerauld) to measured da
      - float
      - Maximum saturation endpoint. Default 1.0
 
-Returns a dictionary with same keys as ``fit_rel_perm``, plus ``family`` (name of best-fit model) and ``all_results`` (dict of all three fit results keyed by family name).
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 'family'
+     - str
+     - Name of best-fit model ('COR', 'LET', or 'JER')
+   * - 'params'
+     - dict
+     - Fitted parameter names and values
+   * - 'krmax'
+     - float
+     - Maximum kr endpoint value used
+   * - 'sw_min'
+     - float
+     - Minimum saturation endpoint used
+   * - 'sw_max'
+     - float
+     - Maximum saturation endpoint used
+   * - 'residuals'
+     - np.ndarray
+     - Residual array (observed - predicted)
+   * - 'ssq'
+     - float
+     - Sum of squared residuals
+   * - 'kr_pred'
+     - np.ndarray
+     - Predicted kr values at input saturation points
+   * - 'all_results'
+     - dict
+     - All three fit results keyed by family name
 
 Examples:
 
@@ -733,7 +883,37 @@ Generates an Eclipse VFPINJ keyword table for injection wells. Computes BHP as a
      - bool
      - If True, inputs/outputs use Eclipse METRIC units (barsa, sm3/d, m). Eclipse keyword output uses 'METRIC' unit system. Default False
 
-Returns a dictionary with keys: ``table_num``, ``datum_depth``, ``flo_type``, ``flo_rates``, ``thp_values``, ``bhp`` (2D numpy array shape NTHP x NFLO), ``n_failed``, ``eclipse_string``.
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 'table_num'
+     - int
+     - VFP table number
+   * - 'datum_depth'
+     - float
+     - Bottom hole datum depth
+   * - 'flo_type'
+     - str
+     - Flow rate type
+   * - 'flo_rates'
+     - list
+     - Flow rate values
+   * - 'thp_values'
+     - list
+     - Tubing head pressure values
+   * - 'bhp'
+     - np.ndarray
+     - BHP array, shape (NTHP, NFLO)
+   * - 'n_failed'
+     - int
+     - Number of failed VLP calculations
+   * - 'eclipse_string'
+     - str
+     - Eclipse VFPINJ keyword text
 
 Examples:
 
@@ -837,7 +1017,55 @@ For oil wells: FLO=OIL (stb/d, or sm3/d if metric), WFR=WCT (fraction 0-1), GFR=
      - bool
      - If True, inputs/outputs use Eclipse METRIC units (barsa, sm3/d, sm3/sm3, m). Eclipse keyword output uses 'METRIC' unit system. Default False
 
-Returns a dictionary with keys: ``table_num``, ``datum_depth``, ``well_type``, ``flo_type``, ``wfr_type``, ``gfr_type``, ``flo_rates``, ``thp_values``, ``wfr_values``, ``gfr_values``, ``alq_values``, ``bhp`` (5D numpy array shape NTHP x NWFR x NGFR x NALQ x NFLO), ``n_failed``, ``eclipse_string``.
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 'table_num'
+     - int
+     - VFP table number
+   * - 'datum_depth'
+     - float
+     - Bottom hole datum depth
+   * - 'well_type'
+     - str
+     - Well type ('gas' or 'oil')
+   * - 'flo_type'
+     - str
+     - Flow rate type
+   * - 'wfr_type'
+     - str
+     - Water fraction type
+   * - 'gfr_type'
+     - str
+     - Gas fraction type
+   * - 'flo_rates'
+     - list
+     - Flow rate values
+   * - 'thp_values'
+     - list
+     - Tubing head pressure values
+   * - 'wfr_values'
+     - list
+     - Water fraction values
+   * - 'gfr_values'
+     - list
+     - Gas fraction values
+   * - 'alq_values'
+     - list
+     - Artificial lift values
+   * - 'bhp'
+     - np.ndarray
+     - BHP array, shape (NTHP, NWFR, NGFR, NALQ, NFLO)
+   * - 'n_failed'
+     - int
+     - Number of failed VLP calculations
+   * - 'eclipse_string'
+     - str
+     - Eclipse VFPPROD keyword text
 
 Examples:
 
@@ -867,19 +1095,6 @@ Creates data required for Oil-Gas-Water black oil tables (PVDO, PVDG, optionally
 .. note::
 
     This function was moved from the oil module to simtools in v3.0. A backward-compatible wrapper remains at ``oil.make_bot_og()`` that delegates to this function.
-
-Returns dictionary of results with keys:
-  - ``bot``: Pandas DataFrame of black oil data
-  - ``deno``: Stock tank oil density (lb/cuft, or kg/m3 if metric)
-  - ``deng``: Stock tank gas density (lb/cuft, or kg/m3 if metric)
-  - ``denw``: Water density at Pi (lb/cuft, or kg/m3 if metric)
-  - ``cw``: Water compressibility at Pi (1/psi, or 1/bar if metric)
-  - ``uw``: Water viscosity at Pi (cP)
-  - ``pb``: Bubble point pressure (psia, or barsa if metric)
-  - ``rsb``: Solution GOR at Pb (scf/stb, or sm3/sm3 if metric)
-  - ``rsb_scale``: Scaling factor for Pb/Rsb harmonization
-  - ``vis_frac``: Viscosity scaling factor applied to all oil viscosity outputs
-  - ``usat``: Undersaturated values [usat_p, usat_bo, usat_uo] (if pvto=True)
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -934,6 +1149,47 @@ Returns dictionary of results with keys:
      - bool
      - If True, inputs/outputs use Eclipse METRIC units (barsa, deg C, sm3/sm3, kg/m3, 1/bar). Eclipse keyword output uses METRIC format. Default False
 
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 'bot'
+     - DataFrame
+     - Black oil data table
+   * - 'deno'
+     - float
+     - Stock tank oil density (lb/cuft, or kg/m3 if metric)
+   * - 'deng'
+     - float
+     - Stock tank gas density (lb/cuft, or kg/m3 if metric)
+   * - 'denw'
+     - float
+     - Water density at Pi (lb/cuft, or kg/m3 if metric)
+   * - 'cw'
+     - float
+     - Water compressibility at Pi (1/psi, or 1/bar if metric)
+   * - 'uw'
+     - float
+     - Water viscosity at Pi (cP)
+   * - 'pb'
+     - float
+     - Bubble point pressure (psia, or barsa if metric)
+   * - 'rsb'
+     - float
+     - Solution GOR at Pb (scf/stb, or sm3/sm3 if metric)
+   * - 'rsb_scale'
+     - float
+     - Scaling factor for Pb/Rsb harmonization
+   * - 'vis_frac'
+     - float
+     - Viscosity scaling factor
+   * - 'usat'
+     - list
+     - Undersaturated values [usat_p, usat_bo, usat_uo] if pvto=True
+
 Examples:
 
 .. code-block:: python
@@ -956,8 +1212,6 @@ Generates a PVTW (water PVT) table over a pressure range using brine_props (Spiv
 .. note::
 
     This function was moved from the brine module to simtools in v3.0. A backward-compatible wrapper remains at ``brine.make_pvtw_table()`` that delegates to this function.
-
-Returns dictionary with keys: ``table`` (DataFrame), ``pref`` (psia, or barsa if metric), ``bw_ref``, ``cw_ref`` (1/psi, or 1/bar if metric), ``visw_ref`` (cP), ``rsw_ref`` (scf/stb, or sm3/sm3 if metric), ``den_ref`` (sg).
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -993,6 +1247,35 @@ Returns dictionary with keys: ``table`` (DataFrame), ``pref`` (psia, or barsa if
    * - metric
      - bool
      - If True, inputs/outputs use Eclipse METRIC units (barsa, deg C, sm3/sm3, 1/bar). Eclipse keyword output uses METRIC format. Default False
+
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 'table'
+     - DataFrame
+     - Pressure, Bw, Density, Viscosity, Cw, Rsw
+   * - 'pref'
+     - float
+     - Reference pressure (psia, or barsa if metric)
+   * - 'bw_ref'
+     - float
+     - Bw at reference pressure (rb/stb)
+   * - 'cw_ref'
+     - float
+     - Compressibility at reference pressure (1/psi, or 1/bar if metric)
+   * - 'visw_ref'
+     - float
+     - Viscosity at reference pressure (cP)
+   * - 'rsw_ref'
+     - float
+     - Rsw at reference pressure (scf/stb, or sm3/sm3 if metric)
+   * - 'den_ref'
+     - float
+     - Density (sg) at reference pressure
 
 Examples:
 

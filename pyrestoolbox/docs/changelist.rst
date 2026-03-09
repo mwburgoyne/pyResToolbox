@@ -19,6 +19,7 @@ Changelist in 3.0.4:
 - **gas_matbal() tabulated PVT**: New ``pvt_table`` parameter accepts either ``{'p': [...], 'Z': [...]}`` or ``{'p': [...], 'Bg': [...]}``. Z and Bg are inter-converted internally. Providing both 'Z' and 'Bg' raises ValueError.
 - **RANSAC linear regression**: All linear regression in DCA fitting (``fit_decline()``, ``fit_decline_cum()``, ``fit_ratio()``) and gas material balance (``gas_matbal()`` P/Z regression) now uses RANSAC (Random Sample Consensus) with MAD-based outlier detection. Outlier-contaminated data produces robust fits; clean data reproduces ordinary least squares exactly. New ``ransac_linreg()`` utility in ``shared_fns``.
 - **Linearized hyperbolic fitting**: ``_fit_hyperbolic()`` and ``_fit_hyperbolic_cum()`` replaced scipy ``curve_fit`` with a grid-search-over-b linearization approach. For each trial b, the Arps equation becomes linear, and RANSAC regression recovers qi and di algebraically. Eliminates local minima from nonlinear optimization.
+- **Documentation**: Standardized Returns tables across all 11 RST documentation files. Every function now has a structured Returns table (between Inputs and Examples) documenting return type, attributes/keys, and descriptions. Covers simple scalars, tuples, dicts, dataclass/class results, and arrays. Class Objects sections updated with cross-references to inline Returns tables.
 - 588 validation tests (up from 580).
 
 

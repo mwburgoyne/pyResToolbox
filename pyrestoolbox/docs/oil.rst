@@ -201,6 +201,17 @@ Returns liquid hydrocarbon specific gravity (SG relative to water) at stock tank
      - float
      - Jacoby aromaticity factor, vary between 0 (Paraffins) - 1 (Aromatic).
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Oil specific gravity (relative to water)
+
 Examples:
 
 .. code-block:: python
@@ -241,6 +252,29 @@ If sg is left as default, the Jacoby relationship shall be used to estimate spec
    * - metric
      - bool
      - Use Eclipse METRIC units for outputs (K, barsa, m3/kmol). Default False
+
+.. list-table:: Returns (tuple)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Index
+     - Type
+     - Description
+   * - [0]
+     - float
+     - Specific gravity (relative to water)
+   * - [1]
+     - float
+     - Normal boiling point (deg R, or K if metric=True)
+   * - [2]
+     - float
+     - Critical temperature (deg R, or K if metric=True)
+   * - [3]
+     - float
+     - Critical pressure (psia, or barsa if metric=True)
+   * - [4]
+     - float
+     - Critical volume (cuft/lbmol, or m3/kmol if metric=True)
 
 Examples:
 
@@ -290,6 +324,17 @@ rs_st = 0.1618 * Separator GOR (Adapted from Eq 3-4 in Valko McCain 2003 paper)
      - bool
      - Use Eclipse METRIC units for inputs/outputs. Default False
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Incremental stock tank gas (scf/stb, or sm3/sm3 if metric=True)
+
 Examples:
 
 .. code-block:: python
@@ -336,6 +381,17 @@ At least one of sg_g and sg_sp must be supplied. This function will make simple 
    * - metric
      - bool
      - Use Eclipse METRIC units for inputs/outputs. Default False
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Bubble point pressure (psia, or barsa if metric=True)
 
 Examples:
 
@@ -393,6 +449,17 @@ At least one of sg_g and sg_sp must be supplied. This function will make simple 
      - bool
      - Use Eclipse METRIC units for inputs/outputs. Default False
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Solution GOR at bubble point (scf/stb, or sm3/sm3 if metric=True)
+
 Examples:
 
 .. code-block:: python
@@ -444,6 +511,17 @@ Returns solution gas oil ratio (scf/stb, or sm3/sm3 if metric=True) calculated w
    * - metric
      - bool
      - Use Eclipse METRIC units for inputs/outputs. Default False
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Solution gas-oil ratio (scf/stb, or sm3/sm3 if metric=True)
 
 Examples:
 
@@ -526,6 +604,17 @@ Either pb, rsb or both need to be specified. If one is missing, the other will b
      - bool
      - Use Eclipse METRIC units for inputs/outputs. Default False
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Oil compressibility (1/psi, or 1/barsa if metric=True)
+
 
 Examples:
 
@@ -591,6 +680,17 @@ pb only needs to be set when pressures are above pb. For saturated oil, this can
      - bool
      - Use Eclipse METRIC units for inputs/outputs. Default False
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Live oil density (lb/cuft, or kg/m3 if metric=True)
+
 
 Examples:
 
@@ -651,6 +751,17 @@ At least one of sg_g and sg_sp must be supplied. This function will make simple 
      - bool
      - Use Eclipse METRIC units for inputs/outputs. Default False
 
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Oil formation volume factor (rb/stb, or rm3/sm3 if metric=True)
+
 Examples:
 
 .. code-block:: python
@@ -695,6 +806,17 @@ Returns Oil Viscosity (cP) with Beggs-Robinson (1975) correlation at saturated p
    * - metric
      - bool
      - Use Eclipse METRIC units for inputs/outputs. Default False
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Oil viscosity (cP)
 
 Examples:
 
@@ -759,6 +881,26 @@ Returns tuple of ``(pb, rsb, rsb_frac, vis_frac)`` where rsb_frac is 1.0 when on
    * - metric
      - bool
      - Use Eclipse METRIC units for inputs/outputs. Default False
+
+.. list-table:: Returns (tuple)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Index
+     - Type
+     - Description
+   * - [0]
+     - float
+     - Bubble point pressure (psia, or barsa if metric=True)
+   * - [1]
+     - float
+     - Solution GOR at Pb (scf/stb, or sm3/sm3 if metric=True)
+   * - [2]
+     - float
+     - rsb_frac scaling factor (1.0 when only one of Pb/Rsb specified)
+   * - [3]
+     - float
+     - vis_frac viscosity scaling factor (1.0 when no target viscosity specified)
 
 Examples:
 
@@ -871,6 +1013,44 @@ If user species Pb or Rsb only, the corresponding property will be calculated. I
      - bool
      - Boolean flag that controls whether PVTO live oil Eclipse format will be generated. If True: extends saturated pressures up to maximum pressure, generates undersaturated oil properties at each pressure step, and writes out PVTO include file if export is also True. Default is False
 
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 'bot'
+     - DataFrame
+     - Black oil data table
+   * - 'deno'
+     - float
+     - Stock tank oil density (lb/cuft)
+   * - 'deng'
+     - float
+     - Stock tank gas density (lb/cuft)
+   * - 'denw'
+     - float
+     - Water density at Pi (lb/cuft)
+   * - 'cw'
+     - float
+     - Water compressibility at Pi (1/psi)
+   * - 'uw'
+     - float
+     - Water viscosity at Pi (cP)
+   * - 'pb'
+     - float
+     - Bubble point pressure (psia)
+   * - 'rsb'
+     - float
+     - Solution GOR at Pb (scf/stb)
+   * - 'rsb_scale'
+     - float
+     - Scaling factor for Pb/Rsb harmonization
+   * - 'usat'
+     - list
+     - Undersaturated values [usat_p, usat_bo, usat_uo] if pvto=True
+
 Examples:
 
 .. code-block:: python
@@ -911,7 +1091,18 @@ Returns estimated specific gravity of gas evolved from insitu-oil due to depress
      - Density of stock tank liquid (API). Will calculate from sg_sto if not specified
    * - sg_sp
      - float
-     - Separator gas gravity (relative to air). 
+     - Separator gas gravity (relative to air).
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Specific gravity of evolved gas (relative to air)
 
 
 Examples:
@@ -948,8 +1139,19 @@ Estimates specific gravity of gas evolving from liquid exiting the separator. Re
      - Density of stock tank liquid (API)
    * - degf_sp
      - float
-     - Separator temperature (deg F). 
-     
+     - Separator temperature (deg F).
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Stock tank gas specific gravity (relative to air)
+
 Examples:
 
 .. code-block:: python
@@ -986,8 +1188,19 @@ Calculates weighted average specific gravity of surface gas (sg_g) from separato
      - Specific gravity of incremental gas evolved from separator liquid as it equilibrates to stock tank conditions (relative to air)
    * - rst
      - float
-     - Incremental gas evolved from separator liquid as it equilibrates to stock tank conditions (scf/stb). 
-     
+     - Incremental gas evolved from separator liquid as it equilibrates to stock tank conditions (scf/stb).
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Weighted average surface gas specific gravity (relative to air)
+
 Examples:
 
 .. code-block:: python
@@ -1015,7 +1228,18 @@ Returns oil API given specific gravity value of oil
    * - sg_value
      - float
      - Specific gravity (relative to water)
-     
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Oil API gravity (degrees)
+
 Examples:
 
 .. code-block:: python
@@ -1043,7 +1267,18 @@ Returns oil specific gravity given API value of oil
    * - api_value
      - float
      - Oil API density
-     
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Oil specific gravity (relative to water)
+
 Examples:
 
 .. code-block:: python
@@ -1112,6 +1347,17 @@ Either ``uo`` and ``bo`` must be provided explicitly, or an ``oil_pvt`` object w
    * - metric
      - bool
      - Use Eclipse METRIC units for inputs/outputs. Default False
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float or np.ndarray
+     - Oil rate (stb/d, or sm3/d if metric=True). Returns same type as the array input
 
 Examples:
 
@@ -1194,6 +1440,17 @@ Either ``uo`` and ``bo`` must be provided explicitly, or an ``oil_pvt`` object w
    * - metric
      - bool
      - Use Eclipse METRIC units for inputs/outputs. Default False
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float or np.ndarray
+     - Oil rate (stb/d, or sm3/d if metric=True). Returns same type as the array input
 
 Examples:
 
