@@ -49,27 +49,27 @@ Module List
 .. list-table::
    :widths: 30 70
 
-   * - `dca <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/dca.rst>`_
+   * - `dca <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/dca.rst>`_
      - Arps and Duong decline rate and cumulative, EUR estimation, Decline model fitting (time-domain and cumulative, with windowing), Ratio model fitting (GOR/WOR), Forecasting with uptime and secondary phase ratios
-   * - `matbal <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/matbal.rst>`_
+   * - `matbal <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/matbal.rst>`_
      - Gas P/Z material balance (OGIP), Cole plot diagnostics, Havlena-Odeh with aquifer influx, Oil Havlena-Odeh material balance (OOIP) with drive indices, Parameter regression with bounds, Tabulated PVT support
-   * - `gas <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/gas.rst>`_
+   * - `gas <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/gas.rst>`_
      - Gas Tc & Pc Calculation, Gas Z-Factor Calculation, Gas Viscosity, Gas Viscosity \* Z, Gas Compressibility, Gas Formation Volume Factor, Gas Density, Gas Water of Condensation, Convert P/Z to P, Convert Gas Gradient to SG, Delta Pseudopressure, Gas Condensate FWS SG, Gas Flow Rate Radial, Gas Flow Rate Linear, Gas Hydrate Prediction
-   * - `oil <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/oil.rst>`_
+   * - `oil <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/oil.rst>`_
      - Oil Density from MW, Oil Critical Properties with Twu, Incremental GOR post Separation, Oil Bubble Point Pressure, Oil GOR at Pb, Oil GOR at P, Oil Compressibility, Oil Density, Oil Formation Volume Factor, Oil Viscosity, Harmonize Pb and Rsb, Estimate soln gas SG from oil, Estimate SG of gas post separator, Calculate weighted average surface gas SG, Oil API to SG, Oil SG to API, Oil Flow Rate Radial, Oil Flow Rate Linear
-   * - `nodal <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/nodal.rst>`_
+   * - `nodal <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/nodal.rst>`_
      - Flowing BHP (4 VLP methods), Outflow (VLP) curves, Inflow (IPR) curves, Operating point analysis, Multi-segment deviated/horizontal wells, GasPVT and OilPVT convenience classes
-   * - `library <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/library.rst>`_
+   * - `library <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/library.rst>`_
      - Return critical parameters for typical single components
-   * - `brine <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/brine.rst>`_
+   * - `brine <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/brine.rst>`_
      - Calculate suite of brine properties with variable methane, Calculate suite of CO2 saturated brine properties, Multicomponent gas-saturated brine (Soreide-Whitson VLE)
-   * - `layer <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/layer.rst>`_
+   * - `layer <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/layer.rst>`_
      - Lorenz coefficient from Beta value, Lorenz coefficient from flow fraction, Lorenz coefficient to flow fraction, Lorenz coefficient to permeability array
-   * - `simtools <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/simtools.rst>`_
+   * - `simtools <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/simtools.rst>`_
      - Summarize IX convergence errors from PRT file, Create Aquifer Influence Functions, Perform recursive ECL or IX deck zip/check for INCLUDE files, Solve Rachford Rice for user specified feed Zis and Ki's, Create sets of rel perm tables (Corey, LET, Jerauld), Fit relative permeability models to measured data, Generate Eclipse VFPPROD lift curve tables, Generate Eclipse VFPINJ injection curve tables, Create Black Oil tables (PVDO, PVDG, PVTO), Create PVTW water PVT tables
-   * - `recommend <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/recommend.rst>`_
+   * - `recommend <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/recommend.rst>`_
      - Recommend Z-factor, critical property, oil PVT, and VLP methods based on fluid composition and well configuration
-   * - `sensitivity <https://github.com/mwburgoyne/pyResToolbox/tree/main/pyrestoolbox/docs/sensitivity.rst>`_
+   * - `sensitivity <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/sensitivity.rst>`_
      - Parameter sweeps and tornado chart sensitivity analysis
 
 
