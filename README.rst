@@ -34,7 +34,7 @@ Includes functions to perform calculations including;
 
 All public PVT, flow rate, and simulation table functions support both oilfield (psia, deg F, ft) and Eclipse METRIC (barsa, deg C, m) unit systems via an optional ``metric=False`` parameter. See individual module documentation for unit mapping details.
 
-`Changelist <https://github.com/mwburgoyne/pyResToolbox/blob/main/docs/changelist.rst>`_
+`Changelist <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/changelist.rst>`_
 
 Upgrade previous installations with
 
