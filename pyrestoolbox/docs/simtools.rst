@@ -1210,7 +1210,7 @@ Creates data required for Oil-Gas-Water black oil tables (PVDO, PVDG, optionally
      - Water density at Pi (lb/cuft, or kg/m3 if metric)
    * - 'cw'
      - float
-     - Water compressibility at Pi (1/psi, or 1/bar if metric)
+     - Water undersaturated compressibility at Pi (1/psi, or 1/bar if metric)
    * - 'uw'
      - float
      - Water viscosity at Pi (cP)

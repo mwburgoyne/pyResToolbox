@@ -334,15 +334,15 @@ def test_doc_oil_rs_stan():
 
 def test_doc_oil_co_above_pb():
     """oil.rst: oil_co above bubble point"""
-    result = oil.oil_co(p=4500, api=47, degf=180, sg_sp=0.72, rsb=2750)
+    result = oil.oil_co(p=6000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945)
     assert isinstance(result, float)
-    assert abs(result - 8.430807614802478e-05) / 8.430807614802478e-05 < RTOL
+    assert abs(result - 3.63915926110187e-05) / 3.63915926110187e-05 < RTOL
 
 def test_doc_oil_co_below_pb():
     """oil.rst: oil_co below bubble point"""
     result = oil.oil_co(p=2000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945)
     assert isinstance(result, float)
-    assert abs(result - 0.0002311385007013396) / 0.0002311385007013396 < RTOL
+    assert abs(result - 1.0122640715155418e-05) / 1.0122640715155418e-05 < RTOL
 
 def test_doc_oil_deno():
     """oil.rst: oil_deno"""
@@ -475,7 +475,8 @@ def test_doc_make_pvtw_table():
     result = brine.make_pvtw_table(pi=3000, degf=200, wt=0, ch4_sat=0)
     assert isinstance(result, dict)
     assert abs(result['bw_ref'] - 1.027589195773527) / 1.027589195773527 < RTOL
-    assert abs(result['cw_ref'] - 3.0887176266534516e-06) / 3.0887176266534516e-06 < RTOL
+    assert isinstance(result['cw_ref'], list) and len(result['cw_ref']) == 2, "cw_ref should be [usat, sat] list"
+    assert abs(result['cw_ref'][0] - 3.0887176266534516e-06) / 3.0887176266534516e-06 < RTOL
     assert abs(result['visw_ref'] - 0.3083544960904146) / 0.3083544960904146 < RTOL
     assert 'table' in result
 
@@ -485,7 +486,9 @@ def test_doc_brine_props():
     assert abs(bw - 1.0152007040056148) / 1.0152007040056148 < RTOL
     assert abs(lsg - 0.9950108179684295) / 0.9950108179684295 < RTOL
     assert abs(visw - 0.4994004662758671) / 0.4994004662758671 < RTOL
-    assert abs(cw - 0.0001539690974662865) / 0.0001539690974662865 < RTOL
+    assert isinstance(cw, list) and len(cw) == 2, f"Cw should be [usat, sat] list, got {cw}"
+    assert abs(cw[0] - 2.969627494768876e-06) / 2.969627494768876e-06 < RTOL  # Undersaturated Cw
+    assert abs(cw[1] - 0.0001539690974662865) / 0.0001539690974662865 < RTOL  # Saturated Cw
     assert abs(rsw - 1.2540982731813703) / 1.2540982731813703 < RTOL
 
 def test_doc_co2_brine_field():

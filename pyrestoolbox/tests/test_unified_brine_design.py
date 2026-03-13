@@ -76,7 +76,7 @@ def extract_spivey_ch4_vphi():
 
                 # Also get full brine_props results for density comparison
                 bw, lden, visw, cw, rsw = brine.brine_props(p=p, degf=degf, wt=wt, ch4_sat=1.0)
-                bw0, lden0, visw0, cw0, rsw0 = brine.brine_props(p=p, degf=degf, wt=wt, ch4_sat=0.0)
+                bw0, lden0, visw0, _, rsw0 = brine.brine_props(p=p, degf=degf, wt=wt, ch4_sat=0.0)
 
                 delta_pct = (lden - lden0) / lden0 * 100
 
@@ -182,8 +182,8 @@ def compare_viscosity_corrections():
     print("-" * 60)
 
     for degf, p, wt in [(200, 5000, 0), (200, 5000, 3), (250, 5000, 0), (150, 3000, 0)]:
-        bw1, den1, vis1, cw1, rsw1 = brine.brine_props(p=p, degf=degf, wt=wt, ch4_sat=1.0)
-        bw0, den0, vis0, cw0, rsw0 = brine.brine_props(p=p, degf=degf, wt=wt, ch4_sat=0.0)
+        bw1, den1, vis1, _, rsw1 = brine.brine_props(p=p, degf=degf, wt=wt, ch4_sat=1.0)
+        bw0, den0, vis0, _, rsw0 = brine.brine_props(p=p, degf=degf, wt=wt, ch4_sat=0.0)
         change = (vis1 - vis0) / vis0 * 100
 
         print(f"{degf:>8.0f} {p:>8.0f} {wt:>6.0f} {vis1:>12.4f} {vis0:>10.4f} {change:>10.2f}")

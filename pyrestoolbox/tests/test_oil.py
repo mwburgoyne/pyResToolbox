@@ -208,7 +208,7 @@ _FROZEN_BASELINES = {
     'bo_3000': 1.286959379509055,
     'deno_3000': 45.143156554713826,
     'uo_3000': 0.5657565566131671,
-    'co_above_pb': 8.430807614802478e-05,
+    'co_4500': 1.6230543665347515e-05,
     'rs_bub_velar': 1872.666133282599,
 }
 
@@ -234,9 +234,9 @@ def test_regression_viso():
     assert abs(uo - expected) / expected < 1e-6, f"Oil viscosity changed: {uo} vs frozen {expected}"
 
 def test_regression_co():
-    """Oil compressibility must match frozen baseline"""
+    """Oil undersaturated compressibility must match frozen baseline"""
     co = oil.oil_co(p=4500, api=47, degf=180, sg_sp=0.72, rsb=2750)
-    expected = _FROZEN_BASELINES['co_above_pb']
+    expected = _FROZEN_BASELINES['co_4500']
     assert abs(co - expected) / expected < 1e-4, f"Oil Co changed: {co} vs frozen {expected}"
 
 def test_regression_pb_velar():

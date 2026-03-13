@@ -91,8 +91,8 @@ pyrestoolbox.brine.brine_props
      - float
      - Viscosity (cP)
    * - [3]
-     - float
-     - Compressibility (1/psi, or 1/barsa if metric=True)
+     - list
+     - Compressibility [undersaturated, saturated] (1/psi, or 1/barsa if metric=True). The undersaturated value (Cw[0]) is the isothermal compressibility of the brine at constant dissolved gas content. The saturated value (Cw[1]) is a pseudo-compressibility representing the average compressibility of the brine and differentially evolved gas system, accounting for both liquid compression and gas exsolution volume changes
    * - [4]
      - float
      - Rsw — solution gas-water ratio (scf/stb, or sm3/sm3 if metric=True)
@@ -106,17 +106,19 @@ Examples:
     >>> print('Bw:', bw)
     >>> print('SGw:', lsg)
     >>> print('Visw:', visw)
-    >>> print('Cw:', cw)
+    >>> print('Cw_usat:', cw[0])
+    >>> print('Cw_sat:', cw[1])
     >>> print('Rsw:', rsw)
     Bw: 1.0152007040056148
     SGw: 0.9950108179684295
     Visw: 0.4994004662758671
-    Cw: 0.0001539690974662865
+    Cw_usat: 2.969627494768876e-06
+    Cw_sat: 0.0001539690974662865
     Rsw: 1.2540982731813703
 
 .. note::
 
-    When ``metric=True``, Cw is returned in 1/barsa (instead of 1/psi) and Rsw in sm3/sm3 (instead of scf/stb).
+    When ``metric=True``, Cw values are returned in 1/barsa (instead of 1/psi) and Rsw in sm3/sm3 (instead of scf/stb).
     Bw (rb/stb), density (SG), and viscosity (cP) are unchanged by the unit system.
 
 pyrestoolbox.brine.CO2_Brine_Mixture
@@ -187,9 +189,9 @@ pyrestoolbox.brine.CO2_Brine_Mixture
    * - .Cf_usat
      - float
      - Brine undersaturated compressibility (1/Bar or 1/psi)
-   * - .Cf_ssat
+   * - .Cf_sat
      - float
-     - Brine saturated compressibility (1/Bar or 1/psi). Requires cw_sat input to be set True to calculate
+     - Brine saturated pseudo-compressibility (1/Bar or 1/psi). Represents the average compressibility of the brine and differentially evolved gas system, accounting for both liquid compression and gas exsolution. Requires cw_sat input to be set True to calculate
 
                 
 Examples:
@@ -272,7 +274,7 @@ Optionally exports ECLIPSE PVTW keyword file and Excel spreadsheet.
      - Description
    * - table
      - DataFrame
-     - Pressure, Bw, Density, Viscosity, Cw, Rsw
+     - Pressure, Bw, Density, Viscosity, Cw_usat, Cw_sat, Rsw
    * - pref
      - float
      - Reference pressure (psia, or barsa if metric=True)
@@ -280,8 +282,8 @@ Optionally exports ECLIPSE PVTW keyword file and Excel spreadsheet.
      - float
      - Bw at reference pressure (rb/stb)
    * - cw_ref
-     - float
-     - Compressibility at reference pressure (1/psi, or 1/bar if metric=True)
+     - list
+     - Compressibility [undersaturated, saturated] at reference pressure (1/psi, or 1/bar if metric=True)
    * - visw_ref
      - float
      - Viscosity at reference pressure (cP)
@@ -301,7 +303,7 @@ Examples:
     >>> result['bw_ref']
     1.027589195773527
     >>> result['cw_ref']
-    3.0887176266534516e-06
+    [3.0887176266534516e-06, 3.0887176266534516e-06]
     >>> result['visw_ref']
     0.3083544960904146
 
@@ -421,7 +423,7 @@ based on the gas specific gravity using constrained exponential decay to match t
      - Brine undersaturated compressibility (1/Bar or 1/psi)
    * - .Cf_sat
      - float
-     - Brine saturated compressibility (1/Bar or 1/psi). Requires cw_sat input to be set True to calculate
+     - Brine saturated pseudo-compressibility (1/Bar or 1/psi). Represents the average compressibility of the brine and differentially evolved gas system, accounting for both liquid compression and gas exsolution. Requires cw_sat input to be set True to calculate
    * - .gas_comp
      - dict
      - Normalized gas composition used (including estimated HC split from SG)

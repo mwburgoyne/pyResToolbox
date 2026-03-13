@@ -24,7 +24,7 @@ Brine property calculations with three models.
 
 Functions
 ---------
-brine_props         Methane-saturated brine properties (Bw, density, viscosity, Cw, Rs)
+brine_props         Methane-saturated brine properties (Bw, density, viscosity, [Cw_usat, Cw_sat], Rs)
 make_pvtw_table     Water PVT table generation (backward-compatible wrapper)
 
 Classes
@@ -361,12 +361,15 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0, metric: bo
     bw = Bw  # rb/stb (dimensionless ratio, same in both unit systems)
     lden = rhobtpbch4  # sg (g/cm3)
     visw = ub_tpm  # cP
-    cw = cw_new  # 1/psi
+    cwu_psi = 1 / (145.038 * (1 / cwu))  # Undersaturated compressibility in psi-1
+    cws_psi = cw_new  # Saturated compressibility in psi-1
     rsw = rsw_new_oilfield  # scf/stb
 
     if metric:
-        cw = cw * INVPSI_TO_INVBAR  # 1/psi -> 1/bar
+        cw = [cwu_psi * INVPSI_TO_INVBAR, cws_psi * INVPSI_TO_INVBAR]  # 1/bar
         rsw = rsw * SCF_PER_STB_TO_SM3_PER_SM3  # scf/stb -> sm3/sm3
+    else:
+        cw = [cwu_psi, cws_psi]  # 1/psi
 
     return (bw, lden, visw, cw, rsw)
 
@@ -1686,10 +1689,10 @@ class SoreideWhitson:
         #   Viscosity: Mao-Duan (2009) via brine_props
         # ================================================================
         # brine_props still needed for viscosity, compressibility, Bw, Rsw
-        bw_base, den_base_sg, vis_base_cP, cw_base, rsw_base = brine_props(
+        bw_base, den_base_sg, vis_base_cP, _, rsw_base = brine_props(
             p=psia, degf=degf, wt=wt, ch4_sat=0
         )
-        bw_fw, den_fw_sg, vis_fw_cP, cw_fw, rsw_fw = brine_props(
+        bw_fw, den_fw_sg, vis_fw_cP, _, rsw_fw = brine_props(
             p=psia, degf=degf, wt=0, ch4_sat=0
         )
 

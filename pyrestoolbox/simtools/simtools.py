@@ -1960,13 +1960,14 @@ def make_pvtw_table(
         pressures.append(pi)
     pressures = sorted(set(pressures))
 
-    bws, dens, visws, cws, rsws = [], [], [], [], []
+    bws, dens, visws, cws_usat, cws_sat, rsws = [], [], [], [], [], []
     for p in pressures:
         bw, lden, visw, cw, rsw = brine.brine_props(p=p, degf=degf, wt=wt, ch4_sat=ch4_sat)
         bws.append(bw)
         dens.append(lden)
         visws.append(visw)
-        cws.append(cw)
+        cws_usat.append(cw[0])
+        cws_sat.append(cw[1])
         rsws.append(rsw)
 
     df = pd.DataFrame()
@@ -1974,7 +1975,8 @@ def make_pvtw_table(
     df["Bw (rb/stb)"] = bws
     df["Density (sg)"] = dens
     df["Viscosity (cP)"] = visws
-    df["Cw (1/psi)"] = cws
+    df["Cw_usat (1/psi)"] = cws_usat
+    df["Cw_sat (1/psi)"] = cws_sat
     df["Rsw (scf/stb)"] = rsws
 
     # Reference properties at pi
@@ -1986,12 +1988,12 @@ def make_pvtw_table(
         if metric:
             # Use metric values for ECLIPSE export
             pref_exp = pi * PSI_TO_BAR
-            cw_ref_exp = cw_ref * INVPSI_TO_INVBAR
+            cw_ref_exp = cw_ref[0] * INVPSI_TO_INVBAR  # Undersaturated for PVTW keyword
             temp_str = f"{degf_orig_metric:.1f} deg C"
             unit_label = "METRIC"
         else:
             pref_exp = pi
-            cw_ref_exp = cw_ref
+            cw_ref_exp = cw_ref[0]  # Undersaturated for PVTW keyword
             temp_str = f"{degf:.1f} deg F"
             unit_label = "FIELD"
 
@@ -2012,8 +2014,10 @@ def make_pvtw_table(
             df_export["Pressure (psia)"] = df_export["Pressure (psia)"] * PSI_TO_BAR
             df_export.rename(columns={"Pressure (psia)": "Pressure (barsa)"}, inplace=True)
             df_export.rename(columns={"Bw (rb/stb)": "Bw (rm3/sm3)"}, inplace=True)
-            df_export["Cw (1/psi)"] = df_export["Cw (1/psi)"] * INVPSI_TO_INVBAR
-            df_export.rename(columns={"Cw (1/psi)": "Cw (1/bar)"}, inplace=True)
+            df_export["Cw_usat (1/psi)"] = df_export["Cw_usat (1/psi)"] * INVPSI_TO_INVBAR
+            df_export.rename(columns={"Cw_usat (1/psi)": "Cw_usat (1/bar)"}, inplace=True)
+            df_export["Cw_sat (1/psi)"] = df_export["Cw_sat (1/psi)"] * INVPSI_TO_INVBAR
+            df_export.rename(columns={"Cw_sat (1/psi)": "Cw_sat (1/bar)"}, inplace=True)
             df_export["Rsw (scf/stb)"] = df_export["Rsw (scf/stb)"] * SCF_PER_STB_TO_SM3_PER_SM3
             df_export.rename(columns={"Rsw (scf/stb)": "Rsw (sm3/sm3)"}, inplace=True)
             df_export.to_excel("pvtw_table.xlsx", index=False)
@@ -2028,8 +2032,10 @@ def make_pvtw_table(
         df.rename(columns={"Bw (rb/stb)": "Bw (rm3/sm3)"}, inplace=True)
         # Density (sg) — no conversion
         # Viscosity (cP) — no conversion
-        df["Cw (1/psi)"] = df["Cw (1/psi)"] * INVPSI_TO_INVBAR
-        df.rename(columns={"Cw (1/psi)": "Cw (1/bar)"}, inplace=True)
+        df["Cw_usat (1/psi)"] = df["Cw_usat (1/psi)"] * INVPSI_TO_INVBAR
+        df.rename(columns={"Cw_usat (1/psi)": "Cw_usat (1/bar)"}, inplace=True)
+        df["Cw_sat (1/psi)"] = df["Cw_sat (1/psi)"] * INVPSI_TO_INVBAR
+        df.rename(columns={"Cw_sat (1/psi)": "Cw_sat (1/bar)"}, inplace=True)
         df["Rsw (scf/stb)"] = df["Rsw (scf/stb)"] * SCF_PER_STB_TO_SM3_PER_SM3
         df.rename(columns={"Rsw (scf/stb)": "Rsw (sm3/sm3)"}, inplace=True)
 
@@ -2037,7 +2043,7 @@ def make_pvtw_table(
             "table": df,
             "pref": pi * PSI_TO_BAR,
             "bw_ref": bw_ref,
-            "cw_ref": cw_ref * INVPSI_TO_INVBAR,
+            "cw_ref": [c * INVPSI_TO_INVBAR for c in cw_ref],
             "visw_ref": visw_ref,
             "rsw_ref": rsw_ref * SCF_PER_STB_TO_SM3_PER_SM3,
             "den_ref": den_ref,
