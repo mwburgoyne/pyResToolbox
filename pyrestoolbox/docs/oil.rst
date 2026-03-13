@@ -46,9 +46,9 @@ pyResToolBox uses class objects to track calculation options through the functio
         + 'VALMC': Valko-McCain Correlation (2003) - Only for oil_rs_bub (Rs at Pb)
    * - comethod
      - co_method
-     - Method for calculating oil compressibility. Defaults to 'EXPLT'.  
+     - Method for calculating undersaturated oil compressibility. Defaults to 'EXPLT'.
        Options are:
-        + 'EXPLT': Explicit calculation with numerical derivatives assessed and calculation via co = -1/bo*(dbodp - bg*drsdp/5.61458). 
+        + 'EXPLT': Explicit calculation with numerical derivatives via co = -1/bo*dBo/dp at constant Rs.
    * - denomethod
      - deno_method
      - Method for calculating oil density. Defaults to 'SWMH'
@@ -548,7 +548,7 @@ pyrestoolbox.oil.oil_co
 
     oil_co(p, api,  degf, sg_sp =0, sg_g =0, pb =0, rsb =0, comethod='EXPLT', zmethod='DAK', rsmethod='VELAR', cmethod='PMC', denomethod='SWMH', bomethod='MCAIN', pbmethod='VALMC', metric = False) -> float
 
-Returns oil compressibility (1/psi, or 1/barsa if metric=True) calculated with Co = -1/Bo *[dBodp - Bg*dRsdp], using correlation values and their numerical derivatives.
+Returns undersaturated oil compressibility (1/psi, or 1/barsa if metric=True) calculated with Co = -1/Bo * dBo/dp at constant Rs, using correlation values and their numerical derivatives. Rs is held at the equilibrium value for the specified pressure — rsb when above Pb, or the correlation value at p when below Pb. This yields the isothermal compressibility of the liquid oil phase at its current dissolved gas content, without mixing in the volume of differentially evolved gas.
 At least one of sg_g and sg_sp must be supplied. This function will make simple assumption to estimate missing gas sg if only one is provided.
 Either pb, rsb or both need to be specified. If one is missing, the other will be calculated from correlation
 
@@ -615,18 +615,18 @@ Either pb, rsb or both need to be specified. If one is missing, the other will b
      - Description
    * -
      - float
-     - Oil compressibility (1/psi, or 1/barsa if metric=True)
+     - Undersaturated oil compressibility (1/psi, or 1/barsa if metric=True)
 
 
 Examples:
 
 .. code-block:: python
 
-    >>> oil.oil_co(p = 4500, api = 47, degf = 180, sg_sp = 0.72, rsb = 2750)
-    8.430807614802478e-05
+    >>> oil.oil_co(p=6000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945)
+    3.63915926110187e-05
 
-    >>> oil.oil_co(p=2000, api=47, degf=180, sg_sp =0.72, rsb =2750, pb=4945)
-    0.0002311385007013396
+    >>> oil.oil_co(p=2000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945)
+    1.0122640715155418e-05
     
 
 pyrestoolbox.oil.oil_deno
@@ -1036,7 +1036,7 @@ If user species Pb or Rsb only, the corresponding property will be calculated. I
      - Water density at Pi (lb/cuft)
    * - 'cw'
      - float
-     - Water compressibility at Pi (1/psi)
+     - Water undersaturated compressibility at Pi (1/psi)
    * - 'uw'
      - float
      - Water viscosity at Pi (cP)

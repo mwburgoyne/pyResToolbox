@@ -22,14 +22,16 @@ def test_brine_props_freshwater():
     assert 0.98 < bw < 1.15, f"Bw = {bw}, outside expected range"
     assert 0.9 < lden < 1.1, f"Brine density SG = {lden}, outside expected range"
     assert 0.1 < visw < 2.0, f"Brine viscosity = {visw} cP, outside expected range"
-    assert 0 < abs(cw) < 0.001, f"Brine compressibility = {cw}, outside expected range"
+    assert isinstance(cw, list) and len(cw) == 2, f"Cw should be [usat, sat] list, got {cw}"
+    assert all(0 < abs(c) < 0.001 for c in cw), f"Brine compressibility = {cw}, outside expected range"
+    assert cw[1] >= cw[0], f"Saturated Cw ({cw[1]}) should be >= undersaturated ({cw[0]})"
     assert rsw >= 0, f"Brine gas solubility should be non-negative"
 
 def test_brine_props_saline():
     """Saline brine properties"""
     bw, lden, visw, cw, rsw = brine.brine_props(p=3000, degf=200, wt=10, ch4_sat=0)
     # Saline brine should be denser than freshwater
-    bw_fw, lden_fw, _, _, _ = brine.brine_props(p=3000, degf=200, wt=0, ch4_sat=0)
+    bw_fw, lden_fw, *_ = brine.brine_props(p=3000, degf=200, wt=0, ch4_sat=0)
     assert lden > lden_fw, f"Saline brine ({lden}) should be denser than freshwater ({lden_fw})"
     # Saline brine should be more viscous
     assert visw > 0, "Viscosity should be positive"
@@ -37,7 +39,7 @@ def test_brine_props_saline():
 def test_brine_props_ch4_saturated():
     """Methane-saturated brine"""
     bw, lden, visw, cw, rsw = brine.brine_props(p=3000, degf=200, wt=0, ch4_sat=1.0)
-    bw_dry, _, _, _, rsw_dry = brine.brine_props(p=3000, degf=200, wt=0, ch4_sat=0)
+    bw_dry, _, _, _, rsw_dry = brine.brine_props(p=3000, degf=200, wt=0, ch4_sat=0.0)
     assert rsw > rsw_dry, "CH4-saturated brine should have higher Rsw"
     assert bw > bw_dry * 0.99, "CH4-saturated Bw should be >= dry brine Bw"
 
@@ -129,6 +131,7 @@ def test_regression_brine_freshwater():
         f"Brine density changed: {lden} vs frozen {_FROZEN_BASELINES['lden_3000_200_fresh']}"
     assert abs(visw - _FROZEN_BASELINES['visw_3000_200_fresh']) / _FROZEN_BASELINES['visw_3000_200_fresh'] < 1e-8, \
         f"Brine viscosity changed: {visw} vs frozen {_FROZEN_BASELINES['visw_3000_200_fresh']}"
+    assert isinstance(cw, list) and len(cw) == 2, f"Cw should be [usat, sat] list, got {cw}"
 
 def test_regression_co2_xco2():
     mix = brine.CO2_Brine_Mixture(pres=200, temp=80, ppm=0, metric=True)
@@ -171,7 +174,9 @@ def test_make_pvtw_table_ref_vs_direct():
     assert abs(result['bw_ref'] - bw) < 1e-10, f"bw_ref mismatch: {result['bw_ref']} vs {bw}"
     assert abs(result['den_ref'] - lden) < 1e-10, f"den_ref mismatch"
     assert abs(result['visw_ref'] - visw) < 1e-10, f"visw_ref mismatch"
-    assert abs(result['cw_ref'] - cw) < 1e-10, f"cw_ref mismatch"
+    assert isinstance(result['cw_ref'], list) and len(result['cw_ref']) == 2, "cw_ref should be [usat, sat] list"
+    assert abs(result['cw_ref'][0] - cw[0]) < 1e-10, f"cw_ref[0] mismatch"
+    assert abs(result['cw_ref'][1] - cw[1]) < 1e-10, f"cw_ref[1] mismatch"
     assert abs(result['rsw_ref'] - rsw) < 1e-10, f"rsw_ref mismatch"
 
 def test_make_pvtw_table_pi_included():

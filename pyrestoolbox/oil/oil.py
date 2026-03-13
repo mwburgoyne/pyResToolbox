@@ -927,8 +927,9 @@ def oil_co(
     pbmethod: pb_method = pb_method.VALMC,
     metric: bool = False,
 ):
-    """ Returns oil compressibility (1/psi | 1/bar) calculated with Co = -1/Bo *[dBodp - Bg*dRsdp]
-        using numerically derived values and their derivatives
+    """ Returns undersaturated oil compressibility (1/psi | 1/bar) calculated with Co = -1/Bo * dBo/dp
+        at constant Rs, using numerically derived values. Rs is held at the equilibrium value for
+        the specified pressure (rsb above Pb, correlation value below Pb)
 
         p: Reservoir pressure (psia | barsa)
         api: Stock tank oil density (deg API)
@@ -1006,38 +1007,13 @@ def oil_co(
         denomethod=denomethod,
         bomethod=bomethod,
     ):  # Explicit - Calculate with numerical derivatives
-        # co = -1/bo*(dbodp - bg*drsdp/CUFTperBBL)
-        def calc_dbodp(p):
-            if p > pb:
-                rs = rsb
-            else:
-                rs = oil_rs(
-                    api=api,
-                    degf=degf,
-                    sg_sp=sg_sp,
-                    p=p,
-                    pb=pb,
-                    rsb=rsb,
-                    rsmethod=rsmethod,
-                    pbmethod=pbmethod,
-                )
-            sg_o = oil_sg(api)
-            bo = oil_bo(
-                p=p,
-                pb=pb,
-                degf=degf,
-                rs=rs,
-                rsb=rsb,
-                sg_sp=sg_sp,
-                sg_g=sg_g,
-                sg_o=sg_o,
-                bomethod=bomethod,
-                denomethod=denomethod,
-            )
-            return bo
-
-        def calc_drsdp(p):
-            return oil_rs(
+        # Undersaturated compressibility: co = -1/bo * dBo/dp at constant Rs
+        # Rs is held constant at the equilibrium value for pressure p,
+        # so the derivative captures only liquid-phase compression
+        if p > pb:
+            rs_fixed = rsb
+        else:
+            rs_fixed = oil_rs(
                 api=api,
                 degf=degf,
                 sg_sp=sg_sp,
@@ -1048,35 +1024,35 @@ def oil_co(
                 pbmethod=pbmethod,
             )
 
-        dp = max(0.5, p * 0.001)  # Relative step size for numerical derivative
+        def calc_bo_at_p(p_eval):
+            sg_o = oil_sg(api)
+            return oil_bo(
+                p=p_eval,
+                pb=pb,
+                degf=degf,
+                rs=rs_fixed,
+                rsb=rsb,
+                sg_sp=sg_sp,
+                sg_g=sg_g,
+                sg_o=sg_o,
+                bomethod=bomethod,
+                denomethod=denomethod,
+            )
 
-        # Clamp stencil so it never crosses Pb (avoids mixing
-        # saturated/undersaturated physics in a single derivative)
-        if p > pb:
-            # Undersaturated: keep both stencil points above Pb
-            p_hi = p + dp
-            p_lo = max(p - dp, pb)
-        else:
-            # Saturated: keep both stencil points at or below Pb
-            p_hi = min(p + dp, pb)
-            p_lo = max(p - dp, psc)
+        dp = max(0.5, p * 0.001)  # Relative step size for numerical derivative
+        p_hi = p + dp
+        p_lo = p - dp
+
+        # Clamp to avoid negative pressures
+        p_lo = max(p_lo, psc)
 
         span = p_hi - p_lo
         if span < 1e-10:
             span = dp  # fallback for degenerate cases
 
-        dbodp = (calc_dbodp(p_hi) - calc_dbodp(p_lo)) / span
-        if p > pb:
-            drsdp = 0
-        else:
-            drsdp = (calc_drsdp(p_hi) - calc_drsdp(p_lo)) / span
-
-        bo = calc_dbodp(p)
-        bg = (
-            gas.gas_bg(p=p, sg=sg_g, degf=degf, zmethod=zmethod, cmethod=cmethod)
-            / CUFTperBBL
-        )  # rb/scf
-        return -1 / bo * (dbodp - bg * drsdp)
+        dbodp = (calc_bo_at_p(p_hi) - calc_bo_at_p(p_lo)) / span
+        bo = calc_bo_at_p(p)
+        return -1 / bo * dbodp
 
     fn_dic = {"EXPLT": Co_explicit}
 
@@ -1823,11 +1799,11 @@ def _format_bot_results(pressures, rss, bos, denos, uos, co, gz, gfvf, cg,
     st_deng = gas.gas_den(
         p=psc, sg=sg_g, degf=tsc, zmethod=zmethod, cmethod=cmethod
     )
-    bw, lden, visw, cw, _rsw = brine.brine_props(
+    bw, lden, visw, cw_list, _rsw = brine.brine_props(
         p=pi, degf=degf, wt=wt, ch4_sat=ch4_sat
     )
     res_denw = lden * WDEN
-    res_cw = cw
+    res_cw = cw_list[0]  # Undersaturated compressibility for BOT
 
     df = pd.DataFrame()
     df["Pressure (psia)"] = pressures
