@@ -1368,6 +1368,35 @@ def test_doc_sensitivity_tornado():
 
 
 # =============================================================================
+# oil_co co_sat doc examples
+# =============================================================================
+
+def test_doc_oil_co_sat_below_pb():
+    """oil.rst: oil_co with co_sat=True below bubble point"""
+    result = oil.oil_co(p=2000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945, co_sat=True)
+    assert isinstance(result, list)
+    assert len(result) == 2
+    assert abs(result[0] - 1.0122640715155418e-05) / 1.0122640715155418e-05 < RTOL
+    assert abs(result[1] - 0.0002315283893081275) / 0.0002315283893081275 < RTOL
+
+# =============================================================================
+# oil_bt doc examples
+# =============================================================================
+
+def test_doc_oil_bt_below_pb():
+    """oil.rst: oil_bt below bubble point"""
+    result = oil.oil_bt(p=2000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945)
+    assert isinstance(result, float)
+    assert abs(result - 4.162163176179142) / 4.162163176179142 < RTOL
+
+def test_doc_oil_bt_above_pb():
+    """oil.rst: oil_bt above bubble point"""
+    result = oil.oil_bt(p=6000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945)
+    assert isinstance(result, float)
+    assert abs(result - 2.291191400872878) / 2.291191400872878 < RTOL
+
+
+# =============================================================================
 # Main runner
 # =============================================================================
 

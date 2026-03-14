@@ -472,6 +472,83 @@ def test_oil_rate_linear_with_pvt():
     assert q_val > 0, f"Rate should be positive, got {q_val}"
 
 
+# =============================================================================
+# oil_co co_sat tests
+# =============================================================================
+
+def test_oil_co_sat_false_returns_float():
+    """Default co_sat=False returns a scalar float, not a list"""
+    co = oil.oil_co(p=3000, api=35, degf=200, sg_sp=0.75, pb=3500, rsb=500)
+    assert isinstance(co, (float, np.floating)), f"Expected float, got {type(co)}"
+
+def test_oil_co_sat_true_returns_list():
+    """co_sat=True returns a 2-element list"""
+    result = oil.oil_co(p=3000, api=35, degf=200, sg_sp=0.75, pb=3500, rsb=500, co_sat=True)
+    assert isinstance(result, list), f"Expected list, got {type(result)}"
+    assert len(result) == 2, f"Expected 2 elements, got {len(result)}"
+
+def test_oil_co_sat_below_pb():
+    """Below Pb, co_sat > co_usat (gas evolution adds compressibility)"""
+    result = oil.oil_co(p=2000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945, co_sat=True)
+    co_usat, co_sat_val = result
+    assert co_usat > 0, f"co_usat should be positive, got {co_usat}"
+    assert co_sat_val > 0, f"co_sat should be positive, got {co_sat_val}"
+    assert co_sat_val > co_usat, f"Below Pb, co_sat ({co_sat_val}) should exceed co_usat ({co_usat})"
+
+def test_oil_co_sat_above_pb():
+    """Above Pb, co_sat == co_usat (no gas evolution)"""
+    result = oil.oil_co(p=6000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945, co_sat=True)
+    co_usat, co_sat_val = result
+    assert abs(co_usat - co_sat_val) < 1e-15, f"Above Pb co_usat ({co_usat}) should equal co_sat ({co_sat_val})"
+
+def test_oil_co_sat_false_unchanged():
+    """co_sat=False must return the same value as before (backward compat with frozen baseline)"""
+    co = oil.oil_co(p=4500, api=47, degf=180, sg_sp=0.72, rsb=2750)
+    expected = _FROZEN_BASELINES['co_4500']
+    assert abs(co - expected) / expected < 1e-4, f"co_sat=False changed: {co} vs frozen {expected}"
+
+def test_oil_co_sat_usat_matches_default():
+    """co_usat from co_sat=True matches the scalar from co_sat=False"""
+    co_scalar = oil.oil_co(p=2000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945)
+    co_list = oil.oil_co(p=2000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945, co_sat=True)
+    assert abs(co_scalar - co_list[0]) < 1e-15, f"co_usat mismatch: {co_scalar} vs {co_list[0]}"
+
+
+# =============================================================================
+# oil_bt tests
+# =============================================================================
+
+def test_oil_bt_above_pb():
+    """Above Pb, Bt should equal Bo (no free gas)"""
+    bt = oil.oil_bt(p=6000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945)
+    # Compute Bo for comparison
+    sg_g, sg_sp2 = oil.check_sgs(sg_g=0, sg_sp=0.72)
+    rs = oil.oil_rs(api=47, degf=180, sg_sp=0.72, p=6000, pb=4945, rsb=2750)
+    bo = oil.oil_bo(p=6000, pb=4945, degf=180, rs=rs, rsb=2750, sg_sp=sg_sp2, sg_g=sg_g, sg_o=oil.oil_sg(47))
+    assert abs(bt - bo) < 1e-10, f"Above Pb, Bt ({bt}) should equal Bo ({bo})"
+
+def test_oil_bt_below_pb():
+    """Below Pb, Bt > Bo (includes free gas volume)"""
+    bt = oil.oil_bt(p=2000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945)
+    sg_g, sg_sp2 = oil.check_sgs(sg_g=0, sg_sp=0.72)
+    rs = oil.oil_rs(api=47, degf=180, sg_sp=0.72, p=2000, pb=4945, rsb=2750)
+    bo = oil.oil_bo(p=2000, pb=4945, degf=180, rs=rs, rsb=2750, sg_sp=sg_sp2, sg_g=sg_g, sg_o=oil.oil_sg(47))
+    assert bt > bo, f"Below Pb, Bt ({bt}) should exceed Bo ({bo})"
+
+def test_oil_bt_positive():
+    """Bt should always be positive"""
+    bt = oil.oil_bt(p=1000, api=35, degf=200, sg_sp=0.75, rsb=500, pb=3000)
+    assert bt > 0, f"Bt should be positive, got {bt}"
+
+def test_oil_bt_increases_as_p_drops():
+    """Bt should increase as pressure drops below Pb (more gas evolves)"""
+    bt_3000 = oil.oil_bt(p=3000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945)
+    bt_2000 = oil.oil_bt(p=2000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945)
+    bt_1000 = oil.oil_bt(p=1000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945)
+    assert bt_2000 > bt_3000, f"Bt at 2000 ({bt_2000}) should exceed Bt at 3000 ({bt_3000})"
+    assert bt_1000 > bt_2000, f"Bt at 1000 ({bt_1000}) should exceed Bt at 2000 ({bt_2000})"
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("OIL MODULE VALIDATION TESTS")

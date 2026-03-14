@@ -451,6 +451,9 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
         degf_field = degc_to_degf(degf)
         pb_field = pb * BAR_TO_PSI if pb > 0 else 0
         rsb_field = rsb * SM3_PER_SM3_TO_SCF_PER_STB if rsb > 0 else 0
+        # Convert compressibilities from 1/bar to 1/psi
+        cw = cw / BAR_TO_PSI   # 1/bar → 1/psi
+        cf = cf / BAR_TO_PSI   # 1/bar → 1/psi
     else:
         p_field = p
         degf_field = degf
@@ -567,6 +570,14 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
 
         param_names = list(regress.keys())
         bounds = [regress[k] for k in param_names]
+
+        # Convert compressibility regression bounds from 1/bar to 1/psi when metric
+        if metric:
+            bounds = [
+                (lo / BAR_TO_PSI, hi / BAR_TO_PSI) if k in ('cw', 'cf') else (lo, hi)
+                for k, (lo, hi) in zip(param_names, bounds)
+            ]
+
         base_vals = {'m': m, 'cf': cf, 'cw': cw, 'sw_i': sw_i}
 
         # Initial guess: use passed value if within bounds, else midpoint
@@ -605,7 +616,14 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
         cf = base_vals['cf']
         cw = base_vals['cw']
         sw_i = base_vals['sw_i']
-        regressed_result = {k: float(v) for k, v in zip(param_names, opt_result.x)}
+
+        # Report regressed values back in user's unit system
+        regressed_result = {}
+        for k, v in zip(param_names, opt_result.x):
+            if metric and k in ('cw', 'cf'):
+                regressed_result[k] = float(v * BAR_TO_PSI)  # 1/psi → 1/bar
+            else:
+                regressed_result[k] = float(v)
 
     # Final computation with (possibly regressed) params
     ooip, Efw, denom, valid = _compute_result(m, cf, cw, sw_i)

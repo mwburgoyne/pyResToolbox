@@ -152,7 +152,9 @@ Function List
    * - Oil GOR at P
      - `pyrestoolbox.oil.oil_rs`_  
    * - Oil Compressibility
-     - `pyrestoolbox.oil.oil_co`_  
+     - `pyrestoolbox.oil.oil_co`_
+   * - Total Two-Phase Oil FVF
+     - `pyrestoolbox.oil.oil_bt`_
    * - Oil Density
      - `pyrestoolbox.oil.oil_deno`_
    * - Oil Formation Volume Factor
@@ -546,9 +548,14 @@ pyrestoolbox.oil.oil_co
 
 .. code-block:: python
 
-    oil_co(p, api,  degf, sg_sp =0, sg_g =0, pb =0, rsb =0, comethod='EXPLT', zmethod='DAK', rsmethod='VELAR', cmethod='PMC', denomethod='SWMH', bomethod='MCAIN', pbmethod='VALMC', metric = False) -> float
+    oil_co(p, api, degf, sg_sp=0, sg_g=0, pb=0, rsb=0, co_sat=False, comethod='EXPLT', zmethod='DAK', rsmethod='VELAR', cmethod='PMC', denomethod='SWMH', bomethod='MCAIN', pbmethod='VALMC', metric=False) -> float or list
 
-Returns undersaturated oil compressibility (1/psi, or 1/barsa if metric=True) calculated with Co = -1/Bo * dBo/dp at constant Rs, using correlation values and their numerical derivatives. Rs is held at the equilibrium value for the specified pressure — rsb when above Pb, or the correlation value at p when below Pb. This yields the isothermal compressibility of the liquid oil phase at its current dissolved gas content, without mixing in the volume of differentially evolved gas.
+Returns oil compressibility (1/psi, or 1/barsa if metric=True).
+
+By default (``co_sat=False``) returns **undersaturated** compressibility calculated with ``Co = -1/Bo * dBo/dp`` at constant Rs, using correlation values and their numerical derivatives. Rs is held at the equilibrium value for the specified pressure — rsb when above Pb, or the correlation value at p when below Pb. This yields the isothermal compressibility of the liquid oil phase at its current dissolved gas content, without mixing in the volume of differentially evolved gas.
+
+When ``co_sat=True``, returns a ``[co_usat, co_sat]`` list. The **saturated** compressibility uses Perrine's definition: ``co_sat = -(1/Bo)*dBo/dp + (Bg/Bo)*dRs/dp``, where both Bo and Rs vary with pressure. This is a pseudo-compressibility representing the average compressibility of the oil and its differentially evolved gas. Above Pb, ``co_sat`` equals ``co_usat`` (no gas evolution).
+
 At least one of sg_g and sg_sp must be supplied. This function will make simple assumption to estimate missing gas sg if only one is provided.
 Either pb, rsb or both need to be specified. If one is missing, the other will be calculated from correlation
 
@@ -581,6 +588,9 @@ Either pb, rsb or both need to be specified. If one is missing, the other will b
    * - rsb
      - float
      - Original solution GOR at original bubble point pressure (scf/stb, or sm3/sm3 if metric=True)
+   * - co_sat
+     - bool
+     - If True, return ``[co_usat, co_sat]`` list. Default False (returns float)
    * - comethod
      - string or co_method
      - The method of Compressibility calculation to be employed. `Calculation Methods and Class Objects`_.
@@ -613,9 +623,12 @@ Either pb, rsb or both need to be specified. If one is missing, the other will b
    * - Name
      - Type
      - Description
-   * -
+   * - co (co_sat=False)
      - float
      - Undersaturated oil compressibility (1/psi, or 1/barsa if metric=True)
+   * - [co_usat, co_sat] (co_sat=True)
+     - list
+     - ``[undersaturated, saturated]`` compressibility (1/psi, or 1/barsa if metric=True)
 
 
 Examples:
@@ -627,7 +640,102 @@ Examples:
 
     >>> oil.oil_co(p=2000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945)
     1.0122640715155418e-05
-    
+
+    >>> oil.oil_co(p=2000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945, co_sat=True)
+    [1.0122640715155418e-05, 0.0002315283893081275]
+
+
+pyrestoolbox.oil.oil_bt
+=====================
+
+.. code-block:: python
+
+    oil_bt(p, api, degf, sg_sp=0, sg_g=0, pb=0, rsb=0, rsi=0, zmethod='DAK', rsmethod='VELAR', cmethod='PMC', denomethod='SWMH', bomethod='MCAIN', pbmethod='VALMC', metric=False) -> float
+
+Returns total two-phase oil formation volume factor Bt (rb/stb, or rm3/sm3 if metric=True).
+
+``Bt = Bo + (Rsi - Rs) * Bg``
+
+Above Pb, Rs = Rsi so Bt = Bo. Below Pb, Bt accounts for the reservoir volume of both the liquid oil and the gas that has evolved from it relative to the original solution GOR.
+
+At least one of sg_g and sg_sp must be supplied.
+Either pb, rsb or both need to be specified.
+
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - p
+     - float
+     - Pressure (psia, or barsa if metric=True)
+   * - api
+     - float
+     - Density of stock tank liquid (API)
+   * - degf
+     - float
+     - Oil Temperature (deg F, or deg C if metric=True)
+   * - sg_sp
+     - float
+     - Separator gas gravity (relative to air)
+   * - sg_g
+     - float
+     - Weighted average specific gravity of surface gas (relative to air)
+   * - pb
+     - float
+     - Bubble point pressure (psia, or barsa if metric=True)
+   * - rsb
+     - float
+     - Solution GOR at bubble point (scf/stb, or sm3/sm3 if metric=True)
+   * - rsi
+     - float
+     - Initial solution GOR (scf/stb, or sm3/sm3 if metric=True). Default 0 = use rsb
+   * - zmethod
+     - string or z_method
+     - The method of gas z-factor calculation. `Calculation Methods and Class Objects`_.
+   * - rsmethod
+     - string or rs_method
+     - The method of Rs calculation. `Calculation Methods and Class Objects`_.
+   * - cmethod
+     - string or c_method
+     - The method of critical gas property calculation. `Calculation Methods and Class Objects`_.
+   * - denomethod
+     - string or deno_method
+     - The method of live oil density calculation. `Calculation Methods and Class Objects`_.
+   * - bomethod
+     - string or bo_method
+     - The method of Bo calculation. `Calculation Methods and Class Objects`_.
+   * - pbmethod
+     - string or pb_method
+     - The method of Pb calculation. `Calculation Methods and Class Objects`_.
+   * - metric
+     - bool
+     - Use Eclipse METRIC units for inputs/outputs. Default False
+
+.. list-table:: Returns
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * -
+     - float
+     - Total two-phase oil FVF (rb/stb, or rm3/sm3 if metric=True)
+
+Examples:
+
+.. code-block:: python
+
+    >>> oil.oil_bt(p=2000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945)
+    4.162163176179142
+
+    >>> oil.oil_bt(p=6000, api=47, degf=180, sg_sp=0.72, rsb=2750, pb=4945)
+    2.291191400872878
+
 
 pyrestoolbox.oil.oil_deno
 ==============================

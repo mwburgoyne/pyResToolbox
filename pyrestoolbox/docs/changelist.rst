@@ -2,9 +2,13 @@ Changelist in 3.0.5:
 
 - **brine_props()**: Compressibility return changed from a scalar (saturated only) to a ``[cw_usat, cw_sat]`` list. The undersaturated value (Spivey Eq 4.32) is the isothermal compressibility at constant dissolved gas content. The saturated value (Spivey Eq 4.35) is a pseudo-compressibility of the brine and differentially evolved gas system. Previously only the saturated value was returned.
 - **oil_co()**: Changed from saturated pseudo-compressibility (``Co = -1/Bo * (dBo/dp - Bg * dRs/dp)``) to undersaturated compressibility (``Co = -1/Bo * dBo/dp`` at constant Rs). Rs is held at the equilibrium value for the specified pressure, yielding the isothermal liquid-phase compressibility without mixing in differentially evolved gas volume. Values below Pb are now smaller and physically consistent with above-Pb values.
+- **oil_co() co_sat parameter**: New ``co_sat=False`` parameter. When ``True``, returns ``[co_usat, co_sat]`` list. Saturated compressibility uses Perrine's definition: ``co_sat = -(1/Bo)*dBo/dp + (Bg/Bo)*dRs/dp``, a pseudo-compressibility including gas evolution effects. Above Pb, both values are equal. Backward compatible — default returns a float.
+- **oil_bt()**: New function returning total two-phase oil FVF: ``Bt = Bo + (Rsi - Rs) * Bg``. Above Pb returns Bo. Useful for material balance and reservoir voidage calculations.
+- **oil_matbal() metric cw/cf fix**: Fixed bug where ``cw`` and ``cf`` in 1/bar were not converted to 1/psi when ``metric=True``, causing the Efw term to be off by ~14.5x. Regression bounds for ``cw``/``cf`` are also now correctly unit-converted.
 - **CO2_Brine_Mixture.Cf_sat** and **SoreideWhitson.Cf_sat**: Documentation clarified that these are pseudo-compressibilities representing the average compressibility of the brine and differentially evolved gas system.
 - **make_pvtw_table()**: Table now includes both ``Cw_usat`` and ``Cw_sat`` columns. ``cw_ref`` is now a ``[usat, sat]`` list. PVTW keyword export uses undersaturated compressibility.
 - **make_bot_og()**: Water compressibility (``cw`` key) now uses undersaturated value from ``brine_props()``.
+- 603 validation tests (up from 588 in 3.0.4).
 
 Changelist in 3.0.4:
 

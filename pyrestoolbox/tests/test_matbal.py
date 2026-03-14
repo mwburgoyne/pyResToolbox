@@ -722,3 +722,69 @@ def test_gas_matbal_pz_clean_matches_ols():
     )
     # Same frozen baseline as test_gas_matbal_backward_compat
     assert abs(result.ogip - 87.602774253829) / 87.602774253829 < 1e-6
+
+
+# ======================== oil_matbal metric cw/cf tests ========================
+
+def test_oil_matbal_metric_cwcf_roundtrip():
+    """Metric and oilfield oil_matbal should produce matching OOIP."""
+    from pyrestoolbox.constants import BAR_TO_PSI, PSI_TO_BAR
+
+    # Oilfield units
+    p_field = [4000, 3500, 3000, 2500]
+    Np = [0, 1e6, 3e6, 6e6]
+    degf = 220
+    api = 35
+    sg_sp = 0.75
+    pb = 3500
+    rsb = 500
+    cw_psi = 3e-6    # 1/psi
+    cf_psi = 3e-6    # 1/psi
+    sw_i = 0.2
+
+    r_field = matbal.oil_matbal(
+        p=p_field, Np=Np, degf=degf, api=api, sg_sp=sg_sp,
+        pb=pb, rsb=rsb, cf=cf_psi, sw_i=sw_i, cw=cw_psi
+    )
+
+    # Metric units
+    from pyrestoolbox.constants import degf_to_degc, SCF_PER_STB_TO_SM3_PER_SM3
+    p_metric = [pi * PSI_TO_BAR for pi in p_field]
+    degc = degf_to_degc(degf)
+    pb_metric = pb * PSI_TO_BAR
+    rsb_metric = rsb * SCF_PER_STB_TO_SM3_PER_SM3
+    cw_bar = cw_psi * BAR_TO_PSI   # 1/psi -> 1/bar
+    cf_bar = cf_psi * BAR_TO_PSI   # 1/psi -> 1/bar
+
+    r_metric = matbal.oil_matbal(
+        p=p_metric, Np=Np, degf=degc, api=api, sg_sp=sg_sp,
+        pb=pb_metric, rsb=rsb_metric, cf=cf_bar, sw_i=sw_i, cw=cw_bar,
+        metric=True
+    )
+
+    # OOIP should match (both use STB internally)
+    rtol = 0.01  # 1% tolerance for interpolation rounding
+    assert abs(r_field.ooip - r_metric.ooip) / abs(r_field.ooip) < rtol, \
+        f"Metric OOIP ({r_metric.ooip}) vs Field OOIP ({r_field.ooip})"
+
+
+def test_oil_matbal_metric_efw_nonzero():
+    """Metric oil_matbal Efw should be nonzero when cw and cf are nonzero."""
+    from pyrestoolbox.constants import PSI_TO_BAR, BAR_TO_PSI
+    from pyrestoolbox.constants import degf_to_degc, SCF_PER_STB_TO_SM3_PER_SM3
+
+    p_metric = [pi * PSI_TO_BAR for pi in [4000, 3500, 3000, 2500]]
+    degc = degf_to_degc(220)
+    pb_metric = 3500 * PSI_TO_BAR
+    rsb_metric = 500 * SCF_PER_STB_TO_SM3_PER_SM3
+    cw_bar = 3e-6 * BAR_TO_PSI
+    cf_bar = 3e-6 * BAR_TO_PSI
+
+    r = matbal.oil_matbal(
+        p=p_metric, Np=[0, 1e6, 3e6, 6e6], degf=degc, api=35, sg_sp=0.75,
+        pb=pb_metric, rsb=rsb_metric, cf=cf_bar, sw_i=0.2, cw=cw_bar,
+        metric=True
+    )
+
+    # After pressure depletion, Efw should be nonzero at later steps
+    assert r.Efw[-1] > 0, f"Efw should be positive at last step, got {r.Efw[-1]}"
