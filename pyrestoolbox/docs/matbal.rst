@@ -257,7 +257,7 @@ Havlena-Odeh oil material balance for OOIP estimation. Computes underground with
      - Initial water saturation (fraction, default 0)
    * - cw
      - float
-     - Water compressibility (1/psi | 1/bar, default 0)
+     - Water compressibility (1/psi | 1/bar, default 0). See compressibility guidance below
    * - rsmethod
      - str
      - Solution GOR method (default 'VELAR')
@@ -368,6 +368,25 @@ Tabulated PVT Example:
     ... )
     >>> r.ooip
     82793519.84914012
+
+
+.. note:: **Compressibility Guidance**
+
+   The ``cw`` parameter controls how water compressibility is treated in the formation/water expansion term (Efw). Two approaches are common:
+
+   - **Undersaturated (liquid-phase) compressibility**: Use ``cw_usat`` from ``brine.brine_props()``, which is the isothermal compressibility of brine at constant dissolved gas content. Appropriate when the material balance tracks free gas volumes separately, or when the water does not evolve dissolved gas over the depletion range.
+
+   - **Saturated (pseudo) compressibility**: Use ``cw_sat`` from ``brine.brine_props()``, which includes the volume of differentially evolved gas. Appropriate when no separate water-gas tracking is performed. Dissolved gas in water can contribute compressibility as large as or larger than the liquid-phase value alone (Ramey, 1964).
+
+   To compute ``cw`` from brine properties:
+
+   .. code-block:: python
+
+       >>> from pyrestoolbox import brine
+       >>> props = brine.brine_props(p=4000, degf=220, wt=3)
+       >>> cw_usat, cw_sat = props['cw']  # [undersaturated, saturated]
+
+   Similarly, ``oil.oil_co(co_sat=True)`` returns ``[co_usat, co_sat]`` — the undersaturated value is the liquid-phase compressibility, while the saturated value includes gas evolution effects (Perrine's definition).
 
 
 Class Objects
