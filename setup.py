@@ -13,7 +13,7 @@ setup(
     name='pyrestoolbox',
     include_package_data=True,
     version='3.0.5',  # Ideally should be same as your GitHub release tag version
-    packages=find_packages(),
+    packages=find_packages(exclude=['pyrestoolbox.tests', 'pyrestoolbox.tests.*']),
     description='pyResToolbox - A collection of Reservoir Engineering Utilities',
     license="GNU General Public License v3 or later (GPLv3+)",
     long_description=long_description,

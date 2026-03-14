@@ -1,6 +1,8 @@
 include README.rst
 include LICENSE
-global-exclude *Zone.Identifier
+recursive-include pyrestoolbox *.py *.xlsx *.rst *.ipynb *.png
 global-exclude *.pyc
-recursive-include pyrestoolbox *
-global-exclude __pycache__                                                                                                                                       
+global-exclude *Zone.Identifier
+prune pyrestoolbox/tests
+prune pyrestoolbox/docs/.ipynb_checkpoints
+recursive-exclude * __pycache__
