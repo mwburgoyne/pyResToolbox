@@ -81,6 +81,9 @@ from pyrestoolbox.constants import (R, psc, tsc, degF2R, tscr, scf_per_mol, CUFT
 _GL7_NODES, _GL7_WEIGHTS = np.polynomial.legendre.leggauss(7)
 _GL10_NODES, _GL10_WEIGHTS = np.polynomial.legendre.leggauss(10)
 
+# Optional Rust acceleration
+from pyrestoolbox._accelerator import RUST_AVAILABLE, _rust_module
+
 def _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s):
     """Compute pseudopressure difference and flow direction for gas rate calculations.
 
@@ -809,6 +812,33 @@ def gas_z(
         
     zfuncs = {"DAK": zdak, "HY": z_hy, "WYW": z_wyw, "BUR": z_bur}
 
+    # Rust acceleration dispatch
+    if RUST_AVAILABLE:
+        if zmethod.name in ('BNS', 'BUR'):
+            zout = np.array([_rust_module.bns_zfactor_full(
+                float(pi), float(degf), float(sg),
+                float(co2), float(h2s), float(n2), float(h2)
+            ) for pi in p])
+            return process_output(zout, is_list)
+        elif zmethod.name == 'DAK':
+            if cmethod.name == 'SUT':
+                zout = np.array([_rust_module.dak_zfactor_full(
+                    float(pi), float(degf), float(sg),
+                    float(co2), float(h2s), float(n2)
+                ) for pi in p])
+            else:
+                zout = np.array([_rust_module.dak_zfactor(float(pr_i), float(tr)) for pr_i in pprs])
+            return process_output(zout, is_list)
+        elif zmethod.name == 'HY':
+            if cmethod.name == 'SUT':
+                zout = np.array([_rust_module.hall_yarborough_zfactor_full(
+                    float(pi), float(degf), float(sg),
+                    float(co2), float(h2s), float(n2)
+                ) for pi in p])
+            else:
+                zout = np.array([_rust_module.hall_yarborough_zfactor(float(pr_i), float(tr)) for pr_i in pprs])
+            return process_output(zout, is_list)
+
     if zmethod.name in ('BNS', 'BUR'):
         return zfuncs["BUR"](p, degf)
     else:
@@ -886,7 +916,22 @@ def gas_ug(
          zee = gas_z(p, sg, degf, zmethod, cmethod, co2, h2s, n2, h2, tc, pc)
     
     rho = m * p / (t * zee * R * 62.37)
-    
+
+    # Rust-accelerated viscosity (scalar dispatch)
+    if RUST_AVAILABLE:
+        if zmethod.name not in ('BNS', 'BUR'):
+            ug_list = np.array([_rust_module.gas_ug_lge(float(pi), sg, degf, float(zi))
+                                for pi, zi in zip(p, zee)])
+            ug = process_output(ug_list, is_list)
+        else:
+            ug_list = np.array([_rust_module.gas_ug_lbc(float(pi), sg, degf, co2, h2s, n2, h2, float(zi))
+                                for pi, zi in zip(p, zee)])
+            ug = process_output(ug_list, is_list)
+        if ugz:
+            return process_output(ug * zee, is_list)
+        else:
+            return process_output(ug, is_list)
+
     if zmethod.name not in ('BNS', 'BUR'):
         b = 3.448 + (986.4 / t) + (0.01009 * m)  # 2.16
         c = 2.447 - (0.2224 * b)  # 2.17
@@ -1346,6 +1391,25 @@ def gas_dmp(
         zmethod = 'BNS'
 
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
+
+    # Rust-accelerated pseudopressure (entire integration in Rust — no Python round-trips)
+    if RUST_AVAILABLE:
+        zname = zmethod.name
+        if zname == 'BUR':
+            zname = 'BNS'
+        cname = cmethod.name
+        if cname in ('SUT', 'BNS'):
+            try:
+                result = _rust_module.gas_dmp_rust(
+                    float(p1), float(p2), degf, sg,
+                    zname, cname,
+                    co2, h2s, n2, h2, tc, pc,
+                )
+                if metric:
+                    return result * PSI2CP_TO_BAR2CP
+                return result
+            except ValueError:
+                pass  # Fall through to Python for unsupported method combos
 
     def _gl_integrate(lo, hi, nodes, weights):
         """Batch Gauss-Legendre integration of 2p/(mu*Z) over [lo, hi]."""

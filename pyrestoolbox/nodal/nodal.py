@@ -59,6 +59,9 @@ from pyrestoolbox.constants import (BAR_TO_PSI, PSI_TO_BAR, degc_to_degf, degf_t
                                     STB_TO_SM3, SM3_TO_STB)
 import pyrestoolbox.gas as gas
 import pyrestoolbox.oil as oil
+from pyrestoolbox._accelerator import RUST_AVAILABLE as _RUST_AVAILABLE
+if _RUST_AVAILABLE:
+    from pyrestoolbox import _native as _rust
 
 
 class NodalResult(dict):
@@ -728,6 +731,13 @@ def _static_oil_column_pressure(thp, length, tht, bht, wc, wsg,
 def _hb_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                   injection=False, pr=0.0, theta=math.pi / 2.0):
+    if _RUST_AVAILABLE:
+        try:
+            return _rust.hb_fbhp_gas_rust(
+                thp, api, gsg, tid, rough, length, tht, bht, wsg,
+                qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta)
+        except Exception:
+            pass
     tc, pc = _sutton_tc_pc(gsg)
     osg = 141.5 / (api + 131.5)
     total_mass = (0.0765 * gsg * qg_mmscfd * 1e6 +
@@ -879,6 +889,14 @@ def _hb_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                   rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
                   vis_frac=1.0, rsb_frac=1.0):
+    if _RUST_AVAILABLE:
+        try:
+            return _rust.hb_fbhp_oil_rust(
+                thp, api, gsg, tid, rough, length, tht, bht, wsg,
+                qt_stbpd, gor, wc, pb, rsb, sgsp,
+                rsb_scale, injection, theta, vis_frac, rsb_frac)
+        except Exception:
+            pass
     tc, pc = _sutton_tc_pc(gsg)
     wc_adj = max(wc, 1e-9)
     if qt_stbpd < 1e-7:
@@ -1113,6 +1131,13 @@ def _wg_friction_gradient_lm(m_flow_g, m_flow_l, rho_g, rho_l,
 def _wg_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                   injection=False, pr=0.0, theta=math.pi / 2.0):
+    if _RUST_AVAILABLE:
+        try:
+            return _rust.wg_fbhp_gas_rust(
+                thp, api, gsg, tid, rough, length, tht, bht, wsg,
+                qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta)
+        except Exception:
+            pass
     tc, pc = _sutton_tc_pc(gsg)
     osg = 141.5 / (api + 131.5)
     total_mass = (0.0765 * gsg * qg_mmscfd * 1e6 +
@@ -1202,6 +1227,14 @@ def _wg_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                   rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
                   vis_frac=1.0, rsb_frac=1.0):
+    if _RUST_AVAILABLE:
+        try:
+            return _rust.wg_fbhp_oil_rust(
+                thp, api, gsg, tid, rough, length, tht, bht, wsg,
+                qt_stbpd, gor, wc, pb, rsb, sgsp,
+                rsb_scale, injection, theta, vis_frac, rsb_frac)
+        except Exception:
+            pass
     tc, pc = _sutton_tc_pc(gsg)
     wc_adj = max(wc, 1e-9)
     if qt_stbpd < 1e-7:
@@ -1352,6 +1385,13 @@ def _gray_effective_roughness(rough_dry, sigma, rho_ns, v_m, lambda_l):
 def _gray_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                     wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                     injection=False, pr=0.0, theta=math.pi / 2.0):
+    if _RUST_AVAILABLE:
+        try:
+            return _rust.gray_fbhp_gas_rust(
+                thp, api, gsg, tid, rough, length, tht, bht, wsg,
+                qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta)
+        except Exception:
+            pass
     tc, pc = _sutton_tc_pc(gsg)
     osg = 141.5 / (api + 131.5)
     total_mass = (0.0765 * gsg * qg_mmscfd * 1e6 +
@@ -1449,6 +1489,14 @@ def _gray_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
                     wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                     rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
                     vis_frac=1.0, rsb_frac=1.0):
+    if _RUST_AVAILABLE:
+        try:
+            return _rust.gray_fbhp_oil_rust(
+                thp, api, gsg, tid, rough, length, tht, bht, wsg,
+                qt_stbpd, gor, wc, pb, rsb, sgsp,
+                rsb_scale, injection, theta, vis_frac, rsb_frac)
+        except Exception:
+            pass
     tc, pc = _sutton_tc_pc(gsg)
     wc_adj = max(wc, 1e-9)
     if qt_stbpd < 1e-7:
@@ -1646,6 +1694,13 @@ def _bb_core_gas(thp, api, gsg, tid, rough, length, tht, bht,
                  wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                  injection, pr, theta=math.pi / 2.0):
     """Beggs & Brill core for gas wells."""
+    if _RUST_AVAILABLE:
+        try:
+            return _rust.bb_fbhp_gas_rust(
+                thp, api, gsg, tid, rough, length, tht, bht, wsg,
+                qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta)
+        except Exception:
+            pass
     tc, pc = _sutton_tc_pc(gsg)
     osg = 141.5 / (api + 131.5)
     total_mass = (0.0765 * gsg * qg_mmscfd * 1e6 +
@@ -1766,6 +1821,14 @@ def _bb_core_oil(thp, api, gsg, tid, rough, length, tht, bht,
                  rsb_scale, injection, theta=math.pi / 2.0,
                  vis_frac=1.0, rsb_frac=1.0):
     """Beggs & Brill core for oil wells."""
+    if _RUST_AVAILABLE:
+        try:
+            return _rust.bb_fbhp_oil_rust(
+                thp, api, gsg, tid, rough, length, tht, bht, wsg,
+                qt_stbpd, gor, wc, pb, rsb, sgsp,
+                rsb_scale, injection, theta, vis_frac, rsb_frac)
+        except Exception:
+            pass
     tc, pc = _sutton_tc_pc(gsg)
     wc_adj = max(wc, 1e-9)
     if qt_stbpd < 1e-7:
