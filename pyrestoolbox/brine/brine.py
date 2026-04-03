@@ -52,6 +52,9 @@ from pyrestoolbox.constants import (R, psc, tsc, degF2R, tscr, scf_per_mol, CUFT
                                     BAR_TO_PSI, PSI_TO_BAR, degc_to_degf, degf_to_degc,
                                     INVPSI_TO_INVBAR, SCF_PER_STB_TO_SM3_PER_SM3)
 from pyrestoolbox.plyasunov.iapws_if97 import rho_if97 as _rho_if97
+from pyrestoolbox._accelerator import RUST_AVAILABLE as _RUST_AVAILABLE
+if _RUST_AVAILABLE:
+    from pyrestoolbox import _native as _rust
 
 def _Eq41(t, input_array):
     """Eq 4.1 from McCain Petroleum Reservoir Fluid Properties"""
@@ -922,17 +925,40 @@ class CO2_Brine_Mixture():
     
     def co2BrineSolubility(self):
         """ Calculates CO2 saturated Brine mutual solubilities
-    
+
             Inputs:
                 pBar: Pressure (Bar)
                 degC: Temperature (deg C)
                 ppm: NaCL equivalent concentration in brine (wt salt per million weight of brine)
-    
+
             Returns Tuple of:
                 xCO2: Mole fraction CO2 in brine at pBar
                 yH2O: Mole fraction H2O in CO2 rich gas
                 rhoGas: CO2 rich gas density (gm/cm3)
         """
+        if _RUST_AVAILABLE:
+            try:
+                xco2, yco2, yh2o, rhogas, gasz = _rust.co2_brine_solubility_rust(
+                    self.pBar, self.degC, self.ppm
+                )
+                self.x = np.array([xco2, 1.0 - xco2 - (self.xSalt if self.xSalt else 0.0)])
+                self.y = np.array([yco2, yh2o])
+                self.rhoGas = rhogas
+                self.GASZ = gasz
+                fppM = self.ppm / 1e6
+                self.molaL = self.ppm2Molality()
+                self.xSalt = 2 * fppM * MWWAT / (fppM * MWWAT + (1.0 - fppM) * MWSAL)
+                mCO2 = xco2 * (CONMOLA + 2 * self.molaL) / max(1 - xco2, 1e-30)
+                self.xSalt = 2.0 * self.molaL / (2.0 * self.molaL + CONMOLA + mCO2)
+                self.x[1] = 1.0 - self.x[0] - self.xSalt
+                self.x[1] = min(max(self.x[1], 0), 1)
+                self.MwGas = yco2 * MWCO2 + yh2o * MWWAT
+                self.MolarVol = self.MwGas / max(rhogas, 1e-30)
+                self.pRT = self.pBar / (RGASCON * self.tKel)
+                return
+            except Exception:
+                pass
+
         pBar = self.pBar
         degC = self.degC
         ppm = self.ppm
