@@ -34,6 +34,43 @@ Includes functions to perform calculations including;
 
 All public PVT, flow rate, and simulation table functions support both oilfield (psia, deg F, ft) and Eclipse METRIC (barsa, deg C, m) unit systems via an optional ``metric=False`` parameter. See individual module documentation for unit mapping details.
 
+Rust Acceleration (Optional)
+-----------------------------
+
+pyResToolbox includes optional Rust-compiled extensions that accelerate computationally intensive algorithms. When the compiled extension is present and loadable, these functions run automatically through Rust with no API changes. When the extension is unavailable, all functions fall back silently to the pure Python implementation.
+
+**Accelerated functions:**
+
+- **Nodal VLP segment loops** — all 8 VLP method functions (4 methods x gas/oil)
+- **Gas Z-factor** — DAK, Hall-Yarborough, and BNS full-pipeline calculations
+- **Gas viscosity** — LGE and LBC correlations
+- **Gas pseudopressure** — Gauss-Legendre quadrature integration
+- **Oil density** — Standing-Witte-McCain-Hill (iterative and above-Pb)
+- **Oil FVF** — McCain density-based method
+- **DCA hyperbolic fitting** — grid search with RANSAC (``fit_decline``, ``fit_decline_cum``)
+- **Material balance** — oil matbal regression objective function
+
+**Behavior:**
+
+- If the Rust extension is not found on disk, pure Python is used with no warning
+- If the extension fails to load (e.g. OS permission restrictions, architecture mismatch), a sentinel file is written to avoid repeated probe attempts on subsequent imports. The sentinel is automatically invalidated when the extension file changes (new build or update)
+- All Rust-accelerated paths use ``try/except`` wrappers — any Rust-side error falls back to the Python implementation transparently
+
+**Environment variables:**
+
+- ``PYRESTOOLBOX_NO_RUST=1`` — Force pure Python mode (skip Rust extension entirely)
+- ``PYRESTOOLBOX_RETRY_RUST=1`` — Ignore the sentinel file and retry loading the extension
+
+**Programmatic status check:**
+
+.. code-block:: python
+
+    >>> from pyrestoolbox._accelerator import get_status, clear_block
+    >>> get_status()
+    {'rust_available': True, 'failure_reason': '', 'forced_python': False, ...}
+    >>> # If blocked by a sentinel, clear it and restart Python:
+    >>> clear_block()
+
 `Changelist <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/changelist.rst>`_
 
 Upgrade previous installations with

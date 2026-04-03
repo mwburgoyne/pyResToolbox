@@ -77,6 +77,9 @@ from pyrestoolbox.constants import (BAR_TO_PSI, PSI_TO_BAR, degc_to_degf, degf_t
 from pyrestoolbox.classes import z_method, c_method, pb_method, rs_method, bo_method, uo_method, deno_method, co_method, kr_family, kr_table, class_dic
 from pyrestoolbox.validate import validate_methods
 import pyrestoolbox.gas as gas
+from pyrestoolbox._accelerator import RUST_AVAILABLE as _RUST_AVAILABLE
+if _RUST_AVAILABLE:
+    from pyrestoolbox import _native as _rust
 import pyrestoolbox.brine as brine
 
 def get_real_part(value):
@@ -1401,6 +1404,15 @@ def oil_deno(
         api = 141.5 / sg_o - 131.5
     else:  # overwrite sg_o with api value
         sg_o = oil_sg(api)
+
+    if _RUST_AVAILABLE and denomethod.name == "SWMH":
+        try:
+            result = _rust.oil_deno_mccain_rust(p, degf, rs, rsb, sg_g, sg_sp, pb, sg_o, api)
+            if metric:
+                return result * LBCUFT_TO_KGM3
+            return result
+        except Exception:
+            pass
 
     if (
         p > pb

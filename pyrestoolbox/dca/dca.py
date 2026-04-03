@@ -54,6 +54,9 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from pyrestoolbox.shared_fns import convert_to_numpy, process_output, ransac_linreg
+from pyrestoolbox._accelerator import RUST_AVAILABLE as _RUST_AVAILABLE
+if _RUST_AVAILABLE:
+    from pyrestoolbox import _native as _rust
 
 
 @dataclass
@@ -380,6 +383,17 @@ def _fit_hyperbolic(t, q):
     Grid search over b finds the best R-squared, recovering qi and di
     algebraically from intercept and slope.
     """
+    if _RUST_AVAILABLE:
+        try:
+            qi, di, b, r2 = _rust.fit_hyperbolic_rust(t.tolist(), q.tolist())
+            q_pred = qi / (1.0 + b * di * t) ** (1.0 / b)
+            return DeclineResult(
+                method='hyperbolic', qi=qi, di=di, b=b,
+                r_squared=r2, residuals=q - q_pred,
+            )
+        except Exception:
+            pass
+
     best_r2 = -np.inf
     best_result = None
 
@@ -496,6 +510,19 @@ def _fit_hyperbolic_cum(Np, q):
       B = -qi^b / ((1-b)*di)
     Recover qi and di algebraically from regression coefficients.
     """
+    if _RUST_AVAILABLE:
+        try:
+            qi, di, b, r2 = _rust.fit_hyperbolic_cum_rust(Np.tolist(), q.tolist())
+            exp = 1.0 - b
+            inner = np.maximum(1.0 - exp * di * Np / qi, 1e-10)
+            q_pred = qi * inner ** (1.0 / exp)
+            return DeclineResult(
+                method='hyperbolic', qi=qi, di=di, b=b,
+                r_squared=r2, residuals=q - q_pred,
+            )
+        except Exception:
+            pass
+
     best_r2 = -np.inf
     best_result = None
 

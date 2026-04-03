@@ -49,6 +49,9 @@ from pyrestoolbox.constants import BAR_TO_PSI, degc_to_degf, PSI_TO_BAR
 from pyrestoolbox.constants import SCF_PER_STB_TO_SM3_PER_SM3, SM3_PER_SM3_TO_SCF_PER_STB
 from pyrestoolbox.classes import z_method, c_method, rs_method, bo_method
 from pyrestoolbox.shared_fns import ransac_linreg
+from pyrestoolbox._accelerator import RUST_AVAILABLE as _RUST_AVAILABLE
+if _RUST_AVAILABLE:
+    from pyrestoolbox import _native as _rust
 
 
 @dataclass
@@ -590,6 +593,16 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
                 x0.append((lo + hi) / 2.0)
 
         def objective(x):
+            if _RUST_AVAILABLE:
+                try:
+                    return _rust.matbal_objective_rust(
+                        x.tolist() if hasattr(x, 'tolist') else list(x),
+                        param_names,
+                        F.tolist(), Eo.tolist(), Eg.tolist(), p_field.tolist(),
+                        Boi, base_vals['m'], base_vals['cf'], base_vals['cw'], base_vals['sw_i'],
+                    )
+                except Exception:
+                    pass
             vals = dict(base_vals)
             for k, v in zip(param_names, x):
                 vals[k] = v
