@@ -50,6 +50,10 @@ import numpy as np
 from typing import Dict, Tuple, Optional, List, Callable
 from dataclasses import dataclass
 
+from pyrestoolbox._accelerator import RUST_AVAILABLE as _RUST_AVAILABLE
+if _RUST_AVAILABLE:
+    from pyrestoolbox import _native as _rust
+
 
 # =============================================================================
 # Constants
@@ -2066,6 +2070,22 @@ class SWMultiComponentFlash:
         """
         z = np.asarray(z, dtype=float)
         z = z / np.sum(z)
+
+        # Rust acceleration path — gamma is always passed explicitly
+        # to prevent Rust from using its built-in ks model (which lacks
+        # the specialised Dubessy/Akinfiev models for CO2/H2S).
+        if _RUST_AVAILABLE:
+            try:
+                gamma_arr = np.asarray(gamma, dtype=float) if gamma is not None \
+                    else np.ones(self.nc)
+                V, x_r, y_r = _rust.flash_tp_rust(
+                    T_K, P_Pa, z.tolist(), list(self.names),
+                    0.0, mode, gamma_arr.tolist(),
+                )
+                return V, np.array(x_r), np.array(y_r), True
+            except Exception:
+                pass
+
         kij_matrix = self.build_kij_matrix(T_K, mode)
 
         # Precompute T/P-dependent quantities (constant across SS iterations)
@@ -2206,6 +2226,45 @@ class SWMultiComponentFlash:
         # Handle backward compatibility
         if salinity_for_sechenov > 0 and salinity_method == 'gamma_phi':
             salinity_method = 'explicit'
+
+        # Rust acceleration path: compute gamma in Python (correct ks models),
+        # then use Rust flash_tp for the two flashes.
+        if _RUST_AVAILABLE and salinity_method == 'gamma_phi':
+            try:
+                gamma_aq = None
+                if self.salinity > 0:
+                    P_bar = P_Pa / 1e5
+                    gamma_aq = self.calc_gamma(T_K, P_bar=P_bar,
+                                               ks_override=ks_override)
+                gamma_list = gamma_aq.tolist() if gamma_aq is not None \
+                    else [1.0] * self.nc
+                names_list = list(self.names)
+
+                V_aq, x_aq_r, y_aq_r = _rust.flash_tp_rust(
+                    T_K, P_Pa, z.tolist(), names_list,
+                    self.salinity, 'AQ', gamma_list,
+                )
+                V_na, x_na_r, y_na_r = _rust.flash_tp_rust(
+                    T_K, P_Pa, z.tolist(), names_list,
+                    self.salinity, 'NA', [1.0] * self.nc,
+                )
+                x_aq = np.array(x_aq_r)
+                y_na = np.array(y_na_r)
+                K_true = np.where(x_aq > 1e-15, y_na / x_aq, 1e10)
+
+                result = {
+                    'x_aq': x_aq, 'y_na': y_na, 'K_true': K_true,
+                    'V_aq': V_aq, 'V_na': V_na,
+                    'converged_aq': True, 'converged_na': True,
+                    'component_names': self.names,
+                    'salinity_method': salinity_method,
+                    'vlle_warning': False,
+                }
+                if gamma_aq is not None:
+                    result['gamma'] = gamma_aq
+                return result
+            except Exception:
+                pass
 
         # Calculate gamma for gamma-phi method
         gamma_aq = None

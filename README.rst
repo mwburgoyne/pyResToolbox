@@ -49,6 +49,8 @@ pyResToolbox includes optional Rust-compiled extensions that accelerate computat
 - **Oil FVF** — McCain density-based method
 - **DCA hyperbolic fitting** — grid search with RANSAC (``fit_decline``, ``fit_decline_cum``)
 - **Material balance** — oil matbal regression objective function
+- **CO2-Brine solubility** — Spycher-Pruess iterative RK-EOS solver
+- **VLE flash** — Soreide-Whitson multi-component Peng-Robinson flash
 
 **Behavior:**
 
