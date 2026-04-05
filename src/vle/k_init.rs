@@ -129,6 +129,7 @@ pub fn sw_kvalue_init(
 /// Standard Wilson K-value correlation.
 ///
 /// K_i = (Pc_i / P) * exp(5.373 * (1 + omega_i) * (1 - Tc_i / T))
+#[allow(dead_code)]
 pub fn wilson_k_value(tc: f64, pc: f64, omega: f64, t_k: f64, p_pa: f64) -> f64 {
     (pc / p_pa) * (5.373 * (1.0 + omega) * (1.0 - tc / t_k)).exp()
 }

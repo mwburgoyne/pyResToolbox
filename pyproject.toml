@@ -1,3 +1,56 @@
-[build-system]                         
-requires = ["setuptools", "wheel"]     
-build-backend = "setuptools.build_meta"
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "pyrestoolbox"
+version = "3.0.5"
+description = "pyResToolbox - A collection of Reservoir Engineering Utilities"
+license = {text = "GPL-3.0-or-later"}
+authors = [{name = "Mark W. Burgoyne", email = "mark.w.burgoyne@gmail.com"}]
+keywords = ["restoolbox", "petroleum", "reservoir"]
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy",
+    "scipy",
+    "pandas",
+    "tabulate",
+    "gwr_inversion",
+    "mpmath",
+    "openpyxl",
+]
+readme = "README.rst"
+
+[project.urls]
+Homepage = "https://github.com/mwburgoyne/pyResToolbox"
+
+[tool.maturin]
+# Mixed Rust + Python layout: Python source in pyrestoolbox/, Rust crate at root
+python-source = "."
+module-name = "pyrestoolbox._native"
+features = ["pyo3/extension-module"]
+manifest-path = "Cargo.toml"
+
+# Include Python package data (docs, xlsx, notebooks, images)
+include = [
+    {path = "pyrestoolbox/**/*.py", format = "sdist"},
+    {path = "pyrestoolbox/**/*.xlsx", format = ["sdist", "wheel"]},
+    {path = "pyrestoolbox/**/*.rst", format = ["sdist", "wheel"]},
+    {path = "pyrestoolbox/**/*.ipynb", format = ["sdist", "wheel"]},
+    {path = "pyrestoolbox/**/*.png", format = ["sdist", "wheel"]},
+    {path = "src/**/*.rs", format = "sdist"},
+    {path = "Cargo.toml", format = "sdist"},
+    {path = "Cargo.lock", format = "sdist"},
+]
+exclude = [
+    "pyrestoolbox/tests/**",
+    "**/__pycache__/**",
+    "**/.ipynb_checkpoints/**",
+    "**/*.pyc",
+]
