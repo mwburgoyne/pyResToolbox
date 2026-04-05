@@ -3,12 +3,12 @@ use pyo3::exceptions::PyValueError;
 use crate::critical_properties;
 
 const DEGF2R: f64 = 459.67;
-const R_GAS: f64 = 10.7316;
-const MW_AIR: f64 = 28.967;
-const MW_CO2: f64 = 44.01;
-const MW_H2S: f64 = 34.082;
-const MW_N2: f64 = 28.014;
-const MW_H2: f64 = 2.016;
+#[allow(dead_code)] const R_GAS: f64 = 10.7316;
+#[allow(dead_code)] const MW_AIR: f64 = 28.967;
+#[allow(dead_code)] const MW_CO2: f64 = 44.01;
+#[allow(dead_code)] const MW_H2S: f64 = 34.082;
+#[allow(dead_code)] const MW_N2: f64 = 28.014;
+#[allow(dead_code)] const MW_H2: f64 = 2.016;
 
 // =========================================================================
 // DAK Z-factor (Dranchuk & Abou-Kassem 1975)
@@ -212,6 +212,7 @@ pub fn hall_yarborough_zfactor_full(
 // =========================================================================
 
 // EOS parameters: [CO2=0, H2S=1, N2=2, H2=3, Gas=4]
+#[allow(dead_code)]
 const BNS_MWS: [f64; 5] = [44.01, 34.082, 28.014, 2.016, 0.0]; // Gas MW set at runtime
 const BNS_TCS: [f64; 5] = [547.416, 672.120, 227.160, 47.430, 1.0]; // Gas Tc set at runtime
 const BNS_PCS: [f64; 5] = [1069.51, 1299.97, 492.84, 187.5300, 1.0]; // Gas Pc set at runtime

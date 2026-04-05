@@ -1,6 +1,9 @@
 include README.rst
 include LICENSE
+include Cargo.toml
+include Cargo.lock
 recursive-include pyrestoolbox *.py *.xlsx *.rst *.ipynb *.png
+recursive-include src *.rs
 global-exclude *.pyc
 global-exclude *Zone.Identifier
 prune pyrestoolbox/tests

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /// Component properties database for Soreide-Whitson VLE engine.
 ///
 /// 16 components: H2O + 15 gas species.

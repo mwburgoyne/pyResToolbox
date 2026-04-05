@@ -4,8 +4,8 @@ use crate::zfactor;
 use crate::gas_viscosity;
 
 const DEGF2R: f64 = 459.67;
-const MW_AIR: f64 = 28.97;
-const R: f64 = 10.731577089016;
+#[allow(dead_code)] const MW_AIR: f64 = 28.97;
+#[allow(dead_code)] const R: f64 = 10.731577089016;
 
 // Gauss-Legendre 7-point nodes and weights
 const GL7_NODES: [f64; 7] = [
@@ -66,7 +66,7 @@ fn eval_z(
     p_psia: f64,
     method: &ZMethod,
     deg_r: f64,
-    degf: f64,
+    _degf: f64,
     // Sutton path params (precomputed)
     tpc_sut: f64,
     ppc_sut: f64,

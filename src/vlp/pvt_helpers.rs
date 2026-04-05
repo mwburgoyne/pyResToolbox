@@ -86,6 +86,7 @@ pub fn gas_viscosity(sg: f64, temp_f: f64, press_psia: f64, z: f64, _tc: f64, _p
 
 /// Gas density in lb/ft^3.
 #[inline]
+#[allow(dead_code)]
 pub fn gas_density(sg: f64, temp_f: f64, press_psia: f64, z: f64) -> f64 {
     MW_AIR * sg * press_psia / (z * 10.732 * (temp_f + 459.67))
 }

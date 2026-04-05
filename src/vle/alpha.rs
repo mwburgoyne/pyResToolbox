@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /// Alpha functions for the Peng-Robinson EOS.
 ///
 /// Three alpha functions:
