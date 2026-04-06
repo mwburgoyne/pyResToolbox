@@ -10,6 +10,8 @@ mod matbal;
 mod oil;
 mod spycher_pruess;
 mod vle;
+mod bessel;
+mod gwr;
 
 /// Smoke test function called during import-time probe.
 #[pyfunction]
@@ -70,6 +72,10 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // VLE Flash Engine
     m.add_function(wrap_pyfunction!(vle::flash_tp_rust, m)?)?;
     m.add_function(wrap_pyfunction!(vle::calc_equilibrium_rust, m)?)?;
+
+    // GWR inverse Laplace transform / influence tables
+    m.add_function(wrap_pyfunction!(gwr::influence_tables_rust, m)?)?;
+    m.add_function(wrap_pyfunction!(gwr::gwr_rust, m)?)?;
 
     Ok(())
 }
