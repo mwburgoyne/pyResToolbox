@@ -36,3 +36,9 @@ target/
 *.rtf
 *.VFP
 *.png
+
+# Standalone ILT development (lives in ilt-inversion repo)
+ilt/
+benchmark_ilt.py
+benchmark_rust.py
+BUILD_INSTRUCTIONS.txt
