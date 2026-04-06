@@ -923,6 +923,7 @@ def oil_co(
     rsb: float = 0,
     pi: float = 0,
     co_sat: bool = False,
+    undersaturated_only: bool = False,
     comethod: co_method = co_method.EXPLT,
     zmethod: z_method = z_method.DAK,
     rsmethod: rs_method = rs_method.VELAR,
@@ -942,6 +943,10 @@ def oil_co(
         Perrine's definition: co_sat = -(1/Bo)*dBo/dp + (Bg/Bo)*dRs/dp, where both Bo and Rs
         vary with pressure. Above Pb, co_sat equals co_usat (no gas evolution).
 
+        When undersaturated_only=True, uses the analytical cofb correlation (McCain Eq 3.13)
+        at all pressures, giving a smooth curve with no discontinuity at Pb. This is the
+        compressibility at constant composition (rsb) regardless of pressure relative to Pb.
+
         p: Reservoir pressure (psia | barsa)
         api: Stock tank oil density (deg API)
         sg_sp: Separator Gas specific Gravity (relative to air). If not defined, will use sg_g instead
@@ -950,6 +955,7 @@ def oil_co(
         pb: Bubble point pressure (psia | barsa). If not provided, will attempt to calculate with Valko-McCain Pb Correlation
         rsb: Oil solution gas volume at bubblepoint pressure (scf/stb | sm3/sm3)
         co_sat: If True, return [co_usat, co_sat] list. Default False (returns float)
+        undersaturated_only: If True, use analytical cofb correlation at all pressures (no Pb discontinuity). Default False
         comethod: A string or co_method Enum class that specifies calculation method for compressibility (currently only one option)
         zmethod: A string or z_method Enum class that specifies calculation method for gas Z-factor
         rsmethod: A string or rs_method Enum class that specifies calculation method for GOR
@@ -1004,6 +1010,68 @@ def oil_co(
             sg_sp=sg_sp,
             rsmethod=rsmethod,
         )
+
+    # Analytical cofb compressibility (McCain Eq 3.13) — smooth across Pb.
+    # When undersaturated_only=True, uses the cofb polynomial at all pressures
+    # giving a continuous curve with no discontinuity at Pb. This is the
+    # compressibility at constant composition (rsb), suitable for BOT tables.
+    if undersaturated_only:
+        C = [
+            [3.011, -0.0835, 3.51, 0.327, -1.918, 2.52],
+            [-2.6254, -0.259, -0.0289, -0.608, -0.642, -2.73],
+            [0.497, 0.382, -0.0584, 0.0911, 0.154, 0.429],
+        ]
+        var = [
+            np.log(api),
+            np.log(sg_sp),
+            np.log(pb),
+            np.log(p / pb),
+            np.log(rsb),
+            np.log(degf),
+        ]
+        Zn = [sum([C[i][n] * var[n] ** i for i in range(3)]) for n in range(6)]
+        Zp = sum(Zn)
+        ln_cofb = 2.434 + 0.475 * Zp + 0.048 * Zp ** 2 - np.log(1e6)
+        co_usat = np.exp(ln_cofb)
+
+        if not co_sat:
+            if metric:
+                return co_usat * INVPSI_TO_INVBAR
+            return co_usat
+        # co_sat requested: saturated = undersaturated above Pb
+        if p >= pb:
+            if metric:
+                return [co_usat * INVPSI_TO_INVBAR, co_usat * INVPSI_TO_INVBAR]
+            return [co_usat, co_usat]
+        # Below Pb with co_sat: need Perrine's saturated value.
+        # co_usat already set from cofb above; compute co_sat_val and return.
+        sg_o = oil_sg(api)
+        dp = max(0.5, p * 0.001)
+        p_hi = p + dp
+        p_lo = max(p - dp, psc)
+        span = p_hi - p_lo
+        if span < 1e-10:
+            span = dp
+
+        rs_at_p = oil_rs(api=api, degf=degf, sg_sp=sg_sp, p=p, pb=pb, rsb=rsb,
+                         rsmethod=rsmethod, pbmethod=pbmethod)
+        bo_at_p = oil_bo(p=p, pb=pb, degf=degf, rs=rs_at_p, rsb=rsb, sg_sp=sg_sp,
+                         sg_g=sg_g, sg_o=sg_o, bomethod=bomethod, denomethod=denomethod)
+        rs_hi = oil_rs(api=api, degf=degf, sg_sp=sg_sp, p=p_hi, pb=pb, rsb=rsb,
+                       rsmethod=rsmethod, pbmethod=pbmethod)
+        rs_lo = oil_rs(api=api, degf=degf, sg_sp=sg_sp, p=p_lo, pb=pb, rsb=rsb,
+                       rsmethod=rsmethod, pbmethod=pbmethod)
+        bo_hi = oil_bo(p=p_hi, pb=pb, degf=degf, rs=rs_hi, rsb=rsb, sg_sp=sg_sp,
+                       sg_g=sg_g, sg_o=sg_o, bomethod=bomethod, denomethod=denomethod)
+        bo_lo = oil_bo(p=p_lo, pb=pb, degf=degf, rs=rs_lo, rsb=rsb, sg_sp=sg_sp,
+                       sg_g=sg_g, sg_o=sg_o, bomethod=bomethod, denomethod=denomethod)
+        dBodp = (bo_hi - bo_lo) / span
+        dRsdp = (rs_hi - rs_lo) / span
+        bg_at_p = gas.gas_bg(p, sg_sp, degf, zmethod=zmethod, cmethod=cmethod) / CUFTperBBL
+        co_sat_val = -1.0 / bo_at_p * dBodp + bg_at_p / bo_at_p * dRsdp
+        if metric:
+            return [co_usat * INVPSI_TO_INVBAR, co_sat_val * INVPSI_TO_INVBAR]
+        return [co_usat, co_sat_val]
 
     def Co_explicit(
         p=p,
@@ -1912,7 +1980,8 @@ def _build_bot_tables(pressures, pb, rsb, rsb_frac, rsb_max, sg_o, sg_g, sg_sp,
         co.append(
             oil_co(
                 p=p, api=api, sg_sp=sg_sp, sg_g=sg_g, degf=degf,
-                pb=pb, rsb=rsb, zmethod=zmethod, rsmethod=rsmethod,
+                pb=pb, rsb=rsb, undersaturated_only=True,
+                zmethod=zmethod, rsmethod=rsmethod,
                 cmethod=cmethod, denomethod=denomethod, bomethod=bomethod,
             )
         )
