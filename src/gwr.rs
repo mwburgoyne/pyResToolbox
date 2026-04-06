@@ -511,7 +511,7 @@ fn gwr_single(
 // =========================================================================
 
 #[pyfunction]
-#[pyo3(signature = (td_array, red_array, m=8))]
+#[pyo3(signature = (td_array, red_array, m=7))]
 pub fn influence_tables_rust(
     td_array: Vec<f64>,
     red_array: Vec<f64>,

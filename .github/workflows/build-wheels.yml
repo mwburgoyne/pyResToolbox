@@ -40,12 +40,12 @@ jobs:
         shell: bash
 
       - name: Build wheels via cibuildwheel
-        uses: pypa/cibuildwheel@v2.21
+        uses: pypa/cibuildwheel@v2.23
         env:
           # Use maturin as the build frontend
           CIBW_BUILD_FRONTEND: "build"
-          # Build for CPython 3.10-3.13 (drop 3.9 — scipy 1.14+ requires 3.10)
-          CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-*"
+          # Build for CPython 3.8-3.13 (last 5+ years of Python releases)
+          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-*"
           # Skip 32-bit and musl (uncommon for scientific Python)
           CIBW_SKIP: "*-win32 *-manylinux_i686 *-musllinux*"
           # maturin needs Rust in the build container
@@ -98,10 +98,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build wheels via cibuildwheel
-        uses: pypa/cibuildwheel@v2.21
+        uses: pypa/cibuildwheel@v2.23
         env:
           CIBW_BUILD_FRONTEND: "build"
-          CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-*"
+          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-*"
           CIBW_ARCHS_MACOS: "x86_64"
           CIBW_TEST_COMMAND: >
             python -c "from pyrestoolbox._accelerator import get_status; s = get_status(); print(s); assert s['rust_available'], f'Rust not loaded: {s}'"
