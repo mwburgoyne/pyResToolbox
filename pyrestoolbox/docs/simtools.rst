@@ -146,7 +146,7 @@ pyrestoolbox.simtools.influence_tables
 
 .. code-block:: python
 
-    influence_tables(ReDs, min_td = 0.01, max_td = 200, n_incr = 20, M = 8, export = False)-> tuple
+    influence_tables(ReDs, min_td = 0.01, max_td = 200, n_incr = 20, M = 7, export = False)-> tuple
 
 Solves Van Everdingin & Hurst Constant Terminal Rate solution via inverse Laplace transform and optionally writes out ECLIPSE styled AQUTAB include file.
 
@@ -175,7 +175,7 @@ Returns a tuple of;
      - Number of log transformed increments to split dimensionless time into. Default = 20
    * - M
      - int
-     - Laplace invesrion accuracy. Higher = more accurate, but more time. Generally 6-12 is good range. Default = 8
+     - Laplace inversion accuracy. Higher = more accurate, but more time. Generally 6-12 is good range. Default = 7
    * - export
      - bool
      - Boolean value that controls whether an include file with 'INFLUENCE.INC' name is created. Default: False

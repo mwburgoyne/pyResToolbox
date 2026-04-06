@@ -64,6 +64,7 @@ import pandas as pd
 from tabulate import tabulate
 from ilt import gwr
 from mpmath import mp
+from pyrestoolbox._accelerator import RUST_AVAILABLE, _rust_module
 
 from pyrestoolbox.classes import (kr_family, kr_table, vlp_method,
                                   z_method, c_method, pb_method, rs_method,
@@ -720,7 +721,7 @@ def influence_tables(
     min_td: float = 0.01,
     max_td: float = 200,
     n_incr: int = 20,
-    M: int = 8,
+    M: int = 7,
     export: bool = False,
 ) -> Tuple:
     """ Returns a Tuple of;
@@ -734,7 +735,7 @@ def influence_tables(
         min_td: Minimum dimensionless time. Default = 0.01
         max_td: Maximum dimensionless time. Dfeault = 200
         n_incr: Number of increments to split dimensionless time into (log transformed), Default = 20
-        M: Laplace invesrion accuracy. Higher = more accurate, but more time. Generally 6-12 is good range. Default = 8
+        M: Laplace inversion accuracy. Higher = more accurate, but more time. Generally 6-12 is good range. Default = 7
         export: Boolean value that controls whether an include file with 'INFLUENCE.INC' name is created. Default: False
     """
     if len(ReDs) == 0:
@@ -742,26 +743,30 @@ def influence_tables(
     if min(ReDs) <=1:
         raise ValueError("ReDs must all be strictly greater than 1.0")
 
-    # Eq 23 from SPE 81428
-    def laplace_Ps(s: float, ReD: float):
-        x = mp.sqrt(s)
-        # pre-calculate duplicated bessel function for greater efficiency
-        i1sReD = mp.besseli(1, x * ReD)
-        k1sReD = mp.besselk(1, x * ReD)
-        numerator = k1sReD * mp.besseli(0, x) + i1sReD * mp.besselk(0, x)
-        denominator = s ** 1.5 * (
-            i1sReD * mp.besselk(1, x) - k1sReD * mp.besseli(1, x)
-        )
-        return numerator / denominator
-
     dtD = np.log(max_td / min_td) / n_incr
     tD = [np.exp(x * dtD + np.log(min_td)) for x in range(n_incr + 1)]
     tD = np.array(tD)
 
-    pDs = []
-    for ReD in ReDs:
-        print("Calculating ReD = " + str(ReD))
-        pDs.append(gwr(lambda s: laplace_Ps(s, ReD), tD, M))
+    # Rust fast path: Bessel + GWR entirely in Rust (no Python callbacks)
+    if RUST_AVAILABLE:
+        pDs = _rust_module.influence_tables_rust(tD.tolist(), list(ReDs), M)
+    else:
+        # Python fallback via ilt library
+        def laplace_Ps(s: float, ReD: float):
+            x = mp.sqrt(s)
+            # pre-calculate duplicated bessel function for greater efficiency
+            i1sReD = mp.besseli(1, x * ReD)
+            k1sReD = mp.besselk(1, x * ReD)
+            numerator = k1sReD * mp.besseli(0, x) + i1sReD * mp.besselk(0, x)
+            denominator = s ** 1.5 * (
+                i1sReD * mp.besselk(1, x) - k1sReD * mp.besseli(1, x)
+            )
+            return numerator / denominator
+
+        pDs = []
+        for ReD in ReDs:
+            print("Calculating ReD = " + str(ReD))
+            pDs.append(gwr(lambda s: laplace_Ps(s, ReD), tD, M))
 
     if export:
         inc_out = "---------------------------------------\n"
