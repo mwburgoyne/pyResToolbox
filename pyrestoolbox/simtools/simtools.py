@@ -62,7 +62,7 @@ import numpy.typing as npt
 
 import pandas as pd
 from tabulate import tabulate
-from gwr_inversion import gwr
+from ilt import gwr
 from mpmath import mp
 
 from pyrestoolbox.classes import (kr_family, kr_table, vlp_method,
