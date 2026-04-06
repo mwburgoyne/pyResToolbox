@@ -30,6 +30,7 @@ setup(
         'tabulate',
         'ilt-inversion',
         'mpmath',
+        'gmpy2',
         'openpyxl'
     ]
 )
