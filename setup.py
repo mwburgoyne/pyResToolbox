@@ -12,7 +12,7 @@ with open(os.path.join(ROOT, 'README.rst'), 'r', encoding='utf-8') as f:
 setup(
     name='pyrestoolbox',
     include_package_data=True,
-    version='3.0.5',  # Ideally should be same as your GitHub release tag version
+    version='3.1.0',  # Ideally should be same as your GitHub release tag version
     packages=find_packages(exclude=['pyrestoolbox.tests', 'pyrestoolbox.tests.*']),
     description='pyResToolbox - A collection of Reservoir Engineering Utilities',
     license="GNU General Public License v3 or later (GPLv3+)",
@@ -28,7 +28,7 @@ setup(
         'scipy',
         'pandas',
         'tabulate',
-        'gwr_inversion',
+        'ilt-inversion',
         'mpmath',
         'openpyxl'
     ]
