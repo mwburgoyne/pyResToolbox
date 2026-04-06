@@ -55,7 +55,7 @@ jobs:
           CIBW_ENVIRONMENT_LINUX: 'PATH="$HOME/.cargo/bin:$PATH"'
           # macOS: build native arch only per runner (no cross-compilation)
           CIBW_ARCHS_MACOS: "arm64"
-          CIBW_ARCHS_LINUX: "x86_64 aarch64"
+          CIBW_ARCHS_LINUX: "x86_64"
           CIBW_ARCHS_WINDOWS: "AMD64"
           # Windows: use gnu target so GMP can build with MinGW GCC.
           # MSYS2 is pre-installed on windows-latest runners.
