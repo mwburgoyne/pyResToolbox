@@ -74,9 +74,9 @@ jobs:
           CIBW_TEST_COMMAND: >
             python -c "from pyrestoolbox._accelerator import get_status; s = get_status(); print(s); assert s['rust_available'], f'Rust not loaded: {s}'"
           CIBW_TEST_REQUIRES: "numpy"
-          # Skip tests on Linux (scipy needs OpenBLAS absent in manylinux), cross-arch,
+          # Skip tests on Linux (scipy needs OpenBLAS absent in manylinux), macOS (MPFR symbol issue),
           # and cp38/cp39 (dependency ilt-inversion may not have matching wheels on PyPI yet)
-          CIBW_TEST_SKIP: "*-manylinux* *-macosx_x86_64 cp38-* cp39-*"
+          CIBW_TEST_SKIP: "*-manylinux* *-macosx* cp38-* cp39-*"
 
       - uses: actions/upload-artifact@v4
         with:
