@@ -561,7 +561,7 @@ def _halley_cubic_vec(c2, c1, c0, max_iter=50, tol=1e-12):
 
     # Check residuals and fall back to Cardano for any bad elements
     f = Z**3 + c2 * Z**2 + c1 * Z + c0
-    bad = np.abs(f) > 1e-6
+    bad = (np.abs(f) > 1e-6) | (Z < 0.0)
     if np.any(bad):
         bad_idx = np.where(bad)[0]
         for idx in bad_idx:
