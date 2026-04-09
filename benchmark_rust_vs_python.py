@@ -64,10 +64,10 @@ print(json.dumps({"elapsed": _elapsed, "value": float(z)}))
 """,
     ),
     (
-        "(b) 100x Z-factors",
-        "[gas.gas_z(p=p, sg=0.7, degf=200, zmethod=z_method.BNS, cmethod=c_method.BNS)\n  for p in np.linspace(500, 5000, 100)]",
+        "(b) 1000x Z-factors",
+        "[gas.gas_z(p=p, sg=0.7, degf=200, zmethod=z_method.BNS, cmethod=c_method.BNS)\n  for p in np.linspace(500, 5000, 1000)]",
         """
-pressures = np.linspace(500, 5000, 100).tolist()
+pressures = np.linspace(500, 5000, 1000).tolist()
 results = [gas.gas_z(p=p, sg=0.7, degf=200, zmethod=z_method.BNS, cmethod=c_method.BNS) for p in pressures]
 print(json.dumps({"elapsed": _elapsed, "value": float(np.mean(results))}))
 """,
@@ -81,10 +81,10 @@ print(json.dumps({"elapsed": _elapsed, "value": float(ug)}))
 """,
     ),
     (
-        "(d) 100x viscosities",
-        "[gas.gas_ug(p=p, sg=0.7, degf=200, zmethod=z_method.BNS, cmethod=c_method.BNS)\n  for p in np.linspace(500, 5000, 100)]",
+        "(d) 1000x viscosities",
+        "[gas.gas_ug(p=p, sg=0.7, degf=200, zmethod=z_method.BNS, cmethod=c_method.BNS)\n  for p in np.linspace(500, 5000, 1000)]",
         """
-pressures = np.linspace(500, 5000, 100).tolist()
+pressures = np.linspace(500, 5000, 1000).tolist()
 results = [gas.gas_ug(p=p, sg=0.7, degf=200, zmethod=z_method.BNS, cmethod=c_method.BNS) for p in pressures]
 print(json.dumps({"elapsed": _elapsed, "value": float(np.mean(results))}))
 """,

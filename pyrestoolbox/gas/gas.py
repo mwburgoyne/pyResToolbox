@@ -536,32 +536,60 @@ def _cardano_cubic(c2, c1, c0, flag=0):
         return max(Zs)
     return Zs
 
-def _halley_cubic_vec(c2, c1, c0, max_iter=50, tol=1e-12):
+def _halley_cubic_vec(c2, c1, c0, A=None, B=None, max_iter=50, tol=1e-12):
     """Vectorized Halley solver: solve Z^3+c2*Z^2+c1*Z+c0=0 for max root (vapor Z).
     c2, c1, c0 are 1D arrays of length N. Returns 1D array of Z values.
-    Falls back to _cardano_cubic for any non-converged elements."""
-    N = len(c2)
-    Z = -c2 / 3.0
-    f0 = Z**3 + c2 * Z**2 + c1 * Z + c0
-    Z = np.where(f0 < 0, Z + 1.0, Z)
+    When A and B are provided, solves in Z* = Z - B space (per Aaron Zick's
+    reformulation) where all physical roots lie in (0, 1], giving more
+    robust convergence. Falls back to _cardano_cubic for any bad elements."""
 
-    for _ in range(max_iter):
+    if A is not None and B is not None:
+        # Z* = Z - B reformulation: Z*³ + d2·Z*² + d1·Z* + d0 = 0
+        # f*(0) = -2B² < 0, f*(1) = A >= 0, so largest root in (0, 1]
+        d2 = 4.0 * B - 1.0
+        d1 = A + 2.0 * B * (B - 2.0)
+        d0 = -2.0 * B * B
+
+        # Start at Z* = 1 (above largest root since f*(1) = A >= 0)
+        Zs = np.ones_like(c2)
+
+        for _ in range(max_iter):
+            f = Zs**3 + d2 * Zs**2 + d1 * Zs + d0
+            fp = 3.0 * Zs**2 + 2.0 * d2 * Zs + d1
+            fpp = 6.0 * Zs + 2.0 * d2
+            safe_fp = np.where(np.abs(fp) < 1e-30, 1e-30, fp)
+            dZ = f / safe_fp
+            denom = safe_fp - 0.5 * dZ * fpp
+            denom = np.where(np.abs(denom) < 1e-30, 1e-30, denom)
+            dZ = f / denom
+            Zs -= dZ
+            if np.max(np.abs(dZ)) < tol:
+                break
+
+        # Convert Z* -> Z; fallback to Cardano in Z space for bad elements
+        Z = Zs + B
+        f = Zs**3 + d2 * Zs**2 + d1 * Zs + d0
+        bad = (np.abs(f) > 1e-6) | (Zs <= 0.0)
+    else:
+        # Legacy path: solve directly in Z space with Cauchy upper bound
+        Z = 1.0 + np.maximum(np.abs(c2), np.maximum(np.abs(c1), np.abs(c0)))
+
+        for _ in range(max_iter):
+            f = Z**3 + c2 * Z**2 + c1 * Z + c0
+            fp = 3.0 * Z**2 + 2.0 * c2 * Z + c1
+            fpp = 6.0 * Z + 2.0 * c2
+            safe_fp = np.where(np.abs(fp) < 1e-30, 1e-30, fp)
+            dZ = f / safe_fp
+            denom = safe_fp - 0.5 * dZ * fpp
+            denom = np.where(np.abs(denom) < 1e-30, 1e-30, denom)
+            dZ = f / denom
+            Z -= dZ
+            if np.max(np.abs(dZ)) < tol:
+                break
+
         f = Z**3 + c2 * Z**2 + c1 * Z + c0
-        fp = 3.0 * Z**2 + 2.0 * c2 * Z + c1
-        fpp = 6.0 * Z + 2.0 * c2
-        # Protect against zero derivatives
-        safe_fp = np.where(np.abs(fp) < 1e-30, 1e-30, fp)
-        dZ = f / safe_fp
-        denom = safe_fp - 0.5 * dZ * fpp
-        denom = np.where(np.abs(denom) < 1e-30, 1e-30, denom)
-        dZ = f / denom
-        Z -= dZ
-        if np.max(np.abs(dZ)) < tol:
-            break
+        bad = (np.abs(f) > 1e-6) | (Z < 0.0)
 
-    # Check residuals and fall back to Cardano for any bad elements
-    f = Z**3 + c2 * Z**2 + c1 * Z + c0
-    bad = (np.abs(f) > 1e-6) | (Z < 0.0)
     if np.any(bad):
         bad_idx = np.where(bad)[0]
         for idx in bad_idx:
@@ -766,7 +794,7 @@ def gas_z(
         c0 = -(A * B - B**2 - B**3)
 
         # Solve all cubics at once - get max (vapor) root
-        Z_raw = _halley_cubic_vec(c2, c1_coeff, c0)    # (N,)
+        Z_raw = _halley_cubic_vec(c2, c1_coeff, c0, A=A, B=B)    # (N,)
 
         # Fugacity-based root selection for sub-critical conditions
         # When 3 real roots exist, the thermodynamically stable phase

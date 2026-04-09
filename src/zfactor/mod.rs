@@ -288,37 +288,46 @@ fn cardano_cubic(c2: f64, c1: f64, c0: f64, flag: i32) -> f64 {
     }
 }
 
-/// Halley's method for finding max root of cubic z^3 + c2*z^2 + c1*z + c0 = 0
-fn halley_cubic(c2: f64, c1: f64, c0: f64) -> f64 {
-    let mut z = -c2 / 3.0;
-    let f0 = z * z * z + c2 * z * z + c1 * z + c0;
-    if f0 < 0.0 {
-        z += 1.0;
-    }
+/// Halley's method for finding max root of cubic z^3 + c2*z^2 + c1*z + c0 = 0,
+/// using Z* = Z - B transformation (per Aaron Zick's reformulation).
+/// For any standard cubic EOS with non-negative A, all physical Z* roots
+/// lie in (0, 1], eliminating negative/huge roots and guaranteeing convergence.
+/// Returns Z (not Z*), i.e. the B offset is added back before returning.
+fn halley_cubic_zstar(a_mix: f64, b_mix: f64) -> f64 {
+    // Z* cubic: Z*³ + d2·Z*² + d1·Z* + d0 = 0
+    // where f*(0) = d0 = -2B² < 0 and f*(1) = A >= 0
+    let d2 = 4.0 * b_mix - 1.0;
+    let d1 = a_mix + 2.0 * b_mix * (b_mix - 2.0);
+    let d0 = -2.0 * b_mix * b_mix;
+
+    // Start at Z* = 1 where f* = A >= 0 (above largest root).
+    let mut zs = 1.0_f64;
 
     for _ in 0..50 {
-        let f = z * z * z + c2 * z * z + c1 * z + c0;
-        let fp = 3.0 * z * z + 2.0 * c2 * z + c1;
-        let fpp = 6.0 * z + 2.0 * c2;
+        let f = zs * zs * zs + d2 * zs * zs + d1 * zs + d0;
+        let fp = 3.0 * zs * zs + 2.0 * d2 * zs + d1;
+        let fpp = 6.0 * zs + 2.0 * d2;
 
         let fp_safe = if fp.abs() < 1e-30 { 1e-30 } else { fp };
         let dz = f / fp_safe;
         let denom = fp_safe - 0.5 * dz * fpp;
         let denom_safe = if denom.abs() < 1e-30 { 1e-30 } else { denom };
         let dz_final = f / denom_safe;
-        z -= dz_final;
+        zs -= dz_final;
         if dz_final.abs() < 1e-12 {
             break;
         }
     }
 
-    // Verify convergence
-    let f = z * z * z + c2 * z * z + c1 * z + c0;
-    if f.abs() > 1e-6 {
-        // Fallback to Cardano
+    // Verify convergence; fallback to Cardano in Z space if needed
+    let f = zs * zs * zs + d2 * zs * zs + d1 * zs + d0;
+    if f.abs() > 1e-6 || zs <= 0.0 {
+        let c2 = -(1.0 - b_mix);
+        let c1 = a_mix - 3.0 * b_mix * b_mix - 2.0 * b_mix;
+        let c0 = -(a_mix * b_mix - b_mix * b_mix - b_mix * b_mix * b_mix);
         return cardano_cubic(c2, c1, c0, 1);
     }
-    z
+    zs + b_mix
 }
 
 fn bns_zfactor_core(
@@ -381,28 +390,29 @@ fn bns_zfactor_core(
         b_mix += zi[i] * bi[i];
     }
 
-    // Cubic coefficients: Z^3 + c2*Z^2 + c1*Z + c0 = 0
-    let c2 = -(1.0 - b_mix);
-    let c1 = a_mix - 3.0 * b_mix * b_mix - 2.0 * b_mix;
-    let c0 = -(a_mix * b_mix - b_mix * b_mix - b_mix * b_mix * b_mix);
+    // Solve cubic in Z* = Z - B space (Aaron Zick reformulation)
+    let z_max = halley_cubic_zstar(a_mix, b_mix);
 
-    // Solve cubic - get max (vapor) root
-    let z_max = halley_cubic(c2, c1, c0);
-
-    // Check for 3-root case (fugacity-based root selection)
-    let p_d = (3.0 * c1 - c2 * c2) / 3.0;
-    let q_d = (2.0 * c2 * c2 * c2 - 9.0 * c2 * c1 + 27.0 * c0) / 27.0;
+    // Fugacity-based root selection for sub-critical conditions.
+    // Use Z* cubic discriminant to check for 3-root case.
+    let d2 = 4.0 * b_mix - 1.0;
+    let d1 = a_mix + 2.0 * b_mix * (b_mix - 2.0);
+    let d0 = -2.0 * b_mix * b_mix;
+    let p_d = (3.0 * d1 - d2 * d2) / 3.0;
+    let q_d = (2.0 * d2 * d2 * d2 - 9.0 * d2 * d1 + 27.0 * d0) / 27.0;
     let disc = q_d * q_d / 4.0 + p_d * p_d * p_d / 27.0;
 
     let z_selected = if disc < -1e-15 {
-        // 3 real roots - find min root via deflation
-        let b_q = c2 + z_max;
-        let c_q = c1 + z_max * b_q;
+        // 3 real roots — find min root via deflation in Z* space
+        let zs_max = z_max - b_mix; // convert back to Z*
+        let b_q = d2 + zs_max;
+        let c_q = d1 + zs_max * b_q;
         let det = (b_q * b_q - 4.0 * c_q).max(0.0);
-        let z_min = (-b_q - det.sqrt()) / 2.0;
+        let zs_min = (-b_q - det.sqrt()) / 2.0;
+        let z_min = zs_min + b_mix; // convert to Z
 
-        // Fugacity comparison (Gibbs criterion)
-        if z_min > b_mix {
+        // Fugacity comparison (Gibbs criterion); Z > B ↔ Z* > 0
+        if zs_min > 0.0 {
             let sqrt2: f64 = std::f64::consts::SQRT_2;
             let s2p1 = 1.0 + sqrt2;
             let s2m1 = sqrt2 - 1.0;
