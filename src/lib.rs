@@ -38,9 +38,18 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(zfactor::hall_yarborough_zfactor_full, m)?)?;
     m.add_function(wrap_pyfunction!(zfactor::bns_zfactor_full, m)?)?;
 
+    // Z-factor batch functions
+    m.add_function(wrap_pyfunction!(zfactor::dak_zfactor_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(zfactor::hy_zfactor_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(zfactor::bns_zfactor_batch, m)?)?;
+
     // Gas viscosity
     m.add_function(wrap_pyfunction!(gas_viscosity::gas_ug_lge, m)?)?;
     m.add_function(wrap_pyfunction!(gas_viscosity::gas_ug_lbc, m)?)?;
+
+    // Gas viscosity batch functions
+    m.add_function(wrap_pyfunction!(gas_viscosity::gas_ug_lge_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(gas_viscosity::gas_ug_lbc_batch, m)?)?;
 
     // Pseudopressure integration
     m.add_function(wrap_pyfunction!(pseudopressure::gas_dmp_rust, m)?)?;

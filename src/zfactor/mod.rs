@@ -464,6 +464,80 @@ pub fn bns_zfactor_full(
 }
 
 // =========================================================================
+// Batch (vectorized) pipeline functions — precompute once, loop pressures
+// =========================================================================
+
+/// DAK Z-factor for a batch of pressures. Precomputes Sutton+WA critical properties once.
+#[pyfunction]
+pub fn dak_zfactor_batch(
+    pressures: Vec<f64>,
+    t_degf: f64,
+    sg: f64,
+    co2_frac: f64,
+    h2s_frac: f64,
+    n2_frac: f64,
+) -> PyResult<Vec<f64>> {
+    let (tpc, ppc) = critical_properties::sutton_wa_internal(sg, co2_frac, h2s_frac, n2_frac)
+        .map_err(|e| PyValueError::new_err(e))?;
+    let t_rankine = t_degf + DEGF2R;
+    let tr = t_rankine / tpc;
+
+    let result: Vec<f64> = pressures.iter().map(|&p| {
+        let pr = p / ppc;
+        dak_core(pr, tr)
+    }).collect();
+
+    Ok(result)
+}
+
+/// Hall-Yarborough Z-factor for a batch of pressures. Precomputes Sutton+WA critical properties once.
+#[pyfunction]
+pub fn hy_zfactor_batch(
+    pressures: Vec<f64>,
+    t_degf: f64,
+    sg: f64,
+    co2_frac: f64,
+    h2s_frac: f64,
+    n2_frac: f64,
+) -> PyResult<Vec<f64>> {
+    let (tpc, ppc) = critical_properties::sutton_wa_internal(sg, co2_frac, h2s_frac, n2_frac)
+        .map_err(|e| PyValueError::new_err(e))?;
+    let t_rankine = t_degf + DEGF2R;
+    let tr = t_rankine / tpc;
+
+    let result: Vec<f64> = pressures.iter().map(|&p| {
+        let pr = p / ppc;
+        hy_core(pr, tr)
+    }).collect();
+
+    Ok(result)
+}
+
+/// BNS Z-factor for a batch of pressures. Precomputes critical properties, BIPs,
+/// alpha, and m once — loops only mixing rules, cubic solve, and fugacity selection.
+#[pyfunction]
+pub fn bns_zfactor_batch(
+    pressures: Vec<f64>,
+    t_degf: f64,
+    sg: f64,
+    co2_frac: f64,
+    h2s_frac: f64,
+    n2_frac: f64,
+    h2_frac: f64,
+) -> PyResult<Vec<f64>> {
+    let deg_r = t_degf + DEGF2R;
+    let (tpc_hc, ppc_hc, _) = critical_properties::bns_pseudocritical_internal(
+        sg, co2_frac, h2s_frac, n2_frac, h2_frac
+    );
+
+    let result: Vec<f64> = pressures.iter().map(|&p| {
+        bns_zfactor_core(p, deg_r, co2_frac, h2s_frac, n2_frac, h2_frac, tpc_hc, ppc_hc)
+    }).collect();
+
+    Ok(result)
+}
+
+// =========================================================================
 // Public wrappers for cross-module access (used by pseudopressure)
 // =========================================================================
 
