@@ -1,4 +1,4 @@
-Changelist in 3.1.2:
+Changelist in 3.1.3:
 
 - **Z-factor Z*=Z-B reformulation**: BNS Peng-Robinson cubic solver now uses Aaron Zick's Z* = Z - B variable substitution, which bounds all physical roots to (0, 1] and guarantees Halley solver convergence. Eliminates rare failures at extreme pressures. Falls back to Cardano analytically if needed.
 - **Rust batch vectorization**: Rust-accelerated ``gas_z()`` and ``gas_ug()`` now use batch dispatch (single FFI call for all pressures) instead of per-pressure scalar loops. Precomputes critical properties, BIPs, and LBC mixture parameters once per call. New Rust functions: ``bns_zfactor_batch``, ``dak_zfactor_batch``, ``hy_zfactor_batch``, ``gas_ug_lge_batch``, ``gas_ug_lbc_batch``. LBC viscosity batch is 9.3x faster than scalar; full BNS pipeline (Z + viscosity) is 2x faster than pure Python.
