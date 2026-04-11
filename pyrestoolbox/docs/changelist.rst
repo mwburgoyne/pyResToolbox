@@ -1,3 +1,11 @@
+Changelist in 3.1.2:
+
+- **Z-factor Z*=Z-B reformulation**: BNS Peng-Robinson cubic solver now uses Aaron Zick's Z* = Z - B variable substitution, which bounds all physical roots to (0, 1] and guarantees Halley solver convergence. Eliminates rare failures at extreme pressures. Falls back to Cardano analytically if needed.
+- **Rust batch vectorization**: Rust-accelerated ``gas_z()`` and ``gas_ug()`` now use batch dispatch (single FFI call for all pressures) instead of per-pressure scalar loops. Precomputes critical properties, BIPs, and LBC mixture parameters once per call. New Rust functions: ``bns_zfactor_batch``, ``dak_zfactor_batch``, ``hy_zfactor_batch``, ``gas_ug_lge_batch``, ``gas_ug_lbc_batch``. LBC viscosity batch is 9.3x faster than scalar; full BNS pipeline (Z + viscosity) is 2x faster than pure Python.
+- **Rust GWR inverse Laplace transform**: Rust/MPFR-accelerated Gaver-Wynn-Rho algorithm and Bessel functions for influence table generation. Switched dependency from ``gwr_inversion`` to ``ilt-inversion``.
+- **oil_co() Pb discontinuity fix**: Fixed oil compressibility discontinuity at bubble point in black oil tables. Added ``undersaturated_only`` mode.
+- 630 validation tests (up from 603 in 3.0.5).
+
 Changelist in 3.0.5:
 
 - **Rust acceleration (optional)**: Computationally intensive algorithms now have optional Rust-compiled acceleration. When the compiled extension is present it is used automatically with no API changes; when unavailable, all functions fall back silently to pure Python. Accelerated functions include all 8 VLP segment loops (4 methods x gas/oil), gas Z-factor (DAK, HY, BNS), gas viscosity (LGE, LBC), gas pseudopressure, oil density (SWMH), oil FVF (McCain), DCA hyperbolic grid search (``fit_decline``, ``fit_decline_cum``), and the material balance regression objective. Set ``PYRESTOOLBOX_NO_RUST=1`` to force pure Python; set ``PYRESTOOLBOX_RETRY_RUST=1`` to retry after a blocked probe. Use ``from pyrestoolbox._accelerator import get_status`` for programmatic status checks.
