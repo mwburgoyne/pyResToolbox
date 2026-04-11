@@ -159,3 +159,54 @@ pub fn gas_ug_lbc(
     let params = lbc_params(degf, sg, co2, h2s, n2, h2);
     Ok(lbc_viscosity_with_params(p_psia, deg_r, zee, &params))
 }
+
+// =========================================================================
+// Batch (vectorized) viscosity functions
+// =========================================================================
+
+/// LGE viscosity for a batch of (pressure, z-factor) pairs.
+#[pyfunction]
+pub fn gas_ug_lge_batch(
+    pressures: Vec<f64>,
+    z_factors: Vec<f64>,
+    sg: f64,
+    degf: f64,
+) -> PyResult<Vec<f64>> {
+    let t_degr = degf + DEGF2R;
+    let m = MW_AIR * sg;
+
+    // Precompute temperature-dependent LGE coefficients
+    let b = 3.448 + (986.4 / t_degr) + (0.01009 * m);
+    let c = 2.447 - (0.2224 * b);
+    let a = (9.379 + (0.01607 * m)) * t_degr.powf(1.5) / (209.2 + (19.26 * m) + t_degr);
+
+    let result: Vec<f64> = pressures.iter().zip(z_factors.iter()).map(|(&p, &z)| {
+        let rho = m * p / (t_degr * z * R * 62.37);
+        a * 0.0001 * (b * rho.powf(c)).exp()
+    }).collect();
+
+    Ok(result)
+}
+
+/// LBC viscosity for a batch of (pressure, z-factor) pairs.
+/// Precomputes LBC mixture parameters (u0, eta_mix, rhoc) once.
+#[pyfunction]
+pub fn gas_ug_lbc_batch(
+    pressures: Vec<f64>,
+    z_factors: Vec<f64>,
+    sg: f64,
+    degf: f64,
+    co2: f64,
+    h2s: f64,
+    n2: f64,
+    h2: f64,
+) -> PyResult<Vec<f64>> {
+    let deg_r = degf + DEGF2R;
+    let params = lbc_params(degf, sg, co2, h2s, n2, h2);
+
+    let result: Vec<f64> = pressures.iter().zip(z_factors.iter()).map(|(&p, &z)| {
+        lbc_viscosity_with_params(p, deg_r, z, &params)
+    }).collect();
+
+    Ok(result)
+}

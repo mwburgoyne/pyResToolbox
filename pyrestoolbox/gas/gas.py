@@ -840,29 +840,29 @@ def gas_z(
         
     zfuncs = {"DAK": zdak, "HY": z_hy, "WYW": z_wyw, "BUR": z_bur}
 
-    # Rust acceleration dispatch
+    # Rust acceleration dispatch (batch — single FFI call for all pressures)
     if RUST_AVAILABLE:
         if zmethod.name in ('BNS', 'BUR'):
-            zout = np.array([_rust_module.bns_zfactor_full(
-                float(pi), float(degf), float(sg),
+            zout = np.array(_rust_module.bns_zfactor_batch(
+                p.tolist(), float(degf), float(sg),
                 float(co2), float(h2s), float(n2), float(h2)
-            ) for pi in p])
+            ))
             return process_output(zout, is_list)
         elif zmethod.name == 'DAK':
             if cmethod.name == 'SUT':
-                zout = np.array([_rust_module.dak_zfactor_full(
-                    float(pi), float(degf), float(sg),
+                zout = np.array(_rust_module.dak_zfactor_batch(
+                    p.tolist(), float(degf), float(sg),
                     float(co2), float(h2s), float(n2)
-                ) for pi in p])
+                ))
             else:
                 zout = np.array([_rust_module.dak_zfactor(float(pr_i), float(tr)) for pr_i in pprs])
             return process_output(zout, is_list)
         elif zmethod.name == 'HY':
             if cmethod.name == 'SUT':
-                zout = np.array([_rust_module.hall_yarborough_zfactor_full(
-                    float(pi), float(degf), float(sg),
+                zout = np.array(_rust_module.hy_zfactor_batch(
+                    p.tolist(), float(degf), float(sg),
                     float(co2), float(h2s), float(n2)
-                ) for pi in p])
+                ))
             else:
                 zout = np.array([_rust_module.hall_yarborough_zfactor(float(pr_i), float(tr)) for pr_i in pprs])
             return process_output(zout, is_list)
@@ -945,15 +945,17 @@ def gas_ug(
     
     rho = m * p / (t * zee * R * 62.37)
 
-    # Rust-accelerated viscosity (scalar dispatch)
+    # Rust-accelerated viscosity (batch — single FFI call for all pressures)
     if RUST_AVAILABLE:
         if zmethod.name not in ('BNS', 'BUR'):
-            ug_list = np.array([_rust_module.gas_ug_lge(float(pi), sg, degf, float(zi))
-                                for pi, zi in zip(p, zee)])
+            ug_list = np.array(_rust_module.gas_ug_lge_batch(
+                p.tolist(), zee.tolist(), sg, degf
+            ))
             ug = process_output(ug_list, is_list)
         else:
-            ug_list = np.array([_rust_module.gas_ug_lbc(float(pi), sg, degf, co2, h2s, n2, h2, float(zi))
-                                for pi, zi in zip(p, zee)])
+            ug_list = np.array(_rust_module.gas_ug_lbc_batch(
+                p.tolist(), zee.tolist(), sg, degf, co2, h2s, n2, h2
+            ))
             ug = process_output(ug_list, is_list)
         if ugz:
             return process_output(ug * zee, is_list)
