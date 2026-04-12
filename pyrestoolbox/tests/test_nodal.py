@@ -57,8 +57,8 @@ def test_gas_pvt_bg_matches_direct():
 def test_gas_pvt_h2_auto_selects_bns():
     """GasPVT with h2>0 should auto-select BNS method."""
     gpvt = GasPVT(sg=0.5, h2=0.1)
-    assert gpvt.zmethod.name in ('BNS', 'BUR'), f"Expected BNS, got {gpvt.zmethod.name}"
-    assert gpvt.cmethod.name in ('BNS', 'BUR'), f"Expected BNS, got {gpvt.cmethod.name}"
+    assert gpvt.zmethod.name == 'BNS', f"Expected BNS, got {gpvt.zmethod.name}"
+    assert gpvt.cmethod.name == 'BNS', f"Expected BNS, got {gpvt.cmethod.name}"
 
 
 def test_gas_pvt_precomputed_tc_pc():

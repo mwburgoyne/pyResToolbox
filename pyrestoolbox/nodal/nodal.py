@@ -43,6 +43,7 @@ __all__ = [
 ]
 
 import math
+import warnings
 import numpy as np
 
 from pyrestoolbox.classes import vlp_method, class_dic
@@ -62,6 +63,14 @@ import pyrestoolbox.oil as oil
 from pyrestoolbox._accelerator import RUST_AVAILABLE as _RUST_AVAILABLE
 if _RUST_AVAILABLE:
     from pyrestoolbox import _native as _rust
+
+
+# Unit conversion constants used in VLP inner loops
+_DYNCM_TO_LBFFT = 6.852e-5        # dyne/cm -> lbf/ft
+_CP_TO_LBFTS = 6.7197e-4          # cP -> lb/(ft*s)
+_LB_TO_KG = 0.453592              # lb -> kg
+_LBFT3_TO_KGM3 = 16.01846         # lb/ft3 -> kg/m3
+_R_GAS = 10.732                   # Gas constant, psia*ft3/(lb-mol*degR)
 
 
 class NodalResult(dict):
@@ -482,7 +491,7 @@ def _gas_viscosity(sg, temp_f, press_psia, z=None, tc=None, pc=None):
         z = _z_factor(sg, temp_f, press_psia, tc=tc, pc=pc)
     temp_r = temp_f + 459.67
     mw = _MW_AIR * sg
-    rho_gcc = (_MW_AIR * sg * press_psia / (z * 10.732 * temp_r)) / 62.428
+    rho_gcc = (_MW_AIR * sg * press_psia / (z * _R_GAS * temp_r)) / 62.428
 
     k_val = ((9.4 + 0.02 * mw) * temp_r ** 1.5 / (209.0 + 19.0 * mw + temp_r))
     x_val = 3.5 + 986.0 / temp_r + 0.01 * mw
@@ -497,7 +506,7 @@ def _gas_density(sg, temp_f, press_psia, z=None, tc=None, pc=None):
     """Gas density in lb/ft^3."""
     if z is None:
         z = _z_factor(sg, temp_f, press_psia, tc=tc, pc=pc)
-    return _MW_AIR * sg * press_psia / (z * 10.732 * (temp_f + 459.67))
+    return _MW_AIR * sg * press_psia / (z * _R_GAS * (temp_f + 459.67))
 
 
 def _water_viscosity(press_psia, temp_f, salinity=0.0):
@@ -696,7 +705,7 @@ def _static_gas_column_pressure(thp, length, tht, bht, gsg, theta=math.pi / 2.0)
         temp_local = tht + (bht - tht) * frac
         temp_r = temp_local + 459.67
         zee = _z_factor(gsg, temp_local, max(p, 14.7), tc=tc, pc=pc)
-        rho_gas = _MW_AIR * gsg * p / (zee * 10.732 * temp_r)
+        rho_gas = _MW_AIR * gsg * p / (zee * _R_GAS * temp_r)
         p += rho_gas / 144.0 * d_len * sin_theta
     return p
 
@@ -728,6 +737,88 @@ def _static_oil_column_pressure(thp, length, tht, bht, wc, wsg,
 #  1. HAGEDORN-BROWN VLP
 # ============================================================================
 
+def _hb_gradient_gas(s):
+    """Hagedorn-Brown gradient: polynomial holdup, Orkiszewski bubble flow, Serghides friction."""
+    ul = s['v_sl']
+    ugas = s['v_sg']
+    ift = s['sigma']
+    rho_l = s['rho_l']
+
+    nvl = 1.938 * ul * (rho_l / ift) ** 0.25
+    nvg = 1.938 * ugas * (rho_l / ift) ** 0.25
+    nd = 120.872 * s['diam_ft'] * (rho_l / ift) ** 0.5
+
+    mul = s['mu_l'] if s['ql_loc'] > 0 else 1.0
+
+    nl = 0.15726 * mul * (1.0 / (rho_l * ift ** 3)) ** 0.25
+    if nl <= 0:
+        nl = 1e-8
+
+    x1 = _log10(nl) + 3.0
+    cnl = 10.0 ** (-2.69851 + 0.1584095 * x1 - 0.5509976 * x1 * x1 +
+                   0.5478492 * x1 ** 3 - 0.1219458 * x1 ** 4)
+
+    nvg_safe = max(nvg, 1e-10)
+    f1 = nvl * s['p_avg'] ** 0.1 * cnl / (nvg_safe ** 0.575 * 14.7 ** 0.1 * nd)
+
+    lf1 = _log10(f1) + 6.0
+    ylonsi = (-0.10306578 + 0.617774 * lf1 - 0.632946 * lf1 ** 2 +
+              0.29598 * lf1 ** 3 - 0.0401 * lf1 ** 4)
+    ylonsi = max(ylonsi, 0.0)
+
+    f2 = nvg * nl ** 0.38 / nd ** 2.14
+    idex = 1.0 if f2 >= 0.012 else -1.0
+    f2 = (1.0 - idex) / 2.0 * 0.012 + (1.0 + idex) / 2.0 * f2
+
+    si = (0.9116257 - 4.821756 * f2 + 1232.25 * f2 * f2 -
+          22253.58 * f2 ** 3 + 116174.3 * f2 ** 4)
+    if f2 <= 0.001:
+        si = 1.0
+
+    yl = _clamp(si * ylonsi, 0.0, 1.0)
+
+    # Minimum holdup from mass fraction
+    rho_g_sg = s['rho_g'] / 62.37
+    mflow_lpd = s['mflow_l'] * 86400.0
+    mflow_gpd = s['mflow_g'] * 86400.0
+    mflow_total_pd = mflow_lpd + mflow_gpd
+    mass_frac_liq = mflow_lpd / mflow_total_pd if mflow_total_pd > 0 else 0.0
+    min_l = (mass_frac_liq * rho_g_sg / (rho_g_sg + s['lsg_loc'])
+             if (rho_g_sg + s['lsg_loc']) > 0 else 0.0)
+    if yl < min_l:
+        yl = min_l
+
+    # Orkiszewski bubble flow correction
+    vm = ugas + ul
+    vs = 0.8
+    lb = 1.071 - 0.2218 * vm * vm / s['diam_ft']
+    if lb < 0.13:
+        lb = 0.13
+    if vm > 0:
+        b_ratio = ugas / vm
+        if b_ratio < lb:
+            disc = (1.0 + vm / vs) ** 2 - 4.0 * ugas / vs
+            if disc >= 0:
+                yl = 1.0 - 0.5 * (1.0 + vm / vs - math.sqrt(disc))
+                yl = _clamp(yl, 0.0, 1.0)
+
+    # Reynolds and friction (mass-flow basis)
+    mflow_pd = mflow_total_pd
+    nre = 96778.0 * (mflow_pd / 86400.0) / (s['diam_ft'] *
+          mul ** yl * s['mu_g'] ** (1.0 - yl))
+    if nre < 2100:
+        nre = 2100.0
+
+    eond = s['rough'] / s['tid']
+    f = _serghides_fanning(nre, eond)
+
+    rho_avg = yl * rho_l + (1.0 - yl) * s['rho_g']
+
+    fric_term = f * mflow_pd ** 2 / 7.413e10 / s['diam_ft'] ** 5 / rho_avg
+    sign = -1.0 if s['injection'] else 1.0
+    return (rho_avg * math.sin(s['theta']) + sign * fric_term) / 144.0
+
+
 def _hb_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                   injection=False, pr=0.0, theta=math.pi / 2.0):
@@ -736,153 +827,11 @@ def _hb_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
             return _rust.hb_fbhp_gas_rust(
                 thp, api, gsg, tid, rough, length, tht, bht, wsg,
                 qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta)
-        except Exception:
+        except (ImportError, AttributeError):
             pass
-    tc, pc = _sutton_tc_pc(gsg)
-    osg = 141.5 / (api + 131.5)
-    total_mass = (0.0765 * gsg * qg_mmscfd * 1e6 +
-                  osg * 62.4 * cgr * qg_mmscfd * 5.615 +
-                  wsg * 62.4 * qw_bwpd * 5.615)
-    if total_mass < 1e-6 or qg_mmscfd < 0.05:
-        return _static_gas_column_pressure(thp, length, tht, bht, gsg, theta=theta)
-
-    area = math.pi * tid * tid / 4.0 / 144.0
-    ndiv = _calc_segments(length)
-    seg_len = length / ndiv
-
-    depth = [0.0] * (ndiv + 1)
-    dz = [0.0] * (ndiv + 1)
-    incr = [0.0] * (ndiv + 1)
-    temp = [0.0] * (ndiv + 1)
-    p = [0.0] * (ndiv + 1)
-
-    temp[0] = tht
-    midpoint = 0.0
-
-    for i in range(ndiv + 1):
-        depth[i] = i * seg_len
-        if i == 0:
-            incr[i] = seg_len
-        else:
-            incr[i] = depth[i] - depth[i - 1]
-            dz[i] = (incr[i - 1] + incr[i]) / 2.0
-        if i == ndiv:
-            incr[i] = 0.5 * seg_len
-            dz[i] = incr[i - 1] + incr[i]
-        midpoint += dz[i]
-        temp[i] = (bht - tht) * midpoint / length + tht + 459.67
-
-    p[0] = thp
-
-    for i in range(1, ndiv + 1):
-        temp_f_i = temp[i] - 459.67
-        p_est = p[i - 1]
-
-        for _iter in range(2):
-            p_avg = max((p[i - 1] + p_est) / 2.0, 14.7)
-
-            cgr_loc, qo_loc, ql_loc, lsg_loc = _condensate_dropout(
-                cgr, qg_mmscfd, p_avg, pr, osg, qw_bwpd, wsg)
-            ul = ql_loc * 5.615 / 86400.0 / area
-
-            oil_vis_loc = _condensate_vis(pr, cgr_loc, gsg, api,
-                                          temp_f_i, p_avg, oil_vis)
-
-            zee = _z_factor(gsg, temp_f_i, p_avg, tc=tc, pc=pc)
-
-            mflow_o = osg * 62.4 * qo_loc * 5.615
-            mflow_w = wsg * 62.4 * qw_bwpd * 5.615
-            mflow_g = 0.0765 * gsg * qg_mmscfd * 1e6
-
-            water_visc = _water_viscosity(p_avg, temp_f_i)
-
-            rs_est = _standing_rs(gsg, p_avg, temp_f_i, api)
-            ift = _interfacial_tension(p_avg, temp_f_i, api, rs_est,
-                                       mflow_o, mflow_w, mflow_g)
-
-            ugas = (qg_mmscfd * 1e6 /
-                    (p_avg * 35.3741 / (zee * temp[i])) /
-                    86400.0 / area)
-            um = ugas + ul
-
-            nvl = 1.938 * ul * (62.4 * lsg_loc / ift) ** 0.25
-            nvg = 1.938 * ugas * (62.4 * lsg_loc / ift) ** 0.25
-            nd = 120.872 * tid / 12.0 * (62.4 * lsg_loc / ift) ** 0.5
-
-            mul = 1.0
-            if ql_loc > 0:
-                mul = (qo_loc * oil_vis_loc + qw_bwpd * water_visc) / (qo_loc + qw_bwpd)
-
-            nl = 0.15726 * mul * (1.0 / (62.4 * lsg_loc * ift ** 3)) ** 0.25
-            if nl <= 0:
-                nl = 1e-8
-
-            x1 = _log10(nl) + 3.0
-            cnl = 10.0 ** (-2.69851 + 0.1584095 * x1 - 0.5509976 * x1 * x1 +
-                           0.5478492 * x1 ** 3 - 0.1219458 * x1 ** 4)
-
-            nvg_safe = max(nvg, 1e-10)
-            f1 = nvl * p_avg ** 0.1 * cnl / (nvg_safe ** 0.575 * 14.7 ** 0.1 * nd)
-
-            lf1 = _log10(f1) + 6.0
-            ylonsi = (-0.10306578 + 0.617774 * lf1 - 0.632946 * lf1 ** 2 +
-                      0.29598 * lf1 ** 3 - 0.0401 * lf1 ** 4)
-            ylonsi = max(ylonsi, 0.0)
-
-            f2 = nvg * nl ** 0.38 / nd ** 2.14
-            idex = 1.0 if f2 >= 0.012 else -1.0
-            f2 = (1.0 - idex) / 2.0 * 0.012 + (1.0 + idex) / 2.0 * f2
-
-            si = (0.9116257 - 4.821756 * f2 + 1232.25 * f2 * f2 -
-                  22253.58 * f2 ** 3 + 116174.3 * f2 ** 4)
-            if f2 <= 0.001:
-                si = 1.0
-
-            yl = _clamp(si * ylonsi, 0.0, 1.0)
-
-            rho = 29.0 * gsg * p_avg / (temp[i] * zee * 10.732 * 62.37)
-
-            mflow = lsg_loc * 62.4 * ql_loc * 5.615 + 0.0765 * gsg * qg_mmscfd * 1e6
-            mass_frac_liq = (lsg_loc * 62.4 * ql_loc * 5.615) / mflow if mflow > 0 else 0
-            min_l = mass_frac_liq * rho * 62.37 / (rho * 62.37 + lsg_loc * 62.37)
-            if yl < min_l:
-                yl = min_l
-
-            # Orkiszewski bubble flow correction
-            vm = ugas + ul
-            vs = 0.8
-            d_ft = tid / 12.0
-            lb = 1.071 - 0.2218 * vm * vm / d_ft
-            if lb < 0.13:
-                lb = 0.13
-            if vm > 0:
-                b_ratio = ugas / vm
-                if b_ratio < lb:
-                    disc = (1.0 + vm / vs) ** 2 - 4.0 * ugas / vs
-                    if disc >= 0:
-                        yl = 1.0 - 0.5 * (1.0 + vm / vs - math.sqrt(disc))
-                        yl = _clamp(yl, 0.0, 1.0)
-
-            mug = _gas_viscosity(gsg, temp_f_i, p_avg, z=zee, tc=tc, pc=pc)
-            nre = 96778.0 * (mflow / 86400.0) / ((tid / 12.0) *
-                  mul ** yl * mug ** (1.0 - yl))
-            if nre < 2100:
-                nre = 2100.0
-
-            eond = rough / tid
-            f = _serghides_fanning(nre, eond)
-
-            rho_g = _MW_AIR * gsg * p_avg / (zee * 10.73 * temp[i])
-            rho_avg = yl * lsg_loc * 62.4 + (1.0 - yl) * rho_g
-
-            fric_term = f * mflow ** 2 / 7.413e10 / (tid / 12.0) ** 5 / rho_avg
-            dpdz = (rho_avg * math.sin(theta) + (-fric_term if injection else fric_term)) / 144.0
-
-            p_est = p[i - 1] + dpdz * incr[i]
-
-        p[i] = p_est
-
-    return p[ndiv]
+    return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
+                              wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
+                              injection, pr, theta, _hb_gradient_gas)
 
 
 def _hb_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
@@ -895,164 +844,12 @@ def _hb_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
                 thp, api, gsg, tid, rough, length, tht, bht, wsg,
                 qt_stbpd, gor, wc, pb, rsb, sgsp,
                 rsb_scale, injection, theta, vis_frac, rsb_frac)
-        except Exception:
+        except (ImportError, AttributeError):
             pass
-    tc, pc = _sutton_tc_pc(gsg)
-    wc_adj = max(wc, 1e-9)
-    if qt_stbpd < 1e-7:
-        return _static_oil_column_pressure(
-            thp, length, tht, bht, wc_adj, wsg, api, sgsp, pb, rsb, rsb_scale,
-            theta=theta)
-
-    qo = qt_stbpd * (1.0 - wc)
-    qw = qt_stbpd * wc
-    osg = 141.5 / (api + 131.5)
-    sgsto = osg
-    rsb_for_calc = rsb / rsb_scale
-
-    area = math.pi * tid * tid / 4.0 / 144.0
-    ndiv = _calc_segments(length)
-    seg_len_ft = length / ndiv
-
-    depth = [0.0] * (ndiv + 1)
-    dz = [0.0] * (ndiv + 1)
-    incr = [0.0] * (ndiv + 1)
-    temp = [0.0] * (ndiv + 1)
-    p_arr = [0.0] * (ndiv + 1)
-
-    temp[0] = tht
-    midpoint = 0.0
-
-    for i in range(ndiv + 1):
-        depth[i] = i * seg_len_ft
-        if i == 0:
-            incr[i] = seg_len_ft
-        else:
-            incr[i] = depth[i] - depth[i - 1]
-            dz[i] = (incr[i - 1] + incr[i]) / 2.0
-        if i == ndiv:
-            incr[i] = 0.5 * seg_len_ft
-            dz[i] = incr[i - 1] + incr[i]
-        midpoint += dz[i]
-        temp[i] = (bht - tht) * midpoint / length + tht + 459.67
-
-    p_arr[0] = thp
-
-    for i in range(1, ndiv + 1):
-        temp_f_i = temp[i] - 459.67
-        p_est = p_arr[i - 1]
-
-        for _iter in range(2):
-            p_avg = max((p_arr[i - 1] + p_est) / 2.0, 14.7)
-
-            rs_local = _velarde_rs(sgsp, api, temp_f_i, pb, rsb_for_calc, p_avg) * rsb_scale
-            free_gas = max(gor - rs_local, 0.0)
-            qg_mmscfd = max(free_gas * qo / 1e6, 1e-9)
-
-            oil_vis_seg = _oil_viscosity_full(sgsp, api, temp_f_i, rsb, pb, p_avg, vis_frac, rsb_frac)
-            rho_oil_local = _oil_density_mccain(rs_local, sgsp, sgsto,
-                                                 min(p_avg, pb), temp_f_i)
-
-            zee = _z_factor(gsg, temp_f_i, p_avg, tc=tc, pc=pc)
-            mug = _gas_viscosity(gsg, temp_f_i, p_avg, z=zee, tc=tc, pc=pc)
-
-            mflow_o = osg * 62.4 * qo * 5.615
-            mflow_w = wsg * 62.4 * qw * 5.615
-            mflow_g = 0.0765 * gsg * qg_mmscfd * 1e6
-            mflow = mflow_o + mflow_w + mflow_g
-
-            if mflow < 1e-6:
-                tavg_r = (tht + bht) / 2.0 + 459.67
-                p_arr[i] = p_arr[i - 1] * math.exp(0.01875 * gsg * incr[i] / (zee * tavg_r))
-                break
-
-            ql = qo + qw
-            lsg = (qo * osg + qw * wsg) / ql
-            ul = ql * 5.615 / 86400.0 / area
-
-            water_visc = _water_viscosity(p_avg, temp_f_i)
-            ift = _interfacial_tension(p_avg, temp_f_i, api, rs_local,
-                                       mflow_o, mflow_w, mflow_g)
-
-            ugas = (qg_mmscfd * 1e6 /
-                    (p_avg * 35.3741 / (zee * temp[i])) / 86400.0 / area)
-
-            nvl = 1.938 * ul * (62.4 * lsg / ift) ** 0.25
-            nvg = 1.938 * ugas * (62.4 * lsg / ift) ** 0.25
-            nd = 120.872 * tid / 12.0 * (62.4 * lsg / ift) ** 0.5
-
-            mul = 1.0
-            if ql > 0:
-                mul = (qo * oil_vis_seg + qw * water_visc) / ql
-
-            nl = 0.15726 * mul * (1.0 / (62.4 * lsg * ift ** 3)) ** 0.25
-            if nl <= 0:
-                nl = 1e-8
-
-            x1 = _log10(nl) + 3.0
-            cnl = 10.0 ** (-2.69851 + 0.1584095 * x1 - 0.5509976 * x1 ** 2 +
-                           0.5478492 * x1 ** 3 - 0.1219458 * x1 ** 4)
-
-            nvg_safe = max(nvg, 1e-10)
-            f1 = nvl * p_avg ** 0.1 * cnl / (nvg_safe ** 0.575 * 14.7 ** 0.1 * nd)
-
-            lf1 = _log10(f1) + 6.0
-            ylonsi = (-0.10306578 + 0.617774 * lf1 - 0.632946 * lf1 ** 2 +
-                      0.29598 * lf1 ** 3 - 0.0401 * lf1 ** 4)
-            ylonsi = max(ylonsi, 0.0)
-
-            f2 = nvg * nl ** 0.38 / nd ** 2.14
-            idex = 1.0 if f2 >= 0.012 else -1.0
-            f2 = (1.0 - idex) / 2.0 * 0.012 + (1.0 + idex) / 2.0 * f2
-
-            si = (0.9116257 - 4.821756 * f2 + 1232.25 * f2 ** 2 -
-                  22253.58 * f2 ** 3 + 116174.3 * f2 ** 4)
-            if f2 <= 0.001:
-                si = 1.0
-
-            yl = _clamp(si * ylonsi, 0.0, 1.0)
-
-            rho_g = _MW_AIR * gsg * p_avg / (zee * 10.73 * temp[i])
-
-            mass_frac_liq = (lsg * 62.4 * ql * 5.615) / mflow if mflow > 0 else 0
-            min_l = mass_frac_liq * rho_g * 62.37 / (rho_g * 62.37 + lsg * 62.37)
-            if yl < min_l:
-                yl = min_l
-
-            # Orkiszewski bubble flow correction
-            vm = ugas + ul
-            vs = 0.8
-            d_ft = tid / 12.0
-            lb_val = 1.071 - 0.2218 * vm * vm / d_ft
-            if lb_val < 0.13:
-                lb_val = 0.13
-            if vm > 0:
-                b_ratio = ugas / vm
-                if b_ratio < lb_val:
-                    disc = (1.0 + vm / vs) ** 2 - 4.0 * ugas / vs
-                    if disc >= 0:
-                        yl = 1.0 - 0.5 * (1.0 + vm / vs - math.sqrt(disc))
-                        yl = _clamp(yl, 0.0, 1.0)
-
-            nre = 96778.0 * (mflow / 86400.0) / ((tid / 12.0) *
-                  mul ** yl * mug ** (1.0 - yl))
-            if nre < 2100:
-                nre = 2100.0
-
-            eond = rough / tid
-            f_fan = _serghides_fanning(nre, eond)
-
-            rho_avg = yl * rho_oil_local + (1.0 - yl) * rho_g
-
-            fric_term = f_fan * mflow ** 2 / 7.413e10 / (tid / 12.0) ** 5 / rho_avg
-            dpdz = (rho_avg * math.sin(theta) + (-fric_term if injection else fric_term)) / 144.0
-
-            p_est = p_arr[i - 1] + dpdz * incr[i]
-
-        if p_arr[i] == 0:
-            p_arr[i] = p_est
-
-    return p_arr[ndiv]
+    return _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
+                              wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
+                              rsb_scale, injection, theta, _hb_gradient_gas,
+                              vis_frac, rsb_frac)
 
 
 # ============================================================================
@@ -1128,6 +925,37 @@ def _wg_friction_gradient_lm(m_flow_g, m_flow_l, rho_g, rho_l,
     return phi2_l * dpdz_l
 
 
+def _wg_gradient_gas(s):
+    """Woldesemayat-Ghajar gradient: drift-flux void fraction, Chisholm friction (SI)."""
+    # Convert oilfield state to SI
+    diam_m = s['tid'] * _IN_TO_M
+    rough_m = s['rough'] * _IN_TO_M
+    area_m2 = math.pi * diam_m ** 2 / 4.0
+    rho_g_kgm3 = s['rho_g'] * _LBFT3_TO_KGM3
+    rho_l_kgm3 = s['rho_l'] * _LBFT3_TO_KGM3
+    mflow_g_kgs = s['mflow_g'] * _LB_TO_KG
+    mflow_l_kgs = s['mflow_l'] * _LB_TO_KG
+    u_sg = mflow_g_kgs / (rho_g_kgm3 * area_m2)
+    u_sl = mflow_l_kgs / (rho_l_kgm3 * area_m2)
+    sigma_nm = s['sigma'] * _DYNECM_TO_NM
+    p_sys_pa = s['p_avg'] * _PSI_TO_PA
+
+    alpha_g = _wg_void_fraction(u_sg, u_sl, rho_g_kgm3, rho_l_kgm3,
+                                 sigma_nm, diam_m, s['theta'], p_sys_pa)
+    rho_mix = alpha_g * rho_g_kgm3 + (1.0 - alpha_g) * rho_l_kgm3
+    dpdz_hydro = rho_mix * _G_SI * math.sin(s['theta'])
+
+    mu_g_pas = s['mu_g'] * _CP_TO_PAS
+    mu_l_pas = s['mu_l'] * _CP_TO_PAS
+    dpdz_fric = _wg_friction_gradient_lm(
+        mflow_g_kgs, mflow_l_kgs, rho_g_kgm3, rho_l_kgm3,
+        mu_g_pas, mu_l_pas, diam_m, rough_m)
+
+    sign = -1.0 if s['injection'] else 1.0
+    dpdz_pam = dpdz_hydro + sign * dpdz_fric
+    return dpdz_pam / (_PSI_TO_PA / _FT_TO_M)
+
+
 def _wg_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                   injection=False, pr=0.0, theta=math.pi / 2.0):
@@ -1136,91 +964,11 @@ def _wg_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
             return _rust.wg_fbhp_gas_rust(
                 thp, api, gsg, tid, rough, length, tht, bht, wsg,
                 qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta)
-        except Exception:
+        except (ImportError, AttributeError):
             pass
-    tc, pc = _sutton_tc_pc(gsg)
-    osg = 141.5 / (api + 131.5)
-    total_mass = (0.0765 * gsg * qg_mmscfd * 1e6 +
-                  osg * 62.4 * cgr * qg_mmscfd * 5.615 +
-                  wsg * 62.4 * qw_bwpd * 5.615)
-    if total_mass < 1e-6 or qg_mmscfd < 0.05:
-        return _static_gas_column_pressure(thp, length, tht, bht, gsg, theta=theta)
-
-    diam_m = tid * _IN_TO_M
-    rough_m = rough * _IN_TO_M
-    area_m2 = math.pi * diam_m ** 2 / 4.0
-
-    m_flow_g_kgs = 0.0765 * gsg * qg_mmscfd * 1e6 * 0.453592 / 86400.0
-    m_flow_w_kgs = wsg * 62.4 * qw_bwpd * 5.615 * 0.453592 / 86400.0
-
-    ndiv = _calc_segments(length)
-    seg_len_ft = length / ndiv
-
-    p_psia = thp
-
-    for i in range(1, ndiv + 1):
-        frac = (i - 0.5) / ndiv
-        temp_f_i = tht + (bht - tht) * frac
-        p_est = p_psia
-
-        for _it in range(2):
-            p_avg = (p_psia + p_est) / 2.0
-            if p_avg < 14.7:
-                p_avg = 14.7
-
-            cgr_loc, qo_loc, ql_loc, lsg_loc = _condensate_dropout(
-                cgr, qg_mmscfd, p_avg, pr, osg, qw_bwpd, wsg)
-
-            m_flow_o_kgs = osg * 62.4 * qo_loc * 5.615 * 0.453592 / 86400.0
-            m_flow_l_kgs = m_flow_o_kgs + m_flow_w_kgs
-            rho_l_kgm3 = lsg_loc * 62.4 * _LBFT3_TO_KGM3
-            u_sl = m_flow_l_kgs / (rho_l_kgm3 * area_m2)
-
-            oil_vis_loc = _condensate_vis(pr, cgr_loc, gsg, api,
-                                           temp_f_i, p_avg, oil_vis)
-
-            zee = _z_factor(gsg, temp_f_i, p_avg, tc=tc, pc=pc)
-            mu_g_cp = _gas_viscosity(gsg, temp_f_i, p_avg, z=zee, tc=tc, pc=pc)
-
-            temp_r = temp_f_i + 459.67
-            rho_g_lbft3 = _MW_AIR * gsg * p_avg / (zee * 10.732 * temp_r)
-            rho_g_kgm3 = rho_g_lbft3 * _LBFT3_TO_KGM3
-
-            qg_actual_m3s = m_flow_g_kgs / rho_g_kgm3
-            u_sg = qg_actual_m3s / area_m2
-
-            water_visc = _water_viscosity(p_avg, temp_f_i)
-            if ql_loc > 0:
-                mu_l = (qo_loc * oil_vis_loc + qw_bwpd * water_visc) / ql_loc * _CP_TO_PAS
-            else:
-                mu_l = oil_vis_loc * _CP_TO_PAS
-
-            rs_est = _standing_rs(gsg, p_avg, temp_f_i, api)
-            ift = _interfacial_tension(p_avg, temp_f_i, api, rs_est,
-                                       m_flow_o_kgs, m_flow_w_kgs, m_flow_g_kgs)
-            sigma_nm = ift * _DYNECM_TO_NM
-            p_sys_pa = p_avg * _PSI_TO_PA
-
-            alpha_g = _wg_void_fraction(u_sg, u_sl, rho_g_kgm3, rho_l_kgm3,
-                                         sigma_nm, diam_m, theta, p_sys_pa)
-            liq_holdup = 1.0 - alpha_g
-
-            rho_mix = alpha_g * rho_g_kgm3 + liq_holdup * rho_l_kgm3
-            dpdz_hydro = rho_mix * _G_SI * math.sin(theta)
-
-            mu_g_pas = mu_g_cp * _CP_TO_PAS
-            dpdz_fric = _wg_friction_gradient_lm(
-                m_flow_g_kgs, m_flow_l_kgs, rho_g_kgm3, rho_l_kgm3,
-                mu_g_pas, mu_l, diam_m, rough_m)
-
-            dpdz_total_pam = dpdz_hydro + (-dpdz_fric if injection else dpdz_fric)
-            dpdz_psift = dpdz_total_pam / (_PSI_TO_PA / _FT_TO_M)
-
-            p_est = p_psia + dpdz_psift * seg_len_ft
-
-        p_psia = p_est
-
-    return p_psia
+    return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
+                              wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
+                              injection, pr, theta, _wg_gradient_gas)
 
 
 def _wg_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
@@ -1233,101 +981,12 @@ def _wg_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
                 thp, api, gsg, tid, rough, length, tht, bht, wsg,
                 qt_stbpd, gor, wc, pb, rsb, sgsp,
                 rsb_scale, injection, theta, vis_frac, rsb_frac)
-        except Exception:
+        except (ImportError, AttributeError):
             pass
-    tc, pc = _sutton_tc_pc(gsg)
-    wc_adj = max(wc, 1e-9)
-    if qt_stbpd < 1e-7:
-        return _static_oil_column_pressure(
-            thp, length, tht, bht, wc_adj, wsg, api, sgsp, pb, rsb, rsb_scale,
-            theta=theta)
-
-    qo = qt_stbpd * (1.0 - wc)
-    qw = qt_stbpd * wc
-    osg = 141.5 / (api + 131.5)
-    rsb_for_calc = rsb / rsb_scale
-
-    diam_m = tid * _IN_TO_M
-    rough_m = rough * _IN_TO_M
-    area_m2 = math.pi * diam_m ** 2 / 4.0
-
-    ndiv = _calc_segments(length)
-    seg_len_ft = length / ndiv
-
-    p_psia = thp
-
-    for i in range(1, ndiv + 1):
-        frac = (i - 0.5) / ndiv
-        temp_f_i = tht + (bht - tht) * frac
-        p_est = p_psia
-
-        for _it in range(2):
-            p_avg = max((p_psia + p_est) / 2.0, 14.7)
-
-            rs_local = _velarde_rs(sgsp, api, temp_f_i, pb, rsb_for_calc, p_avg) * rsb_scale
-            free_gas = max(gor - rs_local, 0.0)
-            qg_mmscfd = max(free_gas * qo / 1e6, 1e-9)
-
-            oil_vis_seg = _oil_viscosity_full(sgsp, api, temp_f_i, rsb, pb, p_avg, vis_frac, rsb_frac)
-            rho_oil_lbft3 = _oil_density_mccain(rs_local, sgsp, osg,
-                                                  min(p_avg, pb), temp_f_i)
-            rho_oil_kgm3 = rho_oil_lbft3 * _LBFT3_TO_KGM3
-
-            zee = _z_factor(gsg, temp_f_i, p_avg, tc=tc, pc=pc)
-            mu_g_cp = _gas_viscosity(gsg, temp_f_i, p_avg, z=zee, tc=tc, pc=pc)
-
-            temp_r = temp_f_i + 459.67
-            rho_g_lbft3 = _MW_AIR * gsg * p_avg / (zee * 10.732 * temp_r)
-            rho_g_kgm3 = rho_g_lbft3 * _LBFT3_TO_KGM3
-
-            m_flow_o_kgs = osg * 62.4 * qo * 5.615 * 0.453592 / 86400.0
-            m_flow_w_kgs = wsg * 62.4 * qw * 5.615 * 0.453592 / 86400.0
-            m_flow_g_kgs = 0.0765 * gsg * qg_mmscfd * 1e6 * 0.453592 / 86400.0
-            m_flow_l_kgs = m_flow_o_kgs + m_flow_w_kgs
-            m_flow_total = m_flow_g_kgs + m_flow_l_kgs
-
-            if m_flow_total < 1e-15:
-                tavg_r = (tht + bht) / 2.0 + 459.67
-                p_psia *= math.exp(0.01875 * gsg * seg_len_ft / (zee * tavg_r))
-                break
-
-            ql = qo + qw
-            rho_w_kgm3 = wsg * 62.4 * _LBFT3_TO_KGM3
-            rho_l_kgm3 = ((qo * rho_oil_kgm3 + qw * rho_w_kgm3) / ql
-                           if ql > 0 else rho_oil_kgm3)
-
-            u_sg = m_flow_g_kgs / (rho_g_kgm3 * area_m2)
-            u_sl = m_flow_l_kgs / (rho_l_kgm3 * area_m2)
-
-            water_visc = _water_viscosity(p_avg, temp_f_i)
-            mu_l_pas = ((qo * oil_vis_seg + qw * water_visc) / ql * _CP_TO_PAS
-                        if ql > 0 else oil_vis_seg * _CP_TO_PAS)
-
-            ift = _interfacial_tension(p_avg, temp_f_i, api, rs_local,
-                                       m_flow_o_kgs, m_flow_w_kgs, m_flow_g_kgs)
-            sigma_nm = ift * _DYNECM_TO_NM
-            p_sys_pa = p_avg * _PSI_TO_PA
-
-            alpha_g = _wg_void_fraction(u_sg, u_sl, rho_g_kgm3, rho_l_kgm3,
-                                         sigma_nm, diam_m, theta, p_sys_pa)
-            liq_holdup = 1.0 - alpha_g
-
-            rho_mix = alpha_g * rho_g_kgm3 + liq_holdup * rho_l_kgm3
-            dpdz_hydro = rho_mix * _G_SI * math.sin(theta)
-
-            mu_g_pas = mu_g_cp * _CP_TO_PAS
-            dpdz_fric = _wg_friction_gradient_lm(
-                m_flow_g_kgs, m_flow_l_kgs, rho_g_kgm3, rho_l_kgm3,
-                mu_g_pas, mu_l_pas, diam_m, rough_m)
-
-            dpdz_total_pam = dpdz_hydro + (-dpdz_fric if injection else dpdz_fric)
-            dpdz_psift = dpdz_total_pam / (_PSI_TO_PA / _FT_TO_M)
-
-            p_est = p_psia + dpdz_psift * seg_len_ft
-
-        p_psia = p_est
-
-    return p_psia
+    return _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
+                              wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
+                              rsb_scale, injection, theta, _wg_gradient_gas,
+                              vis_frac, rsb_frac)
 
 
 # ============================================================================
@@ -1342,7 +1001,7 @@ def _gray_liquid_holdup(v_m, rho_l, rho_g, sigma, diam, lambda_l, p_sys):
     if v_m < 1e-10:
         return lambda_l
 
-    sigma_lbf_ft = sigma * 6.852e-5
+    sigma_lbf_ft = sigma * _DYNCM_TO_LBFFT
     if sigma_lbf_ft <= 0:
         return lambda_l
 
@@ -1372,7 +1031,7 @@ def _gray_liquid_holdup(v_m, rho_l, rho_g, sigma, diam, lambda_l, p_sys):
 
 
 def _gray_effective_roughness(rough_dry, sigma, rho_ns, v_m, lambda_l):
-    sigma_lbf_ft = sigma * 6.852e-5
+    sigma_lbf_ft = sigma * _DYNCM_TO_LBFFT
     if v_m < 1e-10 or rho_ns <= 0 or sigma_lbf_ft <= 0:
         return rough_dry
     ke = rho_ns * v_m * v_m
@@ -1382,22 +1041,31 @@ def _gray_effective_roughness(rough_dry, sigma, rho_ns, v_m, lambda_l):
     return rough_dry + max(film, 0.0)
 
 
-def _gray_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
-                    wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
-                    injection=False, pr=0.0, theta=math.pi / 2.0):
-    if _RUST_AVAILABLE:
-        try:
-            return _rust.gray_fbhp_gas_rust(
-                thp, api, gsg, tid, rough, length, tht, bht, wsg,
-                qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta)
-        except Exception:
-            pass
+# ============================================================================
+#  Shared Gas Segment March
+# ============================================================================
+
+def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
+                       wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
+                       injection, pr, theta, gradient_fn):
+    """Shared segment march for all gas VLP methods.
+
+    gradient_fn(s) -> dpdz (psi/ft)
+        Called at each pressure iteration with a dict containing all
+        computed PVT/flow properties for the current segment step.
+    """
     tc, pc = _sutton_tc_pc(gsg)
     osg = 141.5 / (api + 131.5)
     total_mass = (0.0765 * gsg * qg_mmscfd * 1e6 +
                   osg * 62.4 * cgr * qg_mmscfd * 5.615 +
                   wsg * 62.4 * qw_bwpd * 5.615)
-    if total_mass < 1e-6 or qg_mmscfd < 0.05:
+    if total_mass < 1e-6 or qg_mmscfd < 0.001:
+        if qg_mmscfd >= 0.001:
+            warnings.warn(
+                f"Gas rate {qg_mmscfd:.4f} MMscf/d with near-zero total mass; "
+                "using static gas column pressure.",
+                RuntimeWarning, stacklevel=3
+            )
         return _static_gas_column_pressure(thp, length, tht, bht, gsg, theta=theta)
 
     diam_ft = tid / 12.0
@@ -1407,96 +1075,91 @@ def _gray_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
     ndiv = _calc_segments(length)
     seg_len = length / ndiv
 
-    m_flow_g_lbs = 0.0765 * gsg * qg_mmscfd * 1e6 / 86400.0
-    m_flow_w_lbs = wsg * 62.4 * qw_bwpd * 5.615 / 86400.0
+    mflow_g = 0.0765 * gsg * qg_mmscfd * 1e6 / 86400.0
+    mflow_w = wsg * 62.4 * qw_bwpd * 5.615 / 86400.0
 
     p_psia = thp
 
     for i in range(1, ndiv + 1):
         frac = (i - 0.5) / ndiv
-        temp_f_i = tht + (bht - tht) * frac
+        temp_f = tht + (bht - tht) * frac
+        temp_r = temp_f + 459.67
         p_est = p_psia
 
         for _it in range(2):
-            p_avg = (p_psia + p_est) / 2.0
-            if p_avg < 14.7:
-                p_avg = 14.7
+            p_avg = max((p_psia + p_est) / 2.0, 14.7)
 
             cgr_loc, qo_loc, ql_loc, lsg_loc = _condensate_dropout(
                 cgr, qg_mmscfd, p_avg, pr, osg, qw_bwpd, wsg)
 
-            m_flow_o_lbs = osg * 62.4 * qo_loc * 5.615 / 86400.0
-            m_flow_l_lbs = m_flow_o_lbs + m_flow_w_lbs
-            m_flow_total_lbs = m_flow_g_lbs + m_flow_l_lbs
+            mflow_o = osg * 62.4 * qo_loc * 5.615 / 86400.0
+            mflow_l = mflow_o + mflow_w
+            mflow_total = mflow_g + mflow_l
 
             oil_vis_loc = _condensate_vis(pr, cgr_loc, gsg, api,
-                                           temp_f_i, p_avg, oil_vis)
+                                          temp_f, p_avg, oil_vis)
 
-            zee = _z_factor(gsg, temp_f_i, p_avg, tc=tc, pc=pc)
-            mu_g_cp = _gas_viscosity(gsg, temp_f_i, p_avg, z=zee, tc=tc, pc=pc)
+            zee = _z_factor(gsg, temp_f, p_avg, tc=tc, pc=pc)
+            mu_g = _gas_viscosity(gsg, temp_f, p_avg, z=zee, tc=tc, pc=pc)
 
-            temp_r = temp_f_i + 459.67
-            rho_g = _MW_AIR * gsg * p_avg / (zee * 10.732 * temp_r)
+            rho_g = _MW_AIR * gsg * p_avg / (zee * _R_GAS * temp_r)
             rho_l = lsg_loc * 62.4
 
-            v_sg = (m_flow_g_lbs / max(rho_g, 1e-10)) / area
-            v_sl = (m_flow_l_lbs / max(rho_l, 1e-10)) / area
+            v_sg = (mflow_g / max(rho_g, 1e-10)) / area
+            v_sl = (mflow_l / max(rho_l, 1e-10)) / area
             v_m = v_sg + v_sl
             lambda_l = v_sl / v_m if v_m > 1e-10 else 0.0
             rho_ns = rho_l * lambda_l + rho_g * (1.0 - lambda_l)
 
-            rs_est = _standing_rs(gsg, p_avg, temp_f_i, api)
-            sigma = _interfacial_tension(p_avg, temp_f_i, api, rs_est,
-                                         m_flow_o_lbs * 0.453592,
-                                         m_flow_w_lbs * 0.453592,
-                                         m_flow_g_lbs * 0.453592)
+            water_visc = _water_viscosity(p_avg, temp_f)
+            mu_l = ((qo_loc * oil_vis_loc + qw_bwpd * water_visc) / ql_loc
+                    if ql_loc > 0 else oil_vis_loc)
 
-            hl = _gray_liquid_holdup(v_m, rho_l, rho_g, sigma, diam_ft,
-                                      lambda_l, p_avg)
-            rho_s = rho_l * hl + rho_g * (1.0 - hl)
+            rs_est = _standing_rs(gsg, p_avg, temp_f, api)
+            sigma = _interfacial_tension(p_avg, temp_f, api, rs_est,
+                                         mflow_o * _LB_TO_KG,
+                                         mflow_w * _LB_TO_KG,
+                                         mflow_g * _LB_TO_KG)
 
-            eps_eff = _gray_effective_roughness(rough_ft, sigma, rho_ns,
-                                                v_m, lambda_l)
-            eps_d = eps_eff / diam_ft
+            s = {
+                'p_avg': p_avg, 'temp_f': temp_f, 'temp_r': temp_r,
+                'zee': zee, 'mu_g': mu_g, 'rho_g': rho_g, 'rho_l': rho_l,
+                'rho_ns': rho_ns, 'v_sg': v_sg, 'v_sl': v_sl, 'v_m': v_m,
+                'lambda_l': lambda_l, 'sigma': sigma, 'mu_l': mu_l,
+                'diam_ft': diam_ft, 'rough_ft': rough_ft, 'area': area,
+                'injection': injection, 'theta': theta,
+                'mflow_g': mflow_g, 'mflow_l': mflow_l,
+                'mflow_o': mflow_o, 'mflow_w': mflow_w,
+                'mflow_total': mflow_total,
+                'qo_loc': qo_loc, 'ql_loc': ql_loc, 'qw_bwpd': qw_bwpd,
+                'oil_vis_loc': oil_vis_loc, 'lsg_loc': lsg_loc,
+                'osg': osg, 'gsg': gsg, 'tid': tid, 'rough': rough,
+                'rs_est': rs_est, 'tc': tc, 'pc': pc,
+                'qg_mmscfd': qg_mmscfd, 'api': api,
+            }
 
-            water_visc = _water_viscosity(p_avg, temp_f_i)
-            mu_l_cp = ((qo_loc * oil_vis_loc + qw_bwpd * water_visc) / ql_loc
-                       if ql_loc > 0 else oil_vis_loc)
-            mu_ns = mu_l_cp * lambda_l + mu_g_cp * (1.0 - lambda_l)
-            mu_ns_lbfts = mu_ns * 6.7197e-4
-            n_re = rho_ns * v_m * diam_ft / mu_ns_lbfts if mu_ns_lbfts > 0 else 0.0
-
-            f_fanning = _serghides_fanning(n_re, eps_d)
-            f_moody = 4.0 * f_fanning
-
-            gm = m_flow_total_lbs / area
-
-            dpdz_hydro = rho_s * math.sin(theta) / 144.0
-            dpdz_fric = (f_moody * gm ** 2 / (2.0 * _GC * diam_ft * rho_ns * 144.0)
-                         if rho_ns > 0 else 0.0)
-            ek = gm * v_sg / (_GC * p_avg * 144.0)
-            denom_val = max(1.0 - ek, 0.1)
-
-            dpdz_total = (dpdz_hydro + (-dpdz_fric if injection else dpdz_fric)) / denom_val
-            p_est = p_psia + dpdz_total * seg_len
+            dpdz = gradient_fn(s)
+            p_est = p_psia + dpdz * seg_len
 
         p_psia = p_est
 
     return p_psia
 
 
-def _gray_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
-                    wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
-                    rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
-                    vis_frac=1.0, rsb_frac=1.0):
-    if _RUST_AVAILABLE:
-        try:
-            return _rust.gray_fbhp_oil_rust(
-                thp, api, gsg, tid, rough, length, tht, bht, wsg,
-                qt_stbpd, gor, wc, pb, rsb, sgsp,
-                rsb_scale, injection, theta, vis_frac, rsb_frac)
-        except Exception:
-            pass
+# ============================================================================
+#  Shared Oil Segment March
+# ============================================================================
+
+def _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
+                       wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
+                       rsb_scale, injection, theta, gradient_fn,
+                       vis_frac=1.0, rsb_frac=1.0):
+    """Shared segment march for all oil VLP methods.
+
+    gradient_fn(s) -> dpdz (psi/ft)
+        Called at each pressure iteration with a dict containing all
+        computed PVT/flow properties for the current segment step.
+    """
     tc, pc = _sutton_tc_pc(gsg)
     wc_adj = max(wc, 1e-9)
     if qt_stbpd < 1e-7:
@@ -1520,83 +1183,146 @@ def _gray_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
 
     for i in range(1, ndiv + 1):
         frac = (i - 0.5) / ndiv
-        temp_f_i = tht + (bht - tht) * frac
+        temp_f = tht + (bht - tht) * frac
+        temp_r = temp_f + 459.67
         p_est = p_psia
 
         for _it in range(2):
             p_avg = max((p_psia + p_est) / 2.0, 14.7)
 
-            rs_local = _velarde_rs(sgsp, api, temp_f_i, pb, rsb_for_calc, p_avg) * rsb_scale
+            rs_local = _velarde_rs(sgsp, api, temp_f, pb, rsb_for_calc, p_avg) * rsb_scale
             free_gas = max(gor - rs_local, 0.0)
             qg_mmscfd = max(free_gas * qo / 1e6, 1e-9)
 
-            oil_vis_seg = _oil_viscosity_full(sgsp, api, temp_f_i, rsb, pb, p_avg, vis_frac, rsb_frac)
-            rho_oil_local = _oil_density_mccain(rs_local, sgsp, osg,
-                                                 min(p_avg, pb), temp_f_i)
+            oil_vis_seg = _oil_viscosity_full(sgsp, api, temp_f, rsb, pb, p_avg,
+                                              vis_frac, rsb_frac)
+            rho_oil = _oil_density_mccain(rs_local, sgsp, osg,
+                                           min(p_avg, pb), temp_f)
 
-            zee = _z_factor(gsg, temp_f_i, p_avg, tc=tc, pc=pc)
-            mu_g_cp = _gas_viscosity(gsg, temp_f_i, p_avg, z=zee, tc=tc, pc=pc)
+            zee = _z_factor(gsg, temp_f, p_avg, tc=tc, pc=pc)
+            mu_g = _gas_viscosity(gsg, temp_f, p_avg, z=zee, tc=tc, pc=pc)
 
-            temp_r = temp_f_i + 459.67
-            rho_g = _MW_AIR * gsg * p_avg / (zee * 10.732 * temp_r)
+            rho_g = _MW_AIR * gsg * p_avg / (zee * _R_GAS * temp_r)
 
-            m_flow_o_lbs = osg * 62.4 * qo * 5.615 / 86400.0
-            m_flow_w_lbs = wsg * 62.4 * qw * 5.615 / 86400.0
-            m_flow_g_lbs = 0.0765 * gsg * qg_mmscfd * 1e6 / 86400.0
-            m_flow_l_lbs = m_flow_o_lbs + m_flow_w_lbs
-            m_flow_total_lbs = m_flow_g_lbs + m_flow_l_lbs
+            mflow_o = osg * 62.4 * qo * 5.615 / 86400.0
+            mflow_w = wsg * 62.4 * qw * 5.615 / 86400.0
+            mflow_g = 0.0765 * gsg * qg_mmscfd * 1e6 / 86400.0
+            mflow_l = mflow_o + mflow_w
+            mflow_total = mflow_g + mflow_l
 
-            if m_flow_total_lbs < 1e-15:
+            if mflow_total < 1e-15:
                 tavg_r = (tht + bht) / 2.0 + 459.67
                 p_psia *= math.exp(0.01875 * gsg * seg_len / (zee * tavg_r))
                 break
 
             ql = qo + qw
             rho_w = wsg * 62.4
-            rho_l = (qo * rho_oil_local + qw * rho_w) / ql if ql > 0 else rho_oil_local
+            rho_l = (qo * rho_oil + qw * rho_w) / ql if ql > 0 else rho_oil
+            lsg = (qo * osg + qw * wsg) / ql if ql > 0 else osg
 
-            v_sg = (m_flow_g_lbs / max(rho_g, 1e-10)) / area
-            v_sl = (m_flow_l_lbs / max(rho_l, 1e-10)) / area
+            v_sg = (mflow_g / max(rho_g, 1e-10)) / area
+            v_sl = (mflow_l / max(rho_l, 1e-10)) / area
             v_m = v_sg + v_sl
             lambda_l = v_sl / v_m if v_m > 1e-10 else 0.0
             rho_ns = rho_l * lambda_l + rho_g * (1.0 - lambda_l)
 
-            water_visc = _water_viscosity(p_avg, temp_f_i)
-            mu_l_cp = ((qo * oil_vis_seg + qw * water_visc) / ql
-                       if ql > 0 else oil_vis_seg)
+            water_visc = _water_viscosity(p_avg, temp_f)
+            mu_l = ((qo * oil_vis_seg + qw * water_visc) / ql
+                    if ql > 0 else oil_vis_seg)
 
-            ift = _interfacial_tension(p_avg, temp_f_i, api, rs_local,
-                                       m_flow_o_lbs * 0.453592,
-                                       m_flow_w_lbs * 0.453592,
-                                       m_flow_g_lbs * 0.453592)
+            sigma = _interfacial_tension(p_avg, temp_f, api, rs_local,
+                                         mflow_o * _LB_TO_KG,
+                                         mflow_w * _LB_TO_KG,
+                                         mflow_g * _LB_TO_KG)
 
-            hl = _gray_liquid_holdup(v_m, rho_l, rho_g, ift, diam_ft,
-                                      lambda_l, p_avg)
-            rho_s = rho_l * hl + rho_g * (1.0 - hl)
+            s = {
+                'p_avg': p_avg, 'temp_f': temp_f, 'temp_r': temp_r,
+                'zee': zee, 'mu_g': mu_g, 'rho_g': rho_g, 'rho_l': rho_l,
+                'rho_ns': rho_ns, 'v_sg': v_sg, 'v_sl': v_sl, 'v_m': v_m,
+                'lambda_l': lambda_l, 'sigma': sigma, 'mu_l': mu_l,
+                'diam_ft': diam_ft, 'rough_ft': rough_ft, 'area': area,
+                'injection': injection, 'theta': theta,
+                'mflow_g': mflow_g, 'mflow_l': mflow_l,
+                'mflow_o': mflow_o, 'mflow_w': mflow_w,
+                'mflow_total': mflow_total,
+                'qo_loc': qo, 'ql_loc': ql, 'qw_bwpd': qw,
+                'oil_vis_loc': oil_vis_seg, 'lsg_loc': lsg,
+                'osg': osg, 'gsg': gsg, 'tid': tid, 'rough': rough,
+                'rs_est': rs_local, 'tc': tc, 'pc': pc,
+                'qg_mmscfd': qg_mmscfd, 'api': api,
+            }
 
-            eps_eff = _gray_effective_roughness(rough_ft, ift, rho_ns,
-                                                v_m, lambda_l)
-            eps_d = eps_eff / diam_ft
-
-            mu_ns = mu_l_cp * lambda_l + mu_g_cp * (1.0 - lambda_l)
-            mu_ns_lbfts = mu_ns * 6.7197e-4
-            n_re = rho_ns * v_m * diam_ft / mu_ns_lbfts if mu_ns_lbfts > 0 else 0.0
-
-            f_moody = 4.0 * _serghides_fanning(n_re, eps_d)
-
-            gm = m_flow_total_lbs / area
-            dpdz_hydro = rho_s * math.sin(theta) / 144.0
-            dpdz_fric = (f_moody * gm ** 2 / (2.0 * _GC * diam_ft * rho_ns * 144.0)
-                         if rho_ns > 0 else 0.0)
-            ek = gm * v_sg / (_GC * p_avg * 144.0)
-            denom_val = max(1.0 - ek, 0.1)
-
-            dpdz_total = (dpdz_hydro + (-dpdz_fric if injection else dpdz_fric)) / denom_val
-            p_est = p_psia + dpdz_total * seg_len
+            dpdz = gradient_fn(s)
+            p_est = p_psia + dpdz * seg_len
 
         p_psia = p_est
 
     return p_psia
+
+
+# ============================================================================
+#  Gradient Callbacks
+# ============================================================================
+
+def _gray_gradient_gas(s):
+    """Gray method gradient: holdup via effective roughness, acceleration term."""
+    hl = _gray_liquid_holdup(s['v_m'], s['rho_l'], s['rho_g'], s['sigma'],
+                             s['diam_ft'], s['lambda_l'], s['p_avg'])
+    rho_s = s['rho_l'] * hl + s['rho_g'] * (1.0 - hl)
+
+    eps_eff = _gray_effective_roughness(s['rough_ft'], s['sigma'], s['rho_ns'],
+                                        s['v_m'], s['lambda_l'])
+    eps_d = eps_eff / s['diam_ft']
+
+    mu_ns = s['mu_l'] * s['lambda_l'] + s['mu_g'] * (1.0 - s['lambda_l'])
+    mu_ns_lbfts = mu_ns * _CP_TO_LBFTS
+    n_re = (s['rho_ns'] * s['v_m'] * s['diam_ft'] / mu_ns_lbfts
+            if mu_ns_lbfts > 0 else 0.0)
+
+    f_moody = 4.0 * _serghides_fanning(n_re, eps_d)
+
+    gm = s['mflow_total'] / s['area']
+    dpdz_hydro = rho_s * math.sin(s['theta']) / 144.0
+    dpdz_fric = (f_moody * gm ** 2 / (2.0 * _GC * s['diam_ft'] * s['rho_ns'] * 144.0)
+                 if s['rho_ns'] > 0 else 0.0)
+    ek = gm * s['v_sg'] / (_GC * s['p_avg'] * 144.0)
+    denom = max(1.0 - ek, 0.1)
+
+    sign = -1.0 if s['injection'] else 1.0
+    return (dpdz_hydro + sign * dpdz_fric) / denom
+
+
+def _gray_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
+                    wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
+                    injection=False, pr=0.0, theta=math.pi / 2.0):
+    if _RUST_AVAILABLE:
+        try:
+            return _rust.gray_fbhp_gas_rust(
+                thp, api, gsg, tid, rough, length, tht, bht, wsg,
+                qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta)
+        except (ImportError, AttributeError):
+            pass
+    return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
+                              wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
+                              injection, pr, theta, _gray_gradient_gas)
+
+
+def _gray_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
+                    wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
+                    rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
+                    vis_frac=1.0, rsb_frac=1.0):
+    if _RUST_AVAILABLE:
+        try:
+            return _rust.gray_fbhp_oil_rust(
+                thp, api, gsg, tid, rough, length, tht, bht, wsg,
+                qt_stbpd, gor, wc, pb, rsb, sgsp,
+                rsb_scale, injection, theta, vis_frac, rsb_frac)
+        except (ImportError, AttributeError):
+            pass
+    return _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
+                              wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
+                              rsb_scale, injection, theta, _gray_gradient_gas,
+                              vis_frac, rsb_frac)
 
 
 # ============================================================================
@@ -1690,6 +1416,60 @@ def _bb_two_phase_friction(f_ns, lambda_l, hl_theta):
     return f_ns * math.exp(s)
 
 
+def _bb_gradient_gas(s):
+    """Beggs & Brill gradient: flow pattern map, Payne correction, two-phase friction."""
+    froude = s['v_m'] ** 2 / (_G_FT * s['diam_ft'])
+    pattern, trans_a = _bb_flow_pattern(froude, s['lambda_l'])
+
+    if pattern == _BB_TRANSITION:
+        hl0_seg = _bb_horizontal_holdup(s['lambda_l'], froude, _BB_SEGREGATED)
+        hl0_int = _bb_horizontal_holdup(s['lambda_l'], froude, _BB_INTERMITTENT)
+        hl0 = trans_a * hl0_seg + (1.0 - trans_a) * hl0_int
+    else:
+        hl0 = _bb_horizontal_holdup(s['lambda_l'], froude, pattern)
+
+    if pattern in (_BB_SEGREGATED, _BB_INTERMITTENT, _BB_TRANSITION):
+        hl0 *= 0.924
+        hl0 = max(hl0, s['lambda_l'])
+
+    sigma_lbf_ft = s['sigma'] * _DYNCM_TO_LBFFT
+    n_lv = (1.938 * s['v_sl'] * (s['rho_l'] / sigma_lbf_ft) ** 0.25
+            if sigma_lbf_ft > 0 else 0.0)
+
+    if pattern == _BB_TRANSITION:
+        hl_seg = _bb_inclination_correction(
+            _bb_horizontal_holdup(s['lambda_l'], froude, _BB_SEGREGATED) * 0.924,
+            s['lambda_l'], n_lv, froude, _BB_SEGREGATED, theta=s['theta'])
+        hl_int = _bb_inclination_correction(
+            _bb_horizontal_holdup(s['lambda_l'], froude, _BB_INTERMITTENT) * 0.924,
+            s['lambda_l'], n_lv, froude, _BB_INTERMITTENT, theta=s['theta'])
+        hl_theta = trans_a * hl_seg + (1.0 - trans_a) * hl_int
+    else:
+        hl_theta = _bb_inclination_correction(
+            hl0, s['lambda_l'], n_lv, froude, pattern, theta=s['theta'])
+
+    hl_theta = _clamp(hl_theta, s['lambda_l'], 1.0)
+    rho_s = s['rho_l'] * hl_theta + s['rho_g'] * (1.0 - hl_theta)
+
+    mu_ns = s['mu_l'] * s['lambda_l'] + s['mu_g'] * (1.0 - s['lambda_l'])
+    mu_ns_lbfts = mu_ns * _CP_TO_LBFTS
+    n_re = (s['rho_ns'] * s['v_m'] * s['diam_ft'] / mu_ns_lbfts
+            if mu_ns_lbfts > 0 else 0.0)
+
+    eps_d = s['rough_ft'] / s['diam_ft']
+    f_ns = _serghides_fanning(n_re, eps_d)
+    f_tp = _bb_two_phase_friction(f_ns, s['lambda_l'], hl_theta)
+
+    dpdz_hydro = rho_s * math.sin(s['theta']) / 144.0
+    dpdz_fric = (4.0 * f_tp * s['rho_ns'] * s['v_m'] ** 2 /
+                 (2.0 * _GC * s['diam_ft'] * 144.0) if s['rho_ns'] > 0 else 0.0)
+    ek = rho_s * s['v_m'] * s['v_sg'] / (_GC * s['p_avg'] * 144.0)
+    denom = max(1.0 - ek, 0.1)
+
+    sign = -1.0 if s['injection'] else 1.0
+    return (dpdz_hydro + sign * dpdz_fric) / denom
+
+
 def _bb_core_gas(thp, api, gsg, tid, rough, length, tht, bht,
                  wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                  injection, pr, theta=math.pi / 2.0):
@@ -1699,121 +1479,11 @@ def _bb_core_gas(thp, api, gsg, tid, rough, length, tht, bht,
             return _rust.bb_fbhp_gas_rust(
                 thp, api, gsg, tid, rough, length, tht, bht, wsg,
                 qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta)
-        except Exception:
+        except (ImportError, AttributeError):
             pass
-    tc, pc = _sutton_tc_pc(gsg)
-    osg = 141.5 / (api + 131.5)
-    total_mass = (0.0765 * gsg * qg_mmscfd * 1e6 +
-                  osg * 62.4 * cgr * qg_mmscfd * 5.615 +
-                  wsg * 62.4 * qw_bwpd * 5.615)
-    if total_mass < 1e-6 or qg_mmscfd < 0.05:
-        return _static_gas_column_pressure(thp, length, tht, bht, gsg, theta=theta)
-
-    diam_ft = tid / 12.0
-    rough_ft = rough / 12.0
-    area = math.pi * diam_ft ** 2 / 4.0
-    eps_d = rough_ft / diam_ft
-
-    ndiv = _calc_segments(length)
-    seg_len = length / ndiv
-
-    m_flow_g_lbs = 0.0765 * gsg * qg_mmscfd * 1e6 / 86400.0
-    m_flow_w_lbs = wsg * 62.4 * qw_bwpd * 5.615 / 86400.0
-
-    p_psia = thp
-
-    for i in range(1, ndiv + 1):
-        frac = (i - 0.5) / ndiv
-        temp_f_i = tht + (bht - tht) * frac
-        p_est = p_psia
-
-        for _it in range(2):
-            p_avg = (p_psia + p_est) / 2.0
-            if p_avg < 14.7:
-                p_avg = 14.7
-
-            cgr_loc, qo_loc, ql_loc, lsg_loc = _condensate_dropout(
-                cgr, qg_mmscfd, p_avg, pr, osg, qw_bwpd, wsg)
-
-            m_flow_o_lbs = osg * 62.4 * qo_loc * 5.615 / 86400.0
-            m_flow_l_lbs = m_flow_o_lbs + m_flow_w_lbs
-
-            oil_vis_loc = _condensate_vis(pr, cgr_loc, gsg, api,
-                                           temp_f_i, p_avg, oil_vis)
-
-            zee = _z_factor(gsg, temp_f_i, p_avg, tc=tc, pc=pc)
-            mu_g_cp = _gas_viscosity(gsg, temp_f_i, p_avg, z=zee, tc=tc, pc=pc)
-
-            temp_r = temp_f_i + 459.67
-            rho_g = _MW_AIR * gsg * p_avg / (zee * 10.732 * temp_r)
-            rho_l = lsg_loc * 62.4
-
-            v_sg = (m_flow_g_lbs / max(rho_g, 1e-10)) / area
-            v_sl = (m_flow_l_lbs / max(rho_l, 1e-10)) / area
-            v_m = v_sg + v_sl
-            lambda_l = v_sl / v_m if v_m > 1e-10 else 0.0
-            rho_ns = rho_l * lambda_l + rho_g * (1.0 - lambda_l)
-
-            froude = v_m ** 2 / (_G_FT * diam_ft)
-            pattern, trans_a = _bb_flow_pattern(froude, lambda_l)
-
-            if pattern == _BB_TRANSITION:
-                hl0_seg = _bb_horizontal_holdup(lambda_l, froude, _BB_SEGREGATED)
-                hl0_int = _bb_horizontal_holdup(lambda_l, froude, _BB_INTERMITTENT)
-                hl0 = trans_a * hl0_seg + (1.0 - trans_a) * hl0_int
-            else:
-                hl0 = _bb_horizontal_holdup(lambda_l, froude, pattern)
-
-            if pattern in (_BB_SEGREGATED, _BB_INTERMITTENT, _BB_TRANSITION):
-                hl0 *= 0.924
-                hl0 = max(hl0, lambda_l)
-
-            rs_est = _standing_rs(gsg, p_avg, temp_f_i, api)
-            sigma = _interfacial_tension(p_avg, temp_f_i, api, rs_est,
-                                         m_flow_o_lbs * 0.453592,
-                                         m_flow_w_lbs * 0.453592,
-                                         m_flow_g_lbs * 0.453592)
-            sigma_lbf_ft = sigma * 6.852e-5
-            n_lv = (1.938 * v_sl * (rho_l / sigma_lbf_ft) ** 0.25
-                    if sigma_lbf_ft > 0 else 0.0)
-
-            if pattern == _BB_TRANSITION:
-                hl_seg = _bb_inclination_correction(
-                    _bb_horizontal_holdup(lambda_l, froude, _BB_SEGREGATED) * 0.924,
-                    lambda_l, n_lv, froude, _BB_SEGREGATED, theta=theta)
-                hl_int = _bb_inclination_correction(
-                    _bb_horizontal_holdup(lambda_l, froude, _BB_INTERMITTENT) * 0.924,
-                    lambda_l, n_lv, froude, _BB_INTERMITTENT, theta=theta)
-                hl_theta = trans_a * hl_seg + (1.0 - trans_a) * hl_int
-            else:
-                hl_theta = _bb_inclination_correction(
-                    hl0, lambda_l, n_lv, froude, pattern, theta=theta)
-
-            hl_theta = _clamp(hl_theta, lambda_l, 1.0)
-            rho_s = rho_l * hl_theta + rho_g * (1.0 - hl_theta)
-
-            water_visc = _water_viscosity(p_avg, temp_f_i)
-            mu_l_cp = ((qo_loc * oil_vis_loc + qw_bwpd * water_visc) / ql_loc
-                       if ql_loc > 0 else oil_vis_loc)
-            mu_ns = mu_l_cp * lambda_l + mu_g_cp * (1.0 - lambda_l)
-            mu_ns_lbfts = mu_ns * 6.7197e-4
-            n_re = rho_ns * v_m * diam_ft / mu_ns_lbfts if mu_ns_lbfts > 0 else 0.0
-
-            f_ns = _serghides_fanning(n_re, eps_d)
-            f_tp = _bb_two_phase_friction(f_ns, lambda_l, hl_theta)
-
-            dpdz_hydro = rho_s * math.sin(theta) / 144.0
-            dpdz_fric = (4.0 * f_tp * rho_ns * v_m ** 2 /
-                         (2.0 * _GC * diam_ft * 144.0) if rho_ns > 0 else 0.0)
-            ek = rho_s * v_m * v_sg / (_GC * p_avg * 144.0)
-            denom_val = max(1.0 - ek, 0.1)
-
-            dpdz_total = (dpdz_hydro + (-dpdz_fric if injection else dpdz_fric)) / denom_val
-            p_est = p_psia + dpdz_total * seg_len
-
-        p_psia = p_est
-
-    return p_psia
+    return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
+                              wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
+                              injection, pr, theta, _bb_gradient_gas)
 
 
 def _bb_core_oil(thp, api, gsg, tid, rough, length, tht, bht,
@@ -1827,132 +1497,12 @@ def _bb_core_oil(thp, api, gsg, tid, rough, length, tht, bht,
                 thp, api, gsg, tid, rough, length, tht, bht, wsg,
                 qt_stbpd, gor, wc, pb, rsb, sgsp,
                 rsb_scale, injection, theta, vis_frac, rsb_frac)
-        except Exception:
+        except (ImportError, AttributeError):
             pass
-    tc, pc = _sutton_tc_pc(gsg)
-    wc_adj = max(wc, 1e-9)
-    if qt_stbpd < 1e-7:
-        return _static_oil_column_pressure(
-            thp, length, tht, bht, wc_adj, wsg, api, sgsp, pb, rsb, rsb_scale,
-            theta=theta)
-
-    qo = qt_stbpd * (1.0 - wc)
-    qw = qt_stbpd * wc
-    osg = 141.5 / (api + 131.5)
-    rsb_for_calc = rsb / rsb_scale
-
-    diam_ft = tid / 12.0
-    rough_ft = rough / 12.0
-    area = math.pi * diam_ft ** 2 / 4.0
-    eps_d = rough_ft / diam_ft
-
-    ndiv = _calc_segments(length)
-    seg_len = length / ndiv
-
-    p_psia = thp
-
-    for i in range(1, ndiv + 1):
-        frac = (i - 0.5) / ndiv
-        temp_f_i = tht + (bht - tht) * frac
-        p_est = p_psia
-
-        for _it in range(2):
-            p_avg = max((p_psia + p_est) / 2.0, 14.7)
-
-            rs_local = _velarde_rs(sgsp, api, temp_f_i, pb, rsb_for_calc, p_avg) * rsb_scale
-            free_gas = max(gor - rs_local, 0.0)
-            qg_mmscfd = max(free_gas * qo / 1e6, 1e-9)
-
-            oil_vis_seg = _oil_viscosity_full(sgsp, api, temp_f_i, rsb, pb, p_avg, vis_frac, rsb_frac)
-            rho_oil_local = _oil_density_mccain(rs_local, sgsp, osg,
-                                                 min(p_avg, pb), temp_f_i)
-
-            zee = _z_factor(gsg, temp_f_i, p_avg, tc=tc, pc=pc)
-            mu_g_cp = _gas_viscosity(gsg, temp_f_i, p_avg, z=zee, tc=tc, pc=pc)
-
-            temp_r = temp_f_i + 459.67
-            rho_g = _MW_AIR * gsg * p_avg / (zee * 10.732 * temp_r)
-
-            m_flow_o_lbs = osg * 62.4 * qo * 5.615 / 86400.0
-            m_flow_w_lbs = wsg * 62.4 * qw * 5.615 / 86400.0
-            m_flow_g_lbs = 0.0765 * gsg * qg_mmscfd * 1e6 / 86400.0
-            m_flow_l_lbs = m_flow_o_lbs + m_flow_w_lbs
-            m_flow_total_lbs = m_flow_g_lbs + m_flow_l_lbs
-
-            if m_flow_total_lbs < 1e-15:
-                tavg_r = (tht + bht) / 2.0 + 459.67
-                p_psia *= math.exp(0.01875 * gsg * seg_len / (zee * tavg_r))
-                break
-
-            ql = qo + qw
-            rho_w = wsg * 62.4
-            rho_l = (qo * rho_oil_local + qw * rho_w) / ql if ql > 0 else rho_oil_local
-
-            v_sg = (m_flow_g_lbs / max(rho_g, 1e-10)) / area
-            v_sl = (m_flow_l_lbs / max(rho_l, 1e-10)) / area
-            v_m = v_sg + v_sl
-            lambda_l = v_sl / v_m if v_m > 1e-10 else 0.0
-            rho_ns = rho_l * lambda_l + rho_g * (1.0 - lambda_l)
-
-            froude = v_m ** 2 / (_G_FT * diam_ft)
-            pattern, trans_a = _bb_flow_pattern(froude, lambda_l)
-
-            if pattern == _BB_TRANSITION:
-                hl0_seg = _bb_horizontal_holdup(lambda_l, froude, _BB_SEGREGATED)
-                hl0_int = _bb_horizontal_holdup(lambda_l, froude, _BB_INTERMITTENT)
-                hl0 = trans_a * hl0_seg + (1.0 - trans_a) * hl0_int
-            else:
-                hl0 = _bb_horizontal_holdup(lambda_l, froude, pattern)
-
-            if pattern in (_BB_SEGREGATED, _BB_INTERMITTENT, _BB_TRANSITION):
-                hl0 *= 0.924
-                hl0 = max(hl0, lambda_l)
-
-            ift = _interfacial_tension(p_avg, temp_f_i, api, rs_local,
-                                       m_flow_o_lbs * 0.453592,
-                                       m_flow_w_lbs * 0.453592,
-                                       m_flow_g_lbs * 0.453592)
-            sigma_lbf_ft = ift * 6.852e-5
-            n_lv = (1.938 * v_sl * (rho_l / sigma_lbf_ft) ** 0.25
-                    if sigma_lbf_ft > 0 else 0.0)
-
-            if pattern == _BB_TRANSITION:
-                hl_seg = _bb_inclination_correction(
-                    _bb_horizontal_holdup(lambda_l, froude, _BB_SEGREGATED) * 0.924,
-                    lambda_l, n_lv, froude, _BB_SEGREGATED, theta=theta)
-                hl_int = _bb_inclination_correction(
-                    _bb_horizontal_holdup(lambda_l, froude, _BB_INTERMITTENT) * 0.924,
-                    lambda_l, n_lv, froude, _BB_INTERMITTENT, theta=theta)
-                hl_theta = trans_a * hl_seg + (1.0 - trans_a) * hl_int
-            else:
-                hl_theta = _bb_inclination_correction(
-                    hl0, lambda_l, n_lv, froude, pattern, theta=theta)
-
-            hl_theta = _clamp(hl_theta, lambda_l, 1.0)
-            rho_s = rho_l * hl_theta + rho_g * (1.0 - hl_theta)
-
-            water_visc = _water_viscosity(p_avg, temp_f_i)
-            mu_l_cp = ((qo * oil_vis_seg + qw * water_visc) / ql
-                       if ql > 0 else oil_vis_seg)
-            mu_ns = mu_l_cp * lambda_l + mu_g_cp * (1.0 - lambda_l)
-            mu_ns_lbfts = mu_ns * 6.7197e-4
-            n_re = rho_ns * v_m * diam_ft / mu_ns_lbfts if mu_ns_lbfts > 0 else 0.0
-
-            f_ns = _serghides_fanning(n_re, eps_d)
-            f_tp = _bb_two_phase_friction(f_ns, lambda_l, hl_theta)
-
-            dpdz_hydro = rho_s * math.sin(theta) / 144.0
-            dpdz_fric = (4.0 * f_tp * rho_ns * v_m ** 2 /
-                         (2.0 * _GC * diam_ft * 144.0) if rho_ns > 0 else 0.0)
-            ek = rho_s * v_m * v_sg / (_GC * p_avg * 144.0)
-            denom_val = max(1.0 - ek, 0.1)
-
-            dpdz_total = (dpdz_hydro + (-dpdz_fric if injection else dpdz_fric)) / denom_val
-            p_est = p_psia + dpdz_total * seg_len
-
-        p_psia = p_est
-
-    return p_psia
+    return _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
+                              wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
+                              rsb_scale, injection, theta, _bb_gradient_gas,
+                              vis_frac, rsb_frac)
 
 
 # ============================================================================
