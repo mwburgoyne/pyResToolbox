@@ -77,7 +77,7 @@ pub fn hb_fbhp_gas(
     let total_mass = 0.0765 * gsg * qg_mmscfd * 1e6
         + osg * 62.4 * cgr * qg_mmscfd * 5.615
         + wsg * 62.4 * qw_bwpd * 5.615;
-    if total_mass < 1e-6 || qg_mmscfd < 0.05 {
+    if total_mass < 1e-6 || qg_mmscfd < 0.001 {
         return static_gas_column_pressure(thp, length, tht, bht, gsg, theta);
     }
 
@@ -85,40 +85,16 @@ pub fn hb_fbhp_gas(
     let ndiv = calc_segments(length);
     let seg_len = length / ndiv as f64;
 
-    // Build temperature array
-    let mut depth = vec![0.0; ndiv + 1];
-    let mut dz = vec![0.0; ndiv + 1];
-    let mut incr = vec![0.0; ndiv + 1];
-    let mut temp = vec![0.0; ndiv + 1];
-    let mut p = vec![0.0; ndiv + 1];
-
-    temp[0] = tht;
-    let mut midpoint = 0.0;
-
-    for i in 0..=ndiv {
-        depth[i] = i as f64 * seg_len;
-        if i == 0 {
-            incr[i] = seg_len;
-        } else {
-            incr[i] = depth[i] - depth[i - 1];
-            dz[i] = (incr[i - 1] + incr[i]) / 2.0;
-        }
-        if i == ndiv {
-            incr[i] = 0.5 * seg_len;
-            dz[i] = incr[i - 1] + incr[i];
-        }
-        midpoint += dz[i];
-        temp[i] = (bht - tht) * midpoint / length + tht + 459.67;
-    }
-
-    p[0] = thp;
+    let mut p_curr = thp;
 
     for i in 1..=ndiv {
-        let temp_f_i = temp[i] - 459.67;
-        let mut p_est = p[i - 1];
+        let frac = (i as f64 - 0.5) / ndiv as f64;
+        let temp_f_i = tht + (bht - tht) * frac;
+        let temp_r = temp_f_i + 459.67;
+        let mut p_est = p_curr;
 
         for _ in 0..2 {
-            let p_avg = ((p[i - 1] + p_est) / 2.0).max(14.7);
+            let p_avg = ((p_curr + p_est) / 2.0).max(14.7);
 
             let (cgr_loc, qo_loc, ql_loc, lsg_loc) =
                 condensate_dropout(cgr, qg_mmscfd, p_avg, pr, osg, qw_bwpd, wsg);
@@ -141,7 +117,7 @@ pub fn hb_fbhp_gas(
             );
 
             let ugas = qg_mmscfd * 1e6
-                / (p_avg * 35.3741 / (zee * temp[i]))
+                / (p_avg * 35.3741 / (zee * temp_r))
                 / 86400.0
                 / area;
 
@@ -155,7 +131,7 @@ pub fn hb_fbhp_gas(
                 hb_holdup(ul, ugas, tid, lsg_loc, ift_val, mul, p_avg);
 
             // Minimum holdup from mass fraction
-            let rho = 29.0 * gsg * p_avg / (temp[i] * zee * 10.732 * 62.37);
+            let rho = 29.0 * gsg * p_avg / (temp_r * zee * 10.732 * 62.37);
             let mflow = lsg_loc * 62.4 * ql_loc * 5.615 + 0.0765 * gsg * qg_mmscfd * 1e6;
             let mass_frac_liq = if mflow > 0.0 {
                 (lsg_loc * 62.4 * ql_loc * 5.615) / mflow
@@ -180,7 +156,7 @@ pub fn hb_fbhp_gas(
             let eond = rough / tid;
             let f = serghides_fanning(nre, eond);
 
-            let rho_g = MW_AIR * gsg * p_avg / (zee * 10.73 * temp[i]);
+            let rho_g = MW_AIR * gsg * p_avg / (zee * 10.73 * temp_r);
             let rho_avg = yl * lsg_loc * 62.4 + (1.0 - yl) * rho_g;
 
             let fric_term =
@@ -189,13 +165,13 @@ pub fn hb_fbhp_gas(
                 + if injection { -fric_term } else { fric_term })
                 / 144.0;
 
-            p_est = p[i - 1] + dpdz * incr[i];
+            p_est = p_curr + dpdz * seg_len;
         }
 
-        p[i] = p_est;
+        p_curr = p_est;
     }
 
-    p[ndiv]
+    p_curr
 }
 
 // ============================================================================
@@ -212,7 +188,7 @@ pub fn wg_fbhp_gas(
     let total_mass = 0.0765 * gsg * qg_mmscfd * 1e6
         + osg * 62.4 * cgr * qg_mmscfd * 5.615
         + wsg * 62.4 * qw_bwpd * 5.615;
-    if total_mass < 1e-6 || qg_mmscfd < 0.05 {
+    if total_mass < 1e-6 || qg_mmscfd < 0.001 {
         return static_gas_column_pressure(thp, length, tht, bht, gsg, theta);
     }
 
@@ -317,7 +293,7 @@ pub fn gray_fbhp_gas(
     let total_mass = 0.0765 * gsg * qg_mmscfd * 1e6
         + osg * 62.4 * cgr * qg_mmscfd * 5.615
         + wsg * 62.4 * qw_bwpd * 5.615;
-    if total_mass < 1e-6 || qg_mmscfd < 0.05 {
+    if total_mass < 1e-6 || qg_mmscfd < 0.001 {
         return static_gas_column_pressure(thp, length, tht, bht, gsg, theta);
     }
 
@@ -434,7 +410,7 @@ pub fn bb_fbhp_gas(
     let total_mass = 0.0765 * gsg * qg_mmscfd * 1e6
         + osg * 62.4 * cgr * qg_mmscfd * 5.615
         + wsg * 62.4 * qw_bwpd * 5.615;
-    if total_mass < 1e-6 || qg_mmscfd < 0.05 {
+    if total_mass < 1e-6 || qg_mmscfd < 0.001 {
         return static_gas_column_pressure(thp, length, tht, bht, gsg, theta);
     }
 

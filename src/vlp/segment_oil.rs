@@ -61,40 +61,17 @@ pub fn hb_fbhp_oil(
     let ndiv = calc_segments(length);
     let seg_len_ft = length / ndiv as f64;
 
-    let mut depth = vec![0.0; ndiv + 1];
-    let mut dz = vec![0.0; ndiv + 1];
-    let mut incr = vec![0.0; ndiv + 1];
-    let mut temp = vec![0.0; ndiv + 1];
-    let mut p_arr = vec![0.0; ndiv + 1];
-
-    temp[0] = tht;
-    let mut midpoint = 0.0;
-
-    for i in 0..=ndiv {
-        depth[i] = i as f64 * seg_len_ft;
-        if i == 0 {
-            incr[i] = seg_len_ft;
-        } else {
-            incr[i] = depth[i] - depth[i - 1];
-            dz[i] = (incr[i - 1] + incr[i]) / 2.0;
-        }
-        if i == ndiv {
-            incr[i] = 0.5 * seg_len_ft;
-            dz[i] = incr[i - 1] + incr[i];
-        }
-        midpoint += dz[i];
-        temp[i] = (bht - tht) * midpoint / length + tht + 459.67;
-    }
-
-    p_arr[0] = thp;
+    let mut p_curr = thp;
 
     for i in 1..=ndiv {
-        let temp_f_i = temp[i] - 459.67;
-        let mut p_est = p_arr[i - 1];
+        let frac = (i as f64 - 0.5) / ndiv as f64;
+        let temp_f_i = tht + (bht - tht) * frac;
+        let temp_r = temp_f_i + 459.67;
+        let mut p_est = p_curr;
         let mut did_break = false;
 
         for _ in 0..2 {
-            let p_avg = ((p_arr[i - 1] + p_est) / 2.0).max(14.7);
+            let p_avg = ((p_curr + p_est) / 2.0).max(14.7);
 
             let rs_local = velarde_rs(sgsp, api, temp_f_i, pb, rsb_for_calc, p_avg) * rsb_scale;
             let free_gas = (gor - rs_local).max(0.0);
@@ -115,8 +92,7 @@ pub fn hb_fbhp_oil(
 
             if mflow < 1e-6 {
                 let tavg_r = (tht + bht) / 2.0 + 459.67;
-                p_arr[i] = p_arr[i - 1]
-                    * (0.01875 * gsg * incr[i] / (zee * tavg_r)).exp();
+                p_curr *= (0.01875 * gsg * seg_len_ft / (zee * tavg_r)).exp();
                 did_break = true;
                 break;
             }
@@ -131,7 +107,7 @@ pub fn hb_fbhp_oil(
             );
 
             let ugas = qg_mmscfd * 1e6
-                / (p_avg * 35.3741 / (zee * temp[i]))
+                / (p_avg * 35.3741 / (zee * temp_r))
                 / 86400.0
                 / area;
 
@@ -144,7 +120,7 @@ pub fn hb_fbhp_oil(
             let (mut yl, _nvl, _nvg, _nd) =
                 hb_holdup(ul, ugas, tid, lsg, ift_val, mul, p_avg);
 
-            let rho_g = MW_AIR * gsg * p_avg / (zee * 10.73 * temp[i]);
+            let rho_g = MW_AIR * gsg * p_avg / (zee * 10.73 * temp_r);
             let mass_frac_liq = if mflow > 0.0 {
                 (lsg * 62.4 * ql * 5.615) / mflow
             } else {
@@ -174,15 +150,15 @@ pub fn hb_fbhp_oil(
                 + if injection { -fric_term } else { fric_term })
                 / 144.0;
 
-            p_est = p_arr[i - 1] + dpdz * incr[i];
+            p_est = p_curr + dpdz * seg_len_ft;
         }
 
         if !did_break {
-            p_arr[i] = p_est;
+            p_curr = p_est;
         }
     }
 
-    p_arr[ndiv]
+    p_curr
 }
 
 // ============================================================================

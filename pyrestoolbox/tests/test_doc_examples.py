@@ -904,7 +904,7 @@ def test_doc_nodal_fbhp_gas():
     c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
     result = nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas',
                         qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    assert abs(result - 952.6868477414688) / 952.6868477414688 < RTOL
+    assert abs(result - 954.757900205952) / 954.757900205952 < RTOL
 
 def test_doc_nodal_fbhp_gas_wg():
     """nodal.rst: fbhp gas well WG"""
@@ -933,7 +933,7 @@ def test_doc_nodal_fbhp_oil():
     result = nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil',
                         qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65,
                         pb=2500, rsb=500, sgsp=0.65, api=35)
-    assert abs(result - 2256.2340921828286) / 2256.2340921828286 < RTOL
+    assert abs(result - 2271.7216221715075) / 2271.7216221715075 < RTOL
 
 def test_doc_nodal_fbhp_oil_pvt():
     """nodal.rst: fbhp oil well with OilPVT"""
@@ -941,7 +941,7 @@ def test_doc_nodal_fbhp_oil_pvt():
     opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     result = nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil',
                         oil_pvt=opvt, qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65)
-    assert abs(result - 2258.2220198140935) / 2258.2220198140935 < RTOL
+    assert abs(result - 2273.716972560404) / 2273.716972560404 < RTOL
 
 def test_doc_nodal_outflow_curve():
     """nodal.rst: outflow_curve gas"""
@@ -949,7 +949,7 @@ def test_doc_nodal_outflow_curve():
     result = nodal.outflow_curve(thp=500, completion=c, vlpmethod='HB',
                                   well_type='gas', rates=[2.0, 5.0, 10.0, 15.0, 20.0], gsg=0.65)
     assert result['rates'] == [2.0, 5.0, 10.0, 15.0, 20.0]
-    expected_bhp = [676.8, 925.7, 1498.7, 2121.5, 2757.8]
+    expected_bhp = [677.8, 927.6, 1502.5, 2127.0, 2765.2]
     for actual, expected in zip(result['bhp'], expected_bhp):
         assert abs(round(actual, 1) - expected) < 0.2, f"BHP mismatch: {round(actual, 1)} vs {expected}"
 
@@ -970,8 +970,8 @@ def test_doc_nodal_operating_point_gas():
     r = nodal.Reservoir(pr=3000, degf=200, k=10, h=50, re=1500, rw=0.35, S=2, D=0.001)
     result = nodal.operating_point(thp=500, completion=c, reservoir=r,
                                     vlpmethod='HB', well_type='gas', gsg=0.65)
-    assert abs(round(result['rate'], 2) - 10.61) < 0.02
-    assert abs(round(result['bhp'], 1) - 1573.7) < 0.5
+    assert abs(round(result['rate'], 2) - 10.60) < 0.02
+    assert abs(round(result['bhp'], 1) - 1576.4) < 0.5
 
 def test_doc_nodal_operating_point_oil():
     """nodal.rst: operating_point oil"""
@@ -981,8 +981,8 @@ def test_doc_nodal_operating_point_oil():
     result = nodal.operating_point(thp=200, completion=c, reservoir=r,
                                     vlpmethod='HB', well_type='oil',
                                     oil_pvt=opvt, gor=800, wc=0.3, gsg=0.65)
-    assert abs(round(result['rate'], 1) - 1412.6) < 1.0
-    assert abs(round(result['bhp'], 1) - 2193.0) < 1.0
+    assert abs(round(result['rate'], 1) - 1391.4) < 1.0
+    assert abs(round(result['bhp'], 1) - 2206.3) < 1.0
 
 
 def test_doc_nodal_wellsegment_vertical():
@@ -1047,7 +1047,7 @@ def test_doc_nodal_fbhp_deviated():
     c_dev = nodal.Completion(segments=segs, tht=100, bht=200)
     result = nodal.fbhp(thp=500, completion=c_dev, vlpmethod='HB', well_type='gas',
                         qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    assert abs(result - 923.092017723091) < 0.01
+    assert abs(result - 926.585403839484) < 0.01
 
 
 # =============================================================================

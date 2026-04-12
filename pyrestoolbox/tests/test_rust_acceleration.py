@@ -259,13 +259,10 @@ class TestNodalVLPEquivalence:
         )
 
     def test_hb_gas(self):
-        # HB Python path uses corrected midpoint temperature discretization;
-        # Rust HB still has the legacy scheme, so tolerance is looser.
-        self._compare_fbhp_gas('HB', rtol=5e-3)
+        self._compare_fbhp_gas('HB')
 
     def test_hb_oil(self):
-        # Same HB temperature discretization difference as gas.
-        self._compare_fbhp_oil('HB', rtol=0.05)
+        self._compare_fbhp_oil('HB')
 
     def test_wg_gas(self):
         self._compare_fbhp_gas('WG')
