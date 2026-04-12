@@ -1946,7 +1946,7 @@ def operating_point(thp, completion, reservoir,
         return vlp_bhp - ipr_bhp
 
     # Bisect to find operating rate (in IPR units)
-    min_rate = 0.01 * gas_scale if well_type == 'gas' else 1.0
+    min_rate = 0.1 * gas_scale if well_type == 'gas' else 1.0
     max_rate_search = aof * 0.999
 
     try:
@@ -1970,7 +1970,7 @@ def operating_point(thp, completion, reservoir,
 
     # Generate VLP curve for output (in VLP units: MMscf/d for gas, STB/d for oil)
     vlp_max = max_rate_search / gas_scale
-    vlp_min = 0.01 if well_type == 'gas' else 1.0
+    vlp_min = 0.1 if well_type == 'gas' else 1.0
     vlp_rates = list(np.linspace(vlp_min, vlp_max, n_points))
     vlp = outflow_curve(thp=thp, completion=completion, vlpmethod=vlpmethod,
                         well_type=well_type, rates=vlp_rates,
