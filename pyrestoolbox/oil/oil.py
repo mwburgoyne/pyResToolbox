@@ -1681,8 +1681,15 @@ class OilPVT:
                      rsmethod=self.rsmethod, pbmethod=self.pbmethod)
         return raw * self.rsb_frac
 
+    @staticmethod
+    def _is_array(x):
+        return isinstance(x, (list, tuple, np.ndarray))
+
     def rs(self, p, degf):
-        """ Returns solution GOR (scf/stb | sm3/sm3) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
+        """ Returns solution GOR (scf/stb | sm3/sm3) at pressure p (psia | barsa) and temperature degf (deg F | deg C).
+            p can be a scalar, list, or array. degf must be scalar. """
+        if self._is_array(p):
+            return np.array([self.rs(pi, degf) for pi in p])
         if self.metric:
             p = p * BAR_TO_PSI
             degf = degc_to_degf(degf)
@@ -1692,7 +1699,12 @@ class OilPVT:
         return result
 
     def bo(self, p, degf, rs=None):
-        """ Returns oil FVF (rb/stb | rm3/sm3) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
+        """ Returns oil FVF (rb/stb | rm3/sm3) at pressure p (psia | barsa) and temperature degf (deg F | deg C).
+            p can be a scalar, list, or array. degf must be scalar. """
+        if self._is_array(p):
+            rs_arr = rs if rs is None else list(rs)
+            return np.array([self.bo(pi, degf, rs=None if rs is None else rs_arr[i])
+                             for i, pi in enumerate(p)])
         if self.metric:
             p_field = p * BAR_TO_PSI
             degf_field = degc_to_degf(degf)
@@ -1708,7 +1720,12 @@ class OilPVT:
                       bomethod=self.bomethod)
 
     def density(self, p, degf, rs=None):
-        """ Returns live oil density (lb/cuft | kg/m3) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
+        """ Returns live oil density (lb/cuft | kg/m3) at pressure p (psia | barsa) and temperature degf (deg F | deg C).
+            p can be a scalar, list, or array. degf must be scalar. """
+        if self._is_array(p):
+            rs_arr = rs if rs is None else list(rs)
+            return np.array([self.density(pi, degf, rs=None if rs is None else rs_arr[i])
+                             for i, pi in enumerate(p)])
         if self.metric:
             p_field = p * BAR_TO_PSI
             degf_field = degc_to_degf(degf)
@@ -1727,7 +1744,12 @@ class OilPVT:
         return result
 
     def viscosity(self, p, degf, rs=None):
-        """ Returns oil viscosity (cP) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
+        """ Returns oil viscosity (cP) at pressure p (psia | barsa) and temperature degf (deg F | deg C).
+            p can be a scalar, list, or array. degf must be scalar. """
+        if self._is_array(p):
+            rs_arr = rs if rs is None else list(rs)
+            return np.array([self.viscosity(pi, degf, rs=None if rs is None else rs_arr[i])
+                             for i, pi in enumerate(p)])
         if self.metric:
             p_field = p * BAR_TO_PSI
             degf_field = degc_to_degf(degf)
