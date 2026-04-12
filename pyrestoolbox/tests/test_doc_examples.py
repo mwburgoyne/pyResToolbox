@@ -98,13 +98,13 @@ def test_doc_gas_cg_scalar():
     """gas.rst: gas_cg scalar"""
     result = gas.gas_cg(p=2000, sg=0.68, degf=120, co2=0.05)
     assert isinstance(result, float)
-    assert abs(result - 0.0005374854430839333) / 0.0005374854430839333 < RTOL
+    assert abs(result - 0.0005376199398706931) / 0.0005376199398706931 < RTOL
 
 def test_doc_gas_cg_array():
     """gas.rst: gas_cg array"""
     result = gas.gas_cg(p=np.array([1000, 2000]), sg=0.68, degf=120, co2=0.05)
     assert isinstance(result, np.ndarray)
-    expected = np.array([0.00110369, 0.00053749])
+    expected = np.array([0.00110415, 0.00053762])
     np.testing.assert_allclose(result, expected, rtol=RTOL)
 
 def test_doc_gas_bg_scalar():

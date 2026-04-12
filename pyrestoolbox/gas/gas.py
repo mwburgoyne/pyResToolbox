@@ -58,6 +58,7 @@ __all__ = [
 ]
 
 import math
+import warnings
 import numpy as np
 import numpy.typing as npt
 from typing import Tuple
@@ -80,6 +81,24 @@ from pyrestoolbox.constants import (R, psc, tsc, degF2R, tscr, scf_per_mol, CUFT
 # Precomputed Gauss-Legendre nodes/weights for pseudopressure integration
 _GL7_NODES, _GL7_WEIGHTS = np.polynomial.legendre.leggauss(7)
 _GL10_NODES, _GL10_WEIGHTS = np.polynomial.legendre.leggauss(10)
+
+def _h2_method_override(h2, zmethod, cmethod):
+    """Force BNS method when hydrogen is present."""
+    if h2 > 0:
+        return 'BNS', 'BNS'
+    return zmethod, cmethod
+
+def _metric_to_field_pvt(p, degf, tc, pc, metric):
+    """Convert gas PVT inputs from metric (barsa, degC, K, barsa) to field (psia, degF, degR, psia)."""
+    if not metric:
+        return p, degf, tc, pc
+    p = np.asarray(p) * BAR_TO_PSI if not isinstance(p, (int, float)) else p * BAR_TO_PSI
+    degf = degc_to_degf(degf)
+    if tc > 0:
+        tc = tc * 1.8  # K to deg R
+    if pc > 0:
+        pc = pc * BAR_TO_PSI
+    return p, degf, tc, pc
 
 # Optional Rust acceleration
 from pyrestoolbox._accelerator import RUST_AVAILABLE, _rust_module
@@ -347,6 +366,7 @@ def gas_tc_pc(
         pc: Critical gas pressure (psia | barsa). Uses cmethod correlation if not specified
         metric: If True, input/output in Eclipse METRIC units (K, barsa). Defaults to False (FIELD)
     """
+    validate_pe_inputs(sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2)
     if metric:
         if tc > 0:
             tc = tc * 1.8  # K to deg R
@@ -357,9 +377,7 @@ def gas_tc_pc(
             return (tc / 1.8, pc * PSI_TO_BAR)  # deg R -> K, psia -> barsa
         return (tc, pc)
     
-    if h2 > 0:
-        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
-    
+    _, cmethod = _h2_method_override(h2, 'DAK', cmethod)
     cmethod = validate_methods(["cmethod"], [cmethod])
 
     if cmethod.name == "PMC":  # Piper, McCain & Corredor (1999)
@@ -389,7 +407,7 @@ def gas_tc_pc(
 
     elif (cmethod.name == "SUT"):  # Sutton equations with Wichert & Aziz corrections
         hc_frac = 1 - n2 - co2 - h2s
-        if hc_frac <= 0:
+        if hc_frac <= 1e-6:
             raise ValueError("SUT method requires hydrocarbon fraction > 0 (n2 + co2 + h2s must be < 1.0)")
         sg_hc = (sg - (n2 * 28.01 + co2 * 44.01 + h2s * 34.1) / MW_AIR) / hc_frac  # Eq 3.53
         ppc_hc = 756.8 - 131.0 * sg_hc - 3.6 * sg_hc ** 2  # Eq 3.47b
@@ -451,8 +469,6 @@ def gas_tc_pc(
         else:
             hydrocarbon_specific_gravity = 0.75 # Use default value if 100% inerts to avoid numerical problems
         hydrocarbon_specific_gravity = np.max([0.553779772, hydrocarbon_specific_gravity])  # Methane is lower limit
-        
-        hydrocarbon_molecular_weight = hydrocarbon_specific_gravity * MW_AIR
         tpc, ppc = pseudo_critical(hydrocarbon_specific_gravity)
 
     else:
@@ -635,40 +651,42 @@ def gas_z(
         pc: Critical gas pressure (psia | barsa). Uses cmethod correlation if not specified
         metric: If True, input/output in Eclipse METRIC units (barsa, degC, K). Defaults to False (FIELD)
     """
-    if metric:
-        p = np.asarray(p) * BAR_TO_PSI if not isinstance(p, (int, float)) else p * BAR_TO_PSI
-        degf = degc_to_degf(degf)
-        if tc > 0:
-            tc = tc * 1.8  # K to deg R
-        if pc > 0:
-            pc = pc * BAR_TO_PSI
+    p, degf, tc, pc = _metric_to_field_pvt(p, degf, tc, pc, metric)
     validate_pe_inputs(p=p, degf=degf, sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2)
 
     tolerance = 1e-6
     p, is_list = convert_to_numpy(p)
 
-    if h2 > 0:
-        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BNS' 
-    elif cmethod == 'BNS':
+    zmethod, cmethod = _h2_method_override(h2, zmethod, cmethod)
+    if cmethod == 'BNS':
         zmethod = 'BNS'
     elif zmethod == 'BNS':
-        cmethod='BNS'    
-        
+        cmethod='BNS'
+
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
-    
-    if n2 + co2 + h2s + h2 < 1:
-        sg_hc = (sg - (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2) / MW_AIR) / (1 - co2 - h2s - n2 - h2)
-    else:
-        sg_hc = 0.75 # Irrelevant, since hydrocarbon fraction = 0
-    sg_hc = max(sg_hc, 0.553779772) # Methane is lower limit
-    mw_hc = sg_hc * MW_AIR
-        
     tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc)
     tr = (degf + degF2R) / tc
     pprs = np.array(p/pc)
-            
+
+    # Correlation validity range warnings (non-blocking)
+    zname = zmethod.name
+    if zname == 'DAK':
+        if tr < 1.05 or tr > 3.0:
+            warnings.warn(f"DAK Z-factor: Tr={tr:.3f} outside calibration range [1.05, 3.0]", stacklevel=2)
+        if np.any(pprs < 0.2) or np.any(pprs > 30):
+            warnings.warn(f"DAK Z-factor: Ppr outside calibration range [0.2, 30]", stacklevel=2)
+    elif zname == 'HY':
+        if tr < 1.15 or tr > 3.0:
+            warnings.warn(f"HY Z-factor: Tr={tr:.3f} outside calibration range [1.15, 3.0]", stacklevel=2)
+        if np.any(pprs > 24):
+            warnings.warn(f"HY Z-factor: Ppr outside calibration range [0, 24]", stacklevel=2)
+    elif zname == 'WYW':
+        if tr < 1.0 or tr > 3.0:
+            warnings.warn(f"WYW Z-factor: Tr={tr:.3f} outside calibration range [1.0, 3.0]", stacklevel=2)
+        if np.any(pprs < 0.01) or np.any(pprs > 30):
+            warnings.warn(f"WYW Z-factor: Ppr outside calibration range [0.01, 30]", stacklevel=2)
+
     def zdak(pprs, tr):
         # DAK from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
         # Vectorized Newton-Raphson on reduced density rhor
@@ -838,7 +856,7 @@ def gas_z(
 
         return process_output(zout, is_list)
         
-    zfuncs = {"DAK": zdak, "HY": z_hy, "WYW": z_wyw, "BUR": z_bur}
+    zfuncs = {"DAK": zdak, "HY": z_hy, "WYW": z_wyw, "BNS": z_bur}
 
     # Rust acceleration dispatch (batch — single FFI call for all pressures)
     if RUST_AVAILABLE:
@@ -868,7 +886,7 @@ def gas_z(
             return process_output(zout, is_list)
 
     if zmethod.name in ('BNS', 'BUR'):
-        return zfuncs["BUR"](p, degf)
+        return zfuncs["BNS"](p, degf)
     else:
         return zfuncs[zmethod.name](pprs, tr)
 
@@ -927,10 +945,8 @@ def gas_ug(
     p, is_list = convert_to_numpy(p)
     zee, _ = convert_to_numpy(zee)
 
-    if h2 > 0:
-        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BNS'
-    elif cmethod == 'BNS':
+    zmethod, cmethod = _h2_method_override(h2, zmethod, cmethod)
+    if cmethod == 'BNS':
         zmethod = 'BNS'
     elif zmethod == 'BNS':
         cmethod='BNS'
@@ -1057,17 +1073,8 @@ def gas_cg(
                  Defaults to 'PMC
           metric: If True, input/output in Eclipse METRIC units (barsa, degC, 1/barsa). Defaults to False (FIELD)
     """
-    if metric:
-        p = np.asarray(p) * BAR_TO_PSI if not isinstance(p, (int, float)) else p * BAR_TO_PSI
-        degf = degc_to_degf(degf)
-        if tc > 0:
-            tc = tc * 1.8  # K to deg R
-        if pc > 0:
-            pc = pc * BAR_TO_PSI
-    if h2 > 0:
-        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BNS'
-
+    p, degf, tc, pc = _metric_to_field_pvt(p, degf, tc, pc, metric)
+    zmethod, cmethod = _h2_method_override(h2, zmethod, cmethod)
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
     p, is_list = convert_to_numpy(p)
@@ -1076,16 +1083,17 @@ def gas_cg(
     pr = p / pc
     degR = (degf + degF2R)
     tr = degR / tc
-    p_both = np.concatenate([p, p + 1])
+    dp = np.maximum(p * 1e-4, 0.01)  # Relative step, floor at 0.01 psi
+    p_both = np.concatenate([p, p + dp])
     zee_both = gas_z(p=p_both, sg=sg, degf=degf, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2=h2, tc=tc, pc=pc)
     n = len(p)
     zee1 = zee_both[:n]
     zee2 = zee_both[n:]
 
     vol1 = zee1*R*degR/p
-    vol2 = zee2*R*degR/(p+1)
+    vol2 = zee2*R*degR/(p+dp)
 
-    result = process_output((vol1 - vol2)/((vol1 + vol2)/2), is_list) # 1/psi
+    result = process_output((vol1 - vol2)/((vol1 + vol2)/2) / dp, is_list) # 1/psi
     if metric:
         return result * INVPSI_TO_INVBAR  # 1/psi -> 1/barsa
     return result
@@ -1127,19 +1135,10 @@ def gas_bg(
           pc: Critical gas pressure (psia | barsa). Calculates using cmethod if not specified
           metric: If True, input/output in Eclipse METRIC units (barsa, degC). Defaults to False (FIELD)
     """
-    if metric:
-        p = np.asarray(p) * BAR_TO_PSI if not isinstance(p, (int, float)) else p * BAR_TO_PSI
-        degf = degc_to_degf(degf)
-        if tc > 0:
-            tc = tc * 1.8  # K to deg R
-        if pc > 0:
-            pc = pc * BAR_TO_PSI
-    p, is_list = convert_to_numpy(p)
-    if h2 > 0:
-        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BNS'
-
+    p, degf, tc, pc = _metric_to_field_pvt(p, degf, tc, pc, metric)
+    zmethod, cmethod = _h2_method_override(h2, zmethod, cmethod)
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
+    p, is_list = convert_to_numpy(p)
 
     zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc)
     degR = (degf + degF2R)
@@ -1186,20 +1185,10 @@ def gas_den(
           pc: Critical gas pressure (psia | barsa). Calculates using cmethod if not specified
           metric: If True, input/output in Eclipse METRIC units (barsa, degC, kg/m3). Defaults to False (FIELD)
     """
-    if metric:
-        p = np.asarray(p) * BAR_TO_PSI if not isinstance(p, (int, float)) else p * BAR_TO_PSI
-        degf = degc_to_degf(degf)
-        if tc > 0:
-            tc = tc * 1.8  # K to deg R
-        if pc > 0:
-            pc = pc * BAR_TO_PSI
-    p, is_list = convert_to_numpy(p)
-
-    if h2 > 0:
-        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BNS'
-
+    p, degf, tc, pc = _metric_to_field_pvt(p, degf, tc, pc, metric)
+    zmethod, cmethod = _h2_method_override(h2, zmethod, cmethod)
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
+    p, is_list = convert_to_numpy(p)
 
     zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc)
 
@@ -1269,23 +1258,52 @@ def gas_ponz2p(
         if pc > 0:
             pc = pc * BAR_TO_PSI
 
-    if h2 > 0:
-        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BNS'
-
+    zmethod, cmethod = _h2_method_override(h2, zmethod, cmethod)
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
+    poverz, is_list = convert_to_numpy(poverz)
+
+    def _ponz2p_err_msg(target):
+        return (
+            f"gas_ponz2p: no single-phase solution exists for P/Z={target:.4f} at this "
+            f"temperature and composition. Target may fall in the two-phase region where "
+            f"P/Z is discontinuous."
+        )
+
+    # Try Rust-accelerated batch solver for supported method combinations
+    zname = zmethod.name
+    cname = cmethod.name
+    if cname in ('SUT', 'BNS'):
+        try:
+            p_list = _rust_module.gas_ponz2p_rust(
+                [float(v) for v in poverz], degf, sg,
+                zname, cname,
+                co2, h2s, n2, h2, tc, pc, rtol,
+            )
+            result = process_output(np.array(p_list), is_list)
+            if metric:
+                return result * PSI_TO_BAR
+            return result
+        except (ImportError, AttributeError):
+            pass
+        except ValueError as e:
+            if "failed to converge" in str(e) or "root not bracketed" in str(e):
+                raise ValueError(_ponz2p_err_msg(poverz[0])) from e
+            raise
+
+    # Python fallback: scalar bisection
     def PonZ2P_err(args, p):
         ponz, sg, degf, zmethod, cmethod, tc, pc, co2, h2s, n2, h2 = args
-        zee = zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc)
+        zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc)
         return (p - (ponz * zee)) / p
-
-    poverz, is_list = convert_to_numpy(poverz)
 
     p = []
     for ponz in poverz:
         args = (ponz, sg, degf, zmethod, cmethod, tc, pc, co2, h2s, n2, h2)
-        p.append(bisect_solve(args, PonZ2P_err, ponz * 0.1, ponz * 5, rtol))
+        try:
+            p.append(bisect_solve(args, PonZ2P_err, ponz * 0.1, ponz * 5, rtol))
+        except (ValueError, RuntimeError) as e:
+            raise ValueError(_ponz2p_err_msg(ponz)) from e
 
     result = process_output(p, is_list)
     if metric:
@@ -1356,10 +1374,7 @@ def gas_grad2sg(
         error = (grad - grad_calc) / grad
         return error
 
-    if h2 > 0:
-        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BNS' 
-        
+    zmethod, cmethod = _h2_method_override(h2, zmethod, cmethod)
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
     args = (grad, p, zmethod, cmethod, tc, pc, co2, h2s, n2, h2)
@@ -1416,17 +1431,12 @@ def gas_dmp(
     if p1 == p2:
         return 0
 
-    if h2 > 0:
-        cmethod = 'BNS' # The BNS PR EOS method is the only one that can handle Hydrogen
-        zmethod = 'BNS'
-
+    zmethod, cmethod = _h2_method_override(h2, zmethod, cmethod)
     zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
 
     # Rust-accelerated pseudopressure (entire integration in Rust — no Python round-trips)
     if RUST_AVAILABLE:
         zname = zmethod.name
-        if zname == 'BUR':
-            zname = 'BNS'
         cname = cmethod.name
         if cname in ('SUT', 'BNS'):
             try:
@@ -1529,9 +1539,7 @@ class GasPVT:
         self.n2 = n2
         self.h2 = h2
         self.metric = metric
-        if h2 > 0:
-            zmethod = 'BNS'
-            cmethod = 'BNS'
+        zmethod, cmethod = _h2_method_override(h2, zmethod, cmethod)
         self.zmethod, self.cmethod = validate_methods(
             ["zmethod", "cmethod"], [zmethod, cmethod])
         # tc/pc always stored in oilfield units internally

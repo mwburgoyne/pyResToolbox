@@ -173,6 +173,8 @@ def arps_rate(qi, di, b, t):
         Rate at time t.
     """
     t, is_list = convert_to_numpy(t)
+    if qi <= 0:
+        raise ValueError(f"qi must be positive, got {qi}")
     if di <= 0:
         raise ValueError(f"di must be positive, got {di}")
     if b < 0 or b > 1:
@@ -208,6 +210,8 @@ def arps_cum(qi, di, b, t):
         Cumulative production at time t.
     """
     t, is_list = convert_to_numpy(t)
+    if qi <= 0:
+        raise ValueError(f"qi must be positive, got {qi}")
     if di <= 0:
         raise ValueError(f"di must be positive, got {di}")
     if b < 0 or b > 1:
@@ -218,13 +222,6 @@ def arps_cum(qi, di, b, t):
     elif b == 1:
         Qcum = (qi / di) * np.log(1.0 + di * t)
     else:
-        Qcum = (qi / ((1.0 - b) * di)) * ((1.0 + b * di * t) ** (1.0 - 1.0 / b) - 1.0)
-        # Equivalent to: qi^b / ((1-b)*di) * (qi^(1-b) - q(t)^(1-b))
-        # Simplified: (qi / ((1-b)*di)) * (1 - (1+b*di*t)^((b-1)/b))
-        # Using: (1+b*di*t)^(1-1/b) - 1 = (1+b*di*t)^((b-1)/b) - 1
-        # Note sign: cumulative should be positive
-        # Correct formula: Qcum = qi / ((1-b)*di) * (1 - (1+b*di*t)^(-(1-b)/b))
-        # Let's recalculate properly
         Qcum = (qi / ((1.0 - b) * di)) * (1.0 - (1.0 + b * di * t) ** (-(1.0 - b) / b))
 
     return process_output(Qcum, is_list)
@@ -391,11 +388,12 @@ def _fit_hyperbolic(t, q):
                 method='hyperbolic', qi=qi, di=di, b=b,
                 r_squared=r2, residuals=q - q_pred,
             )
-        except Exception:
+        except (ImportError, AttributeError):
             pass
 
     best_r2 = -np.inf
     best_result = None
+    ss_tot = np.sum((q - np.mean(q)) ** 2)
 
     for b_trial in np.arange(0.05, 0.96, 0.01):
         # Transform: Y = q^(-b) is linear in t
@@ -415,7 +413,6 @@ def _fit_hyperbolic(t, q):
         # Compute R-squared in original rate space
         q_pred = qi / (1.0 + b_trial * di * t) ** (1.0 / b_trial)
         ss_res = np.sum((q - q_pred) ** 2)
-        ss_tot = np.sum((q - np.mean(q)) ** 2)
         r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
 
         if r2 > best_r2:
@@ -520,11 +517,12 @@ def _fit_hyperbolic_cum(Np, q):
                 method='hyperbolic', qi=qi, di=di, b=b,
                 r_squared=r2, residuals=q - q_pred,
             )
-        except Exception:
+        except (ImportError, AttributeError):
             pass
 
     best_r2 = -np.inf
     best_result = None
+    ss_tot = np.sum((q - np.mean(q)) ** 2)
 
     for b_trial in np.arange(0.05, 0.96, 0.01):
         exp = 1.0 - b_trial
@@ -555,7 +553,6 @@ def _fit_hyperbolic_cum(Np, q):
         inner = np.maximum(inner, 1e-10)
         q_pred = qi * inner ** (1.0 / exp)
         ss_res = np.sum((q - q_pred) ** 2)
-        ss_tot = np.sum((q - np.mean(q)) ** 2)
         r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
 
         if r2 > best_r2:
@@ -928,9 +925,9 @@ def forecast(result, t_end, dt=1.0, q_min=0.0, uptime=1.0, ratios=None):
     t = np.arange(dt, t_end + dt / 2, dt)
 
     if result.method == 'duong':
-        q_capacity = np.array([float(duong_rate(result.qi, result.a, result.m, ti)) for ti in t])
+        q_capacity = np.asarray(duong_rate(result.qi, result.a, result.m, t), dtype=float)
     else:
-        q_capacity = np.array([float(arps_rate(result.qi, result.di, result.b, ti)) for ti in t])
+        q_capacity = np.asarray(arps_rate(result.qi, result.di, result.b, t), dtype=float)
 
     # Apply uptime
     q = q_capacity * uptime
@@ -959,7 +956,7 @@ def forecast(result, t_end, dt=1.0, q_min=0.0, uptime=1.0, ratios=None):
                 x_eval = Qcum
             else:
                 x_eval = t
-            R = np.array([float(ratio_forecast(rr, xi)) for xi in x_eval])
+            R = np.asarray(ratio_forecast(rr, x_eval), dtype=float)
             sec_rate = q * R
             sec_cum = np.cumsum(sec_rate * dt)
             secondary[name] = {'ratio': R, 'rate': sec_rate, 'cum': sec_cum}

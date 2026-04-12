@@ -195,6 +195,8 @@ def gas_matbal(p, Gp, degf, sg=0.65, co2=0, h2s=0, n2=0, h2=0,
     p = np.asarray(p, dtype=float)
     Gp = np.asarray(Gp, dtype=float)
 
+    if np.any(p <= 0):
+        raise ValueError("Pressures must be positive")
     if len(p) != len(Gp):
         raise ValueError(f"p and Gp must have same length, got {len(p)} and {len(Gp)}")
     if len(p) < 2:
@@ -404,6 +406,8 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
     Np = np.asarray(Np, dtype=float)
     n = len(p)
 
+    if np.any(p <= 0):
+        raise ValueError("Pressures must be positive")
     if len(Np) != n:
         raise ValueError(f"p and Np must have same length, got {len(p)} and {len(Np)}")
     if n < 2:
@@ -526,37 +530,23 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
         Rp_arr = Rs_arr.copy()
 
     # Precompute F, Eo, Eg (these do NOT depend on regressable params)
-    F = np.zeros(n)
-    Eo = np.zeros(n)
-    Eg = np.zeros(n)
+    F = (Np * (Bo_arr + (Rp_arr - Rs_arr) * Bg_arr)
+         + (Wp_arr - Wi_arr) * Bw
+         - Gi_arr * Bg_arr)
 
-    for i in range(n):
-        # Underground withdrawal
-        F[i] = (Np[i] * (Bo_arr[i] + (Rp_arr[i] - Rs_arr[i]) * Bg_arr[i])
-                + (Wp_arr[i] - Wi_arr[i]) * Bw
-                - Gi_arr[i] * Bg_arr[i])
+    Eo = np.where(p_field >= pb_field,
+                  Bo_arr - Boi,
+                  (Bo_arr - Boi) + (Rsi - Rs_arr) * Bg_arr)
 
-        # Oil expansion + dissolved gas
-        if p_field[i] >= pb_field:
-            Eo[i] = Bo_arr[i] - Boi
-        else:
-            Eo[i] = (Bo_arr[i] - Boi) + (Rsi - Rs_arr[i]) * Bg_arr[i]
-
-        # Gas cap expansion
-        if Bgi > 0:
-            Eg[i] = Boi * (Bg_arr[i] / Bgi - 1.0)
-        else:
-            Eg[i] = 0.0
+    Eg = np.where(Bgi > 0, Boi * (Bg_arr / max(Bgi, 1e-30) - 1.0), 0.0)
 
     # Helper to compute Efw and OOIP for given (m_t, cf_t, cw_t, sw_t)
     def _compute_result(m_t, cf_t, cw_t, sw_t):
-        Efw = np.zeros(n)
-        for i in range(n):
-            dp = p_field[0] - p_field[i]
-            if (1.0 - sw_t) > 0:
-                Efw[i] = Boi * (cw_t * sw_t + cf_t) / (1.0 - sw_t) * dp
-            else:
-                Efw[i] = 0.0
+        dp = p_field[0] - p_field
+        if (1.0 - sw_t) > 0:
+            Efw = Boi * (cw_t * sw_t + cf_t) / (1.0 - sw_t) * dp
+        else:
+            Efw = np.zeros(n)
 
         denom = Eo + m_t * Eg + (1.0 + m_t) * Efw
         valid = np.abs(denom) > 1e-30
@@ -601,7 +591,7 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
                         F.tolist(), Eo.tolist(), Eg.tolist(), p_field.tolist(),
                         Boi, base_vals['m'], base_vals['cf'], base_vals['cw'], base_vals['sw_i'],
                     )
-                except Exception:
+                except (ImportError, AttributeError):
                     pass
             vals = dict(base_vals)
             for k, v in zip(param_names, x):
@@ -644,15 +634,12 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
         raise RuntimeError("Cannot compute OOIP — all expansion terms are zero")
 
     # Drive indices at each valid point
-    ddi = np.zeros(n)
-    sdi = np.zeros(n)
-    cdi = np.zeros(n)
-    for i in range(n):
-        if abs(denom[i]) > 1e-30 and abs(F[i]) > 1e-30:
-            N_i = F[i] / denom[i]
-            ddi[i] = N_i * Eo[i] / F[i]
-            sdi[i] = N_i * m * Eg[i] / F[i]
-            cdi[i] = N_i * (1.0 + m) * Efw[i] / F[i]
+    drive_valid = (np.abs(denom) > 1e-30) & (np.abs(F) > 1e-30)
+    N_pts = np.where(drive_valid, F / np.where(drive_valid, denom, 1.0), 0.0)
+    F_safe = np.where(drive_valid, F, 1.0)
+    ddi = np.where(drive_valid, N_pts * Eo / F_safe, 0.0)
+    sdi = np.where(drive_valid, N_pts * m * Eg / F_safe, 0.0)
+    cdi = np.where(drive_valid, N_pts * (1.0 + m) * Efw / F_safe, 0.0)
 
     return OilMatbalResult(
         ooip=ooip,

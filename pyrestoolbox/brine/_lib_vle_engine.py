@@ -46,6 +46,7 @@ Author: Mark Burgoyne, Markus H. Nielsen
 Date: 2025-2026
 """
 
+import warnings
 import numpy as np
 from typing import Dict, Tuple, Optional, List, Callable
 from dataclasses import dataclass
@@ -1081,6 +1082,11 @@ def rr_solver(
             b = (b_min + b_max) / 2.0
 
         if N_it > max_iter:
+            warnings.warn(
+                f"Rachford-Rice solver did not converge in {max_iter} iterations "
+                f"(residual={abs(h_b):.2e}, tol={tol:.1e}). Results may be inaccurate.",
+                RuntimeWarning, stacklevel=3
+            )
             break
 
     # Recover compositions from transformed variables
@@ -2083,7 +2089,7 @@ class SWMultiComponentFlash:
                     0.0, mode, gamma_arr.tolist(),
                 )
                 return V, np.array(x_r), np.array(y_r), True
-            except Exception:
+            except (ImportError, AttributeError):
                 pass
 
         kij_matrix = self.build_kij_matrix(T_K, mode)
@@ -2263,7 +2269,7 @@ class SWMultiComponentFlash:
                 if gamma_aq is not None:
                     result['gamma'] = gamma_aq
                 return result
-            except Exception:
+            except (ImportError, AttributeError):
                 pass
 
         # Calculate gamma for gamma-phi method
