@@ -956,7 +956,7 @@ class CO2_Brine_Mixture():
                 self.MolarVol = self.MwGas / max(rhogas, 1e-30)
                 self.pRT = self.pBar / (RGASCON * self.tKel)
                 return
-            except Exception:
+            except (ImportError, AttributeError):
                 pass
 
         pBar = self.pBar
@@ -1056,7 +1056,7 @@ class CO2_Brine_Mixture():
         self.x[0] = self.Bprime * (1.0 - self.y[1])
         self.y[0] = 1.0 - self.y[1]
 
-        mCO2 = self.x[0] * (CONMOLA + 2 * self.molaL) / (1 - self.x[0])      # Eq B-6
+        mCO2 = self.x[0] * (CONMOLA + 2 * self.molaL) / max(1 - self.x[0], 1e-15)      # Eq B-6
         self.xSalt = 2.0 * self.molaL / (2.0 * self.molaL + CONMOLA + mCO2)  # Eq B-3. The 2.0x is stoichiometric ions for NaCl
         self.x[1] = 1.0 - self.x[0] - self.xSalt
         self.x[1] = min(max(self.x[1], 0), 1)
@@ -1100,9 +1100,17 @@ class CO2_Brine_Mixture():
                 self.x[1] = 1.0 - self.x[0] - self.xSalt
                 
                 err = abs(self.y[1]/yH2O_last-1)
-                
+
                 iternum += 1
-        
+
+            if err > EPS:
+                import warnings
+                warnings.warn(
+                    f"Spycher CO2-brine iteration did not converge in {iternum} iterations "
+                    f"(relative error={err:.2e}). Results may be inaccurate.",
+                    RuntimeWarning, stacklevel=2
+                )
+
         #=======================================================================
         #  Re-Compute the CO2/H2O Gas Phase Density
         #=======================================================================
@@ -1764,9 +1772,19 @@ class SoreideWhitson:
             # rho = (1 + x2*M2/(M1*x1)) / (x2*V_phi/(M1*x1) + 1/rho1)
             x1 = 1.0 - self.x_total
             M1 = MWWAT
-            numerator = 1.0 + self.x_total * mw_eff / (M1 * x1)
-            denominator = self.x_total * vphi_eff / (M1 * x1) + 1.0 / rho_brine_gcc
-            rho_gas_brine_gcc = numerator / denominator
+            if x1 < 1e-6:
+                # Near-pure gas phase: Garcia mixing rule breaks down
+                import warnings
+                warnings.warn(
+                    f"Gas mole fraction x_total={self.x_total:.4f} is too high for "
+                    "Garcia density mixing rule. Returning unsaturated brine density.",
+                    RuntimeWarning, stacklevel=2
+                )
+                rho_gas_brine_gcc = rho_brine_gcc
+            else:
+                numerator = 1.0 + self.x_total * mw_eff / (M1 * x1)
+                denominator = self.x_total * vphi_eff / (M1 * x1) + 1.0 / rho_brine_gcc
+                rho_gas_brine_gcc = numerator / denominator
         else:
             rho_gas_brine_gcc = rho_brine_gcc
 

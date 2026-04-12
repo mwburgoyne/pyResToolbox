@@ -54,6 +54,9 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Pseudopressure integration
     m.add_function(wrap_pyfunction!(pseudopressure::gas_dmp_rust, m)?)?;
 
+    // P/Z -> P solver
+    m.add_function(wrap_pyfunction!(pseudopressure::gas_ponz2p_rust, m)?)?;
+
     // VLP segment loops
     m.add_function(wrap_pyfunction!(vlp::hb_fbhp_gas_rust, m)?)?;
     m.add_function(wrap_pyfunction!(vlp::hb_fbhp_oil_rust, m)?)?;

@@ -62,6 +62,7 @@ __all__ = [
     'pb_method', 'rs_method', 'bo_method', 'co_method',
 ]
 
+import warnings
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
@@ -251,7 +252,7 @@ def oil_rate_linear(
 
     J = (
         0.00708 * k * area / (2 * np.pi * uo * bo * length)
-    )  # Productivity index
+    )  # Productivity index (linear Darcy: 0.00708/(2*pi) = 0.001127)
     if not vogel:
         qoil = J * (pr - pwf)
     else:
@@ -599,6 +600,18 @@ def oil_pbub(
                 "Need valid values for rsb, api, sg_sp and degf for Velarde or Valko McCain Pb calculation"
             )
 
+    # Correlation validity range warnings (non-blocking)
+    if pbmethod.name == "STAN":
+        if api < 16.5 or api > 63.8:
+            warnings.warn(f"Standing Pb: API={api:.1f} outside calibration range [16.5, 63.8]", stacklevel=2)
+        if degf < 100 or degf > 258:
+            warnings.warn(f"Standing Pb: T={degf:.1f}°F outside calibration range [100, 258]", stacklevel=2)
+    elif pbmethod.name == "VALMC":
+        if api < 6 or api > 56.8:
+            warnings.warn(f"Valko-McCain Pb: API={api:.1f} outside calibration range [6, 56.8]", stacklevel=2)
+        if degf < 78 or degf > 330:
+            warnings.warn(f"Valko-McCain Pb: T={degf:.1f}°F outside calibration range [78, 330]", stacklevel=2)
+
     def pbub_standing(
         api, degf, sg_g, rsb, sg_sp
     ) -> float:  # 1.63 in 'Oil & Gas Properties & Correlations' - http://dx.doi.org/10.1016/B978-0-12-803437-8.00001-4
@@ -830,7 +843,7 @@ def oil_rs(
         return rsb
 
     def Rs_velarde(
-        api, degf, sg_sp, p, pb, rsb
+        api, degf, sg_g, sg_sp, p, pb, rsb
     ):  # Velarde, Blasingame & McCain (1997)
         # Equations 3.8a - 3.8f
         # Estimates Rs of depleting oil from separator oil observations
@@ -859,13 +872,13 @@ def oil_rs(
         rs = rsb * rsr
         return get_real_part(rs)
 
-    def rs_standing(api, degf, sg_sp, p, pb, rsb):
+    def rs_standing(api, degf, sg_g, sg_sp, p, pb, rsb):
         a = 0.00091 * degf - 0.0125 * api  # Eq 1.64
         return sg_g * (((p - psc) / 18.2 + 1.4) / 10 ** a) ** (
             1 / 0.83
         )  # Eq 1.72 - Subtracting 14.7 as suspect this pressure in psig
 
-    def rs_valko_mccain(api, degf, sg_sp, p, pb, rsb):
+    def rs_valko_mccain(api, degf, sg_g, sg_sp, p, pb, rsb):
         rsb_valko = oil_rs_bub(api, degf, pb, sg_g, sg_sp, rsmethod = 'VALMC') # Rsb from Valko-McCain approach
         rs_scaler = rsb / rsb_valko # Scalar to adjust calculated Valko McCain Rs back to be in line with the supplied Rsb
         return rs_scaler * oil_rs_bub(api, degf, p, sg_g, sg_sp, rsmethod = 'VALMC')
@@ -878,7 +891,7 @@ def oil_rs(
     }
 
     result = fn_dic[rsmethod.name](
-        api=api, degf=degf, sg_sp=sg_sp, p=p, pb=pb, rsb=rsb
+        api=api, degf=degf, sg_g=sg_g, sg_sp=sg_sp, p=p, pb=pb, rsb=rsb
     )
     if metric:
         return result * SCF_PER_STB_TO_SM3_PER_SM3  # scf/stb -> sm3/sm3
@@ -909,9 +922,55 @@ def check_sgs(
         sg_g = (sg_sp * rsp + sg_st * rst) / (rsp + rst)
     if sg_g > 0 and sg_sp <= 0:  # Estimate sg_sp from sg_g
         sg_sp = (sg_g * (rsp + rst) - (sg_st * rst)) / rsp
+    if sg_g <= 0 and sg_sp <= 0:
+        raise ValueError("At least one of sg_g or sg_sp must be positive")
     if sg_g < sg_sp:
         sg_sp = sg_g
     return (sg_g, sg_sp)
+
+def _perrine_co_sat(p, api, degf, sg_sp, sg_g, pb, rsb, zmethod, cmethod,
+                    rsmethod, pbmethod, bomethod, denomethod):
+    """Compute Perrine's saturated compressibility: co_sat = -(1/Bo)*dBo/dp + (Bg/Bo)*dRs/dp."""
+    sg_o = oil_sg(api)
+    dp = max(0.5, p * 0.001)
+    p_hi = p + dp
+    p_lo = max(p - dp, psc)
+    span = p_hi - p_lo
+    if span < 1e-10:
+        span = dp
+
+    rs_at_p = oil_rs(api=api, degf=degf, sg_sp=sg_sp, p=p, pb=pb, rsb=rsb,
+                     rsmethod=rsmethod, pbmethod=pbmethod)
+    bo_at_p = oil_bo(p=p, pb=pb, degf=degf, rs=rs_at_p, rsb=rsb, sg_sp=sg_sp,
+                     sg_g=sg_g, sg_o=sg_o, bomethod=bomethod, denomethod=denomethod)
+    rs_hi = oil_rs(api=api, degf=degf, sg_sp=sg_sp, p=p_hi, pb=pb, rsb=rsb,
+                   rsmethod=rsmethod, pbmethod=pbmethod)
+    rs_lo = oil_rs(api=api, degf=degf, sg_sp=sg_sp, p=p_lo, pb=pb, rsb=rsb,
+                   rsmethod=rsmethod, pbmethod=pbmethod)
+    bo_hi = oil_bo(p=p_hi, pb=pb, degf=degf, rs=rs_hi, rsb=rsb, sg_sp=sg_sp,
+                   sg_g=sg_g, sg_o=sg_o, bomethod=bomethod, denomethod=denomethod)
+    bo_lo = oil_bo(p=p_lo, pb=pb, degf=degf, rs=rs_lo, rsb=rsb, sg_sp=sg_sp,
+                   sg_g=sg_g, sg_o=sg_o, bomethod=bomethod, denomethod=denomethod)
+    dBodp = (bo_hi - bo_lo) / span
+    dRsdp = (rs_hi - rs_lo) / span
+    bg_at_p = gas.gas_bg(p, sg_sp, degf, zmethod=zmethod, cmethod=cmethod) / CUFTperBBL
+    return -1.0 / bo_at_p * dBodp + bg_at_p / bo_at_p * dRsdp
+
+def _cofb_mccain(api, sg_sp, pb, p, rsb, degf):
+    """McCain Eq 3.13 cofb polynomial for undersaturated oil compressibility."""
+    C = [
+        [3.011, -0.0835, 3.51, 0.327, -1.918, 2.52],
+        [-2.6254, -0.259, -0.0289, -0.608, -0.642, -2.73],
+        [0.497, 0.382, -0.0584, 0.0911, 0.154, 0.429],
+    ]
+    var = [
+        np.log(api), np.log(sg_sp), np.log(pb),
+        np.log(p / pb), np.log(rsb), np.log(degf),
+    ]
+    Zn = [sum([C[i][n] * var[n] ** i for i in range(3)]) for n in range(6)]
+    Zp = sum(Zn)
+    ln_cofb = 2.434 + 0.475 * Zp + 0.048 * Zp ** 2 - np.log(1e6)
+    return np.exp(ln_cofb)
 
 def oil_co(
     p: float,
@@ -1016,59 +1075,18 @@ def oil_co(
     # giving a continuous curve with no discontinuity at Pb. This is the
     # compressibility at constant composition (rsb), suitable for BOT tables.
     if undersaturated_only:
-        C = [
-            [3.011, -0.0835, 3.51, 0.327, -1.918, 2.52],
-            [-2.6254, -0.259, -0.0289, -0.608, -0.642, -2.73],
-            [0.497, 0.382, -0.0584, 0.0911, 0.154, 0.429],
-        ]
-        var = [
-            np.log(api),
-            np.log(sg_sp),
-            np.log(pb),
-            np.log(p / pb),
-            np.log(rsb),
-            np.log(degf),
-        ]
-        Zn = [sum([C[i][n] * var[n] ** i for i in range(3)]) for n in range(6)]
-        Zp = sum(Zn)
-        ln_cofb = 2.434 + 0.475 * Zp + 0.048 * Zp ** 2 - np.log(1e6)
-        co_usat = np.exp(ln_cofb)
+        co_usat = _cofb_mccain(api, sg_sp, pb, p, rsb, degf)
 
         if not co_sat:
             if metric:
                 return co_usat * INVPSI_TO_INVBAR
             return co_usat
-        # co_sat requested: saturated = undersaturated above Pb
         if p >= pb:
             if metric:
                 return [co_usat * INVPSI_TO_INVBAR, co_usat * INVPSI_TO_INVBAR]
             return [co_usat, co_usat]
-        # Below Pb with co_sat: need Perrine's saturated value.
-        # co_usat already set from cofb above; compute co_sat_val and return.
-        sg_o = oil_sg(api)
-        dp = max(0.5, p * 0.001)
-        p_hi = p + dp
-        p_lo = max(p - dp, psc)
-        span = p_hi - p_lo
-        if span < 1e-10:
-            span = dp
-
-        rs_at_p = oil_rs(api=api, degf=degf, sg_sp=sg_sp, p=p, pb=pb, rsb=rsb,
-                         rsmethod=rsmethod, pbmethod=pbmethod)
-        bo_at_p = oil_bo(p=p, pb=pb, degf=degf, rs=rs_at_p, rsb=rsb, sg_sp=sg_sp,
-                         sg_g=sg_g, sg_o=sg_o, bomethod=bomethod, denomethod=denomethod)
-        rs_hi = oil_rs(api=api, degf=degf, sg_sp=sg_sp, p=p_hi, pb=pb, rsb=rsb,
-                       rsmethod=rsmethod, pbmethod=pbmethod)
-        rs_lo = oil_rs(api=api, degf=degf, sg_sp=sg_sp, p=p_lo, pb=pb, rsb=rsb,
-                       rsmethod=rsmethod, pbmethod=pbmethod)
-        bo_hi = oil_bo(p=p_hi, pb=pb, degf=degf, rs=rs_hi, rsb=rsb, sg_sp=sg_sp,
-                       sg_g=sg_g, sg_o=sg_o, bomethod=bomethod, denomethod=denomethod)
-        bo_lo = oil_bo(p=p_lo, pb=pb, degf=degf, rs=rs_lo, rsb=rsb, sg_sp=sg_sp,
-                       sg_g=sg_g, sg_o=sg_o, bomethod=bomethod, denomethod=denomethod)
-        dBodp = (bo_hi - bo_lo) / span
-        dRsdp = (rs_hi - rs_lo) / span
-        bg_at_p = gas.gas_bg(p, sg_sp, degf, zmethod=zmethod, cmethod=cmethod) / CUFTperBBL
-        co_sat_val = -1.0 / bo_at_p * dBodp + bg_at_p / bo_at_p * dRsdp
+        co_sat_val = _perrine_co_sat(p, api, degf, sg_sp, sg_g, pb, rsb, zmethod, cmethod,
+                                     rsmethod, pbmethod, bomethod, denomethod)
         if metric:
             return [co_usat * INVPSI_TO_INVBAR, co_sat_val * INVPSI_TO_INVBAR]
         return [co_usat, co_sat_val]
@@ -1156,44 +1174,11 @@ def oil_co(
             return co_usat * INVPSI_TO_INVBAR  # 1/psi -> 1/bar
         return co_usat
 
-    # Saturated compressibility (Perrine's definition):
-    # co_sat = -(1/Bo)*dBo/dp + (Bg/Bo)*dRs/dp
-    # where both Bo and Rs vary with pressure (unlike unsaturated which holds Rs constant)
     if p >= pb:
-        # Above Pb: no gas evolution, saturated = unsaturated
         co_sat_val = co_usat
     else:
-        sg_o = oil_sg(api)
-        dp = max(0.5, p * 0.001)
-        p_hi = p + dp
-        p_lo = p - dp
-        p_lo = max(p_lo, psc)
-        span = p_hi - p_lo
-        if span < 1e-10:
-            span = dp
-
-        # Bo at p (with Rs varying with pressure)
-        rs_at_p = oil_rs(api=api, degf=degf, sg_sp=sg_sp, p=p, pb=pb, rsb=rsb,
-                         rsmethod=rsmethod, pbmethod=pbmethod)
-        bo_at_p = oil_bo(p=p, pb=pb, degf=degf, rs=rs_at_p, rsb=rsb, sg_sp=sg_sp,
-                         sg_g=sg_g, sg_o=sg_o, bomethod=bomethod, denomethod=denomethod)
-
-        # dBo/dp with Rs varying
-        rs_hi = oil_rs(api=api, degf=degf, sg_sp=sg_sp, p=p_hi, pb=pb, rsb=rsb,
-                       rsmethod=rsmethod, pbmethod=pbmethod)
-        rs_lo = oil_rs(api=api, degf=degf, sg_sp=sg_sp, p=p_lo, pb=pb, rsb=rsb,
-                       rsmethod=rsmethod, pbmethod=pbmethod)
-        bo_hi = oil_bo(p=p_hi, pb=pb, degf=degf, rs=rs_hi, rsb=rsb, sg_sp=sg_sp,
-                       sg_g=sg_g, sg_o=sg_o, bomethod=bomethod, denomethod=denomethod)
-        bo_lo = oil_bo(p=p_lo, pb=pb, degf=degf, rs=rs_lo, rsb=rsb, sg_sp=sg_sp,
-                       sg_g=sg_g, sg_o=sg_o, bomethod=bomethod, denomethod=denomethod)
-        dBodp = (bo_hi - bo_lo) / span
-        dRsdp = (rs_hi - rs_lo) / span
-
-        # Bg at p (rcf/scf -> rb/scf)
-        bg_at_p = gas.gas_bg(p, sg_sp, degf, zmethod=zmethod, cmethod=cmethod) / CUFTperBBL
-
-        co_sat_val = -1.0 / bo_at_p * dBodp + bg_at_p / bo_at_p * dRsdp
+        co_sat_val = _perrine_co_sat(p, api, degf, sg_sp, sg_g, pb, rsb, zmethod, cmethod,
+                                     rsmethod, pbmethod, bomethod, denomethod)
 
     if metric:
         return [co_usat * INVPSI_TO_INVBAR, co_sat_val * INVPSI_TO_INVBAR]
@@ -1390,6 +1375,7 @@ def oil_deno(
                 err = abs(rho_po - new_rho_po)
                 rho_po = new_rho_po
                 if i > 100:
+                    warnings.warn(f"oil_deno: rho_po iteration did not converge after 100 iterations (err={err:.2e})")
                     break
         else:
             rhoa = 38.52 * (10 ** (-0.00326 * api)) + (
@@ -1439,25 +1425,7 @@ def oil_deno(
             api=api,
         )
 
-        # cofb calculation from default compressibility algorithm Eq 3.13
-        C = [
-            [3.011, -0.0835, 3.51, 0.327, -1.918, 2.52],
-            [-2.6254, -0.259, -0.0289, -0.608, -0.642, -2.73],
-            [0.497, 0.382, -0.0584, 0.0911, 0.154, 0.429],
-        ]
-        var = [
-            np.log(api),
-            np.log(sg_sp),
-            np.log(pb),
-            np.log(p / pb),
-            np.log(rsb),
-            np.log(degf),
-        ]
-        Zn = [sum([C[i][n] * var[n] ** i for i in range(3)]) for n in range(6)]
-        Zp = sum(Zn)
-        ln_cofb_p = 2.434 + 0.475 * Zp + 0.048 * Zp ** 2 - np.log(10 ** 6)
-        cofb_p = np.exp(ln_cofb_p)
-
+        cofb_p = _cofb_mccain(api, sg_sp, pb, p, rsb, degf)
         return rhorb * np.exp(cofb_p * (p - pb))  # Eq 3.20
 
     fn_dic = {
@@ -1479,7 +1447,7 @@ def oil_deno(
             if metric:
                 return result * LBCUFT_TO_KGM3
             return result
-        except Exception:
+        except (ImportError, AttributeError):
             pass
 
     if (
@@ -1600,6 +1568,12 @@ def oil_viso(p: float, api: float, degf: float, pb: float, rs: float, metric: bo
         pb = pb * BAR_TO_PSI
         rs = rs * SM3_PER_SM3_TO_SCF_PER_STB
 
+    # Correlation validity range warnings (non-blocking)
+    if api < 16 or api > 58:
+        warnings.warn(f"Beggs-Robinson viscosity: API={api:.1f} outside calibration range [16, 58]", stacklevel=2)
+    if degf < 70 or degf > 295:
+        warnings.warn(f"Beggs-Robinson viscosity: T={degf:.1f}°F outside calibration range [70, 295]", stacklevel=2)
+
     def uo_br(p, api, degf, pb, rs):
         Z = 3.0324 - 0.02023 * api
         y = 10 ** Z
@@ -1607,12 +1581,14 @@ def oil_viso(p: float, api: float, degf: float, pb: float, rs: float, metric: bo
         A = 10.715 * (rs + 100) ** -0.515
         B = 5.44 * (rs + 150) ** -0.338
 
-        uod = 10 ** X - 1
+        uod = max(10 ** X - 1, 1e-6)  # Guard against negative/zero dead-oil viscosity
         uor = A * uod ** B  # Eq 3.23c
-        return uor
+        return max(uor, 0.01)  # Floor at 0.01 cP
 
     def uo_pf(p, api, degf, pb, rs):
         uob = uo_br(pb, api, degf, pb, rs)
+        if uob <= 0:
+            uob = 0.01  # Safety floor
         loguob = np.log(uob)
         A = (
             -1.0146
@@ -1621,7 +1597,7 @@ def oil_viso(p: float, api: float, degf: float, pb: float, rs: float, metric: bo
             - 1.15036 * loguob ** 3
         )  # Eq 3.24b
         uor = uob + 1.3449e-3 * (p - pb) * 10 ** A  # Eq 3.24a
-        return uor
+        return max(uor, 0.01)  # Floor at 0.01 cP
 
     if p <= pb:
         return uo_br(p, api, degf, pb, rs)
@@ -1837,7 +1813,7 @@ def oil_harmonize(
     # Calculate pb from rsb
     if pb_i <= 0 and rsb_i > 0:
         pb = oil_pbub(
-            degf=degf, api=api, sg_sp=sg_g, rsb=rsb, pbmethod=pbmethod
+            degf=degf, api=api, sg_sp=sg_sp, rsb=rsb, pbmethod=pbmethod
         )
 
     # Both defined by user — find rsb_frac that honors both

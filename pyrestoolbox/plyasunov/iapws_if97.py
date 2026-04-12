@@ -94,6 +94,13 @@ def _gamma_derivatives(pi, tau):
     return gp, gpp
 
 
+def _check_region1(T, P):
+    """Validate that T and P are within IAPWS-IF97 Region 1 bounds."""
+    if T < 273.15 or T > 623.15:
+        raise ValueError(f"Temperature {T} K is outside IAPWS-IF97 Region 1 bounds (273.15-623.15 K)")
+    if P <= 0 or P > 100:
+        raise ValueError(f"Pressure {P} MPa is outside IAPWS-IF97 Region 1 bounds (0-100 MPa)")
+
 def rho_if97(T, P):
     """
     Pure water density from IAPWS-IF97 Region 1.
@@ -105,6 +112,7 @@ def rho_if97(T, P):
     Returns:
         density in kg/m3
     """
+    _check_region1(T, P)
     pi = P / P_STAR
     tau = T_STAR / T
     gp, _ = _gamma_derivatives(pi, tau)
@@ -122,6 +130,7 @@ def kappa_T_if97(T, P):
     Returns:
         kappa_T in 1/MPa
     """
+    _check_region1(T, P)
     pi = P / P_STAR
     tau = T_STAR / T
     gp, gpp = _gamma_derivatives(pi, tau)

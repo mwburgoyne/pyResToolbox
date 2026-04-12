@@ -55,8 +55,8 @@ class z_method(Enum):  # Gas Z-Factor calculation model
     DAK = 0
     HY = 1
     WYW = 2
-    BUR = 3
     BNS = 3
+    BUR = 3  # Legacy alias for BNS
 
 class c_method(Enum):  # Gas critical properties calculation method
     PMC = 0

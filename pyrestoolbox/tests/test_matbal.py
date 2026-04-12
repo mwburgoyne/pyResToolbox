@@ -18,7 +18,7 @@ def test_gas_matbal_basic():
     pi = 5000
     degf = 200
     sg = 0.65
-    zi = gas.gas_z(pi, degf, sg)
+    zi = gas.gas_z(p=pi, sg=sg, degf=degf)
     ogip_true = 100.0  # Bscf
 
     # Generate data points along the P/Z line
