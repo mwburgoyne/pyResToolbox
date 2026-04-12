@@ -230,7 +230,7 @@ class TestNodalVLPEquivalence:
         pvt = OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
         return pvt, comp
 
-    def _compare_fbhp_gas(self, vlpmethod):
+    def _compare_fbhp_gas(self, vlpmethod, rtol=RTOL_LOOSE):
         from pyrestoolbox.nodal import nodal
         pvt, comp = self._gas_completion()
         kwargs = dict(thp=500, gas_pvt=pvt, completion=comp,
@@ -240,11 +240,11 @@ class TestNodalVLPEquivalence:
             result_python = nodal.fbhp(**kwargs)
         np.testing.assert_allclose(
             result_rust, result_python,
-            rtol=RTOL_LOOSE, atol=1.0,
+            rtol=rtol, atol=1.0,
             err_msg=f"VLP {vlpmethod} gas mismatch"
         )
 
-    def _compare_fbhp_oil(self, vlpmethod):
+    def _compare_fbhp_oil(self, vlpmethod, rtol=RTOL_LOOSE):
         from pyrestoolbox.nodal import nodal
         pvt, comp = self._oil_completion()
         kwargs = dict(thp=200, oil_pvt=pvt, completion=comp,
@@ -254,15 +254,18 @@ class TestNodalVLPEquivalence:
             result_python = nodal.fbhp(**kwargs)
         np.testing.assert_allclose(
             result_rust, result_python,
-            rtol=RTOL_LOOSE, atol=1.0,
+            rtol=rtol, atol=1.0,
             err_msg=f"VLP {vlpmethod} oil mismatch"
         )
 
     def test_hb_gas(self):
-        self._compare_fbhp_gas('HB')
+        # HB Python path uses corrected midpoint temperature discretization;
+        # Rust HB still has the legacy scheme, so tolerance is looser.
+        self._compare_fbhp_gas('HB', rtol=5e-3)
 
     def test_hb_oil(self):
-        self._compare_fbhp_oil('HB')
+        # Same HB temperature discretization difference as gas.
+        self._compare_fbhp_oil('HB', rtol=0.05)
 
     def test_wg_gas(self):
         self._compare_fbhp_gas('WG')
