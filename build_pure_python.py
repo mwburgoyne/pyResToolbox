@@ -19,26 +19,34 @@ ROOT = Path(__file__).parent
 
 def main():
     # Write a temporary pyproject.toml for setuptools (pure Python)
-    # Must preserve the [project] section so setup.py can extract the version
+    # Strategy: keep the full [project] section from the real pyproject.toml
+    # (so modern setuptools gets name, version, dependencies, etc.) but swap
+    # [build-system] from maturin to setuptools.
     import re
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
 
-        # Extract version from real pyproject.toml
         real_content = (ROOT / "pyproject.toml").read_text()
-        ver_match = re.search(r'^version\s*=\s*"([^"]+)"', real_content, re.MULTILINE)
-        version = ver_match.group(1) if ver_match else "0.0.0"
 
-        # Copy the pure-Python pyproject.toml (setuptools backend + version)
-        pp_toml = tmp / "pyproject.toml"
-        pp_toml.write_text(
+        # Replace [build-system] section (everything up to next [section] or EOF)
+        pp_content = re.sub(
+            r'^\[build-system\].*?(?=^\[(?!build-system)|\Z)',
             '[build-system]\n'
             'requires = ["setuptools", "wheel"]\n'
-            'build-backend = "setuptools.build_meta"\n'
-            '\n'
-            '[project]\n'
-            f'version = "{version}"\n'
+            'build-backend = "setuptools.build_meta"\n\n',
+            real_content,
+            flags=re.MULTILINE | re.DOTALL,
         )
+        # Remove [tool.maturin] section (not relevant for setuptools)
+        pp_content = re.sub(
+            r'^\[tool\.maturin\].*?(?=^\[(?!tool\.maturin)|\Z)',
+            '',
+            pp_content,
+            flags=re.MULTILINE | re.DOTALL,
+        )
+
+        pp_toml = tmp / "pyproject.toml"
+        pp_toml.write_text(pp_content)
 
         # Build using setup.py + the temporary pyproject.toml
         # We swap pyproject.toml temporarily
