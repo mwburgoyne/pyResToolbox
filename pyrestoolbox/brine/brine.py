@@ -118,15 +118,25 @@ _SG_METHANE = 0.5537
 _SP_K_CO2_LT = [1.189, 1.304e-2, -5.446e-5]
 _SP_K_H2O_LT = [-2.209, 3.097e-2, -1.098e-4, 2.048e-7]
 
-def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0, metric: bool = False) -> Tuple:
+def brine_props(p: float = None, degf: float = None, wt: float = None, ch4_sat: float=0,
+                metric: bool = False, *, pres: float = None, temp: float = None, ppm: float = None) -> Tuple:
     """ Calculates Brine properties from modified Spivey Correlation per McCain Petroleum Reservoir Fluid Properties pg 160
         Returns Tuple of (Bw (rb/stb | rm3/sm3), Density (sg), viscosity (cP), Compressibility (1/psi | 1/bar), Rw GOR (scf/stb | sm3/sm3))
-        p: Pressure (psia | barsa)
-        degf: Temperature (deg F | deg C)
-        wt: Salt wt% (0-100)
+        p: Pressure (psia | barsa). Alias: pres
+        degf: Temperature (deg F | deg C). Alias: temp
+        wt: Salt wt% (0-100). Alias: ppm (auto-converted: wt = ppm / 10000)
         ch4_sat: Degree of methane saturation (0 - 1)
         metric: If True, inputs/outputs in Eclipse METRIC units (barsa, degC, 1/bar, sm3/sm3). Default False (oilfield).
     """
+    # Resolve parameter aliases
+    if p is None and pres is not None:
+        p = pres
+    if degf is None and temp is not None:
+        degf = temp
+    if wt is None:
+        wt = ppm / 10000 if ppm is not None else 0
+    if p is None or degf is None:
+        raise TypeError("brine_props() requires pressure (p or pres) and temperature (degf or temp)")
     if metric:
         p = p * BAR_TO_PSI
         degf = degc_to_degf(degf)
@@ -462,7 +472,17 @@ class CO2_Brine_Mixture():
                 
            
     """
-    def __init__(self, pres, temp, ppm = 0, metric = True, cw_sat = False):
+    def __init__(self, pres=None, temp=None, ppm=None, metric=True, cw_sat=False,
+                 *, p=None, degf=None, wt=None):
+        # Resolve parameter aliases (p/degf/wt -> pres/temp/ppm)
+        if pres is None and p is not None:
+            pres = p
+        if temp is None and degf is not None:
+            temp = degf
+        if ppm is None:
+            ppm = wt * 10000 if wt is not None else 0
+        if pres is None or temp is None:
+            raise TypeError("CO2_Brine_Mixture() requires pressure (pres or p) and temperature (temp or degf)")
         # Validate pressure and temperature (convert to oilfield units for validation)
         _p_val = pres if not metric else pres * BAR2PSI
         _t_val = temp if not metric else temp * 1.8 + 32
@@ -1456,8 +1476,17 @@ class SoreideWhitson:
             Murphy, W.R. and Gaines, T.M. (1974), J. Chem. Eng. Data 19(4), 359-362.
     """
 
-    def __init__(self, pres, temp, ppm=0, y_CO2=0, y_H2S=0, y_N2=0, y_H2=0,
-                 sg=0.65, metric=True, cw_sat=False):
+    def __init__(self, pres=None, temp=None, ppm=None, y_CO2=0, y_H2S=0, y_N2=0, y_H2=0,
+                 sg=0.65, metric=True, cw_sat=False, *, p=None, degf=None, wt=None):
+        # Resolve parameter aliases (p/degf/wt -> pres/temp/ppm)
+        if pres is None and p is not None:
+            pres = p
+        if temp is None and degf is not None:
+            temp = degf
+        if ppm is None:
+            ppm = wt * 10000 if wt is not None else 0
+        if pres is None or temp is None:
+            raise TypeError("SoreideWhitson() requires pressure (pres or p) and temperature (temp or degf)")
         if ppm < 0:
             raise ValueError(f"ppm must be non-negative, got {ppm}")
         if ppm >= 1e6:

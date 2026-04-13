@@ -28,6 +28,7 @@ References:
     Fluid Phase Equilibria, 530, 112883.
 """
 
+import functools
 import numpy as np
 from .water_properties import rho_w, kappa_T, TC_WATER, MW_WATER
 
@@ -314,6 +315,10 @@ def V2_inf(gas, T, P):
 
     V2_inf = A12_inf * kappa_T * R * T
 
+    Results are cached (LRU, 256 entries) since the same (gas, T, P)
+    combinations recur within a single SoreideWhitson evaluation
+    (main pressure + P+1 for compressibility).
+
     Parameters:
         gas: gas name string (case-insensitive)
         T: temperature in K
@@ -322,9 +327,15 @@ def V2_inf(gas, T, P):
     Returns:
         V2_inf in cm3/mol
     """
+    return _V2_inf_cached(gas.upper(), T, P)
+
+
+@functools.lru_cache(maxsize=256)
+def _V2_inf_cached(gas_upper, T, P):
+    """Cached implementation of V2_inf (gas name must be pre-normalized to upper)."""
     rho = rho_w(T, P)
     kt = kappa_T(T, P)
-    a12 = A12_inf(gas, T, rho)
+    a12 = A12_inf(gas_upper, T, rho)
     return a12 * kt * R_CM3_MPA * T
 
 

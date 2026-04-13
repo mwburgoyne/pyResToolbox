@@ -142,8 +142,10 @@ pub fn flash_tp(
     k_vals[iw] = k_vals[iw].min(0.01);
 
     let mut converged = false;
+    let mut damp: f64 = 0.5;
+    let mut prev_err: f64 = f64::INFINITY;
 
-    for it in 0..max_iter {
+    for _it in 0..max_iter {
         // Robust RR solver (Nielsen & Lia 2022)
         let (_v, mut x, mut y) = solve_rachford_rice(&z_norm, &k_vals);
 
@@ -163,20 +165,26 @@ pub fn flash_tp(
         }
 
         // Check convergence
-        let max_rel_change = k_vals
+        let err = k_vals
             .iter()
             .zip(k_new.iter())
             .map(|(&ko, &kn)| (kn / ko - 1.0).abs())
             .fold(0.0_f64, f64::max);
 
-        if max_rel_change < tol {
+        if err < tol {
             converged = true;
             k_vals = k_new;
             break;
         }
 
-        // Damped successive substitution
-        let damp = if it < 20 { 0.7 } else { 0.9 };
+        // Adaptive damping: accelerate when converging, brake when stalling
+        if err < prev_err {
+            damp = (damp * 1.1).min(0.95);
+        } else {
+            damp = (damp * 0.5).max(0.1);
+        }
+        prev_err = err;
+
         for i in 0..nc {
             k_vals[i] *= (k_new[i] / k_vals[i]).powf(damp);
         }
