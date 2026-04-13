@@ -1596,6 +1596,8 @@ class SWBinaryVLE:
         x = np.array([0.999, 0.001])
         y = np.array([0.02, 0.98])
 
+        damp = 0.3
+        prev_error = np.inf
         for iteration in range(max_iter):
             x = np.clip(x, 1e-14, 1.0 - 1e-14)
             x = x / np.sum(x)
@@ -1612,7 +1614,13 @@ class SWBinaryVLE:
             if error < 1e-10:
                 return y[0]
 
-            damp = 0.4
+            # Adaptive damping
+            if error < prev_error:
+                damp = min(damp * 1.15, 0.8)
+            else:
+                damp = max(damp * 0.5, 0.1)
+            prev_error = error
+
             y = y + damp * (y_new - y)
             y = y / np.sum(y)
 
@@ -1901,7 +1909,20 @@ class SWMultiComponentFlash:
         return ai, bi
 
     def build_kij_matrix(self, T_K: float, mode: str = 'AQ') -> np.ndarray:
-        """Build N×N kij matrix. mode='AQ' or 'NA' for gas-water pairs."""
+        """Build N×N kij matrix. mode='AQ' or 'NA' for gas-water pairs.
+
+        Results are cached per (T_K, mode) since the matrix only depends on
+        temperature, mode, and instance-level constants (salinity, framework,
+        component list) that don't change between calls.
+        """
+        cache_key = (T_K, mode)
+        if hasattr(self, '_kij_cache'):
+            cached = self._kij_cache.get(cache_key)
+            if cached is not None:
+                return cached.copy()
+        else:
+            self._kij_cache = {}
+
         kij = np.zeros((self.nc, self.nc))
         for i in range(self.nc):
             for j in range(i + 1, self.nc):
@@ -1917,6 +1938,8 @@ class SWMultiComponentFlash:
                     val = get_gas_gas_bip(ni, nj)
                 kij[i, j] = val
                 kij[j, i] = val
+
+        self._kij_cache[cache_key] = kij.copy()
         return kij
 
     def calc_fugacity_coefficients(self, T_K: float, P_Pa: float, comp: np.ndarray,
@@ -2113,6 +2136,8 @@ class SWMultiComponentFlash:
         K[self.iw] = min(K[self.iw], 0.01)
 
         converged = False
+        damp = 0.5
+        prev_err = np.inf
         for it in range(max_iter):
             # Robust RR solver (Nielsen & Lia 2022)
             V, x, y = solve_rachford_rice(z, K)
@@ -2127,12 +2152,19 @@ class SWMultiComponentFlash:
             # Gamma-phi K-value: K_i = γ_i × φ_i^L / φ_i^V
             K_new = np.clip(gamma_eff * phi_L / (phi_V + 1e-30), 1e-10, 1e10)
 
-            if np.max(np.abs(K_new / K - 1.0)) < tol:
+            err = np.max(np.abs(K_new / K - 1.0))
+            if err < tol:
                 converged = True
                 K = K_new
                 break
 
-            damp = 0.7 if it < 20 else 0.9
+            # Adaptive damping: accelerate when converging, brake when stalling
+            if err < prev_err:
+                damp = min(damp * 1.1, 0.95)
+            else:
+                damp = max(damp * 0.5, 0.1)
+            prev_err = err
+
             K = K * (K_new / K)**damp
 
         # Final compositions with converged K
