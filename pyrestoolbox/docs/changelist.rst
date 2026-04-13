@@ -1,3 +1,18 @@
+Changelist in 3.1.4:
+
+- **Tier 4 brine improvements**: Adaptive VLE damping in ``flash_tp`` and ``calc_water_content_with_kij`` (replaces fixed 0.7/0.9 factors), ``V2_inf`` cached via ``functools.lru_cache(256)`` in Plyasunov model, ``build_kij_matrix`` cached per ``(T_K, mode)`` on VLE engine instance. Rust VLE flash updated with matching adaptive damping. All three brine models (``CH4_Brine``, ``CO2_Brine_Mixture``, ``SoreideWhitson``) now accept ``p``/``degf``/``wt`` and ``pres``/``temp``/``ppm`` parameter aliases.
+- **Oil module split**: Monolithic ``oil.py`` (2100 lines) split into 10 sub-files: ``_constants``, ``_utils``, ``_correlations``, ``_density``, ``_compressibility``, ``_rate``, ``_separator``, ``_harmonize``, ``_tables``, ``_pvt_class``. All public API preserved via ``oil/__init__.py`` re-exports.
+- **Named constants**: ~100 correlation coefficient groups extracted to module-level named constants with paper citations across gas, oil, nodal, and brine modules. Replaces ~290 inline magic numbers.
+- **VLP scaffold deduplication**: Extracted shared ``_segment_march()`` from 4 gas VLP methods, reducing ~450 lines of duplicate segment-loop boilerplate. Each method now provides a gradient callback only.
+- **``@rust_accelerated`` decorator**: New decorator in ``_accelerator.py`` for simple Python/Rust dispatch. Applied to 8 nodal VLP functions where signatures match directly.
+- **OilPVT array support**: ``rs()``, ``bo()``, ``density()``, and ``viscosity()`` methods on ``OilPVT`` now accept scalar, list, or numpy array pressure inputs and return matching output shapes.
+- **Correlation validity warnings**: Optional warnings for out-of-range inputs on DAK/HY/WYW Z-factor (Tr/Ppr bounds), Standing/VALMC bubble point (API/T ranges), and Beggs-Robinson viscosity (API/T/Rs ranges).
+- **``validate_pe_inputs``**: Extended to all oil public functions, gas rate/hydrate, brine init, and nodal ``fbhp()``.
+- **Enum aliasing fix**: ``z_method.BNS`` is now canonical (value 3), ``z_method.BUR`` is alias. ``@unique`` decorator applied. Dispatch dicts updated.
+- **Error-case tests**: 61 new ``pytest.raises`` tests across all modules covering invalid inputs, out-of-range parameters, and edge cases.
+- **Rust Hagedorn-Brown fix**: Fixed temperature discretization and low-rate threshold in Rust HB VLP implementation.
+- 691 validation tests (up from 630 in 3.1.3).
+
 Changelist in 3.1.3:
 
 - **Z-factor Z*=Z-B reformulation**: BNS Peng-Robinson cubic solver now uses Aaron Zick's Z* = Z - B variable substitution, which bounds all physical roots to (0, 1] and guarantees Halley solver convergence. Eliminates rare failures at extreme pressures. Falls back to Cardano analytically if needed.
