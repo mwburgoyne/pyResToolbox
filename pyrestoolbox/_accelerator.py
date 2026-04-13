@@ -156,13 +156,23 @@ else:
 
 
 def get_status():
-    return {
+    status = {
         "rust_available": RUST_AVAILABLE,
         "failure_reason": _failure_reason if not RUST_AVAILABLE else "",
         "forced_python": _force_python,
         "sentinel_path": str(_sentinel_path()),
         "sentinel_exists": _sentinel_path().exists(),
     }
+    if RUST_AVAILABLE:
+        status["rust_version"] = get_rust_version()
+    return status
+
+
+def get_rust_version():
+    """Return Rust extension version string, or None if unavailable."""
+    if not RUST_AVAILABLE or _rust_module is None:
+        return None
+    return getattr(_rust_module, '__version__', getattr(_rust_module, 'version', None))
 
 
 def clear_block():
@@ -172,3 +182,35 @@ def clear_block():
         "note": "Restart Python process to retry Rust extension loading",
         **get_status(),
     }
+
+
+def rust_accelerated(rust_fn_name):
+    """Decorator that dispatches to a Rust implementation when available.
+
+    The decorated function is the pure-Python fallback. When Rust is available,
+    the decorator calls ``_rust_module.<rust_fn_name>`` with the same positional
+    and keyword arguments. On ImportError or AttributeError (missing function),
+    it falls back to the Python implementation transparently.
+
+    Usage::
+
+        @rust_accelerated('hb_fbhp_gas_rust')
+        def _hb_fbhp_gas(thp, api, gsg, ...):
+            return _segment_march_gas(...)  # pure-Python path
+    """
+    import functools
+
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            if RUST_AVAILABLE:
+                try:
+                    rust_fn = getattr(_rust_module, rust_fn_name)
+                    return rust_fn(*args, **kwargs)
+                except (ImportError, AttributeError):
+                    pass
+            return fn(*args, **kwargs)
+        wrapper._rust_fn_name = rust_fn_name
+        wrapper._python_fn = fn
+        return wrapper
+    return decorator

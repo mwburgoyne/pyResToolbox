@@ -98,7 +98,7 @@ class TestGasErrors:
 
 class TestOilErrors:
     def test_oil_rate_radial_missing_pvt(self):
-        from pyrestoolbox.oil import oil
+        from pyrestoolbox import oil
         with pytest.raises(ValueError):
             oil.oil_rate_radial(
                 k=50, h=30, pr=4000, pwf=2000,
@@ -106,7 +106,7 @@ class TestOilErrors:
             )
 
     def test_oil_rate_radial_bad_rw(self):
-        from pyrestoolbox.oil import oil
+        from pyrestoolbox import oil
         with pytest.raises(ValueError, match="r_w"):
             oil.oil_rate_radial(
                 k=50, h=30, pr=4000, pwf=2000,
@@ -115,12 +115,12 @@ class TestOilErrors:
 
     def test_oil_harmonize_no_sg(self):
         """oil_harmonize requires at least one of sg_g or sg_sp."""
-        from pyrestoolbox.oil import oil
+        from pyrestoolbox import oil
         with pytest.raises(ValueError, match="sg_g.*sg_sp|sg_sp.*sg_g"):
             oil.oil_harmonize(api=35, degf=180, pb=2500, sg_g=0, sg_sp=0)
 
     def test_oil_rate_linear_bad_length(self):
-        from pyrestoolbox.oil import oil
+        from pyrestoolbox import oil
         with pytest.raises(ValueError, match="[Ll]ength"):
             oil.oil_rate_linear(
                 k=50, pr=4000, pwf=2000,
@@ -409,12 +409,12 @@ class TestRangeWarnings:
             gas.gas_z(p=2000, sg=0.7, degf=800, zmethod='HY')
 
     def test_standing_pb_api_out_of_range(self):
-        from pyrestoolbox.oil import oil
+        from pyrestoolbox import oil
         with pytest.warns(UserWarning, match="Standing.*API.*outside"):
             oil.oil_pbub(api=5, degf=180, rsb=500, sg_g=0.8, pbmethod='STAN')
 
     def test_beggs_robinson_temp_out_of_range(self):
-        from pyrestoolbox.oil import oil
+        from pyrestoolbox import oil
         with pytest.warns(UserWarning, match="Beggs-Robinson.*outside"):
             oil.oil_viso(p=2000, api=35, degf=400, pb=2500, rs=500)
 

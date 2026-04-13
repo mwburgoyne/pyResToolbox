@@ -82,6 +82,93 @@ from pyrestoolbox.constants import (R, psc, tsc, degF2R, tscr, scf_per_mol, CUFT
 _GL7_NODES, _GL7_WEIGHTS = np.polynomial.legendre.leggauss(7)
 _GL10_NODES, _GL10_WEIGHTS = np.polynomial.legendre.leggauss(10)
 
+# =============================================================================
+# Correlation coefficients — named constants with paper citations
+# =============================================================================
+
+# --- Piper, McCain & Corredor (1999) ---
+# Eqs 2.4-2.6, 'Petroleum Reservoir Fluid Property Correlations', McCain et al.
+_PMC_ALPHA = np.array([0.11582, -0.4582, -0.90348, -0.66026, 0.70729, -0.099397])
+_PMC_BETA = np.array([3.8216, -0.06534, -0.42113, -0.91249, 17.438, -3.2191])
+_PMC_TCI = np.array([0, 672.35, 547.58, 239.26])   # H2S, CO2, N2 critical T (deg R)
+_PMC_PCI = np.array([0, 1306.0, 1071.0, 507.5])    # H2S, CO2, N2 critical P (psia)
+
+# --- Sutton (1985) with Wichert & Aziz (1972) corrections ---
+# Eqs 3.47a-b, 3.52-3.54, McCain et al.
+_SUT_TPC = (169.2, 349.5, -74.0)           # Tpc = a + b*sg + c*sg^2 (deg R)
+_SUT_PPC = (756.8, -131.0, -3.6)           # Ppc = a + b*sg + c*sg^2 (psia)
+_SUT_WA = (120.0, 0.9, 1.6, 15.0, 0.5, 4.0)  # Wichert-Aziz epsilon coefficients
+# Component critical properties for SUT/PMC mixing (N2, CO2, H2S) — deg R and psia
+_IMPUR_TC = (239.26, 547.58, 672.35)       # N2, CO2, H2S critical T (deg R)
+_IMPUR_PC = (507.5, 1071.0, 1306.0)        # N2, CO2, H2S critical P (psia)
+
+# --- BNS pseudo-critical fits (Burgoyne, 2025) ---
+_BNS_TC_AG = (2695.14765, 274.341701, 343.008)   # Associated gas Tc Michaelis-Menten
+_BNS_TC_GC = (1098.10948, 101.529237, 343.008)   # Gas condensate Tc Michaelis-Menten
+_BNS_VC_INTERCEPT = 5.518525872412144             # Vc/Zc intercept for pc_fn
+_BNS_VC_SLOPE_AG = 0.177497835                    # Associated gas Vc slope
+_BNS_VC_SLOPE_GC = 0.170931432                    # Gas condensate Vc slope
+_BNS_CH4_MW = 16.0425                             # Methane MW for BNS fits
+_BNS_SG_METHANE = 0.553779772                     # Methane SG lower bound
+_BNS_VCVIS_HC = (0.0576710, 1.44383)              # HC Vc linear fit: slope, intercept
+
+# --- Dranchuk & Abou-Kassem (1975) ---
+# Eqs 2.7-2.8, 'Petroleum Reservoir Fluid Property Correlations', McCain et al.
+_DAK_A = (0.3265, -1.0700, -0.5339, 0.01569, -0.05165,
+          0.5475, -0.7361, 0.1844, 0.1056, 0.6134, 0.7210)
+_DAK_LEADING = 0.27  # Leading coefficient in DAK reduced density equation
+
+# --- Hall & Yarborough (1973) ---
+_HY_COEFFS = (0.06125, -1.2, 14.76, -9.76, 4.58, 90.7, -242.2, 42.4, 2.18, 2.82)
+
+# --- Wang, Ye & Wu (2021) ---
+# doi:10.1016/j.egyr.2021.11.029
+_WYW_A = np.array([0, 256.41675, 7.18202, -178.5725, 182.98704, -40.74427,
+                    2.24427, 47.44825, 5.2852, -0.14914, 271.50446, 16.2694,
+                    -121.51728, 167.71477, -81.73093, 20.36191, -2.1177,
+                    124.64444, -6.74331, 0.20897, -0.00314])
+
+# --- Lee, Gonzalez & Eakin (1966) ---
+# Eqs 2.14-2.17, 'Petroleum Reservoir Fluid Property Correlations', McCain et al.
+_LGE = (3.448, 986.4, 0.01009,    # b coefficients (Eq 2.16)
+        2.447, 0.2224,              # c coefficients (Eq 2.17)
+        9.379, 0.01607, 209.2, 19.26,  # a coefficients (Eq 2.15)
+        0.0001)                     # output scale factor (Eq 2.14)
+
+# --- Stiel-Thodos dilute gas viscosity ---
+_ST_LOW = (34e-5, 0.94)              # Low-Tr: coeff, exponent
+_ST_HIGH = (17.78e-5, 4.58, -1.67)   # High-Tr: coeff, slope, intercept
+_ST_TR_THRESH = 1.5                   # Tr threshold between low/high
+
+# --- Lohrenz-Bray-Clark (LBC) residual viscosity ---
+_LBC_POLY = np.array([0.1023, 0.023364, 0.058533, -0.0392852, 0.00926279])
+_LBC_OFFSET = 1e-4
+
+# --- Darcy gas flow equation ---
+_DARCY_GAS_CONST = 1422  # Field-unit conversion factor for gas pseudopressure flow
+
+# --- Danesh water content correlation ---
+# 'PVT and Phase Behaviour Of Petroleum Reservoir Fluids', Danesh
+_DANESH_WC = (47484.0, 69.103501, -13064.76, -7.3037, 0.0000012856,  # vapour pressure term
+              -3083.87, 6.69449,                                        # empirical second term
+              0.00492, 0.00017672,                                      # salinity correction
+              8.32, 42.0)                                               # unit conversion: lb/gal, gal/bbl
+
+# --- Standing condensate MW correlation ---
+_STANDING_COND_MW = (240.0, 2.22)  # MW = a - b * API
+
+# --- Motiee (1991) hydrate formation temperature ---
+# Hydrocarbon Processing 70, pp 98-99
+_MOTIEE = (-283.24469, 78.99667, -5.352544, 349.473877, -150.854675, -27.604065)
+
+# --- Towler & Mokhatab (2005) hydrate formation temperature ---
+# Hydrocarbon Processing 84, pp 61-62
+_TOWLER = (13.47, 34.27, -1.675, -20.35)
+
+# --- Hydrate formation pressure search bounds ---
+_HFP_P_LO = 14.696   # ~1 atm (psia)
+_HFP_P_HI = 15000.0   # Upper search bound (psia)
+
 def _h2_method_override(h2, zmethod, cmethod):
     """Force BNS method when hydrogen is present."""
     if h2 > 0:
@@ -227,6 +314,8 @@ def gas_rate_radial(
         raise ValueError("External radius r_ext must be greater than wellbore radius r_w")
 
     k, h, pr, pwf = np.asarray(k), np.asarray(h), np.asarray(pr), np.asarray(pwf)
+    validate_pe_inputs(p=pr)
+    validate_pe_inputs(p=pwf)
     if gas_pvt is None:
         zmethod, cmethod, tc, pc = _prepare_gas_rate_inputs(degf, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, pc)
     direction, delta_mp = _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s)
@@ -304,6 +393,8 @@ def gas_rate_linear(
         raise ValueError("Flow length must be positive")
 
     k, area, pr, pwf = np.asarray(k), np.asarray(area), np.asarray(pr), np.asarray(pwf)
+    validate_pe_inputs(p=pr)
+    validate_pe_inputs(p=pwf)
     if gas_pvt is None:
         zmethod, cmethod, tc, pc = _prepare_gas_rate_inputs(degf, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, pc)
     direction, delta_mp = _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s)
@@ -326,16 +417,17 @@ def darcy_gas(
     radial: bool,
 ) -> np.ndarray:
     # Returns mscf/day gas rate. k (mD), h (ft), t (deg F), l1 (r_w or width)/l2 (re or length) (ft), S(Skin), D(Day/mscf)
+    validate_pe_inputs(degf=degf)
     tr = degf + degF2R
     if radial:
         a = k * h * delta_mp
-        b = 1422 * tr
+        b = _DARCY_GAS_CONST * tr
         c = np.log(l2 / l1) - 0.75 + S
         if D > 1e-9:  # Solve analytically for rate with non-Darcy factor by rearranging into root of a quadratic equation.
             return (np.sqrt(4 * a * b * D + (b * b * c * c)) - (b * c)) / (2 * b * D)
     else:
         a = k * h * l1 * delta_mp
-        b = 1422 * tr
+        b = _DARCY_GAS_CONST * tr
         c = l2
     # Else, ignore non-Darcy skin
     return a / (b * c)
@@ -382,14 +474,10 @@ def gas_tc_pc(
 
     if cmethod.name == "PMC":  # Piper, McCain & Corredor (1999)
         y = np.array([0, h2s, co2, n2])
-        alpha = np.array(
-            [0.11582, -0.4582, -0.90348, -0.66026, 0.70729, -0.099397]
-        )
-        beta = np.array(
-            [3.8216, -0.06534, -0.42113, -0.91249, 17.438, -3.2191]
-        )
-        tci = np.array([0, 672.35, 547.58, 239.26])
-        pci = np.array([0, 1306.0, 1071.0, 507.5])
+        alpha = _PMC_ALPHA
+        beta = _PMC_BETA
+        tci = _PMC_TCI
+        pci = _PMC_PCI
         j = alpha[0] + (alpha[4] * sg) + (alpha[5] * sg * sg)  # 2.5
         k = beta[0] + (beta[4] * sg) + (beta[5] * sg * sg)  # 2.6
         jt = j
@@ -410,24 +498,24 @@ def gas_tc_pc(
         if hc_frac <= 1e-6:
             raise ValueError("SUT method requires hydrocarbon fraction > 0 (n2 + co2 + h2s must be < 1.0)")
         sg_hc = (sg - (n2 * 28.01 + co2 * 44.01 + h2s * 34.1) / MW_AIR) / hc_frac  # Eq 3.53
-        ppc_hc = 756.8 - 131.0 * sg_hc - 3.6 * sg_hc ** 2  # Eq 3.47b
-        tpc_hc = 169.2 + 349.5 * sg_hc - 74.0 * sg_hc ** 2  # Eq 3.47a
+        ppc_hc = _SUT_PPC[0] + _SUT_PPC[1] * sg_hc + _SUT_PPC[2] * sg_hc ** 2  # Eq 3.47b
+        tpc_hc = _SUT_TPC[0] + _SUT_TPC[1] * sg_hc + _SUT_TPC[2] * sg_hc ** 2  # Eq 3.47a
 
         # Wichert & Aziz non-hydrocarbon corrections from monograph
-        eps = 120 * ((co2 + h2s) ** 0.9 - (co2 + h2s) ** 1.6) + 15 * (
-            h2s ** 0.5 - h2s ** 4
+        eps = _SUT_WA[0] * ((co2 + h2s) ** _SUT_WA[1] - (co2 + h2s) ** _SUT_WA[2]) + _SUT_WA[3] * (
+            h2s ** _SUT_WA[4] - h2s ** _SUT_WA[5]
         )  # Eq 3.52c
         ppc_star = (
             (1 - n2 - co2 - h2s) * ppc_hc
-            + n2 * 507.5
-            + co2 * 1071.0
-            + h2s * 1306.0
+            + n2 * _IMPUR_PC[0]
+            + co2 * _IMPUR_PC[1]
+            + h2s * _IMPUR_PC[2]
         )  # Eq 3.54a
         tpc_star = (
             (1 - n2 - co2 - h2s) * tpc_hc
-            + n2 * 239.26
-            + co2 * 547.58
-            + h2s * 672.35
+            + n2 * _IMPUR_TC[0]
+            + co2 * _IMPUR_TC[1]
+            + h2s * _IMPUR_TC[2]
         )  # Eq 3.54b
         tpc = tpc_star - eps  # Eq 3.52a
         ppc = (
@@ -437,15 +525,15 @@ def gas_tc_pc(
 
     elif cmethod.name in ("BUR", "BNS"):
         def tc_ag(x):
-            a, b, c = 2695.14765, 274.341701, 343.008
+            a, b, c = _BNS_TC_AG
             return a * x / (b + x) + c
         
         def tc_gc(x):
-            a, b, c = 1098.10948, 101.529237, 343.008
+            a, b, c = _BNS_TC_GC
             return a * x / (b + x) + c
         
         def pc_fn(x, vc_slope, tc_p):
-            vc_on_zc = vc_slope * x + 5.518525872412144
+            vc_on_zc = vc_slope * x + _BNS_VC_INTERCEPT
             return R * tc_p / vc_on_zc
         
         def pseudo_critical(sg_hc, AG = False):
@@ -454,13 +542,13 @@ def gas_tc_pc(
             - Uses custom linear fits for gas condensates (AG = False) and associated gas (AG = True) (Burgoyne, 2025).
             - These relations are derived from property fitting and may differ from literature.
             """
-            x = max(0, MW_AIR * sg_hc - 16.0425)
+            x = max(0, MW_AIR * sg_hc - _BNS_CH4_MW)
             if AG:
                 tpc_hc = tc_ag(x)
-                vc_slope = 0.177497835
+                vc_slope = _BNS_VC_SLOPE_AG
             else:
                 tpc_hc = tc_gc(x)
-                vc_slope = 0.170931432
+                vc_slope = _BNS_VC_SLOPE_GC
             ppc_hc = pc_fn(x, vc_slope, tpc_hc)
             return tpc_hc, ppc_hc   
             
@@ -468,7 +556,7 @@ def gas_tc_pc(
             hydrocarbon_specific_gravity = (sg - (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2) / MW_AIR) / (1 - co2 - h2s - n2 - h2)
         else:
             hydrocarbon_specific_gravity = 0.75 # Use default value if 100% inerts to avoid numerical problems
-        hydrocarbon_specific_gravity = np.max([0.553779772, hydrocarbon_specific_gravity])  # Methane is lower limit
+        hydrocarbon_specific_gravity = np.max([_BNS_SG_METHANE, hydrocarbon_specific_gravity])  # Methane is lower limit
         tpc, ppc = pseudo_critical(hydrocarbon_specific_gravity)
 
     else:
@@ -690,16 +778,15 @@ def gas_z(
     def zdak(pprs, tr):
         # DAK from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
         # Vectorized Newton-Raphson on reduced density rhor
-        A1, A2, A3, A4, A5 = 0.3265, -1.0700, -0.5339, 0.01569, -0.05165
-        A6, A7, A8, A9, A10, A11 = 0.5475, -0.7361, 0.1844, 0.1056, 0.6134, 0.7210
+        A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11 = _DAK_A
 
         R1 = A1 + A2 / tr + A3 / tr**3 + A4 / tr**4 + A5 / tr**5
-        R2 = 0.27 * pprs / tr  # Array
+        R2 = _DAK_LEADING * pprs / tr  # Array
         R3 = A6 + A7 / tr + A8 / tr**2
         R4 = A9 * (A7 / tr + A8 / tr**2)
         R5 = A10 / tr**3
 
-        rhor = 0.27 * pprs / tr  # Initial guess (array)
+        rhor = _DAK_LEADING * pprs / tr  # Initial guess (array)
         rhor = np.maximum(rhor, 1e-10)
 
         for _ in range(100):
@@ -723,7 +810,7 @@ def gas_z(
                 break
             rhor = rhor_new
 
-        zout = 0.27 * pprs / (rhor * tr)
+        zout = _DAK_LEADING * pprs / (rhor * tr)
         return process_output(zout, is_list)
 
     # Hall & Yarborough — Vectorized Newton-Raphson
@@ -731,10 +818,11 @@ def gas_z(
 
         tpr_inv = 1/tr  # Reciprocal reduced temperature
         t2 = tpr_inv ** 2
-        a = 0.06125 * tpr_inv * np.exp(-1.2 * (1 - tpr_inv) ** 2)
-        b = tpr_inv * (14.76 - 9.76 * tpr_inv + 4.58 * t2)
-        c = tpr_inv * (90.7 - 242.2 * tpr_inv + 42.4 * t2)
-        D = 2.18 + 2.82 * tpr_inv
+        _a0, _a1, _b0, _b1, _b2, _c0, _c1, _c2, _d0, _d1 = _HY_COEFFS
+        a = _a0 * tpr_inv * np.exp(_a1 * (1 - tpr_inv) ** 2)
+        b = tpr_inv * (_b0 + _b1 * tpr_inv + _b2 * t2)
+        c = tpr_inv * (_c0 + _c1 * tpr_inv + _c2 * t2)
+        D = _d0 + _d1 * tpr_inv
 
         # Initial guess from WYW
         z_init = z_wyw(pprs, tr)
@@ -767,7 +855,7 @@ def gas_z(
     # "An accurate correlation for calculating natural gas compressibility factors under a wide range of pressure conditions"
     # https://doi.org/10.1016/j.egyr.2021.11.029
     def z_wyw(pprs, tr):
-        a = [0, 256.41675, 7.18202, -178.5725, 182.98704, -40.74427, 2.24427, 47.44825, 5.2852, -0.14914, 271.50446, 16.2694, -121.51728, 167.71477, -81.73093, 20.36191, -2.1177, 124.64444, -6.74331, 0.20897, -0.00314]
+        a = _WYW_A
         numerators = a[1] + a[2] * (1 + a[3] * tr + a[4] * tr ** 2 + a[5] * tr ** 3 + a[6] * tr ** 4) * pprs + a[7] * pprs ** 2 + a[8] * pprs ** 3 + a[9] * pprs ** 4
         denominators = a[10] + a[11] * (1 + a[12] * tr + a[13] * tr ** 2 + a[14] * tr ** 3 + a[15] * tr ** 4 + a[16] * tr ** 5) * pprs + a[17] * pprs ** 2 + a[18] * pprs ** 3 + a[19] * pprs ** 4 + a[20] * pprs ** 5
         zout = numerators/denominators
@@ -959,7 +1047,7 @@ def gas_ug(
     if not zee_provided or not check_2_inputs(zee, p): # Need to calculate Z-Factors if not same length / type as p
          zee = gas_z(p, sg, degf, zmethod, cmethod, co2, h2s, n2, h2, tc, pc)
     
-    rho = m * p / (t * zee * R * 62.37)
+    rho = m * p / (t * zee * R * WDEN)
 
     # Rust-accelerated viscosity (batch — single FFI call for all pressures)
     if RUST_AVAILABLE:
@@ -979,10 +1067,10 @@ def gas_ug(
             return process_output(ug, is_list)
 
     if zmethod.name not in ('BNS', 'BUR'):
-        b = 3.448 + (986.4 / t) + (0.01009 * m)  # 2.16
-        c = 2.447 - (0.2224 * b)  # 2.17
-        a = ((9.379 + (0.01607 * m)) * np.power(t, 1.5) / (209.2 + (19.26 * m) + t))  # 2.15
-        ug = process_output(a * 0.0001 * np.exp(b * np.power(rho, c)), is_list)  # 2.14
+        b = _LGE[0] + (_LGE[1] / t) + (_LGE[2] * m)  # 2.16
+        c = _LGE[3] - (_LGE[4] * b)  # 2.17
+        a = ((_LGE[5] + (_LGE[6] * m)) * np.power(t, 1.5) / (_LGE[7] + (_LGE[8] * m) + t))  # 2.15
+        ug = process_output(a * _LGE[9] * np.exp(b * np.power(rho, c)), is_list)  # 2.14
     else:
         # Vectorized LBC viscosity for BNS method
         # From https://wiki.whitson.com/bopvt/visc_correlations/
@@ -998,28 +1086,28 @@ def gas_ug(
         else:
             sg_hc = 0.75
 
-        sg_hc = max(sg_hc, 0.553779772)
+        sg_hc = max(sg_hc, _BNS_SG_METHANE)
         hc_gas_mw = sg_hc * MW_AIR
 
         mws_lbc[-1] = hc_gas_mw
         tcs_lbc[-1], pcs_lbc[-1] = gas_tc_pc(hc_gas_mw / MW_AIR, cmethod='BNS')
-        VCVIS_lbc[-1] = 0.0576710 * (hc_gas_mw - 16.0425) + 1.44383
+        VCVIS_lbc[-1] = _BNS_VCVIS_HC[0] * (hc_gas_mw - _BNS_CH4_MW) + _BNS_VCVIS_HC[1]
 
         # Vectorized Stiel-Thodos
         Tr = degR / tcs_lbc
         Tc_K = tcs_lbc * 5.0 / 9.0
-        Pc_atm = pcs_lbc / 14.696
+        Pc_atm = pcs_lbc / psc
         eta_st = Tc_K**(1.0/6.0) / (mws_lbc**0.5 * Pc_atm**(2.0/3.0))
-        ui_low = 34e-5 * Tr**0.94 / eta_st
-        ui_high = 17.78e-5 * np.maximum(4.58 * Tr - 1.67, 1e-30)**(5.0/8.0) / eta_st
-        ui = np.where(Tr <= 1.5, ui_low, ui_high)
+        ui_low = _ST_LOW[0] * Tr**_ST_LOW[1] / eta_st
+        ui_high = _ST_HIGH[0] * np.maximum(_ST_HIGH[1] * Tr + _ST_HIGH[2], 1e-30)**(5.0/8.0) / eta_st
+        ui = np.where(Tr <= _ST_TR_THRESH, ui_low, ui_high)
 
         # Herning-Zippener dilute gas mixture viscosity
         sqrt_mws = np.sqrt(mws_lbc)
         u0_val = np.sum(zi * ui * sqrt_mws) / np.sum(zi * sqrt_mws)
 
         # LBC mixture parameters
-        a_lbc = np.array([0.1023, 0.023364, 0.058533, -0.0392852, 0.00926279])
+        a_lbc = _LBC_POLY
         rhoc = 1.0 / np.sum(VCVIS_lbc * zi)
         eta_mix = np.abs(np.sum(zi * Tc_K))**(1.0/6.0) / (np.abs(np.sum(zi * mws_lbc))**0.5 * np.abs(np.sum(zi * Pc_atm))**(2.0/3.0))
 
@@ -1027,7 +1115,7 @@ def gas_ug(
         zee_arr, _ = convert_to_numpy(zee)
         rhor = p / (zee_arr * R * degR * rhoc)
         lhs = a_lbc[0] + rhor * (a_lbc[1] + rhor * (a_lbc[2] + rhor * (a_lbc[3] + rhor * a_lbc[4])))
-        ug = process_output((lhs**4 - 1e-4) / eta_mix + u0_val, is_list)
+        ug = process_output((lhs**4 - _LBC_OFFSET) / eta_mix + u0_val, is_list)
     if ugz:
         return process_output(ug * zee, is_list)
     else:
@@ -1428,6 +1516,10 @@ def gas_dmp(
             tc = tc * 1.8  # K to deg R
         if pc > 0:
             pc = pc * BAR_TO_PSI
+    if p1 < 0:
+        raise ValueError(f"Pressure p1 must be non-negative, got {p1}")
+    if p2 < 0:
+        raise ValueError(f"Pressure p2 must be non-negative, got {p2}")
     if p1 == p2:
         return 0
 
@@ -1511,7 +1603,7 @@ def gas_fws_sg(sg_g: float, cgr: float, api_st: float, metric: bool = False) -> 
     cond_mass = cond_vol * (cond_sg * WDEN)  # lb
     surface_gas_moles = 1e6 / scf_per_mol  # lb-moles
     surface_gas_mass = sg_g * MW_AIR * surface_gas_moles  # lb
-    cond_mw = 240 - 2.22 * api_st  # lb/lb-moles (Standing correlation)
+    cond_mw = _STANDING_COND_MW[0] - _STANDING_COND_MW[1] * api_st  # lb/lb-moles (Standing correlation)
     cond_moles = cond_mass / cond_mw  # lb-moles
     fws_gas_mass = cond_mass + surface_gas_mass  # lb
     fws_gas_moles = cond_moles + surface_gas_moles  # lb-moles
@@ -1599,21 +1691,21 @@ def gas_water_content(p: float, degf: float, salinity: float = 0, metric: bool =
     t = degf
     content = (
         (
-            47484
+            _DANESH_WC[0]
             * (
                 np.exp(
-                    69.103501
-                    + (-13064.76 / (t + degF2R))
-                    + (-7.3037 * np.log(t + degF2R))
-                    + (0.0000012856 * ((t + degF2R) * (t + degF2R)))
+                    _DANESH_WC[1]
+                    + (_DANESH_WC[2] / (t + degF2R))
+                    + (_DANESH_WC[3] * np.log(t + degF2R))
+                    + (_DANESH_WC[4] * ((t + degF2R) * (t + degF2R)))
                 )
             )
             / (p)
-            + (np.power(10, ((-3083.87 / (t + degF2R)) + 6.69449)))
+            + (np.power(10, ((_DANESH_WC[5] / (t + degF2R)) + _DANESH_WC[6])))
         )
-        * (1 - (0.00492 * salinity) - (0.00017672 * (salinity * salinity)))
-        / 8.32
-        / 42
+        * (1 - (_DANESH_WC[7] * salinity) - (_DANESH_WC[8] * (salinity * salinity)))
+        / _DANESH_WC[9]
+        / _DANESH_WC[10]
     )
     if metric:
         return content * STB_PER_MMSCF_TO_SM3_PER_SM3  # stb/MMscf -> sm3/sm3
@@ -1773,12 +1865,12 @@ def _motiee_hft(p_psia, sg):
     """
     p_kpa = p_psia * _PSI_TO_KPA
     log_p = math.log10(p_kpa)
-    t_c = (-283.24469
-           + 78.99667 * log_p
-           - 5.352544 * log_p * log_p
-           + 349.473877 * sg
-           - 150.854675 * sg * sg
-           - 27.604065 * sg * log_p)
+    t_c = (_MOTIEE[0]
+           + _MOTIEE[1] * log_p
+           + _MOTIEE[2] * log_p * log_p
+           + _MOTIEE[3] * sg
+           + _MOTIEE[4] * sg * sg
+           + _MOTIEE[5] * sg * log_p)
     return t_c * 9.0 / 5.0 + 32.0  # degC -> degF
 
 
@@ -1791,7 +1883,7 @@ def _towler_mokhatab_hft(p_psia, sg):
     """
     ln_p = math.log(p_psia)
     ln_sg = math.log(sg)
-    return 13.47 * ln_p + 34.27 * ln_sg - 1.675 * ln_p * ln_sg - 20.35
+    return _TOWLER[0] * ln_p + _TOWLER[1] * ln_sg + _TOWLER[2] * ln_p * ln_sg + _TOWLER[3]
 
 
 def _hydrate_formation_press(degf_target, sg, hft_fn):
@@ -1800,8 +1892,8 @@ def _hydrate_formation_press(degf_target, sg, hft_fn):
     Uses Motiee for inversion (consistent with ResToolbox3).
     Returns pressure in psia, or NaN if target T is outside correlation range.
     """
-    p_lo = 14.696   # ~1 atm
-    p_hi = 15000.0  # upper search bound
+    p_lo = _HFP_P_LO
+    p_hi = _HFP_P_HI
 
     t_lo = hft_fn(p_lo, sg)
     t_hi = hft_fn(p_hi, sg)
@@ -1946,19 +2038,11 @@ def gas_hydrate(
     degf_wc = degf_res_of if degf_res_of is not None else degf_of
 
     # Validate inputs
-    if p_psia <= 0:
-        raise ValueError("Pressure must be positive")
-    if p_wc <= 0:
-        raise ValueError("Reservoir pressure must be positive")
-    if sg <= 0:
-        raise ValueError("Gas specific gravity must be positive")
+    validate_pe_inputs(p=p_psia, degf=degf_of, sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2)
+    if p_wc != p_psia:
+        validate_pe_inputs(p=p_wc)
     if inhibitor_wt_pct < 0 or inhibitor_wt_pct >= 100:
         raise ValueError("Inhibitor wt% must be in range [0, 100)")
-    for name, val in [('co2', co2), ('h2s', h2s), ('n2', n2), ('h2', h2)]:
-        if val < 0:
-            raise ValueError(f"{name} mole fraction must be >= 0")
-    if co2 + h2s + n2 + h2 > 1.0:
-        raise ValueError("Sum of co2 + h2s + n2 + h2 must be <= 1.0")
     if additional_water < 0:
         raise ValueError("additional_water must be >= 0")
 

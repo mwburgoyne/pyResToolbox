@@ -87,7 +87,7 @@ from pyrestoolbox.validate import validate_methods
 import pyrestoolbox.gas as gas
 import pyrestoolbox.brine as brine
 import pyrestoolbox.oil as oil
-import pyrestoolbox.oil.oil as _oil_impl
+import pyrestoolbox.oil as _oil_impl
 
 EPS_T = 1e-15
 MAX_ITR = 100

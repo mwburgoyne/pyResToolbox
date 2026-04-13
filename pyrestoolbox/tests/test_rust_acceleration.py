@@ -35,7 +35,7 @@ def force_python():
     """Context manager that disables Rust in all modules, then restores."""
     import pyrestoolbox._accelerator as acc
     import pyrestoolbox.gas.gas as gas_mod
-    import pyrestoolbox.oil.oil as oil_mod
+    import pyrestoolbox.oil._density as oil_mod
     import pyrestoolbox.brine.brine as brine_mod
     import pyrestoolbox.nodal.nodal as nodal_mod
     import pyrestoolbox.dca.dca as dca_mod
@@ -225,7 +225,7 @@ class TestNodalVLPEquivalence:
 
     def _oil_completion(self):
         from pyrestoolbox.nodal import nodal
-        from pyrestoolbox.oil.oil import OilPVT
+        from pyrestoolbox.oil import OilPVT
         comp = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
         pvt = OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
         return pvt, comp
