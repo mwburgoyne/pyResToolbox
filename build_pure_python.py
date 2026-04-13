@@ -19,15 +19,25 @@ ROOT = Path(__file__).parent
 
 def main():
     # Write a temporary pyproject.toml for setuptools (pure Python)
+    # Must preserve the [project] section so setup.py can extract the version
+    import re
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
 
-        # Copy the pure-Python pyproject.toml
+        # Extract version from real pyproject.toml
+        real_content = (ROOT / "pyproject.toml").read_text()
+        ver_match = re.search(r'^version\s*=\s*"([^"]+)"', real_content, re.MULTILINE)
+        version = ver_match.group(1) if ver_match else "0.0.0"
+
+        # Copy the pure-Python pyproject.toml (setuptools backend + version)
         pp_toml = tmp / "pyproject.toml"
         pp_toml.write_text(
             '[build-system]\n'
             'requires = ["setuptools", "wheel"]\n'
             'build-backend = "setuptools.build_meta"\n'
+            '\n'
+            '[project]\n'
+            f'version = "{version}"\n'
         )
 
         # Build using setup.py + the temporary pyproject.toml
