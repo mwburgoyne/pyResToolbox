@@ -46,7 +46,7 @@ from tabulate import tabulate
 
 import pyrestoolbox.gas as gas # Needed for Z-Factor
 from pyrestoolbox.classes import z_method, c_method, pb_method, rs_method, bo_method, uo_method, deno_method, co_method, kr_family, kr_table, class_dic
-from pyrestoolbox.shared_fns import convert_to_numpy, process_output, halley_solve_cubic
+from pyrestoolbox.shared_fns import convert_to_numpy, process_output, halley_solve_cubic, validate_pe_inputs
 from pyrestoolbox.validate import validate_methods
 from pyrestoolbox.constants import (R, psc, tsc, degF2R, tscr, scf_per_mol, CUFTperBBL, WDEN, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2,
                                     BAR_TO_PSI, PSI_TO_BAR, degc_to_degf, degf_to_degc,
@@ -76,6 +76,48 @@ _FM32T_ARR = [0, -0.617, -0.747, -0.4339, 0, 10.26]
 _FM1T_ARR = [0, 0, 9.917, 5.1128, 0, 3.892]
 _FM12T_ARR = [0, 0.0365, -0.0369, 0, 0, 0]
 
+# IAPWS-IF97 vapor pressure coefficients (Wagner & Pruss, 2002)
+_IAPWS_TC_K = 647.096     # Critical temperature of water (K)
+_IAPWS_PC_MPA = 22.064    # Critical pressure of water (MPa)
+_IAPWS_VAP_A = [0, -7.85951783, 1.84408259, -11.7866497, 22.6807411, -15.9618719, 1.80122502]
+
+# Duan-Mao CH4 solubility coefficients (McCain Table 4-15/4-16)
+_DUAN_A = [0, 0, -0.004462, -0.06763, 0, 0]
+_DUAN_B = [0, -0.03602, 0.18917, 0.97242, 0, 0]
+_DUAN_C = [0, 0.6855, -3.1992, -3.7968, 0.07711, 0.2229]
+_DUAN_U = [0, 8.3143711, -7.2772168e-4, 2.1489858e3, -1.4019672e-5, -6.6743449e5,
+           7.698589e-2, -5.0253331e-5, -30.092013, 4.8468502e3, 0]
+_DUAN_LAMBDA = [0, -0.80898, 1.0827e-3, 183.85, 0, 0,
+                3.924e-4, 0, 0, 0, -1.97e-6]
+_DUAN_ETA = [0, -3.89e-3, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+# Mao-Duan (2009) viscosity coefficients (McCain Table 4-14)
+_MAODUAN_D = [0, 2885310, -11072.577, -9.0834095, 0.030925651, -0.0000274071,
+              -1928385.1, 5621.6046, 13.82725, -0.047609523, 0.000035545041]
+_MAODUAN_A = [-0.21319213, 0.0013651589, -0.0000012191756]
+_MAODUAN_B = [0.069161945, -0.00027292263, 0.0000002085244]
+_MAODUAN_C = [-0.0025988855, 0.0000077989227]
+
+# Gas constant in cm3·MPa/(mol·K)
+_R_CM3_MPA = 8.314467
+
+# Garcia (2001) partial molar volume of dissolved CO2 (Eq. 3)
+_GARCIA_VMV = [37.51, -0.09585, 0.000874, -0.0000005044]
+
+# Unit conversions
+_MPA_TO_PSI = 145.038            # MPa -> psi
+_SM3_TO_SCFSTB = 0.1781076       # sm3/sm3 -> scf/stb
+
+# Standard temperature in K (60 degF)
+_T_SC_K = (60 - 32) / 1.8 + 273.15  # 288.7056 K
+
+# Methane specific gravity
+_SG_METHANE = 0.5537
+
+# Spycher-Pruess K-value coefficients (low-temperature, non-saturated CO2)
+_SP_K_CO2_LT = [1.189, 1.304e-2, -5.446e-5]
+_SP_K_H2O_LT = [-2.209, 3.097e-2, -1.098e-4, 2.048e-7]
+
 def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0, metric: bool = False) -> Tuple:
     """ Calculates Brine properties from modified Spivey Correlation per McCain Petroleum Reservoir Fluid Properties pg 160
         Returns Tuple of (Bw (rb/stb | rm3/sm3), Density (sg), viscosity (cP), Compressibility (1/psi | 1/bar), Rw GOR (scf/stb | sm3/sm3))
@@ -88,8 +130,7 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0, metric: bo
     if metric:
         p = p * BAR_TO_PSI
         degf = degc_to_degf(degf)
-    if p <= 0:
-        raise ValueError("Pressure must be positive")
+    validate_pe_inputs(p=p, degf=degf)
     if wt < 0 or wt >= 100:
         raise ValueError(f"Salt weight percent must be >= 0 and < 100, got {wt}")
 
@@ -188,17 +229,9 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0, metric: bo
     salt_ratio_sc = Rhob_scm_spivey / rhow_sc_spivey if m > 0 else 1.0
     Rhob_scm = rhow_sc * salt_ratio_sc
 
-    a_coefic = [
-        0,
-        -7.85951783,
-        1.84408259,
-        -11.7866497,
-        22.6807411,
-        -15.9618719,
-        1.80122502,
-    ]
-    x = 1 - (degk / 647.096)  # Eq 4.14
-    ln_vap_ratio = (647.096 / degk) * (
+    a_coefic = _IAPWS_VAP_A
+    x = 1 - (degk / _IAPWS_TC_K)  # Eq 4.14
+    ln_vap_ratio = (_IAPWS_TC_K / degk) * (
         a_coefic[1] * x
         + a_coefic[2] * x ** 1.5
         + a_coefic[3] * np.power(x, 3)
@@ -206,11 +239,11 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0, metric: bo
         + a_coefic[5] * np.power(x, 4)
         + a_coefic[6] * np.power(x, 7.5)
     )  # Eq 4.13
-    vap_pressure = np.exp(ln_vap_ratio) * 22.064
+    vap_pressure = np.exp(ln_vap_ratio) * _IAPWS_PC_MPA
 
-    a_coefic = [0, 0, -0.004462, -0.06763, 0, 0]
-    b_coefic = [0, -0.03602, 0.18917, 0.97242, 0, 0]
-    c_coefic = [0, 0.6855, -3.1992, -3.7968, 0.07711, 0.2229]
+    a_coefic = _DUAN_A
+    b_coefic = _DUAN_B
+    c_coefic = _DUAN_C
 
     A_t = Eq41(degc, a_coefic)
     B_t = Eq41(degc, b_coefic)
@@ -221,33 +254,9 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0, metric: bo
     except (ValueError, FloatingPointError):
         mch4w = 0
     
-    u_arr = [
-        0,
-        8.3143711,
-        -7.2772168e-4,
-        2.1489858e3,
-        -1.4019672e-5,
-        -6.6743449e5,
-        7.698589e-2,
-        -5.0253331e-5,
-        -30.092013,
-        4.8468502e3,
-        0,
-    ]
-    lambda_arr = [
-        0,
-        -0.80898,
-        1.0827e-3,
-        183.85,
-        0,
-        0,
-        3.924e-4,
-        0,
-        0,
-        0,
-        -1.97e-6,
-    ]
-    eta_arr = [0, -3.89e-3, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    u_arr = _DUAN_U
+    lambda_arr = _DUAN_LAMBDA
+    eta_arr = _DUAN_ETA
 
     lambda_ch4Na = (
         lambda_arr[1]
@@ -273,7 +282,7 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0, metric: bo
     detadptm = 0  # Eq 4.21
 
     Vmch4b = (
-        8.314467 * degk * (dudptm + 2 * m * dlambdadptm + m * m * 0)
+        _R_CM3_MPA * degk * (dudptm + 2 * m * dlambdadptm + m * m * 0)
     )  # Eq 4.22
     vb0 = 1 / Rhob_tpm  # Eq 4.23
     rhobtpbch4 = (1000 + m * 58.4428 + mch4 * 16.043) / (
@@ -285,7 +294,7 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0, metric: bo
     d2lambdadp2 = 2 * lambda_arr[10]
     d2etadp2 = 0
     dVmch4dp = (
-        8.314467 * degk * (d2uch2dp2 + 2 * m * d2lambdadp2 + m * m * d2etadp2)
+        _R_CM3_MPA * degk * (d2uch2dp2 + 2 * m * d2lambdadp2 + m * m * d2etadp2)
     )  # Eq 4.31
     cwu = -((1000 + m * 58.4428) * dvbdp + mch4 * dVmch4dp) / (
         (1000 + m * 58.4428) * vb0 + (mch4 * Vmch4b)
@@ -296,10 +305,10 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0, metric: bo
         / ((Mpa - vap_pressure) - 2 * dlambdadptm * m)
     )  # Eq 4.33
 
-    zee = gas.gas_z(p=p, sg=0.5537, degf=degf, zmethod='BNS',
+    zee = gas.gas_z(p=p, sg=_SG_METHANE, degf=degf, zmethod='BNS',
                     co2=0, h2s=0, n2=0, h2=0)  # Z-Factor of pure methane
 
-    vmch4g = zee * 8.314467 * degk / Mpa  # Eq 4.34
+    vmch4g = zee * _R_CM3_MPA * degk / Mpa  # Eq 4.34
 
     cws = -(
         (1000 + m * 58.4428) * dvbdp
@@ -308,7 +317,7 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0, metric: bo
     ) / (
         (1000 + m * 58.4428) * vb0 + (mch4 * Vmch4b)
     )  # Eq 4.35 - Compressibility of saturated brine Mpa-1
-    cw_new = 1 / (145.038 * (1 / cws))  # Compressibility in psi-1
+    cw_new = 1 / (_MPA_TO_PSI * (1 / cws))  # Compressibility in psi-1
     vb0_sc = (
         1 / Rhob_scm
     )  # vb0 at standard conditions - (Calculated by evaluating vbo at 0.1013 MPa and 15 degC)
@@ -323,28 +332,16 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0, metric: bo
 
 
 
-    zee_sc = gas.gas_z(p=psc, sg=0.5537, degf=tsc, zmethod='BNS',
+    zee_sc = gas.gas_z(p=psc, sg=_SG_METHANE, degf=tsc, zmethod='BNS',
                        co2=0, h2s=0, n2=0, h2=0)
-    vmch4g_sc = zee_sc * 8.314467 * (273 + 15) / 0.1013  # Eq 4.34
+    vmch4g_sc = zee_sc * _R_CM3_MPA * (273 + 15) / 0.1013  # Eq 4.34
     rsw_new = mch4 * vmch4g_sc / ((1000 + m * 58.4428) * vb0_sc)
-    rsw_new_oilfield = rsw_new / 0.1781076  # Convert to scf/stb
+    rsw_new_oilfield = rsw_new / _SM3_TO_SCFSTB  # Convert to scf/stb
 
-    d = [
-        0,
-        2885310,
-        -11072.577,
-        -9.0834095,
-        0.030925651,
-        -0.0000274071,
-        -1928385.1,
-        5621.6046,
-        13.82725,
-        -0.047609523,
-        0.000035545041,
-    ]
-    a = [-0.21319213, 0.0013651589, -0.0000012191756]
-    b = [0.069161945, -0.00027292263, 0.0000002085244]
-    c = [-0.0025988855, 0.0000077989227]
+    d = _MAODUAN_D
+    a = _MAODUAN_A
+    b = _MAODUAN_B
+    c = _MAODUAN_C
 
     lnuw_tp = sum([d[i] * np.power(degk, (i - 3)) for i in range(1, 6)])
     lnuw_tp += sum(
@@ -364,7 +361,7 @@ def brine_props(p: float, degf: float, wt: float=0, ch4_sat: float=0, metric: bo
     bw = Bw  # rb/stb (dimensionless ratio, same in both unit systems)
     lden = rhobtpbch4  # sg (g/cm3)
     visw = ub_tpm  # cP
-    cwu_psi = 1 / (145.038 * (1 / cwu))  # Undersaturated compressibility in psi-1
+    cwu_psi = 1 / (_MPA_TO_PSI * (1 / cwu))  # Undersaturated compressibility in psi-1
     cws_psi = cw_new  # Saturated compressibility in psi-1
     rsw = rsw_new_oilfield  # scf/stb
 
@@ -466,6 +463,10 @@ class CO2_Brine_Mixture():
            
     """
     def __init__(self, pres, temp, ppm = 0, metric = True, cw_sat = False):
+        # Validate pressure and temperature (convert to oilfield units for validation)
+        _p_val = pres if not metric else pres * BAR2PSI
+        _t_val = temp if not metric else temp * 1.8 + 32
+        validate_pe_inputs(p=_p_val, degf=_t_val)
         self.metric = metric              # Units. FIELD or METRIC
         self.ppm = ppm                    # Parts (by wt) NaCl added to 1E6 parts of water
         self.tKel = None                  # Deg K
@@ -863,16 +864,16 @@ class CO2_Brine_Mixture():
     #  CO2 K-value at reservoir Pressure
     #=======================================================================
         if self.low_temp:
-            x = [1.189, 1.304e-2, -5.446e-5]
+            x = _SP_K_CO2_LT
             if self.CO2_sat:
-                x = [1.169, 1.368e-2, -5.380e-5] # Liquid CO2 below 31 deg C and above CO2 Psat 
+                x = [1.169, 1.368e-2, -5.380e-5] # Liquid CO2 below 31 deg C and above CO2 Psat
         else:
             x = [1.668, 3.992e-3, -1.156e-5, 1.593e-9]
 
         K0 = 10**self.FT(self.degC, x)
-        
+
         if self.scaled:
-            K0_lt = 10**self.FT(self.degC, [1.189, 1.304e-2, -5.446e-5])
+            K0_lt = 10**self.FT(self.degC, _SP_K_CO2_LT)
             K0 = self.blended_val(K0_lt, K0)
             
         self.K[0] =  self.Ktp(K0, self.vBar[0])
@@ -882,14 +883,14 @@ class CO2_Brine_Mixture():
     #  H2O K-value at reservoir pressure
     #=======================================================================
         if self.low_temp:
-            x = [-2.209, 3.097e-2, -1.098e-4, 2.048e-7]
+            x = _SP_K_H2O_LT
         else:
             x = [-2.1077, 2.8127e-2, -8.4298e-5, 1.4969e-7, -1.1812e-10]
-        
+
         K0 = 10**self.FT(self.degC, x)
-        
+
         if self.scaled:
-            K0_lt = 10**self.FT(self.degC, [-2.209, 3.097e-2, -1.098e-4, 2.048e-7])
+            K0_lt = 10**self.FT(self.degC, _SP_K_H2O_LT)
             K0 = self.blended_val(K0_lt, K0)
             
         self.K[1] =  self.Ktp(K0, self.vBar[1])
@@ -1180,12 +1181,10 @@ class CO2_Brine_Mixture():
         Fm12t_arr = _FM12T_ARR
         
         # Table 4-14 Mao-Duan Coefficients
-        d = [0, 2885310, -11072.577, -9.0834095, 0.030925651, -0.0000274071, -1928385.1, 5621.6046, 13.82725, -0.047609523, 0.000035545041]
-        
-        # Table 4-14 Mao-Duan Coefficients
-        a = [-0.21319213, 0.0013651589, -0.0000012191756]
-        b = [0.069161945, -0.00027292263, 0.0000002085244]
-        c = [-0.0025988855, 0.0000077989227]
+        d = _MAODUAN_D
+        a = _MAODUAN_A
+        b = _MAODUAN_B
+        c = _MAODUAN_C
         
         # Density of pure water at the reference pressure of 70 MPa, ?w(T, 70 MPa), in g/cm3,
         rhow_t70 = Eq41(degc, rhow_t70_arr)                 # Step 1
@@ -1243,7 +1242,7 @@ class CO2_Brine_Mixture():
         def partMolVol(degK):
             #  Partial Molar Volume of dissolved CO2: Garcia Eq (3)
             tC = degK - 273.15
-            return 37.51 + tC * (-0.09585 + tC * (0.000874 - tC * 0.0000005044))
+            return _GARCIA_VMV[0] + tC * (_GARCIA_VMV[1] + tC * (_GARCIA_VMV[2] + tC * _GARCIA_VMV[3]))
         
         # -- Correcting brine density for dissolved CO2, JE Garcia, LBNL Report# 49023, Oct 2011, "Density of Aqueous Solutions of CO2"
         def garciaDensity(rhoBRnoCO2, tKel, pBar, ppm, xCO2, MwB, MwG):
@@ -1296,7 +1295,7 @@ class CO2_Brine_Mixture():
         Fm12t = Eq41(degc, Fm12t_arr)
         
         # -- CO2-Free Brine & Freshwater Density at standard conditions (gm/cm3)
-        tKel_sc = (60 - 32) / 1.8 + 273.15  # 60 degF -> K
+        tKel_sc = _T_SC_K  # 60 degF -> K
         sg_SC_Brine, rhowSC = brine_denw(PSTND/10, tKel_local=tKel_sc)
         
         # Calculate mass of 1 sm3 of brine without CO2
@@ -1463,8 +1462,10 @@ class SoreideWhitson:
             raise ValueError(f"ppm must be non-negative, got {ppm}")
         if ppm >= 1e6:
             raise ValueError(f"ppm must be less than 1,000,000, got {ppm}")
-        if pres <= 0:
-            raise ValueError("Pressure must be positive")
+        # Validate pressure and temperature (convert to oilfield units for validation)
+        _p_val = pres if not metric else pres * BAR2PSI
+        _t_val = temp if not metric else temp * 1.8 + 32
+        validate_pe_inputs(p=_p_val, degf=_t_val)
         non_hc = y_CO2 + y_H2S + y_N2 + y_H2
         if non_hc > 1.0:
             raise ValueError(f"Sum of non-HC gas fractions ({non_hc}) exceeds 1.0")

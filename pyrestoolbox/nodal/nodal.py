@@ -48,7 +48,7 @@ import numpy as np
 
 from pyrestoolbox.classes import vlp_method, class_dic
 from pyrestoolbox.validate import validate_methods
-from pyrestoolbox.shared_fns import bisect_solve
+from pyrestoolbox.shared_fns import bisect_solve, validate_pe_inputs
 from pyrestoolbox.constants import (BAR_TO_PSI, PSI_TO_BAR, degc_to_degf, degf_to_degc,
                                     M_TO_FT, FT_TO_M, MM_TO_IN, IN_TO_MM,
                                     SM3_PER_SM3_TO_SCF_PER_STB, SCF_PER_STB_TO_SM3_PER_SM3,
@@ -60,7 +60,7 @@ from pyrestoolbox.constants import (BAR_TO_PSI, PSI_TO_BAR, degc_to_degf, degf_t
                                     STB_TO_SM3, SM3_TO_STB)
 import pyrestoolbox.gas as gas
 import pyrestoolbox.oil as oil
-from pyrestoolbox._accelerator import RUST_AVAILABLE as _RUST_AVAILABLE
+from pyrestoolbox._accelerator import RUST_AVAILABLE as _RUST_AVAILABLE, rust_accelerated
 if _RUST_AVAILABLE:
     from pyrestoolbox import _native as _rust
 
@@ -107,6 +107,175 @@ _DYNECM_TO_NM = 0.001   # dyne/cm -> N/m
 _SCF_STB_TO_M3M3 = 0.178108
 _LN10 = math.log(10.0)
 _MW_AIR = 28.97
+
+
+# ============================================================================
+#  Standard Fluid & Unit Constants
+# ============================================================================
+
+_RHO_AIR_STC = 0.0765           # Air density at standard conditions (lb/scf)
+_RHO_FW = 62.4                  # Freshwater density (lb/ft³)
+_FT3_PER_BBL = 5.615            # ft³ per barrel
+_SEC_PER_DAY = 86400.0          # seconds per day
+_IN2_PER_FT2 = 144.0            # in² per ft²
+_FW_GRAD = 0.433                # Freshwater pressure gradient (psi/ft)
+_GAS_COL_K = 0.01875            # Gas column static pressure constant
+
+# ============================================================================
+#  IFT Correlation Constants
+# ============================================================================
+
+# Baker & Swerdloff (1956) dead oil IFT
+_BS_TEMP_A = 1.11591            # Temperature coefficient (intercept)
+_BS_TEMP_B = -0.00305           # Temperature coefficient (slope, per degC)
+_BS_API_A = 38.085              # API coefficient (intercept)
+_BS_API_B = -0.259              # API coefficient (slope, per API)
+
+# Firoozabadi & Ramey (1988) gas-oil IFT
+_FR_GOR_THRESH = 50.0           # GOR threshold (m³/m³) between low/high regimes
+_FR_LOW_A = 0.02549             # Low-GOR regime coefficient
+_FR_LOW_B = 1.0157              # Low-GOR regime exponent
+_FR_HIGH_A = 32.0436            # High-GOR regime coefficient
+_FR_HIGH_B = -1.1367            # High-GOR regime exponent
+
+# Jennings & Newman (1971) gas-water IFT
+_JN_74_A = 75.0                 # 74°F coefficient (intercept)
+_JN_74_B = -1.108               # 74°F coefficient (pressure slope)
+_JN_74_C = 0.349                # 74°F coefficient (pressure exponent)
+_JN_280_A = 53.0                # 280°F coefficient (intercept)
+_JN_280_B = -0.1048             # 280°F coefficient (pressure slope)
+_JN_280_C = 0.637               # 280°F coefficient (pressure exponent)
+_JN_T_LO = 74.0                 # Lower reference temperature (°F)
+_JN_T_HI = 280.0                # Upper reference temperature (°F)
+
+# Default IFT values (dyne/cm)
+_IFT_OW_DEFAULT = 26.0          # Oil-water IFT default
+_IFT_NOPHASE_DEFAULT = 20.0     # Default IFT when no phases flow
+
+# ============================================================================
+#  Serghides (1984) Friction Factor — Colebrook-White Constants
+# ============================================================================
+
+_CW_ROUGH = 3.7                 # Roughness denominator
+_CW_RE = 12.0                   # Reynolds number term (laminar iteration)
+_CW_TRANS = 2.51                # Transition term coefficient
+
+# ============================================================================
+#  HB (Hagedorn-Brown 1965) Holdup Constants
+# ============================================================================
+
+# Dimensionless group coefficients (also used in BB Payne correction)
+_DG_VEL = 1.938                 # Velocity number coefficient
+_DG_DIAM = 120.872              # Pipe diameter number coefficient
+_DG_VISC = 0.15726              # Viscosity number coefficient
+
+# CNL polynomial coefficients (5-term)
+_CNL_C0 = -2.69851
+_CNL_C1 = 0.1584095
+_CNL_C2 = -0.5509976
+_CNL_C3 = 0.5478492
+_CNL_C4 = -0.1219458
+
+# YL/NSI holdup polynomial coefficients (5-term)
+_YL_C0 = -0.10306578
+_YL_C1 = 0.617774
+_YL_C2 = -0.632946
+_YL_C3 = 0.29598
+_YL_C4 = -0.0401
+
+# S-correction polynomial coefficients (5-term)
+_SC_C0 = 0.9116257
+_SC_C1 = -4.821756
+_SC_C2 = 1232.25
+_SC_C3 = -22253.58
+_SC_C4 = 116174.3
+
+# S-correction thresholds
+_SC_F2_CLAMP = 0.012            # f2 lower clamp
+_SC_F2_FLOOR = 0.001            # f2 floor where S=1.0
+
+# f1 exponents
+_F1_VG_EXP = 0.575              # Gas velocity number exponent
+_F1_P_ATM = 14.7                # Atmospheric pressure reference (psia)
+
+# f2 exponents
+_F2_VISC_EXP = 0.38             # Viscosity number exponent
+_F2_DIAM_EXP = 2.14             # Diameter number exponent
+
+# Orkiszewski (1967) bubble flow
+_ORK_VS = 0.8                   # Bubble slip velocity (ft/s)
+_ORK_LB_A = 1.071               # Bubble flow boundary coefficient
+_ORK_LB_B = -0.2218             # Bubble flow boundary velocity coefficient
+_ORK_LB_MIN = 0.13              # Minimum bubble flow boundary
+
+# HB Reynolds/friction dimensional constants
+_HB_RE_K = 96778.0              # Reynolds number dimensional constant
+_HB_FRIC_K = 7.413e10           # Friction gradient dimensional constant
+
+# ============================================================================
+#  BB (Beggs & Brill 1973) Constants
+# ============================================================================
+
+# Flow pattern boundaries (L1-L4): coefficient, exponent
+_BB_L1_A, _BB_L1_B = 316.0, 0.302
+_BB_L2_A, _BB_L2_B = 0.0009252, -2.4684
+_BB_L3_A, _BB_L3_B = 0.10, -1.4516
+_BB_L4_A, _BB_L4_B = 0.5, -6.738
+
+# Horizontal holdup (a, b, c per regime)
+_BB_HL_SEG = (0.98, 0.4846, 0.0868)
+_BB_HL_INT = (0.845, 0.5351, 0.0173)
+_BB_HL_DIS = (1.065, 0.5824, 0.0609)
+
+# Inclination correction (e, f, g, h per regime)
+_BB_IC_SEG = (0.011, -3.7680, 3.5390, -1.6140)
+_BB_IC_INT = (2.960, 0.3050, -0.4473, 0.0978)
+
+# Payne et al. (1979) upward flow correction
+_BB_PAYNE = 0.924
+
+# Friction ratio S-factor polynomial
+_BB_SF_C0 = -0.0523
+_BB_SF_C1 = 3.182
+_BB_SF_C2 = -0.8725
+_BB_SF_C3 = 0.01853
+
+# Friction S-factor clamp bounds
+_BB_SF_LO = -5.0
+_BB_SF_HI = 5.0
+
+# ============================================================================
+#  Gray (1978) Holdup & Roughness Constants
+# ============================================================================
+
+_GRAY_HL_A = 0.0814             # Holdup coefficient a
+_GRAY_HL_B = 0.0554             # Holdup coefficient b (also used in f_e)
+_GRAY_HL_C = 730.0              # Holdup coefficient c
+
+_GRAY_ROUGH_K = 28.5            # Effective roughness coefficient
+
+# ============================================================================
+#  WG (Woldesemayat-Ghajar 2007) Drift-Flux Constants
+# ============================================================================
+
+_WG_DRIFT_K = 2.9               # Zuber-Findlay drift velocity coefficient
+_WG_INCL_K = 1.22               # Inclination correction coefficient
+
+# WG Chisholm C values (Lockhart-Martinelli)
+_WG_CHIS_TT = 20.0              # Turbulent-turbulent
+_WG_CHIS_LT = 12.0              # Laminar-turbulent
+_WG_CHIS_TL = 10.0              # Turbulent-laminar
+_WG_CHIS_LL = 5.0               # Laminar-laminar
+
+# ============================================================================
+#  Vogel / Darcy IPR Constants
+# ============================================================================
+
+_DARCY_K = 0.00708              # Darcy radial flow constant
+_DIETZ_CORR = 0.75              # Dietz shape factor correction
+_VOGEL_AOF_DENOM = 1.8          # Vogel AOF denominator
+_VOGEL_LIN = 0.2                # Vogel linear coefficient
+_VOGEL_QUAD = 0.8               # Vogel quadratic coefficient
 
 
 def _log10(x):
@@ -412,10 +581,7 @@ class Reservoir:
             rw = rw * M_TO_FT
             if D != 0:
                 D = D * D_PER_SM3_TO_D_PER_MSCF
-        if pr <= 0:
-            raise ValueError(f"Reservoir pressure pr must be positive, got {pr}")
-        if degf <= -459.67:
-            raise ValueError(f"Temperature must be above absolute zero, got {degf}")
+        validate_pe_inputs(p=pr, degf=degf)
         if k <= 0:
             raise ValueError(f"Permeability k must be positive, got {k}")
         if h <= 0:
@@ -600,8 +766,8 @@ def _oil_viscosity_full(sgsp, api, temp_f, rsb, pb, press_psia, vis_frac=1.0, rs
 
 def _dead_oil_ift(api, temp_f):
     temp_c = (temp_f - 32.0) / 1.8
-    a = 1.11591 - 0.00305 * temp_c
-    return max(a * (38.085 - 0.259 * api), 1.0)
+    a = _BS_TEMP_A + _BS_TEMP_B * temp_c
+    return max(a * (_BS_API_A + _BS_API_B * api), 1.0)
 
 
 def _gas_oil_ift(api, temp_f, rs_scf_stb):
@@ -609,32 +775,32 @@ def _gas_oil_ift(api, temp_f, rs_scf_stb):
     if rs_scf_stb <= 0:
         return sigma_od
     rs_m3m3 = rs_scf_stb * _SCF_STB_TO_M3M3
-    if rs_m3m3 < 50.0:
-        ratio = 1.0 / (1.0 + 0.02549 * rs_m3m3 ** 1.0157)
+    if rs_m3m3 < _FR_GOR_THRESH:
+        ratio = 1.0 / (1.0 + _FR_LOW_A * rs_m3m3 ** _FR_LOW_B)
     else:
-        ratio = 32.0436 * rs_m3m3 ** (-1.1367)
+        ratio = _FR_HIGH_A * rs_m3m3 ** _FR_HIGH_B
     return max(sigma_od * _clamp(ratio, 0.0, 1.0), 1.0)
 
 
 def _gas_water_ift(press_psia, temp_f):
     p = max(press_psia, 14.7)
-    sw74 = 75.0 - 1.108 * p ** 0.349
-    sw280 = 53.0 - 0.1048 * p ** 0.637
-    if temp_f <= 74.0:
+    sw74 = _JN_74_A + _JN_74_B * p ** _JN_74_C
+    sw280 = _JN_280_A + _JN_280_B * p ** _JN_280_C
+    if temp_f <= _JN_T_LO:
         return max(sw74, 1.0)
-    elif temp_f >= 280.0:
+    elif temp_f >= _JN_T_HI:
         return max(sw280, 1.0)
-    return max(sw74 + (sw280 - sw74) * (temp_f - 74.0) / (280.0 - 74.0), 1.0)
+    return max(sw74 + (sw280 - sw74) * (temp_f - _JN_T_LO) / (_JN_T_HI - _JN_T_LO), 1.0)
 
 
 def _interfacial_tension(p_avg, temp_f, api, rs_scf_stb,
                          m_flow_o, m_flow_w, m_flow_g):
     sigma_og = _gas_oil_ift(api, temp_f, rs_scf_stb)
     sigma_wg = _gas_water_ift(p_avg, temp_f)
-    sigma_ow = 26.0
+    sigma_ow = _IFT_OW_DEFAULT
     denom = m_flow_o * m_flow_w + m_flow_o * m_flow_g + m_flow_g * m_flow_w
     if denom <= 0:
-        return 20.0
+        return _IFT_NOPHASE_DEFAULT
     return max(((m_flow_o * m_flow_w) * sigma_ow +
                 (m_flow_o * m_flow_g) * sigma_og +
                 (m_flow_g * m_flow_w) * sigma_wg) / denom, 1.0)
@@ -649,9 +815,9 @@ def _serghides_fanning(re, eps_d):
         return 0.0
     if re <= 2100:
         return 16.0 / re
-    a = -2.0 * _log10(eps_d / 3.7 + 12.0 / re)
-    b = -2.0 * _log10(eps_d / 3.7 + 2.51 * a / re)
-    c = -2.0 * _log10(eps_d / 3.7 + 2.51 * b / re)
+    a = -2.0 * _log10(eps_d / _CW_ROUGH + _CW_RE / re)
+    b = -2.0 * _log10(eps_d / _CW_ROUGH + _CW_TRANS * a / re)
+    c = -2.0 * _log10(eps_d / _CW_ROUGH + _CW_TRANS * b / re)
     diff = c - 2.0 * b + a
     if abs(diff) < 1e-30:
         return 0.005
@@ -706,7 +872,7 @@ def _static_gas_column_pressure(thp, length, tht, bht, gsg, theta=math.pi / 2.0)
         temp_r = temp_local + 459.67
         zee = _z_factor(gsg, temp_local, max(p, 14.7), tc=tc, pc=pc)
         rho_gas = _MW_AIR * gsg * p / (zee * _R_GAS * temp_r)
-        p += rho_gas / 144.0 * d_len * sin_theta
+        p += rho_gas / _IN2_PER_FT2 * d_len * sin_theta
     return p
 
 
@@ -727,9 +893,9 @@ def _static_oil_column_pressure(thp, length, tht, bht, wc, wsg,
             rho_oil = _oil_density_mccain(rs, sgsp, sgsto, p, temp_local)
         else:
             rho_oil = _oil_density_mccain(rsb, sgsp, sgsto, pb, temp_local)
-        oil_sg_local = rho_oil / 62.4
+        oil_sg_local = rho_oil / _RHO_FW
         mix_sg = (1.0 - wc) * oil_sg_local + wc * wsg
-        p += 0.433 * mix_sg * d_len * sin_theta
+        p += _FW_GRAD * mix_sg * d_len * sin_theta
     return p
 
 
@@ -744,43 +910,43 @@ def _hb_gradient_gas(s):
     ift = s['sigma']
     rho_l = s['rho_l']
 
-    nvl = 1.938 * ul * (rho_l / ift) ** 0.25
-    nvg = 1.938 * ugas * (rho_l / ift) ** 0.25
-    nd = 120.872 * s['diam_ft'] * (rho_l / ift) ** 0.5
+    nvl = _DG_VEL * ul * (rho_l / ift) ** 0.25
+    nvg = _DG_VEL * ugas * (rho_l / ift) ** 0.25
+    nd = _DG_DIAM * s['diam_ft'] * (rho_l / ift) ** 0.5
 
     mul = s['mu_l'] if s['ql_loc'] > 0 else 1.0
 
-    nl = 0.15726 * mul * (1.0 / (rho_l * ift ** 3)) ** 0.25
+    nl = _DG_VISC * mul * (1.0 / (rho_l * ift ** 3)) ** 0.25
     if nl <= 0:
         nl = 1e-8
 
     x1 = _log10(nl) + 3.0
-    cnl = 10.0 ** (-2.69851 + 0.1584095 * x1 - 0.5509976 * x1 * x1 +
-                   0.5478492 * x1 ** 3 - 0.1219458 * x1 ** 4)
+    cnl = 10.0 ** (_CNL_C0 + _CNL_C1 * x1 + _CNL_C2 * x1 * x1 +
+                   _CNL_C3 * x1 ** 3 + _CNL_C4 * x1 ** 4)
 
     nvg_safe = max(nvg, 1e-10)
-    f1 = nvl * s['p_avg'] ** 0.1 * cnl / (nvg_safe ** 0.575 * 14.7 ** 0.1 * nd)
+    f1 = nvl * s['p_avg'] ** 0.1 * cnl / (nvg_safe ** _F1_VG_EXP * _F1_P_ATM ** 0.1 * nd)
 
     lf1 = _log10(f1) + 6.0
-    ylonsi = (-0.10306578 + 0.617774 * lf1 - 0.632946 * lf1 ** 2 +
-              0.29598 * lf1 ** 3 - 0.0401 * lf1 ** 4)
+    ylonsi = (_YL_C0 + _YL_C1 * lf1 + _YL_C2 * lf1 ** 2 +
+              _YL_C3 * lf1 ** 3 + _YL_C4 * lf1 ** 4)
     ylonsi = max(ylonsi, 0.0)
 
-    f2 = nvg * nl ** 0.38 / nd ** 2.14
-    idex = 1.0 if f2 >= 0.012 else -1.0
-    f2 = (1.0 - idex) / 2.0 * 0.012 + (1.0 + idex) / 2.0 * f2
+    f2 = nvg * nl ** _F2_VISC_EXP / nd ** _F2_DIAM_EXP
+    idex = 1.0 if f2 >= _SC_F2_CLAMP else -1.0
+    f2 = (1.0 - idex) / 2.0 * _SC_F2_CLAMP + (1.0 + idex) / 2.0 * f2
 
-    si = (0.9116257 - 4.821756 * f2 + 1232.25 * f2 * f2 -
-          22253.58 * f2 ** 3 + 116174.3 * f2 ** 4)
-    if f2 <= 0.001:
+    si = (_SC_C0 + _SC_C1 * f2 + _SC_C2 * f2 * f2 +
+          _SC_C3 * f2 ** 3 + _SC_C4 * f2 ** 4)
+    if f2 <= _SC_F2_FLOOR:
         si = 1.0
 
     yl = _clamp(si * ylonsi, 0.0, 1.0)
 
     # Minimum holdup from mass fraction
     rho_g_sg = s['rho_g'] / 62.37
-    mflow_lpd = s['mflow_l'] * 86400.0
-    mflow_gpd = s['mflow_g'] * 86400.0
+    mflow_lpd = s['mflow_l'] * _SEC_PER_DAY
+    mflow_gpd = s['mflow_g'] * _SEC_PER_DAY
     mflow_total_pd = mflow_lpd + mflow_gpd
     mass_frac_liq = mflow_lpd / mflow_total_pd if mflow_total_pd > 0 else 0.0
     min_l = (mass_frac_liq * rho_g_sg / (rho_g_sg + s['lsg_loc'])
@@ -790,10 +956,10 @@ def _hb_gradient_gas(s):
 
     # Orkiszewski bubble flow correction
     vm = ugas + ul
-    vs = 0.8
-    lb = 1.071 - 0.2218 * vm * vm / s['diam_ft']
-    if lb < 0.13:
-        lb = 0.13
+    vs = _ORK_VS
+    lb = _ORK_LB_A + _ORK_LB_B * vm * vm / s['diam_ft']
+    if lb < _ORK_LB_MIN:
+        lb = _ORK_LB_MIN
     if vm > 0:
         b_ratio = ugas / vm
         if b_ratio < lb:
@@ -804,7 +970,7 @@ def _hb_gradient_gas(s):
 
     # Reynolds and friction (mass-flow basis)
     mflow_pd = mflow_total_pd
-    nre = 96778.0 * (mflow_pd / 86400.0) / (s['diam_ft'] *
+    nre = _HB_RE_K * (mflow_pd / _SEC_PER_DAY) / (s['diam_ft'] *
           mul ** yl * s['mu_g'] ** (1.0 - yl))
     if nre < 2100:
         nre = 2100.0
@@ -814,38 +980,25 @@ def _hb_gradient_gas(s):
 
     rho_avg = yl * rho_l + (1.0 - yl) * s['rho_g']
 
-    fric_term = f * mflow_pd ** 2 / 7.413e10 / s['diam_ft'] ** 5 / rho_avg
+    fric_term = f * mflow_pd ** 2 / _HB_FRIC_K / s['diam_ft'] ** 5 / rho_avg
     sign = -1.0 if s['injection'] else 1.0
-    return (rho_avg * math.sin(s['theta']) + sign * fric_term) / 144.0
+    return (rho_avg * math.sin(s['theta']) + sign * fric_term) / _IN2_PER_FT2
 
 
+@rust_accelerated('hb_fbhp_gas_rust')
 def _hb_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                   injection=False, pr=0.0, theta=math.pi / 2.0):
-    if _RUST_AVAILABLE:
-        try:
-            return _rust.hb_fbhp_gas_rust(
-                thp, api, gsg, tid, rough, length, tht, bht, wsg,
-                qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta)
-        except (ImportError, AttributeError):
-            pass
     return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                               injection, pr, theta, _hb_gradient_gas)
 
 
+@rust_accelerated('hb_fbhp_oil_rust')
 def _hb_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                   rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
                   vis_frac=1.0, rsb_frac=1.0):
-    if _RUST_AVAILABLE:
-        try:
-            return _rust.hb_fbhp_oil_rust(
-                thp, api, gsg, tid, rough, length, tht, bht, wsg,
-                qt_stbpd, gor, wc, pb, rsb, sgsp,
-                rsb_scale, injection, theta, vis_frac, rsb_frac)
-        except (ImportError, AttributeError):
-            pass
     return _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                               rsb_scale, injection, theta, _hb_gradient_gas,
@@ -869,9 +1022,9 @@ def _wg_void_fraction(u_sg, u_sl, rho_g, rho_l, sigma, diam, theta, p_sys):
     co = lam * (1.0 + (u_sl / u_sg) ** density_ratio)
     buoy = (_G_SI * diam * sigma * (1.0 + math.cos(theta)) *
             (rho_l - rho_g) / (rho_l * rho_l))
-    u_gm_base = 2.9 * max(buoy, 0.0) ** 0.25
+    u_gm_base = _WG_DRIFT_K * max(buoy, 0.0) ** 0.25
     p_exp = _P_ATM_PA / p_sys
-    incl_factor = (1.22 + 1.22 * math.sin(theta)) ** p_exp
+    incl_factor = (_WG_INCL_K + _WG_INCL_K * math.sin(theta)) ** p_exp
     u_gm = u_gm_base * incl_factor
     denom = co * u_m + u_gm
     if denom <= 0:
@@ -914,13 +1067,13 @@ def _wg_friction_gradient_lm(m_flow_g, m_flow_l, rho_g, rho_l,
     liq_turb = re_l >= 2100
     gas_turb = re_g >= 2100
     if liq_turb and gas_turb:
-        chisholm_c = 20.0
+        chisholm_c = _WG_CHIS_TT
     elif not liq_turb and gas_turb:
-        chisholm_c = 12.0
+        chisholm_c = _WG_CHIS_LT
     elif liq_turb and not gas_turb:
-        chisholm_c = 10.0
+        chisholm_c = _WG_CHIS_TL
     else:
-        chisholm_c = 5.0
+        chisholm_c = _WG_CHIS_LL
     phi2_l = 1.0 + chisholm_c / x_param + 1.0 / (x_param * x_param)
     return phi2_l * dpdz_l
 
@@ -956,33 +1109,20 @@ def _wg_gradient_gas(s):
     return dpdz_pam / (_PSI_TO_PA / _FT_TO_M)
 
 
+@rust_accelerated('wg_fbhp_gas_rust')
 def _wg_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                   injection=False, pr=0.0, theta=math.pi / 2.0):
-    if _RUST_AVAILABLE:
-        try:
-            return _rust.wg_fbhp_gas_rust(
-                thp, api, gsg, tid, rough, length, tht, bht, wsg,
-                qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta)
-        except (ImportError, AttributeError):
-            pass
     return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                               injection, pr, theta, _wg_gradient_gas)
 
 
+@rust_accelerated('wg_fbhp_oil_rust')
 def _wg_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                   rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
                   vis_frac=1.0, rsb_frac=1.0):
-    if _RUST_AVAILABLE:
-        try:
-            return _rust.wg_fbhp_oil_rust(
-                thp, api, gsg, tid, rough, length, tht, bht, wsg,
-                qt_stbpd, gor, wc, pb, rsb, sgsp,
-                rsb_scale, injection, theta, vis_frac, rsb_frac)
-        except (ImportError, AttributeError):
-            pass
     return _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                               rsb_scale, injection, theta, _wg_gradient_gas,
@@ -1014,15 +1154,15 @@ def _gray_liquid_holdup(v_m, rho_l, rho_g, sigma, diam, lambda_l, p_sys):
     n1 = v_m ** 2 * rho_ns / (_G_FT * diam * drho)
     n2 = _G_FT * diam ** 2 * drho / sigma_lbf_ft
 
-    a = 0.0814 * (1.0 - 0.0554 * math.log(1.0 + 730.0 * rv / (1.0 + rv)))
-    b = 0.0554
+    a = _GRAY_HL_A * (1.0 - _GRAY_HL_B * math.log(1.0 + _GRAY_HL_C * rv / (1.0 + rv)))
+    b = _GRAY_HL_B
 
     if n1 <= 1e-15:
         return lambda_l
 
     argument = (a + b * n2) / n1
     if argument > 0:
-        f_e = -0.0554 * math.log(argument)
+        f_e = -_GRAY_HL_B * math.log(argument)
     else:
         f_e = 0.0
 
@@ -1035,7 +1175,7 @@ def _gray_effective_roughness(rough_dry, sigma, rho_ns, v_m, lambda_l):
     if v_m < 1e-10 or rho_ns <= 0 or sigma_lbf_ft <= 0:
         return rough_dry
     ke = rho_ns * v_m * v_m
-    r1 = 28.5 * sigma_lbf_ft / max(ke, 1e-10)
+    r1 = _GRAY_ROUGH_K * sigma_lbf_ft / max(ke, 1e-10)
     r2 = ke * lambda_l / sigma_lbf_ft
     film = r1 * (1.0 - math.exp(-r2))
     return rough_dry + max(film, 0.0)
@@ -1056,9 +1196,9 @@ def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
     """
     tc, pc = _sutton_tc_pc(gsg)
     osg = 141.5 / (api + 131.5)
-    total_mass = (0.0765 * gsg * qg_mmscfd * 1e6 +
-                  osg * 62.4 * cgr * qg_mmscfd * 5.615 +
-                  wsg * 62.4 * qw_bwpd * 5.615)
+    total_mass = (_RHO_AIR_STC * gsg * qg_mmscfd * 1e6 +
+                  osg * _RHO_FW * cgr * qg_mmscfd * _FT3_PER_BBL +
+                  wsg * _RHO_FW * qw_bwpd * _FT3_PER_BBL)
     if total_mass < 1e-6 or qg_mmscfd < 0.001:
         if qg_mmscfd >= 0.001:
             warnings.warn(
@@ -1075,8 +1215,8 @@ def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
     ndiv = _calc_segments(length)
     seg_len = length / ndiv
 
-    mflow_g = 0.0765 * gsg * qg_mmscfd * 1e6 / 86400.0
-    mflow_w = wsg * 62.4 * qw_bwpd * 5.615 / 86400.0
+    mflow_g = _RHO_AIR_STC * gsg * qg_mmscfd * 1e6 / _SEC_PER_DAY
+    mflow_w = wsg * _RHO_FW * qw_bwpd * _FT3_PER_BBL / _SEC_PER_DAY
 
     p_psia = thp
 
@@ -1092,7 +1232,7 @@ def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
             cgr_loc, qo_loc, ql_loc, lsg_loc = _condensate_dropout(
                 cgr, qg_mmscfd, p_avg, pr, osg, qw_bwpd, wsg)
 
-            mflow_o = osg * 62.4 * qo_loc * 5.615 / 86400.0
+            mflow_o = osg * _RHO_FW * qo_loc * _FT3_PER_BBL / _SEC_PER_DAY
             mflow_l = mflow_o + mflow_w
             mflow_total = mflow_g + mflow_l
 
@@ -1103,7 +1243,7 @@ def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
             mu_g = _gas_viscosity(gsg, temp_f, p_avg, z=zee, tc=tc, pc=pc)
 
             rho_g = _MW_AIR * gsg * p_avg / (zee * _R_GAS * temp_r)
-            rho_l = lsg_loc * 62.4
+            rho_l = lsg_loc * _RHO_FW
 
             v_sg = (mflow_g / max(rho_g, 1e-10)) / area
             v_sl = (mflow_l / max(rho_l, 1e-10)) / area
@@ -1204,19 +1344,19 @@ def _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
 
             rho_g = _MW_AIR * gsg * p_avg / (zee * _R_GAS * temp_r)
 
-            mflow_o = osg * 62.4 * qo * 5.615 / 86400.0
-            mflow_w = wsg * 62.4 * qw * 5.615 / 86400.0
-            mflow_g = 0.0765 * gsg * qg_mmscfd * 1e6 / 86400.0
+            mflow_o = osg * _RHO_FW * qo * _FT3_PER_BBL / _SEC_PER_DAY
+            mflow_w = wsg * _RHO_FW * qw * _FT3_PER_BBL / _SEC_PER_DAY
+            mflow_g = _RHO_AIR_STC * gsg * qg_mmscfd * 1e6 / _SEC_PER_DAY
             mflow_l = mflow_o + mflow_w
             mflow_total = mflow_g + mflow_l
 
             if mflow_total < 1e-15:
                 tavg_r = (tht + bht) / 2.0 + 459.67
-                p_psia *= math.exp(0.01875 * gsg * seg_len / (zee * tavg_r))
+                p_psia *= math.exp(_GAS_COL_K * gsg * seg_len / (zee * tavg_r))
                 break
 
             ql = qo + qw
-            rho_w = wsg * 62.4
+            rho_w = wsg * _RHO_FW
             rho_l = (qo * rho_oil + qw * rho_w) / ql if ql > 0 else rho_oil
             lsg = (qo * osg + qw * wsg) / ql if ql > 0 else osg
 
@@ -1282,43 +1422,30 @@ def _gray_gradient_gas(s):
     f_moody = 4.0 * _serghides_fanning(n_re, eps_d)
 
     gm = s['mflow_total'] / s['area']
-    dpdz_hydro = rho_s * math.sin(s['theta']) / 144.0
-    dpdz_fric = (f_moody * gm ** 2 / (2.0 * _GC * s['diam_ft'] * s['rho_ns'] * 144.0)
+    dpdz_hydro = rho_s * math.sin(s['theta']) / _IN2_PER_FT2
+    dpdz_fric = (f_moody * gm ** 2 / (2.0 * _GC * s['diam_ft'] * s['rho_ns'] * _IN2_PER_FT2)
                  if s['rho_ns'] > 0 else 0.0)
-    ek = gm * s['v_sg'] / (_GC * s['p_avg'] * 144.0)
+    ek = gm * s['v_sg'] / (_GC * s['p_avg'] * _IN2_PER_FT2)
     denom = max(1.0 - ek, 0.1)
 
     sign = -1.0 if s['injection'] else 1.0
     return (dpdz_hydro + sign * dpdz_fric) / denom
 
 
+@rust_accelerated('gray_fbhp_gas_rust')
 def _gray_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                     wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                     injection=False, pr=0.0, theta=math.pi / 2.0):
-    if _RUST_AVAILABLE:
-        try:
-            return _rust.gray_fbhp_gas_rust(
-                thp, api, gsg, tid, rough, length, tht, bht, wsg,
-                qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta)
-        except (ImportError, AttributeError):
-            pass
     return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                               injection, pr, theta, _gray_gradient_gas)
 
 
+@rust_accelerated('gray_fbhp_oil_rust')
 def _gray_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
                     wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                     rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
                     vis_frac=1.0, rsb_frac=1.0):
-    if _RUST_AVAILABLE:
-        try:
-            return _rust.gray_fbhp_oil_rust(
-                thp, api, gsg, tid, rough, length, tht, bht, wsg,
-                qt_stbpd, gor, wc, pb, rsb, sgsp,
-                rsb_scale, injection, theta, vis_frac, rsb_frac)
-        except (ImportError, AttributeError):
-            pass
     return _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                               rsb_scale, injection, theta, _gray_gradient_gas,
@@ -1338,10 +1465,10 @@ _BB_TRANSITION = 3
 def _bb_flow_pattern(froude, lambda_l):
     if lambda_l <= 0 or lambda_l >= 1.0:
         return _BB_DISTRIBUTED, 0.0
-    l1 = 316.0 * lambda_l ** 0.302
-    l2 = 0.0009252 * lambda_l ** (-2.4684)
-    l3 = 0.10 * lambda_l ** (-1.4516)
-    l4 = 0.5 * lambda_l ** (-6.738)
+    l1 = _BB_L1_A * lambda_l ** _BB_L1_B
+    l2 = _BB_L2_A * lambda_l ** _BB_L2_B
+    l3 = _BB_L3_A * lambda_l ** _BB_L3_B
+    l4 = _BB_L4_A * lambda_l ** _BB_L4_B
     if lambda_l < 0.01 and froude < l1:
         return _BB_SEGREGATED, 0.0
     if lambda_l >= 0.01 and froude < l2:
@@ -1367,11 +1494,14 @@ def _bb_horizontal_holdup(lambda_l, froude, pattern):
     if froude <= 0:
         return lambda_l
     if pattern == _BB_SEGREGATED:
-        hl0 = 0.98 * lambda_l ** 0.4846 / froude ** 0.0868
+        a, b, c = _BB_HL_SEG
+        hl0 = a * lambda_l ** b / froude ** c
     elif pattern == _BB_INTERMITTENT:
-        hl0 = 0.845 * lambda_l ** 0.5351 / froude ** 0.0173
+        a, b, c = _BB_HL_INT
+        hl0 = a * lambda_l ** b / froude ** c
     elif pattern == _BB_DISTRIBUTED:
-        hl0 = 1.065 * lambda_l ** 0.5824 / froude ** 0.0609
+        a, b, c = _BB_HL_DIS
+        hl0 = a * lambda_l ** b / froude ** c
     else:
         hl0 = lambda_l
     return max(hl0, lambda_l)
@@ -1382,9 +1512,9 @@ def _bb_inclination_correction(hl0, lambda_l, n_lv, froude, pattern,
     if lambda_l <= 0 or lambda_l >= 1.0:
         return hl0
     if pattern == _BB_SEGREGATED:
-        e_p, f_p, g_p, h_p = 0.011, -3.7680, 3.5390, -1.6140
+        e_p, f_p, g_p, h_p = _BB_IC_SEG
     elif pattern == _BB_INTERMITTENT:
-        e_p, f_p, g_p, h_p = 2.960, 0.3050, -0.4473, 0.0978
+        e_p, f_p, g_p, h_p = _BB_IC_INT
     elif pattern == _BB_DISTRIBUTED:
         return hl0
     else:
@@ -1409,10 +1539,10 @@ def _bb_two_phase_friction(f_ns, lambda_l, hl_theta):
         s = math.log(2.2 * y - 1.2)
     else:
         ln_y = math.log(y)
-        denom = (-0.0523 + 3.182 * ln_y - 0.8725 * ln_y ** 2 +
-                 0.01853 * ln_y ** 4)
+        denom = (_BB_SF_C0 + _BB_SF_C1 * ln_y + _BB_SF_C2 * ln_y ** 2 +
+                 _BB_SF_C3 * ln_y ** 4)
         s = ln_y / denom if abs(denom) >= 1e-6 else 0.0
-    s = _clamp(s, -5.0, 5.0)
+    s = _clamp(s, _BB_SF_LO, _BB_SF_HI)
     return f_ns * math.exp(s)
 
 
@@ -1429,19 +1559,19 @@ def _bb_gradient_gas(s):
         hl0 = _bb_horizontal_holdup(s['lambda_l'], froude, pattern)
 
     if pattern in (_BB_SEGREGATED, _BB_INTERMITTENT, _BB_TRANSITION):
-        hl0 *= 0.924
+        hl0 *= _BB_PAYNE
         hl0 = max(hl0, s['lambda_l'])
 
     sigma_lbf_ft = s['sigma'] * _DYNCM_TO_LBFFT
-    n_lv = (1.938 * s['v_sl'] * (s['rho_l'] / sigma_lbf_ft) ** 0.25
+    n_lv = (_DG_VEL * s['v_sl'] * (s['rho_l'] / sigma_lbf_ft) ** 0.25
             if sigma_lbf_ft > 0 else 0.0)
 
     if pattern == _BB_TRANSITION:
         hl_seg = _bb_inclination_correction(
-            _bb_horizontal_holdup(s['lambda_l'], froude, _BB_SEGREGATED) * 0.924,
+            _bb_horizontal_holdup(s['lambda_l'], froude, _BB_SEGREGATED) * _BB_PAYNE,
             s['lambda_l'], n_lv, froude, _BB_SEGREGATED, theta=s['theta'])
         hl_int = _bb_inclination_correction(
-            _bb_horizontal_holdup(s['lambda_l'], froude, _BB_INTERMITTENT) * 0.924,
+            _bb_horizontal_holdup(s['lambda_l'], froude, _BB_INTERMITTENT) * _BB_PAYNE,
             s['lambda_l'], n_lv, froude, _BB_INTERMITTENT, theta=s['theta'])
         hl_theta = trans_a * hl_seg + (1.0 - trans_a) * hl_int
     else:
@@ -1460,45 +1590,32 @@ def _bb_gradient_gas(s):
     f_ns = _serghides_fanning(n_re, eps_d)
     f_tp = _bb_two_phase_friction(f_ns, s['lambda_l'], hl_theta)
 
-    dpdz_hydro = rho_s * math.sin(s['theta']) / 144.0
+    dpdz_hydro = rho_s * math.sin(s['theta']) / _IN2_PER_FT2
     dpdz_fric = (4.0 * f_tp * s['rho_ns'] * s['v_m'] ** 2 /
-                 (2.0 * _GC * s['diam_ft'] * 144.0) if s['rho_ns'] > 0 else 0.0)
-    ek = rho_s * s['v_m'] * s['v_sg'] / (_GC * s['p_avg'] * 144.0)
+                 (2.0 * _GC * s['diam_ft'] * _IN2_PER_FT2) if s['rho_ns'] > 0 else 0.0)
+    ek = rho_s * s['v_m'] * s['v_sg'] / (_GC * s['p_avg'] * _IN2_PER_FT2)
     denom = max(1.0 - ek, 0.1)
 
     sign = -1.0 if s['injection'] else 1.0
     return (dpdz_hydro + sign * dpdz_fric) / denom
 
 
+@rust_accelerated('bb_fbhp_gas_rust')
 def _bb_core_gas(thp, api, gsg, tid, rough, length, tht, bht,
                  wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
-                 injection, pr, theta=math.pi / 2.0):
+                 injection=False, pr=0.0, theta=math.pi / 2.0):
     """Beggs & Brill core for gas wells."""
-    if _RUST_AVAILABLE:
-        try:
-            return _rust.bb_fbhp_gas_rust(
-                thp, api, gsg, tid, rough, length, tht, bht, wsg,
-                qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta)
-        except (ImportError, AttributeError):
-            pass
     return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                               injection, pr, theta, _bb_gradient_gas)
 
 
+@rust_accelerated('bb_fbhp_oil_rust')
 def _bb_core_oil(thp, api, gsg, tid, rough, length, tht, bht,
                  wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
-                 rsb_scale, injection, theta=math.pi / 2.0,
+                 rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
                  vis_frac=1.0, rsb_frac=1.0):
     """Beggs & Brill core for oil wells."""
-    if _RUST_AVAILABLE:
-        try:
-            return _rust.bb_fbhp_oil_rust(
-                thp, api, gsg, tid, rough, length, tht, bht, wsg,
-                qt_stbpd, gor, wc, pb, rsb, sgsp,
-                rsb_scale, injection, theta, vis_frac, rsb_frac)
-        except (ImportError, AttributeError):
-            pass
     return _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                               rsb_scale, injection, theta, _bb_gradient_gas,
@@ -1587,6 +1704,7 @@ def fbhp(thp, completion, vlpmethod='WG', well_type='gas',
             if rsb > 0:
                 rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
 
+    validate_pe_inputs(p=thp)
     vlpmethod = validate_methods(["vlpmethod"], [vlpmethod])
 
     # Extract oil PVT parameters if provided (already in oilfield units from OilPVT)
@@ -1804,22 +1922,22 @@ def ipr_curve(reservoir, well_type='gas', gas_pvt=None, oil_pvt=None,
             bo_pr = bo
             uo_pr = uo
 
-        J = 0.00708 * k * h / (uo_pr * bo_pr * (np.log(re / rw) + S - 0.75))
+        J = _DARCY_K * k * h / (uo_pr * bo_pr * (np.log(re / rw) + S - _DIETZ_CORR))
 
         for pwf in pwf_list:
             if oil_pvt is not None and pr > pb:
                 # Undersaturated: Darcy from Pr to Pb, Vogel below Pb
                 q_darcy = J * (pr - max(pwf, pb))
                 if pwf < pb:
-                    qsat_max = J * pb / 1.8
-                    q_vogel = qsat_max * (1 - 0.2 * (pwf / pb) - 0.8 * (pwf / pb) ** 2)
+                    qsat_max = J * pb / _VOGEL_AOF_DENOM
+                    q_vogel = qsat_max * (1 - _VOGEL_LIN * (pwf / pb) - _VOGEL_QUAD * (pwf / pb) ** 2)
                     rate_list.append(q_darcy + q_vogel)
                 else:
                     rate_list.append(q_darcy)
             elif oil_pvt is not None and pr <= pb:
                 # Saturated: Vogel
-                qsat_max = J * pr / 1.8
-                q = qsat_max * (1 - 0.2 * (pwf / pr) - 0.8 * (pwf / pr) ** 2)
+                qsat_max = J * pr / _VOGEL_AOF_DENOM
+                q = qsat_max * (1 - _VOGEL_LIN * (pwf / pr) - _VOGEL_QUAD * (pwf / pr) ** 2)
                 rate_list.append(q)
             else:
                 # Simple Darcy (no Pb info)
@@ -1827,7 +1945,7 @@ def ipr_curve(reservoir, well_type='gas', gas_pvt=None, oil_pvt=None,
 
     elif well_type == 'water':
         # Water injectivity
-        J = 0.00708 * k * h / (uo * bo * (np.log(re / rw) + S - 0.75))
+        J = _DARCY_K * k * h / (uo * bo * (np.log(re / rw) + S - _DIETZ_CORR))
         for pwf in pwf_list:
             rate_list.append(J * (pr - pwf))
 
