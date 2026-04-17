@@ -57,10 +57,14 @@ fn resolve_comp_names(comp_names: &[String]) -> PyResult<Vec<usize>> {
 /// * `p_pa` - Pressure in Pascal
 /// * `z` - Feed composition (will be normalized)
 /// * `comp_names` - Component names (e.g., ["H2O", "CH4", "CO2"])
-/// * `salinity` - NaCl molality (mol/kg water)
+/// * `salinity` - NaCl molality (mol/kg water). Informational only; the caller
+///                is responsible for baking salinity into `gamma`.
 /// * `mode` - "AQ" for aqueous phase BIPs, "NA" for non-aqueous
-/// * `gamma` - Activity coefficient array (same length as z).
-///             Use all-ones for freshwater or when salinity is handled externally.
+/// * `gamma` - Activity coefficient array (same length as z). Must be computed
+///             by the caller. For framework='proposed', specialized ks models
+///             (Dubessy/Akinfiev/Li/Mao-Duan/Duan-Sun) live on the Python side
+///             — this Rust entry point must not substitute its own S&W Eq 8
+///             fallback silently. Use `1.0` for gases in freshwater.
 ///
 /// # Returns
 /// Tuple (V, x_vec, y_vec) where V is vapor fraction, x is liquid comp, y is vapor comp.
@@ -74,6 +78,10 @@ pub fn flash_tp_rust(
     mode: String,
     gamma: Vec<f64>,
 ) -> PyResult<(f64, Vec<f64>, Vec<f64>)> {
+    // Salinity arg is retained for signature stability / future diagnostics;
+    // currently unused because gamma is always caller-supplied.
+    let _ = salinity;
+
     // Validate inputs
     if !t_k.is_finite() || t_k <= 0.0 {
         return Err(PyValueError::new_err("Temperature must be positive and finite"));
@@ -104,23 +112,13 @@ pub fn flash_tp_rust(
 
     let comp_indices = resolve_comp_names(&comp_names)?;
 
-    // If salinity > 0 and mode is AQ and gamma is all-ones, compute gamma internally
-    let gamma_eff = if salinity > 0.0
-        && mode_aq
-        && gamma.iter().all(|&g| (g - 1.0).abs() < 1e-15)
-    {
-        flash::calc_gamma(&comp_indices, t_k, salinity)
-    } else {
-        gamma
-    };
-
     let (v, x, y, _converged) = flash::flash_tp(
         t_k,
         p_pa,
         &z,
         &comp_indices,
         mode_aq,
-        &gamma_eff,
+        &gamma,
         200,
         1e-10,
     );
@@ -133,6 +131,17 @@ pub fn flash_tp_rust(
 /// Flash 1 (kij_AQ) -> aqueous phase x
 /// Flash 2 (kij_NA) -> non-aqueous phase y
 /// True K-values: K_i = y_i(Flash 2) / x_i(Flash 1)
+///
+/// # Warning
+/// This entry point computes Sechenov activity coefficients internally using
+/// **S&W Equation 8 only**. It does NOT route CO2/H2S through the specialized
+/// Dubessy/Akinfiev/Li/Mao-Duan/Duan-Sun models used by the Python
+/// framework='proposed' path. Callers who need the specialized ks models must
+/// compute gamma Python-side and call `flash_tp_rust` twice (AQ then NA) with
+/// the pre-computed gamma, rather than using this convenience entry point.
+/// Not currently called from Python `SWFlashEngine` — Python computes gamma
+/// via `self.calc_gamma(...)` with the correct framework dispatch and calls
+/// `flash_tp_rust` directly.
 ///
 /// # Arguments
 /// * `t_k` - Temperature in Kelvin

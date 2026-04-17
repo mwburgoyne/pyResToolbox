@@ -323,10 +323,13 @@ def duong_cum(qi, a, m, t):
     if np.any(t <= 0):
         raise ValueError("Time must be positive for Duong model")
 
-    # Generate fine time grid for integration
+    # Generate fine time grid for integration. Lower bound must be strictly
+    # less than ti to give np.linspace an ascending range, otherwise trapezoid
+    # integrates over a descending axis and returns negative cumulative.
     results = np.zeros_like(t, dtype=float)
     for i, ti in enumerate(t):
-        t_fine = np.linspace(0.001, ti, max(500, int(ti * 10)))
+        lower = min(0.001, ti * 0.001)
+        t_fine = np.linspace(lower, ti, max(500, int(ti * 10)))
         q_fine = qi * t_fine ** (-m) * np.exp(a / (1.0 - m) * (t_fine ** (1.0 - m) - 1.0))
         results[i] = np.trapezoid(q_fine, t_fine)
 
@@ -958,6 +961,12 @@ def forecast(result, t_end, dt=1.0, q_min=0.0, uptime=1.0, ratios=None):
     -------
     ForecastResult
     """
+    if dt <= 0:
+        raise ValueError(f"dt must be positive, got {dt}")
+    if t_end <= 0:
+        raise ValueError(f"t_end must be positive, got {t_end}")
+    if not (0.0 < uptime <= 1.0):
+        raise ValueError(f"uptime must be in (0, 1], got {uptime}")
     t = np.arange(dt, t_end + dt / 2, dt)
 
     if result.method == 'duong':

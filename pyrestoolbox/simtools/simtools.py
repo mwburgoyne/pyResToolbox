@@ -1025,19 +1025,11 @@ def zip_check_sim_deck(files2scrape = [], tozip = True, console_summary = True, 
     else:
         return
 
-def ensure_numpy_array(data):
-    if isinstance(data, list):
-        return np.array(data)
-    elif isinstance(data, np.ndarray):
-        return data
-    else:
-        raise ValueError("Input is neither a list nor a numpy array.")
-                               
 def rr_solver(
     zi: Union[npt.ArrayLike, list], ki: Union[npt.ArrayLike, list]
 ) -> Tuple[int, np.ndarray, np.ndarray, float, float]:
     """
-    Solves for the root of the Rachford-Rice equation using a method that 
+    Solves for the root of the Rachford-Rice equation using a method that
     gracefully handles catastrophic roundoff errors.
     The method is outlined in 2022 'Fluid Phase Equilibria' paper by M. Nielsen & H. Lia
 
@@ -1052,8 +1044,10 @@ def rr_solver(
     V: Vapor molar fraction (float)
     L: Liquid molar fraction (float)
     """
-    zi = ensure_numpy_array(zi)
-    ki = ensure_numpy_array(ki)
+    from pyrestoolbox.brine._lib_vle_engine import rr_solver as _brine_rr_solver
+
+    zi = np.asarray(zi, dtype=float)
+    ki = np.asarray(ki, dtype=float)
 
     if len(zi) == 0 or len(ki) == 0:
         raise ValueError("zi and ki arrays must not be empty")
@@ -1063,76 +1057,8 @@ def rr_solver(
     zi_sum = np.sum(zi)
     if zi_sum <= 0:
         raise ValueError("Sum of zi must be positive")
-    zi = zi / zi_sum  # Normalize feed compositions
-    
-    def rr(V: float) -> float:
-        return np.dot(zi, (ki - 1) / (1 + V * (ki - 1)))
-    
-    def h(b: float) -> float:    # Eq 12b
-        return np.sum(zi*b/(1+b*(phi_min - ci)))
-    
-    def dh(b: float) -> float:   # Eq 16b
-        return np.sum(zi/(1 + b*(phi_min - ci)) ** 2)
-    
-    N_it = 0
-    
-    # Assess if solution nearest vapor or liquid solutions
-    # and appropriately assign pseudo phase and ki's
-    near_vapor = False
-    if rr(0.5) > 0:
-        near_vapor = True
-    
-    ki_hat = ki
-    if near_vapor:
-        ki_hat = 1/ki
-    
-    ci = np.where(np.abs(1 - ki_hat) > 1e-10, 1/(1-ki_hat), 0.0)  # Eq 10
-        
-    # Will use the transformed solution in terms of b (Eq 14b)
-    phi_max = min(1/(1-min(ki_hat)), 0.5)    # Eq 11a
-    phi_min = 1/(1-max(ki_hat))              # Eq 11b with upper 0.5 limit given we have chosen this phase
-    b_min = 1/(phi_max - phi_min)            # Eq 15
-    b_max = np.inf
-    
-    b = 1/(0.25 - phi_min)
-    N_it = 0
-    h_b = np.inf
 
-    while abs(h_b) > EPS_T:
-        N_it += 1
-
-        h_b = h(b)
-        dh_b = dh(b)
-
-        if h_b > 0:
-            b_max = b
-        else:
-            b_min = b
-
-        b = b - h_b / dh_b
-
-        if b < b_min or b > b_max:
-            b = (b_min + b_max) / 2
-
-        if N_it > MAX_ITR:
-            break
-    
-    ui = -zi*ci*b/(1+b*(phi_min-ci))    # Eq 27b 
-    phi = (1+b*phi_min)/b               # Rearranged Eq 14b
-    
-    if near_vapor:
-        L = phi
-        V = 1 - L
-        yi = ui
-        xi = ki_hat * ui                # Eq 28
-        
-    else:
-        V = phi
-        L = 1 - V
-        xi = ui
-        yi = ki_hat * ui                # Eq 28
-        
-    return N_it, yi, xi, V, L
+    return _brine_rr_solver(zi, ki, tol=EPS_T, max_iter=MAX_ITR)
 
 
 # =============================================================================

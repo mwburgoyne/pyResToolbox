@@ -75,7 +75,9 @@ def recommend_gas_methods(sg: float = 0.65, co2: float = 0, h2s: float = 0,
     Parameters
     ----------
     sg : float
-        Gas specific gravity (default 0.65).
+        Gas specific gravity (default 0.65). Currently unused by the decision
+        logic — accepted for API consistency and reserved for future rules
+        (e.g. heavy gas / condensate-laden streams). Breaking removal deferred.
     co2 : float
         CO2 mole fraction (default 0).
     h2s : float
@@ -90,6 +92,7 @@ def recommend_gas_methods(sg: float = 0.65, co2: float = 0, h2s: float = 0,
     dict of str to MethodRecommendation
         Keys: 'zmethod', 'cmethod'.
     """
+    _ = sg  # reserved, see docstring
     inerts = co2 + h2s + n2 + h2
     recs = {}
 
@@ -204,13 +207,16 @@ def recommend_vlp_method(deviation: float = 0,
     deviation : float
         Maximum wellbore deviation from vertical in degrees (default 0).
     well_type : str
-        'gas' or 'oil' (default 'gas').
+        'gas' or 'oil' (default 'gas'). Currently unused by the decision logic
+        — accepted for API consistency and reserved for future fluid-specific
+        recommendations. Breaking removal deferred.
 
     Returns
     -------
     dict of str to MethodRecommendation
         Key: 'vlp_method'.
     """
+    _ = well_type  # reserved, see docstring
     recs = {}
 
     if deviation <= 30:

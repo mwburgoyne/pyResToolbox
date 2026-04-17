@@ -2100,9 +2100,12 @@ class SWMultiComponentFlash:
         z = np.asarray(z, dtype=float)
         z = z / np.sum(z)
 
-        # Rust acceleration path — gamma is always passed explicitly
-        # to prevent Rust from using its built-in ks model (which lacks
-        # the specialised Dubessy/Akinfiev models for CO2/H2S).
+        # Rust acceleration path — gamma is always passed explicitly.
+        # The Rust entry point trusts the caller-supplied gamma and never
+        # substitutes its own S&W Eq 8 ks fallback. framework='proposed'
+        # specialised ks models (Dubessy CO2, Akinfiev H2S, Li HC,
+        # Mao-Duan N2, Duan-Sun CO2) are applied in self.calc_gamma()
+        # on the Python side.
         if _RUST_AVAILABLE:
             try:
                 gamma_arr = np.asarray(gamma, dtype=float) if gamma is not None \
