@@ -47,7 +47,7 @@ import warnings
 import numpy as np
 
 from pyrestoolbox.classes import vlp_method, class_dic
-from pyrestoolbox.validate import validate_methods
+from pyrestoolbox.validate import validate_methods, validate_choice
 from pyrestoolbox.shared_fns import bisect_solve, validate_pe_inputs
 from pyrestoolbox.constants import (BAR_TO_PSI, PSI_TO_BAR, degc_to_degf, degf_to_degc,
                                     M_TO_FT, FT_TO_M, MM_TO_IN, IN_TO_MM,
@@ -306,16 +306,19 @@ class WellSegment:
     def __init__(self, md, id, deviation=0, roughness=None, metric=False):
         if roughness is None:
             roughness = 0.01524 if metric else 0.0006  # 0.0006 in = 0.01524 mm
+        _md_in, _id_in, _rough_in = md, id, roughness
+        _unit_len = 'm' if metric else 'ft'
+        _unit_dia = 'mm' if metric else 'in'
         if metric:
             md = md * M_TO_FT
             id = id * MM_TO_IN
             roughness = roughness * MM_TO_IN
         if md <= 0:
-            raise ValueError(f"Measured depth md must be positive, got {md}")
+            raise ValueError(f"Measured depth md must be positive, got {_md_in} {_unit_len}")
         if id <= 0:
-            raise ValueError(f"Internal diameter id must be positive, got {id}")
+            raise ValueError(f"Internal diameter id must be positive, got {_id_in} {_unit_dia}")
         if roughness < 0:
-            raise ValueError(f"Roughness must be non-negative, got {roughness}")
+            raise ValueError(f"Roughness must be non-negative, got {_rough_in} {_unit_dia}")
         if not (0 <= deviation <= 90):
             raise ValueError(f"Deviation must be between 0 and 90 degrees, got {deviation}")
         self.md = md  # stored in ft
@@ -573,6 +576,9 @@ class Reservoir:
         metric: If True, inputs in metric units (barsa, degC, m, day/sm3). Default False.
     """
     def __init__(self, pr, degf, k, h, re, rw, S=0, D=0, metric=False):
+        # Preserve original user-facing values for error messages
+        _pr_in, _degf_in, _h_in, _re_in, _rw_in = pr, degf, h, re, rw
+        _unit_len = 'm' if metric else 'ft'
         if metric:
             pr = pr * BAR_TO_PSI
             degf = degc_to_degf(degf)
@@ -585,11 +591,14 @@ class Reservoir:
         if k <= 0:
             raise ValueError(f"Permeability k must be positive, got {k}")
         if h <= 0:
-            raise ValueError(f"Net pay thickness h must be positive, got {h}")
+            raise ValueError(f"Net pay thickness h must be positive, got {_h_in} {_unit_len}")
         if rw <= 0:
-            raise ValueError(f"Wellbore radius rw must be positive, got {rw}")
+            raise ValueError(f"Wellbore radius rw must be positive, got {_rw_in} {_unit_len}")
         if re <= rw:
-            raise ValueError(f"Drainage radius re ({re}) must be greater than wellbore radius rw ({rw})")
+            raise ValueError(
+                f"Drainage radius re ({_re_in} {_unit_len}) must be greater than "
+                f"wellbore radius rw ({_rw_in} {_unit_len})"
+            )
         self.pr = pr  # stored in psia
         self.degf = degf  # stored in degF
         self.k = k  # mD (same in both systems)
@@ -1705,6 +1714,7 @@ def fbhp(thp, completion, vlpmethod='WG', well_type='gas',
                 rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
 
     validate_pe_inputs(p=thp)
+    validate_choice(well_type, ('gas', 'oil'), 'well_type')
     vlpmethod = validate_methods(["vlpmethod"], [vlpmethod])
 
     # Extract oil PVT parameters if provided (already in oilfield units from OilPVT)
@@ -1791,6 +1801,7 @@ def outflow_curve(thp, completion, vlpmethod='WG', well_type='gas',
                 'rates': list of flow rates (MMscf/d for gas, STB/d for oil; sm3/d if metric)
                 'bhp': list of flowing BHP values (psia; barsa if metric) at each rate
     """
+    validate_choice(well_type, ('gas', 'oil'), 'well_type')
     # Convert metric inputs to oilfield at the boundary
     if metric:
         thp = thp * BAR_TO_PSI
@@ -1877,6 +1888,7 @@ def ipr_curve(reservoir, well_type='gas', gas_pvt=None, oil_pvt=None,
         gsg: Gas specific gravity. Used if gas_pvt not provided
         metric: If True, inputs/outputs in Eclipse METRIC units. Default False.
     """
+    validate_choice(well_type, ('gas', 'oil', 'water'), 'well_type')
     if min_pwf is None:
         min_pwf = 1.01325 if metric else 14.7
     if metric:
@@ -1991,6 +2003,7 @@ def operating_point(thp, completion, reservoir,
             vlp: VLP outflow curve dict
             ipr: IPR inflow curve dict
     """
+    validate_choice(well_type, ('gas', 'oil'), 'well_type')
     # Convert metric inputs to oilfield at the boundary
     if metric:
         thp = thp * BAR_TO_PSI

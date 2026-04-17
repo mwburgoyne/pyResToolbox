@@ -247,6 +247,46 @@ def test_soreide_whitson_bad_gas_fractions():
         pass
 
 
+def test_garcia_density_no_singularity_at_xco2_one():
+    """Garcia mixing rule (Eq 18) should produce finite density as xCO2 -> 1.
+
+    The original formulation had 1/(1-xCO2) in both numerator and denominator
+    and went to NaN/Inf as xCO2 approached 1. The algebraic reformulation
+    (multiply top/bot by xNotCO2*MwB) gives the same answer for low xCO2 and
+    a finite mathematical limit at xCO2 = 1.
+    """
+    import numpy as np
+    MwB = 18.015        # MW water (g/mol)
+    MwG = 44.01         # MW CO2
+    rho_brine = 1.0     # g/cm3, pure brine density
+    vPhi = 35.0         # cm3/mol, partial molar volume
+
+    def old_form(xCO2):
+        xNotCO2 = 1.0 - xCO2
+        xRat = xCO2 / xNotCO2
+        mRat = MwG / MwB
+        return (1.0 + mRat * xRat) / (vPhi * xRat / MwB + 1.0 / rho_brine)
+
+    def new_form(xCO2):
+        xNotCO2 = 1.0 - xCO2
+        mRat = MwG / MwB
+        return MwB * (xNotCO2 + mRat * xCO2) / (vPhi * xCO2 + MwB * xNotCO2 / rho_brine)
+
+    # Agreement across the well-defined region
+    for xco2 in [0.001, 0.01, 0.05, 0.1, 0.3, 0.5, 0.9]:
+        assert abs(old_form(xco2) - new_form(xco2)) < 1e-10, \
+            f"Forms disagree at xCO2={xco2}"
+
+    # New form is finite near and at the singularity
+    for xco2 in [0.99, 0.999, 0.9999, 1.0]:
+        rho = new_form(xco2)
+        assert np.isfinite(rho), f"rho is {rho} at xCO2={xco2}"
+        assert rho > 0, f"rho should be positive, got {rho} at xCO2={xco2}"
+
+    # At xCO2=1 limit equals MwG/vPhi (pure-CO2 partial molar density)
+    assert abs(new_form(1.0) - MwG / vPhi) < 1e-10
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("BRINE MODULE VALIDATION TESTS")

@@ -59,6 +59,13 @@ if _RUST_AVAILABLE:
     from pyrestoolbox import _native as _rust
 
 
+def _fmt_array(a, name):
+    if a is None:
+        return f"{name}=None"
+    arr = np.asarray(a)
+    return f"{name}=ndarray(shape={arr.shape}, dtype={arr.dtype})"
+
+
 @dataclass
 class DeclineResult:
     """Result from decline curve fitting.
@@ -97,6 +104,18 @@ class DeclineResult:
     uptime_mean: Optional[float] = None
     uptime_history: Optional[np.ndarray] = None
 
+    def __repr__(self):
+        scalars = (
+            f"method={self.method!r}, qi={self.qi}, di={self.di}, b={self.b}, "
+            f"a={self.a}, m={self.m}, r_squared={self.r_squared}, "
+            f"uptime_mean={self.uptime_mean}"
+        )
+        return (
+            f"DeclineResult({scalars}, "
+            f"{_fmt_array(self.residuals, 'residuals')}, "
+            f"{_fmt_array(self.uptime_history, 'uptime_history')})"
+        )
+
 
 @dataclass
 class ForecastResult:
@@ -121,6 +140,16 @@ class ForecastResult:
     Qcum: np.ndarray
     eur: float
     secondary: Optional[dict] = None
+
+    def __repr__(self):
+        sec = 'None' if self.secondary is None else f"{{{', '.join(self.secondary.keys())}}}"
+        return (
+            f"ForecastResult("
+            f"{_fmt_array(self.t, 't')}, "
+            f"{_fmt_array(self.q, 'q')}, "
+            f"{_fmt_array(self.Qcum, 'Qcum')}, "
+            f"eur={self.eur}, secondary={sec})"
+        )
 
 
 @dataclass
@@ -151,6 +180,13 @@ class RatioResult:
     domain: str = 'cum'
     r_squared: float = 0.0
     residuals: np.ndarray = field(default_factory=lambda: np.array([]))
+
+    def __repr__(self):
+        return (
+            f"RatioResult(method={self.method!r}, a={self.a}, b={self.b}, "
+            f"c={self.c}, domain={self.domain!r}, r_squared={self.r_squared}, "
+            f"{_fmt_array(self.residuals, 'residuals')})"
+        )
 
 
 def arps_rate(qi, di, b, t):

@@ -1266,11 +1266,14 @@ class CO2_Brine_Mixture():
         
         # -- Correcting brine density for dissolved CO2, JE Garcia, LBNL Report# 49023, Oct 2011, "Density of Aqueous Solutions of CO2"
         def garciaDensity(rhoBRnoCO2, tKel, pBar, ppm, xCO2, MwB, MwG):
+            # Algebraic reformulation of Garcia Eq 18: original form
+            #     (1 + mRat*xRat) / (vPhi*xRat/MwB + 1/rhoBRnoCO2) with xRat = xCO2/(1-xCO2)
+            # has a singularity at xCO2 -> 1. Multiplying numerator and denominator by
+            # (1-xCO2)*MwB removes xRat entirely and gives the same result.
             xNotCO2 = 1.0 - xCO2                         #--Brine (H20+Salt) Mole Fraction
-            xRat = xCO2 / xNotCO2                        #--Mole Fraction Ratio, Gas/Brine
             mRat = MwG / MwB                             #--Mole Weight Ratio  , Gas/Brine
             vPhi = partMolVol(tKel)                      #--Apparent Molar Volume of Dissolved CO2
-            return (1.0 + mRat * xRat) / (vPhi * xRat / MwB + 1.0 / rhoBRnoCO2) # --Equation 18 of Garcia paper
+            return MwB * (xNotCO2 + mRat * xCO2) / (vPhi * xCO2 + MwB * xNotCO2 / rhoBRnoCO2)
         
         # Correct CO2 free brine viscosity for dissolved CO2
         # Using approach from "Viscosity Models and Effects of Dissolved CO2", Akand W. Islam and Eric S. Carlson (Jul 2012), Energy Fuels 2012, 26, 8, 5330�5336, https://doi.org/10.1021/ef3006228
@@ -1798,23 +1801,15 @@ class SoreideWhitson:
                 vphi_eff += yi * _plyasunov_V_phi(gas_ply, tKel, Mpa)
                 mw_eff += yi * _plyasunov_gas_mw(gas_ply)
 
-            # Garcia Eq. 18 in g/cm3:
-            # rho = (1 + x2*M2/(M1*x1)) / (x2*V_phi/(M1*x1) + 1/rho1)
+            # Garcia Eq. 18 in g/cm3, algebraically reformulated to remove the
+            # x1 -> 0 singularity. Multiplying top/bot of
+            #     (1 + x2*M2/(M1*x1)) / (x2*V_phi/(M1*x1) + 1/rho1)
+            # by M1*x1 gives the equivalent, non-singular form below.
             x1 = 1.0 - self.x_total
             M1 = MWWAT
-            if x1 < 1e-6:
-                # Near-pure gas phase: Garcia mixing rule breaks down
-                import warnings
-                warnings.warn(
-                    f"Gas mole fraction x_total={self.x_total:.4f} is too high for "
-                    "Garcia density mixing rule. Returning unsaturated brine density.",
-                    RuntimeWarning, stacklevel=2
-                )
-                rho_gas_brine_gcc = rho_brine_gcc
-            else:
-                numerator = 1.0 + self.x_total * mw_eff / (M1 * x1)
-                denominator = self.x_total * vphi_eff / (M1 * x1) + 1.0 / rho_brine_gcc
-                rho_gas_brine_gcc = numerator / denominator
+            numerator = M1 * x1 + self.x_total * mw_eff
+            denominator = self.x_total * vphi_eff + M1 * x1 / rho_brine_gcc
+            rho_gas_brine_gcc = numerator / denominator
         else:
             rho_gas_brine_gcc = rho_brine_gcc
 

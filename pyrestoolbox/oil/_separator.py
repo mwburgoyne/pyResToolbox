@@ -19,6 +19,7 @@ def sg_evolved_gas(
         api: Stock tank oil density (API)
         sg_sp: Specific gravity of separator gas (relative to air)
     """
+    validate_pe_inputs(p=p, degf=degf, sg=sg_sp)
 
     if (
         p > _SGEVOL_THRESHOLD

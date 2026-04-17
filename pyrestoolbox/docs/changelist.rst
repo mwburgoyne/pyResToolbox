@@ -1,3 +1,21 @@
+Changelist in 3.1.5:
+
+- **Agent-friendly UX**:
+
+  - ``validate_methods`` invalid-method errors now list valid options (e.g. ``Invalid zmethod: 'NOSUCH'. Valid options: ['DAK', 'HY', 'WYW', 'BNS', 'BUR']``). New ``validate_choice`` helper used by all ``nodal`` public entry points (``fbhp``, ``outflow_curve``, ``ipr_curve``, ``operating_point``) to validate ``well_type``.
+  - ``simtools.zip_check_sim_deck`` and ``simtools.ix_extract_problem_cells`` accept a ``non_interactive=True`` kwarg that raises a ``ValueError`` instead of prompting on ``input()``. Safe for scripts and agents without stdin.
+  - ``simtools.make_vfpinj``/``make_vfpprod`` BHP-failure warnings now use ``warnings.warn`` instead of ``print``.
+  - ``DeclineResult``, ``ForecastResult``, ``RatioResult`` ``__repr__`` now summarise array fields as ``ndarray(shape=..., dtype=...)`` so printing a result doesn't flood agent transcripts.
+  - ``nodal`` unit-validation errors (``Reservoir.__init__``, ``WellSegment.__init__``) echo the user's original value and unit (e.g. ``got -1 m``) rather than the post-conversion internal number.
+
+- **Release-blocking numerical fixes**:
+
+  - **Garcia CO2-brine density**: Algebraic reformulation of Eq 18 (``brine.garciaDensity`` and ``SoreideWhitson._calc_properties``) removes the ``xCO2 → 1`` singularity. Finite rho at ``xCO2 = 1`` equals ``MwG / vPhi``. Mathematically identical to the old formula for ``xCO2 < 1`` (regression: 1e-12).
+  - **``oil.Rs_velarde`` at atmospheric ``pb``**: Now returns ``0.0`` when ``pb <= psc`` instead of emitting NaN from a ``0/0`` division.
+  - **``oil.sg_evolved_gas`` silent NaN**: Now calls ``validate_pe_inputs`` at entry; zero pressure or zero ``sg_sp`` raises ``ValueError`` instead of returning NaN.
+
+- 696 validation tests (up from 691 in 3.1.4).
+
 Changelist in 3.1.4:
 
 - **Tier 4 brine improvements**: Adaptive VLE damping in ``flash_tp`` and ``calc_water_content_with_kij`` (replaces fixed 0.7/0.9 factors), ``V2_inf`` cached via ``functools.lru_cache(256)`` in Plyasunov model, ``build_kij_matrix`` cached per ``(T_K, mode)`` on VLE engine instance. Rust VLE flash updated with matching adaptive damping. All three brine models (``CH4_Brine``, ``CO2_Brine_Mixture``, ``SoreideWhitson``) now accept ``p``/``degf``/``wt`` and ``pres``/``temp``/``ppm`` parameter aliases.
