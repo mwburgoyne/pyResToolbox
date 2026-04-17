@@ -468,7 +468,9 @@ pub fn bns_zfactor_full(
 // =========================================================================
 
 /// DAK Z-factor for a batch of pressures. Precomputes Sutton+WA critical properties once.
+/// If tc_user > 0 and pc_user > 0, those replace the SUT mixture Tc/Pc.
 #[pyfunction]
+#[pyo3(signature = (pressures, t_degf, sg, co2_frac, h2s_frac, n2_frac, tc_user=0.0, pc_user=0.0))]
 pub fn dak_zfactor_batch(
     pressures: Vec<f64>,
     t_degf: f64,
@@ -476,9 +478,15 @@ pub fn dak_zfactor_batch(
     co2_frac: f64,
     h2s_frac: f64,
     n2_frac: f64,
+    tc_user: f64,
+    pc_user: f64,
 ) -> PyResult<Vec<f64>> {
-    let (tpc, ppc) = critical_properties::sutton_wa_internal(sg, co2_frac, h2s_frac, n2_frac)
-        .map_err(|e| PyValueError::new_err(e))?;
+    let (tpc, ppc) = if tc_user > 0.0 && pc_user > 0.0 {
+        (tc_user, pc_user)
+    } else {
+        critical_properties::sutton_wa_internal(sg, co2_frac, h2s_frac, n2_frac)
+            .map_err(|e| PyValueError::new_err(e))?
+    };
     let t_rankine = t_degf + DEGF2R;
     let tr = t_rankine / tpc;
 
@@ -491,7 +499,9 @@ pub fn dak_zfactor_batch(
 }
 
 /// Hall-Yarborough Z-factor for a batch of pressures. Precomputes Sutton+WA critical properties once.
+/// If tc_user > 0 and pc_user > 0, those replace the SUT mixture Tc/Pc.
 #[pyfunction]
+#[pyo3(signature = (pressures, t_degf, sg, co2_frac, h2s_frac, n2_frac, tc_user=0.0, pc_user=0.0))]
 pub fn hy_zfactor_batch(
     pressures: Vec<f64>,
     t_degf: f64,
@@ -499,9 +509,15 @@ pub fn hy_zfactor_batch(
     co2_frac: f64,
     h2s_frac: f64,
     n2_frac: f64,
+    tc_user: f64,
+    pc_user: f64,
 ) -> PyResult<Vec<f64>> {
-    let (tpc, ppc) = critical_properties::sutton_wa_internal(sg, co2_frac, h2s_frac, n2_frac)
-        .map_err(|e| PyValueError::new_err(e))?;
+    let (tpc, ppc) = if tc_user > 0.0 && pc_user > 0.0 {
+        (tc_user, pc_user)
+    } else {
+        critical_properties::sutton_wa_internal(sg, co2_frac, h2s_frac, n2_frac)
+            .map_err(|e| PyValueError::new_err(e))?
+    };
     let t_rankine = t_degf + DEGF2R;
     let tr = t_rankine / tpc;
 
@@ -515,7 +531,10 @@ pub fn hy_zfactor_batch(
 
 /// BNS Z-factor for a batch of pressures. Precomputes critical properties, BIPs,
 /// alpha, and m once — loops only mixing rules, cubic solve, and fugacity selection.
+/// If tc_user > 0 and pc_user > 0, those replace only the hydrocarbon pseudo-component
+/// Tc/Pc (inert component Tc/Pc remain at BNS internal constants).
 #[pyfunction]
+#[pyo3(signature = (pressures, t_degf, sg, co2_frac, h2s_frac, n2_frac, h2_frac, tc_user=0.0, pc_user=0.0))]
 pub fn bns_zfactor_batch(
     pressures: Vec<f64>,
     t_degf: f64,
@@ -524,11 +543,18 @@ pub fn bns_zfactor_batch(
     h2s_frac: f64,
     n2_frac: f64,
     h2_frac: f64,
+    tc_user: f64,
+    pc_user: f64,
 ) -> PyResult<Vec<f64>> {
     let deg_r = t_degf + DEGF2R;
-    let (tpc_hc, ppc_hc, _) = critical_properties::bns_pseudocritical_internal(
-        sg, co2_frac, h2s_frac, n2_frac, h2_frac
-    );
+    let (tpc_hc, ppc_hc) = if tc_user > 0.0 && pc_user > 0.0 {
+        (tc_user, pc_user)
+    } else {
+        let (t, p, _) = critical_properties::bns_pseudocritical_internal(
+            sg, co2_frac, h2s_frac, n2_frac, h2_frac
+        );
+        (t, p)
+    };
 
     let result: Vec<f64> = pressures.iter().map(|&p| {
         bns_zfactor_core(p, deg_r, co2_frac, h2s_frac, n2_frac, h2_frac, tpc_hc, ppc_hc)

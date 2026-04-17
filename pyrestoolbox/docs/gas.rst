@@ -64,6 +64,16 @@ Calculating gas Z-Factor of pure methane using DAK and PMC for critical properti
    **BNS method strongly recommended for high-inert or hydrogen-bearing gases.**
    When modelling gases with significant CO2 (>10%), H2S, N2, or any H2 content, the ``'BNS'`` Z-factor and critical property methods (tuned 5-component Peng-Robinson EOS) should be used. Standard correlations (DAK/HY/WYW with PMC/SUT) were developed for sweet natural gas and become unreliable at high impurity concentrations. The BNS method handles the full range from pure hydrocarbon to 100% inerts. When ``h2 > 0``, BNS is auto-selected. For pure or high-concentration CO2/H2S/N2 gases, explicitly set ``zmethod='BNS', cmethod='BNS'``.
 
+.. note::
+
+   **BNS coupling and user-supplied Tc/Pc.**
+   ``zmethod`` and ``cmethod`` are coupled for the BNS framework: if either is BNS, both are forced to BNS (a ``UserWarning`` is emitted if this overrules a user-chosen non-BNS method). Non-BNS methods are not coupled.
+
+   User-supplied ``tc`` and ``pc`` are always respected, but their meaning depends on the critical-property method:
+
+   - **SUT / PMC**: ``tc`` and ``pc`` are the *mixture* pseudo-critical values. They replace the correlation output entirely.
+   - **BNS**: ``tc`` and ``pc`` are the *inert-free hydrocarbon* pseudo-critical values. They replace only the hydrocarbon pseudo-component in the 5-component EOS; inert Tc/Pc (CO2, H2S, N2, H2) remain the BNS internal per-component constants.
+
 Calculating gas Z-Factor of pure CO2
 
 .. code-block:: python
@@ -139,7 +149,11 @@ pyrestoolbox.gas.gas_tc_pc
 
     gas_tc_pc(sg, co2 = 0, h2s = 0, n2 = 0, h2 = 0, cmethod = 'PMC', tc = 0, pc = 0, metric = False) -> tuple
 
-Returns a tuple of critical temperature (deg R, or K if metric=True) and critical pressure (psia, or barsa if metric=True) for hydrocarbon gas. If one or both of the tc and pc parameters are set to be non-zero, then this function will return that unchanged value for the corresponding critical parameter.
+Returns a tuple of critical temperature (deg R, or K if metric=True) and critical pressure (psia, or barsa if metric=True). If one or both of the ``tc`` and ``pc`` parameters are set to be non-zero, then this function will return that unchanged value for the corresponding critical parameter.
+
+For ``cmethod='SUT'`` and ``cmethod='PMC'``, the returned values describe *mixture* pseudo-critical properties (full gas, inerts included).
+
+For ``cmethod='BNS'``, the returned values describe the *inert-free hydrocarbon* pseudo-critical properties only. The supplied inert fractions (``co2``, ``h2s``, ``n2``, ``h2``) are used solely to back out the inert-free hydrocarbon specific gravity from the overall mixture SG; the BNS pseudo-critical correlation is then applied to that hydrocarbon SG. Inert species (CO2, H2S, N2, H2) carry their own per-component Tc/Pc internally within the BNS 5-component PR-EOS, and are *not* included in the value returned here.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -168,10 +182,10 @@ Returns a tuple of critical temperature (deg R, or K if metric=True) and critica
      - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
    * - tc
      - float
-     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
    * - pc
      - float
-     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
    * - metric
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
@@ -254,10 +268,10 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
      - Molar fraction of Hydrogen. Defaults to zero if undefined. zmethod and cmethod get overriden to 'BUR' if positive fraction.
    * - tc
      - float
-     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
    * - pc
      - float
-     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
    * - metric
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
@@ -334,10 +348,10 @@ Furnishing a positive value for zee means it will be used instead of calculating
      - Molar fraction of Hydrogen. Defaults to zero if undefined. Overrides methods to 'BUR' if positive fraction.
    * - tc
      - float
-     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
    * - pc
      - float
-     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
    * - zee
      - float, list or np.array
      - Z-Factor value, or list of values of same length as P, in case recalculation of Z-Factors is not needed. If undefined, will trigger Z-Factor calculation.
@@ -414,10 +428,10 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
      - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
    * - tc
      - float
-     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
    * - pc
      - float
-     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
    * - metric
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
@@ -491,10 +505,10 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
      - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
    * - tc
      - float
-     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
    * - pc
      - float
-     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
    * - metric
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
@@ -567,10 +581,10 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
      - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
    * - tc
      - float
-     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
    * - pc
      - float
-     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
    * - metric
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
@@ -691,10 +705,10 @@ A float or list / array can be used for poverz, returning corresponding 1-D arra
      - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
    * - tc
      - float
-     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
    * - pc
      - float
-     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
    * - rtol
      - float
      - relative solution tolerance as compared with abs([User P/Z - Calculated P/Z] / [User P/Z])
@@ -730,7 +744,7 @@ pyrestoolbox.gas.gas_grad2sg
 
     gas_grad2sg( grad, p, degf, zmethod='DAK', cmethod='PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, rtol = 1E-7, metric = False) -> float
 
-Returns gas specific gravity consistent with observed gas gradient. Calculated through iterative solution method. Will fail if gas SG is below 0.55, or greater than 1.75
+Returns gas specific gravity consistent with observed gas gradient. Calculated through iterative solution method. Bisection bounds span pure H2 (SG ~0.070) to 3.0 to accommodate H2-blend and CO2-rich compositions; solutions outside this range will fail.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -768,10 +782,10 @@ Returns gas specific gravity consistent with observed gas gradient. Calculated t
      - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
    * - tc
      - float
-     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
    * - pc
      - float
-     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
    * - rtol
      - float
      - relative solution tolerance as compared with abs([User grad - Calculated grad] / [User grad])
@@ -847,10 +861,10 @@ Integrates the equation: m(p) = 2 * p / (ug * z)
      - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
    * - tc
      - float
-     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
    * - pc
      - float
-     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
    * - metric
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
@@ -973,10 +987,10 @@ A ``gas_pvt`` object can be provided instead of individual gas composition param
      - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
    * - tc
      - float
-     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
    * - pc
      - float
-     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
    * - n2
      - float
      - Molar fraction of Nitrogen. Defaults to zero if undefined
@@ -1131,10 +1145,10 @@ A ``gas_pvt`` object can be provided instead of individual gas composition param
      - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
    * - tc
      - float
-     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified
+     - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
    * - pc
      - float
-     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified
+     - Critical gas pressure (psia, or barsa if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
    * - n2
      - float
      - Molar fraction of Nitrogen. Defaults to zero if undefined

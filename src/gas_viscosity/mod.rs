@@ -56,10 +56,14 @@ pub struct LbcParams {
 
 /// Compute LBC parameters that don't depend on pressure.
 /// These can be reused across multiple pressure evaluations.
+/// If tc_user > 0 and pc_user > 0, those override the HC pseudo-component Tc/Pc only
+/// (inert Tc/Pc remain at BNS internal constants, as does HC MW / VC_vis).
 pub fn lbc_params(
     degf: f64,
     sg: f64,
     co2: f64, h2s: f64, n2: f64, h2: f64,
+    tc_user: f64,
+    pc_user: f64,
 ) -> LbcParams {
     let deg_r = degf + DEGF2R;
     let zi = [co2, h2s, n2, h2, 1.0 - co2 - h2s - n2 - h2];
@@ -80,11 +84,16 @@ pub fn lbc_params(
     let hc_gas_mw = sg_hc * MW_AIR;
 
     mws[4] = hc_gas_mw;
-    let (tpc_hc, ppc_hc, _) = critical_properties::bns_pseudocritical_internal(
-        hc_gas_mw / MW_AIR, 0.0, 0.0, 0.0, 0.0
-    );
-    tcs[4] = tpc_hc;
-    pcs[4] = ppc_hc;
+    if tc_user > 0.0 && pc_user > 0.0 {
+        tcs[4] = tc_user;
+        pcs[4] = pc_user;
+    } else {
+        let (tpc_hc, ppc_hc, _) = critical_properties::bns_pseudocritical_internal(
+            hc_gas_mw / MW_AIR, 0.0, 0.0, 0.0, 0.0
+        );
+        tcs[4] = tpc_hc;
+        pcs[4] = ppc_hc;
+    }
     vcvis[4] = 0.0576710 * (hc_gas_mw - 16.0425) + 1.44383;
 
     // Stiel-Thodos dilute gas viscosity per component
@@ -145,6 +154,7 @@ pub fn lbc_viscosity_with_params(
 
 /// LBC viscosity exposed to Python (scalar, full computation).
 #[pyfunction]
+#[pyo3(signature = (p_psia, sg, degf, co2, h2s, n2, h2, zee, tc_user=0.0, pc_user=0.0))]
 pub fn gas_ug_lbc(
     p_psia: f64,
     sg: f64,
@@ -154,9 +164,11 @@ pub fn gas_ug_lbc(
     n2: f64,
     h2: f64,
     zee: f64,
+    tc_user: f64,
+    pc_user: f64,
 ) -> PyResult<f64> {
     let deg_r = degf + DEGF2R;
-    let params = lbc_params(degf, sg, co2, h2s, n2, h2);
+    let params = lbc_params(degf, sg, co2, h2s, n2, h2, tc_user, pc_user);
     Ok(lbc_viscosity_with_params(p_psia, deg_r, zee, &params))
 }
 
@@ -190,7 +202,9 @@ pub fn gas_ug_lge_batch(
 
 /// LBC viscosity for a batch of (pressure, z-factor) pairs.
 /// Precomputes LBC mixture parameters (u0, eta_mix, rhoc) once.
+/// If tc_user > 0 and pc_user > 0, those override only the HC pseudo-component Tc/Pc.
 #[pyfunction]
+#[pyo3(signature = (pressures, z_factors, sg, degf, co2, h2s, n2, h2, tc_user=0.0, pc_user=0.0))]
 pub fn gas_ug_lbc_batch(
     pressures: Vec<f64>,
     z_factors: Vec<f64>,
@@ -200,9 +214,11 @@ pub fn gas_ug_lbc_batch(
     h2s: f64,
     n2: f64,
     h2: f64,
+    tc_user: f64,
+    pc_user: f64,
 ) -> PyResult<Vec<f64>> {
     let deg_r = degf + DEGF2R;
-    let params = lbc_params(degf, sg, co2, h2s, n2, h2);
+    let params = lbc_params(degf, sg, co2, h2s, n2, h2, tc_user, pc_user);
 
     let result: Vec<f64> = pressures.iter().zip(z_factors.iter()).map(|(&p, &z)| {
         lbc_viscosity_with_params(p, deg_r, z, &params)

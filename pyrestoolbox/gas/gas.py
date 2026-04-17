@@ -64,23 +64,27 @@ import numpy.typing as npt
 from typing import Tuple
 from dataclasses import dataclass
 
-import pandas as pd
-from pyrestoolbox.classes import z_method, c_method, pb_method, rs_method, bo_method, uo_method, deno_method, co_method, kr_family, kr_table, hyd_method, inhibitor, class_dic
+from pyrestoolbox.classes import z_method, c_method, hyd_method, inhibitor
 from pyrestoolbox.shared_fns import convert_to_numpy, process_output, check_2_inputs, bisect_solve, validate_pe_inputs
 from pyrestoolbox.validate import validate_methods
-from pyrestoolbox.constants import (R, psc, tsc, degF2R, tscr, scf_per_mol, CUFTperBBL, WDEN, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2,
+from pyrestoolbox.constants import (R, psc, tsc, degF2R, scf_per_mol, CUFTperBBL, WDEN, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2,
     BAR_TO_PSI, PSI_TO_BAR, degc_to_degf, degf_to_degc,
-    M_TO_FT, FT_TO_M, MM_TO_IN, IN_TO_MM, SQM_TO_SQFT, SQFT_TO_SQM,
-    LBCUFT_TO_KGM3, KGM3_TO_LBCUFT, INVPSI_TO_INVBAR, INVBAR_TO_INVPSI,
-    PSI2CP_TO_BAR2CP, BAR2CP_TO_PSI2CP, BARM_TO_PSIFT, PSIFT_TO_BARM,
-    MSCF_TO_SM3, SM3_TO_MSCF, STB_PER_MMSCF_TO_SM3_PER_SM3,
-    SM3_PER_SM3_TO_STB_PER_MSCF, SM3_PER_SM3_TO_STB_PER_MMSCF,
-    D_PER_SM3_TO_D_PER_MSCF, D_PER_MSCF_TO_D_PER_SM3,
+    M_TO_FT, SQM_TO_SQFT,
+    LBCUFT_TO_KGM3, INVPSI_TO_INVBAR,
+    PSI2CP_TO_BAR2CP, BARM_TO_PSIFT,
+    MSCF_TO_SM3, STB_PER_MMSCF_TO_SM3_PER_SM3,
+    SM3_PER_SM3_TO_STB_PER_MMSCF,
+    D_PER_SM3_TO_D_PER_MSCF,
     LB_PER_MMSCF_TO_KG_PER_SM3, GAL_PER_MMSCF_TO_L_PER_SM3)
 
 # Precomputed Gauss-Legendre nodes/weights for pseudopressure integration
 _GL7_NODES, _GL7_WEIGHTS = np.polynomial.legendre.leggauss(7)
 _GL10_NODES, _GL10_WEIGHTS = np.polynomial.legendre.leggauss(10)
+
+# gas_grad2sg bisection bounds. Lower = pure H2 SG (physical minimum for
+# H2-blend support); upper = 3.0 covers pure CO2 (SG ~1.53) with margin.
+_GRAD2SG_SG_LO = MW_H2 / MW_AIR
+_GRAD2SG_SG_HI = 3.0
 
 # =============================================================================
 # Correlation coefficients — named constants with paper citations
@@ -175,6 +179,53 @@ def _h2_method_override(h2, zmethod, cmethod):
         return 'BNS', 'BNS'
     return zmethod, cmethod
 
+def _is_bns_method(method):
+    """True if method is BNS/BUR (Enum, string, or legacy alias)."""
+    if hasattr(method, 'name'):
+        return method.name in ('BNS', 'BUR')
+    if isinstance(method, str):
+        return method.upper() in ('BNS', 'BUR')
+    return False
+
+def _method_label(method):
+    """Printable label for a method arg (Enum.name or string)."""
+    if hasattr(method, 'name'):
+        return method.name
+    return str(method)
+
+def _resolve_methods(zmethod, cmethod, h2=0):
+    """Resolve z/c methods with BNS coupling and return validated Enums.
+
+    Policy:
+      1. h2 > 0 forces both methods to 'BNS' (documented auto-selection, no warning).
+      2. If either method is BNS, force both to BNS and emit UserWarning naming
+         the overruled counterpart. Non-BNS methods are not coupled.
+
+    User-supplied tc/pc are always respected within the resulting method:
+    for BNS they replace the hydrocarbon pseudo-component Tc/Pc (inert Tc/Pc
+    remain BNS internal constants); for SUT/PMC they replace the mixture Tc/Pc.
+    """
+    if h2 > 0:
+        zmethod, cmethod = 'BNS', 'BNS'
+    else:
+        z_is_bns = _is_bns_method(zmethod)
+        c_is_bns = _is_bns_method(cmethod)
+        if z_is_bns != c_is_bns:
+            if z_is_bns:
+                overruled = f"cmethod={_method_label(cmethod)!r}"
+                cmethod = 'BNS'
+            else:
+                overruled = f"zmethod={_method_label(zmethod)!r}"
+                zmethod = 'BNS'
+            warnings.warn(
+                f"BNS coupling: {overruled} overruled to 'BNS' because the "
+                f"counterpart method is BNS. When any of zmethod/cmethod is BNS, "
+                f"both are forced to BNS for thermodynamic consistency.",
+                UserWarning,
+                stacklevel=3,
+            )
+    return validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
+
 def _metric_to_field_pvt(p, degf, tc, pc, metric):
     """Convert gas PVT inputs from metric (barsa, degC, K, barsa) to field (psia, degF, degR, psia)."""
     if not metric:
@@ -229,10 +280,7 @@ def _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s)
 def _prepare_gas_rate_inputs(degf, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, pc):
     """Validate inputs, apply H2 auto-selection, resolve methods and critical properties."""
     validate_pe_inputs(degf=degf, sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2)
-    if h2 > 0:
-        cmethod = 'BNS'
-        zmethod = 'BNS'
-    zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
+    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
     tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc)
     return zmethod, cmethod, tc, pc
 
@@ -284,8 +332,8 @@ def gas_rate_radial(
         h2s: Molar fraction of H2S. Defaults to zero if undefined
         n2: Molar fraction of Nitrogen. Defaults to zero if undefined
         h2: Molar fraction of Hydrogen. Defaults to zero if undefined. If > 0, will change zmethod to 'BNS'
-        tc: Critical gas temperature (deg R | K). Uses cmethod correlation if not specified
-        pc: Critical gas pressure (psia | barsa). Uses cmethod correlation if not specified
+        tc: Critical gas temperature (deg R | K). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
+        pc: Critical gas pressure (psia | barsa). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
         gas_pvt: GasPVT object. If provided, sg/co2/h2s/n2/h2/zmethod/cmethod/tc/pc are extracted from it
         metric: If True, input/output in Eclipse METRIC units (barsa, degC, m, sm3/d). Defaults to False (FIELD)
     """
@@ -368,8 +416,8 @@ def gas_rate_linear(
         h2s: Molar fraction of H2S. Defaults to zero if not specified
         n2: Molar fraction of Nitrogen. Defaults to zero if not specified
         h2: Molar fraction of Hydrogen. Defaults to zero if not specified
-        tc: Critical gas temperature (deg R | K). Uses cmethod correlation if not specified
-        pc: Critical gas pressure (psia | barsa). Uses cmethod correlation if not specified
+        tc: Critical gas temperature (deg R | K). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
+        pc: Critical gas pressure (psia | barsa). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
         gas_pvt: GasPVT object. If provided, sg/co2/h2s/n2/h2/zmethod/cmethod/tc/pc are extracted from it
         metric: If True, input/output in Eclipse METRIC units (barsa, degC, m, m2, sm3/d). Defaults to False (FIELD)
     """
@@ -443,19 +491,25 @@ def gas_tc_pc(
     pc: float = 0,
     metric: bool = False,
 ) -> Tuple:
-    """ Returns a Tuple of critical temperature (deg R) and critical pressure (psia) for hydrocarbon gas
+    """ Returns a Tuple of critical temperature (deg R) and critical pressure (psia).
         For SUT and PMC, this returns an equivalent set of critical parameters for the mixture
-        For BUR, this returns critical parameters for the pure hydrocarbon gas alone
+        (full gas including inerts). For BNS, this returns critical parameters for the
+        *inert-free* hydrocarbon gas only: the supplied inert fractions (co2, h2s, n2, h2)
+        are used solely to back out the inert-free hydrocarbon specific gravity from the
+        overall mixture sg, and the BNS pseudo-critical correlation is then applied to that
+        hydrocarbon sg. The returned Tc/Pc therefore describe the pure hydrocarbon pseudo-
+        component; the BNS 5-component PR-EOS handles the inert species' Tc/Pc separately
+        via its own per-component internal constants (CO2, H2S, N2, H2).
         sg: Specific gravity of reservoir gas (relative to air)
         co2: Molar fraction of CO2. Defaults to zero if undefined
         h2s: Molar fraction of H2S. Defaults to zero if undefined
         n2: Molar fraction of Nitrogen. Defaults to zero if undefined
         h2: Molar fraction of Hydrogen. Defaults to zero if undefined
-        cmethod: 'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, 
+        cmethod: 'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections,
                  'PMC' for Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'BNS' for Burgoyne, Nielsen and Stanko method (2025). If h2 > 0, then 'BNS' will be used
-        tc: Critical gas temperature (deg R | K). Uses cmethod correlation if not specified
-        pc: Critical gas pressure (psia | barsa). Uses cmethod correlation if not specified
+        tc: Critical gas temperature (deg R | K). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
+        pc: Critical gas pressure (psia | barsa). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
         metric: If True, input/output in Eclipse METRIC units (K, barsa). Defaults to False (FIELD)
     """
     validate_pe_inputs(sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2)
@@ -735,8 +789,8 @@ def gas_z(
         h2s: Molar fraction of H2S. Defaults to zero if undefined
         n2: Molar fraction of Nitrogen. Defaults to zero if undefined
         h2: Molar fraction of Hydrogen. Defaults to zero if undefined
-        tc: Critical gas temperature (deg R | K). Uses cmethod correlation if not specified
-        pc: Critical gas pressure (psia | barsa). Uses cmethod correlation if not specified
+        tc: Critical gas temperature (deg R | K). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
+        pc: Critical gas pressure (psia | barsa). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
         metric: If True, input/output in Eclipse METRIC units (barsa, degC, K). Defaults to False (FIELD)
     """
     p, degf, tc, pc = _metric_to_field_pvt(p, degf, tc, pc, metric)
@@ -744,14 +798,9 @@ def gas_z(
 
     tolerance = 1e-6
     p, is_list = convert_to_numpy(p)
+    user_tc_pc = tc > 0 and pc > 0
 
-    zmethod, cmethod = _h2_method_override(h2, zmethod, cmethod)
-    if cmethod == 'BNS':
-        zmethod = 'BNS'
-    elif zmethod == 'BNS':
-        cmethod='BNS'
-
-    zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
+    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
 
     tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc)
     tr = (degf + degF2R) / tc
@@ -946,19 +995,25 @@ def gas_z(
         
     zfuncs = {"DAK": zdak, "HY": z_hy, "WYW": z_wyw, "BNS": z_bur}
 
-    # Rust acceleration dispatch (batch — single FFI call for all pressures)
+    # Rust acceleration dispatch (batch — single FFI call for all pressures).
+    # User tc/pc is forwarded to each Rust batch path; for BNS it overrides only
+    # the HC pseudo-component (inert Tc/Pc stay at BNS internal constants).
+    tc_arg = float(tc) if user_tc_pc else 0.0
+    pc_arg = float(pc) if user_tc_pc else 0.0
     if RUST_AVAILABLE:
         if zmethod.name in ('BNS', 'BUR'):
             zout = np.array(_rust_module.bns_zfactor_batch(
                 p.tolist(), float(degf), float(sg),
-                float(co2), float(h2s), float(n2), float(h2)
+                float(co2), float(h2s), float(n2), float(h2),
+                tc_arg, pc_arg,
             ))
             return process_output(zout, is_list)
         elif zmethod.name == 'DAK':
             if cmethod.name == 'SUT':
                 zout = np.array(_rust_module.dak_zfactor_batch(
                     p.tolist(), float(degf), float(sg),
-                    float(co2), float(h2s), float(n2)
+                    float(co2), float(h2s), float(n2),
+                    tc_arg, pc_arg,
                 ))
             else:
                 zout = np.array([_rust_module.dak_zfactor(float(pr_i), float(tr)) for pr_i in pprs])
@@ -967,7 +1022,8 @@ def gas_z(
             if cmethod.name == 'SUT':
                 zout = np.array(_rust_module.hy_zfactor_batch(
                     p.tolist(), float(degf), float(sg),
-                    float(co2), float(h2s), float(n2)
+                    float(co2), float(h2s), float(n2),
+                    tc_arg, pc_arg,
                 ))
             else:
                 zout = np.array([_rust_module.hall_yarborough_zfactor(float(pr_i), float(tr)) for pr_i in pprs])
@@ -1016,8 +1072,8 @@ def gas_ug(
           h2s: Molar fraction of H2S. Defaults to zero if undefined
           n2: Molar fraction of Nitrogen. Defaults to zero if undefined
           h2: Molar fraction of Hydrogen. Defaults to zero if undefined
-          tc: Critical gas temperature (deg R). Calculates using cmethod if not specified
-          pc: Critical gas pressure (psia). Calculates using cmethod if not specified
+          tc: Critical gas temperature (deg R). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
+          pc: Critical gas pressure (psia). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
           zee: Gas Z-Factor. If undefined, will trigger Z-Factor calculation.
           ugz: Boolean flag that if True returns ugZ instead of ug
           metric: If True, input/output in Eclipse METRIC units (barsa, degC). Defaults to False (FIELD)
@@ -1032,14 +1088,9 @@ def gas_ug(
     zee_provided = not (isinstance(zee, (int, float, bool)) and not zee)
     p, is_list = convert_to_numpy(p)
     zee, _ = convert_to_numpy(zee)
+    user_tc_pc = isinstance(tc, (int, float)) and isinstance(pc, (int, float)) and tc > 0 and pc > 0
 
-    zmethod, cmethod = _h2_method_override(h2, zmethod, cmethod)
-    if cmethod == 'BNS':
-        zmethod = 'BNS'
-    elif zmethod == 'BNS':
-        cmethod='BNS'
-
-    zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
+    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
 
     t = degf + degF2R
     m = MW_AIR * sg
@@ -1049,7 +1100,9 @@ def gas_ug(
     
     rho = m * p / (t * zee * R * WDEN)
 
-    # Rust-accelerated viscosity (batch — single FFI call for all pressures)
+    # Rust-accelerated viscosity (batch — single FFI call for all pressures).
+    # For BNS, user tc/pc is forwarded as HC-only override (inert Tc/Pc stay
+    # at BNS internal constants).
     if RUST_AVAILABLE:
         if zmethod.name not in ('BNS', 'BUR'):
             ug_list = np.array(_rust_module.gas_ug_lge_batch(
@@ -1057,8 +1110,11 @@ def gas_ug(
             ))
             ug = process_output(ug_list, is_list)
         else:
+            tc_arg = float(tc) if user_tc_pc else 0.0
+            pc_arg = float(pc) if user_tc_pc else 0.0
             ug_list = np.array(_rust_module.gas_ug_lbc_batch(
-                p.tolist(), zee.tolist(), sg, degf, co2, h2s, n2, h2
+                p.tolist(), zee.tolist(), sg, degf, co2, h2s, n2, h2,
+                tc_arg, pc_arg,
             ))
             ug = process_output(ug_list, is_list)
         if ugz:
@@ -1090,7 +1146,11 @@ def gas_ug(
         hc_gas_mw = sg_hc * MW_AIR
 
         mws_lbc[-1] = hc_gas_mw
-        tcs_lbc[-1], pcs_lbc[-1] = gas_tc_pc(hc_gas_mw / MW_AIR, cmethod='BNS')
+        # User-supplied tc/pc override only the hydrocarbon pseudo-component Tc/Pc;
+        # gas_tc_pc returns user values directly when both are >0, else BNS correlation.
+        tcs_lbc[-1], pcs_lbc[-1] = gas_tc_pc(hc_gas_mw / MW_AIR, cmethod='BNS',
+                                             tc=tc if user_tc_pc else 0,
+                                             pc=pc if user_tc_pc else 0)
         VCVIS_lbc[-1] = _BNS_VCVIS_HC[0] * (hc_gas_mw - _BNS_CH4_MW) + _BNS_VCVIS_HC[1]
 
         # Vectorized Stiel-Thodos
@@ -1146,8 +1206,8 @@ def gas_cg(
         h2s: Molar fraction of H2S. Defaults to zero if undefined
         n2: Molar fraction of Nitrogen. Defaults to zero if undefined
         h2: Molar fraction of Hydrogen. Defaults to zero if undefined
-        tc: Critical gas temperature (deg R). Uses cmethod correlation if not specified
-        pc: Critical gas pressure (psia). Uses cmethod correlation if not specified
+        tc: Critical gas temperature (deg R). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
+        pc: Critical gas pressure (psia). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
         zmethod: Method for calculating Z-Factor
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                    'HY' Hall & Yarborough (1973)
@@ -1162,8 +1222,7 @@ def gas_cg(
           metric: If True, input/output in Eclipse METRIC units (barsa, degC, 1/barsa). Defaults to False (FIELD)
     """
     p, degf, tc, pc = _metric_to_field_pvt(p, degf, tc, pc, metric)
-    zmethod, cmethod = _h2_method_override(h2, zmethod, cmethod)
-    zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
+    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
 
     p, is_list = convert_to_numpy(p)
     tc, pc = gas_tc_pc(sg=sg, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc, cmethod=cmethod)
@@ -1219,13 +1278,12 @@ def gas_bg(
           h2s: Molar fraction of H2S. Defaults to zero if undefined
           n2: Molar fraction of Nitrogen. Defaults to zero if undefined
           h2: Molar fraction of Nitrogen. Defaults to zero if undefined
-          tc: Critical gas temperature (deg R | K). Calculates using cmethod if not specified
-          pc: Critical gas pressure (psia | barsa). Calculates using cmethod if not specified
+          tc: Critical gas temperature (deg R | K). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
+          pc: Critical gas pressure (psia | barsa). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
           metric: If True, input/output in Eclipse METRIC units (barsa, degC). Defaults to False (FIELD)
     """
     p, degf, tc, pc = _metric_to_field_pvt(p, degf, tc, pc, metric)
-    zmethod, cmethod = _h2_method_override(h2, zmethod, cmethod)
-    zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
+    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
     p, is_list = convert_to_numpy(p)
 
     zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc)
@@ -1269,13 +1327,12 @@ def gas_den(
           h2s: Molar fraction of H2S. Defaults to zero if undefined
           n2: Molar fraction of Nitrogen. Defaults to zero if undefined
           h2: Molar fraction of Hydrogen. Defaults to zero if undefined
-          tc: Critical gas temperature (deg R | K). Calculates using cmethod if not specified
-          pc: Critical gas pressure (psia | barsa). Calculates using cmethod if not specified
+          tc: Critical gas temperature (deg R | K). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
+          pc: Critical gas pressure (psia | barsa). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
           metric: If True, input/output in Eclipse METRIC units (barsa, degC, kg/m3). Defaults to False (FIELD)
     """
     p, degf, tc, pc = _metric_to_field_pvt(p, degf, tc, pc, metric)
-    zmethod, cmethod = _h2_method_override(h2, zmethod, cmethod)
-    zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
+    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
     p, is_list = convert_to_numpy(p)
 
     zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc)
@@ -1333,8 +1390,8 @@ def gas_ponz2p(
           h2s: Molar fraction of H2S. Defaults to zero if undefined
           n2: Molar fraction of Nitrogen. Defaults to zero if undefined
           h2: Molar fraction of Hydrogen. Defaults to zero if undefined
-          tc: Critical gas temperature (deg R). Calculates using cmethod if not specified
-          pc: Critical gas pressure (psia). Calculates using cmethod if not specified
+          tc: Critical gas temperature (deg R). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
+          pc: Critical gas pressure (psia). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
           rtol: Relative solution tolerance. Will iterate until abs[(p - poverz * Z)/p] < rtol
           metric: If True, input/output in Eclipse METRIC units (barsa, degC). Defaults to False (FIELD)
     """
@@ -1346,8 +1403,7 @@ def gas_ponz2p(
         if pc > 0:
             pc = pc * BAR_TO_PSI
 
-    zmethod, cmethod = _h2_method_override(h2, zmethod, cmethod)
-    zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
+    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
 
     poverz, is_list = convert_to_numpy(poverz)
 
@@ -1358,7 +1414,9 @@ def gas_ponz2p(
             f"P/Z is discontinuous."
         )
 
-    # Try Rust-accelerated batch solver for supported method combinations
+    # Try Rust-accelerated batch solver for supported method combinations.
+    # User tc/pc is honored by the Rust path: mixture override for DAK/HY+SUT,
+    # HC-only override for BNS.
     zname = zmethod.name
     cname = cmethod.name
     if cname in ('SUT', 'BNS'):
@@ -1414,7 +1472,8 @@ def gas_grad2sg(
     metric: bool = False,
 ) -> float:
     """ Returns insitu gas specific gravity consistent with observed gas gradient. Solution iteratively calculated via bisection
-        Calculated through iterative solution method. Will fail if gas SG is below 0.55, or greater than 3.0.
+        Calculated through iterative solution method. Bisection bounds span pure H2 (SG ~0.070) to 3.0 to
+        accommodate H2-blend and CO2-rich compositions; results outside this range will fail.
 
         grad: Observed gas gradient (psi/ft)
         p: Pressure at observation (psia)
@@ -1434,8 +1493,8 @@ def gas_grad2sg(
           h2s: Molar fraction of H2S. Defaults to zero if undefined
           n2: Molar fraction of Nitrogen. Defaults to zero if undefined
           h2: Molar fraction of Hydrogen. Defaults to zero if undefined
-          tc: Critical gas temperature (deg R). Calculates using cmethod if not specified
-          pc: Critical gas pressure (psia). Calculates using cmethod if not specified
+          tc: Critical gas temperature (deg R). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
+          pc: Critical gas pressure (psia). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
           rtol: Relative solution tolerance. Will iterate until abs[(grad - calculation)/grad] < rtol
           metric: If True, input/output in Eclipse METRIC units (bar/m, barsa, degC). Defaults to False (FIELD)
     """
@@ -1462,11 +1521,10 @@ def gas_grad2sg(
         error = (grad - grad_calc) / grad
         return error
 
-    zmethod, cmethod = _h2_method_override(h2, zmethod, cmethod)
-    zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
+    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
 
     args = (grad, p, zmethod, cmethod, tc, pc, co2, h2s, n2, h2)
-    return bisect_solve(args, grad_err, 0.06958923023817742, 3.0, rtol)
+    return bisect_solve(args, grad_err, _GRAD2SG_SG_LO, _GRAD2SG_SG_HI, rtol)
 
 def gas_dmp(
     p1: float,
@@ -1504,8 +1562,8 @@ def gas_dmp(
         h2s: Molar fraction of H2S. Defaults to zero if undefined
         n2: Molar fraction of Nitrogen. Defaults to zero if undefined
         h2: Molar fraction of Hydrogen. Defaults to zero if undefined
-        tc: Critical gas temperature (deg R | K). Calculates using cmethod if not specified
-        pc: Critical gas pressure (psia | barsa). Calculates using cmethod if not specified
+        tc: Critical gas temperature (deg R | K). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
+        pc: Critical gas pressure (psia | barsa). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
         metric: If True, input/output in Eclipse METRIC units (barsa, degC, bar^2/cP). Defaults to False (FIELD)
     """
     if metric:
@@ -1523,10 +1581,11 @@ def gas_dmp(
     if p1 == p2:
         return 0
 
-    zmethod, cmethod = _h2_method_override(h2, zmethod, cmethod)
-    zmethod, cmethod = validate_methods(["zmethod", "cmethod"], [zmethod, cmethod])
+    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
 
-    # Rust-accelerated pseudopressure (entire integration in Rust — no Python round-trips)
+    # Rust-accelerated pseudopressure (entire integration in Rust — no Python round-trips).
+    # User tc/pc is honored by the Rust path: mixture override for DAK/HY+SUT,
+    # HC-only override for BNS.
     if RUST_AVAILABLE:
         zname = zmethod.name
         cname = cmethod.name
@@ -1621,21 +1680,39 @@ class GasPVT:
         h2: Molar fraction of Hydrogen. Defaults to zero
         zmethod: Method for calculating Z-Factor. Defaults to 'DAK', or 'BNS' if h2 > 0
         cmethod: Method for calculating critical properties. Defaults to 'PMC'
+        tc: Critical gas temperature (deg R, or K if metric=True). Defaults to 0 = compute from cmethod.
+            For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants).
+            Both tc and pc must be > 0 to take effect.
+        pc: Critical gas pressure (psia, or barsa if metric=True). Defaults to 0 = compute from cmethod.
+            For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants).
+            Both tc and pc must be > 0 to take effect.
         metric: If True, methods accept/return Eclipse METRIC units (barsa, degC, kg/m3). Defaults to False
+
+        BNS coupling: if either zmethod or cmethod is BNS, both are forced to BNS for
+        thermodynamic consistency (a UserWarning is emitted if this overrules a
+        user-chosen non-BNS method). h2 > 0 auto-selects BNS silently.
     """
     def __init__(self, sg=0.75, co2=0, h2s=0, n2=0, h2=0,
-                 zmethod='DAK', cmethod='PMC', metric=False):
+                 zmethod='DAK', cmethod='PMC', tc=0, pc=0, metric=False):
         self.sg = sg
         self.co2 = co2
         self.h2s = h2s
         self.n2 = n2
         self.h2 = h2
         self.metric = metric
-        zmethod, cmethod = _h2_method_override(h2, zmethod, cmethod)
-        self.zmethod, self.cmethod = validate_methods(
-            ["zmethod", "cmethod"], [zmethod, cmethod])
-        # tc/pc always stored in oilfield units internally
-        self.tc, self.pc = gas_tc_pc(sg, co2, h2s, n2, h2, self.cmethod.name)
+        # Convert user-supplied metric tc/pc to oilfield units for internal storage
+        if metric:
+            if tc > 0:
+                tc = tc * 1.8  # K -> deg R
+            if pc > 0:
+                pc = pc * BAR_TO_PSI
+        self._user_tc_pc = tc > 0 and pc > 0
+        self.zmethod, self.cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
+        # self.tc/self.pc reflect the effective critical properties used by methods:
+        # user-supplied values when both tc/pc > 0, otherwise cmethod correlation output.
+        # For SUT/PMC these are mixture pseudo-critical values; for BNS they are the
+        # inert-free hydrocarbon pseudo-critical values.
+        self.tc, self.pc = gas_tc_pc(sg, co2, h2s, n2, h2, self.cmethod.name, tc, pc)
 
     def _convert_inputs(self, p, degf):
         """Convert metric inputs to oilfield for internal calculations."""
@@ -1647,23 +1724,29 @@ class GasPVT:
     def z(self, p, degf):
         """ Returns Z-factor at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
         p, degf = self._convert_inputs(p, degf)
+        tc = self.tc if self._user_tc_pc else 0
+        pc = self.pc if self._user_tc_pc else 0
         return gas_z(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
                      cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
-                     n2=self.n2, h2=self.h2, tc=self.tc, pc=self.pc)
+                     n2=self.n2, h2=self.h2, tc=tc, pc=pc)
 
     def viscosity(self, p, degf):
         """ Returns gas viscosity (cP) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
         p, degf = self._convert_inputs(p, degf)
+        tc = self.tc if self._user_tc_pc else 0
+        pc = self.pc if self._user_tc_pc else 0
         return gas_ug(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
                       cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
-                      n2=self.n2, h2=self.h2, tc=self.tc, pc=self.pc)
+                      n2=self.n2, h2=self.h2, tc=tc, pc=pc)
 
     def density(self, p, degf):
         """ Returns gas density (lb/cuft | kg/m3) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
         p, degf = self._convert_inputs(p, degf)
+        tc = self.tc if self._user_tc_pc else 0
+        pc = self.pc if self._user_tc_pc else 0
         result = gas_den(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
                          cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
-                         n2=self.n2, h2=self.h2, tc=self.tc, pc=self.pc)
+                         n2=self.n2, h2=self.h2, tc=tc, pc=pc)
         if self.metric:
             return result * LBCUFT_TO_KGM3
         return result
@@ -1671,9 +1754,11 @@ class GasPVT:
     def bg(self, p, degf):
         """ Returns gas FVF Bg (rcf/scf | rm3/sm3) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
         p, degf = self._convert_inputs(p, degf)
+        tc = self.tc if self._user_tc_pc else 0
+        pc = self.pc if self._user_tc_pc else 0
         return gas_bg(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
                       cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
-                      n2=self.n2, h2=self.h2, tc=self.tc, pc=self.pc)
+                      n2=self.n2, h2=self.h2, tc=tc, pc=pc)
 
 
 def gas_water_content(p: float, degf: float, salinity: float = 0, metric: bool = False) -> float:
