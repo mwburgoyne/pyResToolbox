@@ -55,6 +55,7 @@ import glob
 import os
 from os.path import exists
 import zipfile
+import warnings
 
 from typing import Union, Tuple
 import numpy as np
@@ -93,7 +94,7 @@ EPS_T = 1e-15
 MAX_ITR = 100
 
 
-def ix_extract_problem_cells(filename: str = "", silent: bool = False) -> list:
+def ix_extract_problem_cells(filename: str = "", silent: bool = False, non_interactive: bool = False) -> list:
     """
     Processes Intersect PRT file to extract convergence issue information
     Prints a summary of worst offenders to terminal (if silent=False), and returns a list
@@ -103,6 +104,8 @@ def ix_extract_problem_cells(filename: str = "", silent: bool = False) -> list:
               If a filename is furnished, or only one file exists, then no selection will be presented
     silent: False will return only the list of dataframes, with nothing echoed to the terminal
             True will return summary of worst entities to the terminal
+    non_interactive: If True, raise ValueError instead of prompting via input() when multiple .PRT files are found
+                     and no filename was supplied. Use from scripts/agents where stdin is not available.
     """
 
     if filename != "":  # A Filename has been provided
@@ -115,6 +118,11 @@ def ix_extract_problem_cells(filename: str = "", silent: bool = False) -> list:
             raise FileNotFoundError("No .PRT files exist in this directory")
 
         if len(prt_files) > 1:
+            if non_interactive:
+                raise ValueError(
+                    f"Multiple .PRT files found in directory ({prt_files}); "
+                    "pass filename=... explicitly in non-interactive mode"
+                )
             table = []
             header = [
                 "Index",
@@ -816,59 +824,66 @@ def influence_tables(
 
     return (tD, pDs)
 
-def zip_check_sim_deck(files2scrape = [], tozip = True, console_summary = True):
+def zip_check_sim_deck(files2scrape = [], tozip = True, console_summary = True, non_interactive = False):
     """ Performs recursive ECL/IX deck zip/check
-        Crawls through all INCLUDE files in a deck, including an unlimited number of subdirectories and nested INCLUDE references, 
+        Crawls through all INCLUDE files in a deck, including an unlimited number of subdirectories and nested INCLUDE references,
         and (a) checks that all include files exist, then optionally (b) creates a zip file of all associated files
         It does NOT zip any files that are in a higher directory than the .DATA file, but it does flag any such files so users can manually include them
-        
+
         Run in directory containing the simulation DATA or AFI files (or change directory to there)
         Select one or more decks by their index number when prompted, then follow instructions
-        
+
         files2scrape: A list of file names to scrape. These must be .DATA and/or .AFI files
                       If no (or empty) list is passed, then user will be prompted to select one or more from the files existing in the current directory
         tozip: Controls whether all files will be zipped, or whether a check that all files exist is all that is performed.
-               If no (or empty) files2scrape list was passed, then user will be prompted for their choice no matter what was specified.   
-               
+               If no (or empty) files2scrape list was passed, then user will be prompted for their choice no matter what was specified.
+
         console_summary: Controls whether summary results are returned to console or not
                          If False, will return a list of missing INCLUDE files. A zero length list would indicate no missing files.
+        non_interactive: If True, raise ValueError instead of prompting via input(). Use from scripts/agents where stdin is not available.
+                         In this mode: files2scrape must be provided, tozip is respected as given, and zipping with missing files raises rather than asking.
     """
 
     def get_loc(mask):
         input_files = []
-        
+
         for files in mask:
-    
+
             for file in glob.glob(files.upper()): # Grab a list of all the files in the directory with file mask
                 input_files.append(file)
             for file in glob.glob(files.lower()): # In case lowercase extension used
                 input_files.append(file)
         input_files = list(set(input_files)) # In case duplicated file names due to checking upper and lower case
-        
+
         if len(input_files) == 0:
             raise FileNotFoundError('No '+mask+' files exist in this directory')
-    
+
         print(' ')
-        
+
         input_files.sort()
-        
+
         table = []
         header=['Index', 'File Name']  # Print list of options to select from
         for i in range(len(input_files)):
             table.append([i,input_files[i]])
-        print(tabulate(table,headers=header))    
+        print(tabulate(table,headers=header))
         print(' ')
         file_idx = input('Please choose index(s) of file to parse separated by commas (0 - '+str(len(input_files)-1)+') :')
         file_idxs = [int(x) for x in file_idx.split(',')]
-    
+
         if not all(item in [i for i in range(0, len(input_files))] for item in file_idxs):
             raise ValueError('Index entered outside range permitted')
-        
+
         in_files =  [input_files[x] for x in file_idxs]
         return in_files
-    
+
     types = ('*.DATA', '*.afi')
     if len(files2scrape) == 0:
+        if non_interactive:
+            raise ValueError(
+                "files2scrape must be provided in non-interactive mode "
+                "(no input() prompt available)"
+            )
         files2scrape = get_loc(types)
         tozip = True
         method = input('Zip or Check files? (Z/c): ')
@@ -972,6 +987,10 @@ def zip_check_sim_deck(files2scrape = [], tozip = True, console_summary = True):
         if console_summary:
             print('\n'+str(len(files2scrape))+' files to zip')
         if len(missing)>0:
+            if non_interactive:
+                raise RuntimeError(
+                    f"Cannot zip: {len(missing)} INCLUDE file(s) missing: {missing}"
+                )
             if console_summary:
                 cont = input('Continue to zip even with missing files? (Y/n): ')
                 if cont.upper() =='N':
@@ -1379,7 +1398,7 @@ def make_vfpinj(
                 n_failed += 1
 
     if n_failed > 0:
-        print(f"Warning: {n_failed} of {nthp * nflo} VFPINJ BHP calculations failed")
+        warnings.warn(f"{n_failed} of {nthp * nflo} VFPINJ BHP calculations failed")
 
     # --- Metric output conversion ---
     if metric:
@@ -1643,7 +1662,7 @@ def make_vfpprod(
                             n_failed += 1
 
     if n_failed > 0:
-        print(f"Warning: {n_failed} of {total} VFPPROD BHP calculations failed")
+        warnings.warn(f"{n_failed} of {total} VFPPROD BHP calculations failed")
 
     # --- Metric output conversion ---
     if metric:

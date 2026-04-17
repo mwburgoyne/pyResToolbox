@@ -14,7 +14,7 @@ import numpy as np
 class TestValidation:
     def test_validate_bad_method_string(self):
         from pyrestoolbox.validate import validate_methods
-        with pytest.raises(ValueError, match="incorrect method"):
+        with pytest.raises(ValueError, match="Invalid zmethod.*Valid options"):
             validate_methods(["zmethod"], ["NOSUCH"])
 
     def test_validate_pe_negative_pressure(self):
@@ -126,6 +126,25 @@ class TestOilErrors:
                 k=50, pr=4000, pwf=2000,
                 length=0, area=10000, uo=1.0, bo=1.2
             )
+
+    def test_oil_rs_velarde_atmospheric_pb_returns_zero(self):
+        """Rs_velarde returns 0 (not NaN) when pb is at/below atmospheric."""
+        import math
+        from pyrestoolbox import oil
+        # pb = 14.7 (atmospheric): no dissolved gas can evolve. Must be finite.
+        rs = oil.oil_rs(p=10.0, pb=14.7, degf=180, api=35, sg_sp=0.7, rsb=100)
+        assert math.isfinite(rs)
+        assert rs == 0.0
+
+    def test_sg_evolved_gas_zero_pressure_raises(self):
+        from pyrestoolbox.oil import sg_evolved_gas
+        with pytest.raises(ValueError, match="[Pp]ressure"):
+            sg_evolved_gas(p=0, degf=180, rsb=500, api=35, sg_sp=0.7)
+
+    def test_sg_evolved_gas_zero_sg_sp_raises(self):
+        from pyrestoolbox.oil import sg_evolved_gas
+        with pytest.raises(ValueError, match="[Ss]pecific gravity"):
+            sg_evolved_gas(p=2000, degf=180, rsb=500, api=35, sg_sp=0)
 
 
 # ── brine module ───────────────────────────────────────────────────
@@ -358,6 +377,11 @@ class TestSimtoolsErrors:
         from pyrestoolbox.simtools import simtools
         with pytest.raises(ValueError, match="same length"):
             simtools.rr_solver(zi=np.array([0.5, 0.5]), ki=np.array([2.0]))
+
+    def test_zip_check_non_interactive_requires_files(self):
+        from pyrestoolbox.simtools import simtools
+        with pytest.raises(ValueError, match="non-interactive"):
+            simtools.zip_check_sim_deck(files2scrape=[], non_interactive=True)
 
 
 # ── layer module ───────────────────────────────────────────────────

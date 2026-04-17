@@ -324,6 +324,10 @@ def oil_rs(
             raise ValueError(
                 "Missing one of the required inputs: sg_sp, api, rsb, for the Velarde, Blasingame & McCain Rs calculation"
             )
+        # Degenerate: pb at (or below) atmospheric means no dissolved gas can evolve.
+        # Skip the correlation; the 0/0 in pr would otherwise return NaN silently.
+        if pb - psc <= 0:
+            return 0.0
         xs = [_VEL_RS_A, _VEL_RS_B, _VEL_RS_C]
         a = [
             x[0]
