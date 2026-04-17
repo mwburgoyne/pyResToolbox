@@ -225,6 +225,30 @@ class TestDCAErrors:
         with pytest.raises(ValueError, match="q_min"):
             dca.eur(qi=100, di=0.1, b=0.5, q_min=200)
 
+    def test_forecast_zero_dt_raises(self):
+        from pyrestoolbox.dca import dca
+        d = dca.DeclineResult(method='exponential', qi=1000, di=0.01, b=0)
+        with pytest.raises(ValueError, match="dt"):
+            dca.forecast(d, t_end=100, dt=0)
+
+    def test_forecast_negative_uptime_raises(self):
+        from pyrestoolbox.dca import dca
+        d = dca.DeclineResult(method='exponential', qi=1000, di=0.01, b=0)
+        with pytest.raises(ValueError, match="uptime"):
+            dca.forecast(d, t_end=100, dt=1, uptime=-0.1)
+
+    def test_forecast_uptime_above_one_raises(self):
+        from pyrestoolbox.dca import dca
+        d = dca.DeclineResult(method='exponential', qi=1000, di=0.01, b=0)
+        with pytest.raises(ValueError, match="uptime"):
+            dca.forecast(d, t_end=100, dt=1, uptime=1.5)
+
+    def test_duong_cum_small_t_non_negative(self):
+        from pyrestoolbox.dca import dca
+        for ti in [0.0005, 0.001, 0.01, 1.0]:
+            c = dca.duong_cum(qi=1000, a=0.3, m=1.2, t=ti)
+            assert c >= 0, f"duong_cum returned negative at t={ti}: {c}"
+
     def test_fit_decline_too_few_points(self):
         from pyrestoolbox.dca import dca
         with pytest.raises(ValueError, match="3 data points"):

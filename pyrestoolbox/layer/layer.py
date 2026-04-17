@@ -41,6 +41,35 @@ import numpy.typing as npt
 
 from pyrestoolbox.shared_fns import bisect_solve
 
+
+_B_MIN = 1e-6
+_B_MAX_EXP = 709
+_B_MAX_LANG = 25000
+
+
+def _b_max(method: str) -> float:
+    """Upper bookend for B in bisection for the given Lorenz method."""
+    return _B_MAX_LANG if method == "LANG" else _B_MAX_EXP
+
+
+def _clamp_b(B: float, method: str) -> float:
+    """Clamp B to [_B_MIN, _b_max(method)]."""
+    return min(max(B, _B_MIN), _b_max(method))
+
+
+def _flow_fraction_at_x(B: float, x: float, method: str) -> float:
+    """Flow fraction from best phi_h fraction x, given B and method.
+
+    EXP:  (1 - exp(-B*x)) / (1 - exp(-B))
+    LANG: (VL * x) / (PL + x) with PL = 1/B, VL = PL + 1
+    """
+    if method == "LANG":
+        PL = 1 / B
+        VL = PL + 1
+        return (VL * x) / (PL + x)
+    return (1 - np.exp(-B * x)) / (1 - np.exp(-B))
+
+
 def lorenz2b(lorenz: float, lrnz_method: str = "EXP") -> float:
     """ Returns B-factor that characterizes the Lorenz function
         Lorenz: Lorenz coefficient (0-1)
@@ -63,37 +92,22 @@ def lorenz2b(lorenz: float, lrnz_method: str = "EXP") -> float:
         return 0.0  # Homogeneous — no heterogeneity
 
     if lorenz < 0.000333:
-        B = 2 / 1000
-        if method == "LANG":
-            B = 1 / 1000
-        return B
+        return 1 / 1000 if method == "LANG" else 2 / 1000
     if lorenz > 0.997179125528914:
-        B = 709
-        if method == "LANG":
-            B = 25000
-        return B
+        return _b_max(method)
 
-    # Set bookends for B
-    hi = 709
-    if method == "LANG":
-        hi = 25000
-    lo = 0.000001
+    hi = _b_max(method)
+    lo = _B_MIN
     args = (lorenz, method)
 
     def LorenzErr(args, B):
         lorenz, method = args
-        B = max(B, 0.000001)
-        if method == "EXP":
-            B = min(B, 709)
-            err = 2 * ((1 / (np.exp(B) - 1)) - (1 / B)) + 1 - lorenz
-        else:
-            B = min(B, 25000)
+        B = _clamp_b(B, method)
+        if method == "LANG":
             PL = 1 / B
             VL = PL + 1
-            err = (
-                VL - PL * VL * np.log(VL) + PL * VL * np.log(PL) - 0.5
-            ) * 2 - lorenz
-        return err
+            return (VL - PL * VL * np.log(VL) + PL * VL * np.log(PL) - 0.5) * 2 - lorenz
+        return 2 * ((1 / (np.exp(B) - 1)) - (1 / B)) + 1 - lorenz
 
     rtol = 0.0000001
     return bisect_solve(args, LorenzErr, lo, hi, rtol)
@@ -113,16 +127,12 @@ def lorenzfromb(B: float, lrnz_method: str = "EXP") -> float:
     method = lrnz_method.upper()
     if B <= 0:
         return 0.0  # B=0 means homogeneous (Lc=0)
-    B = max(B, 0.000001)
+    B = _clamp_b(B, method)
     if method == "LANG":
-        B = min(B, 25000)
         PL = 1 / B
         VL = PL + 1
-        L = (VL - PL * VL * np.log(VL) + PL * VL * np.log(PL) - 0.5) * 2
-    else:
-        B = min(B, 709)
-        L = 2 * (1 / (np.exp(B) - 1) - (1 / B)) + 1
-    return L
+        return (VL - PL * VL * np.log(VL) + PL * VL * np.log(PL) - 0.5) * 2
+    return 2 * (1 / (np.exp(B) - 1) - (1 / B)) + 1
 
 
 def lorenz_from_flow_fraction(
@@ -155,23 +165,15 @@ def lorenz_from_flow_fraction(
         return lorenzfromb(B, method)
 
     # Set bookends and first guess of B
-    hi = 709
-    lo = 0.000001
+    hi = _B_MAX_EXP
+    lo = _B_MIN
     args = (kh_frac, phih_frac, method)
 
     def BErr(args, B):
         kh_frac, phih_frac, method = args
         method = method.upper()
-        B = max(B, 0.000001)
-        if method == "EXP":
-            B = min(B, 709)
-            err = (1 - np.exp(-B * phih_frac)) / (1 - np.exp(-B)) - kh_frac
-        else:
-            B = min(B, 25000)
-            PL = 1 / B
-            VL = PL + 1
-            err = (VL * phih_frac) / (PL + phih_frac) - kh_frac
-        return err
+        B = _clamp_b(B, method)
+        return _flow_fraction_at_x(B, phih_frac, method) - kh_frac
 
     rtol = 0.0000001
     B = bisect_solve(args, BErr, lo, hi, rtol)
@@ -203,16 +205,8 @@ def lorenz_2_flow_frac(
     if B < 0:  # Need to calculate B
         B = lorenz2b(lorenz=lorenz, lrnz_method=lrnz_method)
 
-    B = max(B, 0.000001)
-    if method == "EXP":
-        B = min(B, 709)
-        fraction = (1 - np.exp(-B * phih_frac)) / (1 - np.exp(-B))
-    else:
-        B = min(B, 25000)
-        PL = 1 / B
-        VL = PL + 1
-        fraction = (VL * phih_frac) / (PL + phih_frac)
-    return fraction
+    B = _clamp_b(B, method)
+    return _flow_fraction_at_x(B, phih_frac, method)
 
 
 def lorenz_2_layers(
@@ -255,11 +249,7 @@ def lorenz_2_layers(
     if B < 0:  # Need to calculate B
         B = lorenz2b(lorenz=lorenz, lrnz_method=lrnz_method)
 
-    B = max(B, 0.000001)
-    if method == "EXP":
-        B = min(B, 709)
-    else:
-        B = min(B, 25000)
+    B = _clamp_b(B, method)
 
     user_layers = False
     if len(phi_h_fracs) > 1:
@@ -280,12 +270,7 @@ def lorenz_2_layers(
     sumkh = []
 
     for layer in phih:
-        if method == "EXP":
-            sumkh.append((1 - np.exp(-B * layer)) / (1 - np.exp(-B)))
-        else:
-            PL = 1 / B
-            VL = PL + 1
-            sumkh.append((VL * layer) / (PL + layer))
+        sumkh.append(_flow_fraction_at_x(B, layer, method))
 
     kh = (
         np.array([sumkh[i] - sumkh[i - 1] for i in range(1, len(sumkh))])

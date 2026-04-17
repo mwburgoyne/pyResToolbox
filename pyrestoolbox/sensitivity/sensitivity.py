@@ -39,6 +39,7 @@ __all__ = [
     'SweepResult', 'TornadoEntry', 'TornadoResult',
 ]
 
+import math
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Any, List, Optional
 
@@ -172,11 +173,21 @@ def tornado(func: Callable, base_kwargs: Dict[str, Any],
     base_raw = func(**base_kwargs)
     base_val = _extract_result(base_raw, result_key)
     base_result = float(base_val)
+    if not math.isfinite(base_result):
+        raise ValueError(
+            f"base_result is not finite ({base_result}); "
+            f"tornado sensitivities would be undefined. "
+            f"Check base_kwargs and result_key."
+        )
 
     entries = []
     for param, (lo, hi) in ranges.items():
         if param not in base_kwargs:
             raise ValueError(f"Parameter '{param}' not found in base_kwargs")
+        if lo > hi:
+            raise ValueError(
+                f"ranges['{param}'] = ({lo}, {hi}): low must be <= high"
+            )
 
         kwargs_lo = dict(base_kwargs)
         kwargs_lo[param] = lo

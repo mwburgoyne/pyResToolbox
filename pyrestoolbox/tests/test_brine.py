@@ -106,6 +106,11 @@ def test_co2_brine_saturated_compressibility():
     assert mix.Cf_sat is not None, "Cf_sat should be calculated when cw_sat=True"
     assert mix.Cf_sat > 0, f"Saturated compressibility should be positive, got {mix.Cf_sat}"
 
+def test_co2_brine_converged_flag():
+    """Converged flag should be True for well-behaved inputs"""
+    mix = brine.CO2_Brine_Mixture(pres=200, temp=80, ppm=0, metric=True)
+    assert mix.converged is True, "Spycher iteration should converge at 200 bar / 80 C"
+
 # =============================================================================
 # Regression baselines
 # =============================================================================

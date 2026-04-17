@@ -1,3 +1,24 @@
+Changelist in 3.2.0:
+
+- **DCA bug fixes**:
+
+  - ``dca.duong_cum`` — fixed linspace-inversion bug where cumulative volume integrated over a descending axis for ``t < 0.001`` (small-t inputs) and returned a negative value. Lower bound of the integration is now ``min(0.001, t * 0.001)`` so the grid is always ascending.
+  - ``dca.forecast`` — now validates ``dt > 0``, ``t_end > 0`` and ``uptime`` in ``(0, 1]`` at entry with clear ``ValueError`` messages. Previously ``dt = 0`` raised an opaque ``ZeroDivisionError`` and out-of-range ``uptime`` was silently accepted.
+
+- **Rachford-Rice solver consolidation**: ``simtools.rr_solver`` is now a thin wrapper that delegates to the canonical ``pyrestoolbox.brine._lib_vle_engine.rr_solver`` (Nielsen & Lia 2022). Removes ~100 lines of duplicated iterative code plus the dead ``ensure_numpy_array`` helper. Inputs validated for length/sum before delegation; behaviour is preserved (``EPS_T=1e-15``, ``max_iter=100``).
+
+- **Rust Sechenov fallback guard**: ``src/vle/mod.rs::flash_tp_rust`` no longer silently substitutes its S&W Eq 8 ``ks`` fallback when a caller passes all-ones ``gamma`` with ``salinity > 0``. The caller-supplied ``gamma`` is now always trusted, eliminating any risk that Python ``framework='proposed'`` calls bypass the specialised Dubessy/Akinfiev/Li/Mao-Duan/Duan-Sun ``ks`` models. ``calc_equilibrium_rust`` retains the S&W Eq 8 path but now carries a prominent doc warning. Python path unchanged (Python always passes the correct ``gamma``).
+
+- **Convergence flag on ``CO2_Brine_Mixture``**: New ``.converged`` attribute on the class. ``True`` after a successful Spycher-Pruess fugacity iteration, ``False`` when the 100-iteration limit is hit (matching the existing ``RuntimeWarning``). Lets downstream callers detect non-convergence programmatically.
+
+- **``sensitivity.tornado`` robustness**: Raises ``ValueError`` if ``base_result`` is not finite (NaN/Inf), and if any ``ranges[param]`` has ``lo > hi``. Previously returned ``nan`` or ``inf`` sensitivities that silently corrupted tornado plots.
+
+- **``layer`` module dedup**: Five copies of the EXP/LANG dispatch (B-clamp, flow-fraction evaluation) consolidated into three private helpers (``_clamp_b``, ``_b_max``, ``_flow_fraction_at_x``). No behaviour change.
+
+- **``recommend`` module docstrings**: ``sg`` on ``recommend_gas_methods`` and ``well_type`` on ``recommend_vlp_method`` are currently unused by the decision logic. Docstrings now flag them as reserved for future rules. Signatures preserved for backward compatibility.
+
+- 701 validation tests (up from 696 in 3.1.5).
+
 Changelist in 3.1.5:
 
 - **Agent-friendly UX**:

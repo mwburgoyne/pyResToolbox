@@ -456,6 +456,7 @@ class CO2_Brine_Mixture():
                 .Rs      : CO2 Saturated Brine solution gas ratio (sm3/sm3 or scf/stb), relative to standard conditions
                 .Cf_usat : Brine undersaturated compressibility (1/Bar or 1/psi). The compressibility with constant Rs
                 .Cf_sat  : Brine saturated compressibility (1/Bar or 1/psi). The compressibility with reducing Rs under depletion
+                .converged: True if the Spycher-Pruess fugacity iteration reached tolerance, False otherwise
                             
             Usage example for 5000 psia x 275 deg F and 3% NaCl brine:
                 mix = brine.CO2_Brine_Mixture(pres = 5000, temp = 275, ppm = 30000, metric = False)
@@ -523,6 +524,7 @@ class CO2_Brine_Mixture():
         self.Cf_sat = None                # Saturated brine compressibility (1/Bar or 1/psi). Compressibility with changing Rs
         self.CO2_sat = False              # Flag to determine if in P-T range for saturated liquid CO2 K values
         self.repeat = False               # Flag to trigger repeat of calculations depending on whether CO2 is saturated liquid phase
+        self.converged = True             # Spycher-Pruess fugacity iteration convergence flag
         #self.EzrokhiDenA = None           # Ezrokhi coefficient array for density (to be calculated with ezrokhi() function)
         #self.EzrokhiVisB = None           # Ezrokhi coefficient array for viscosity (to be calculated with ezrokhi() function)
         self.Rs_STD = None                # Dissolved CO2 remaining at standard conditions (sm3/sm3)
@@ -1125,6 +1127,7 @@ class CO2_Brine_Mixture():
                 iternum += 1
 
             if err > EPS:
+                self.converged = False
                 import warnings
                 warnings.warn(
                     f"Spycher CO2-brine iteration did not converge in {iternum} iterations "
