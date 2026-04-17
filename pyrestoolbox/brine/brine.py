@@ -315,7 +315,7 @@ def brine_props(p: float = None, degf: float = None, wt: float = None, ch4_sat: 
         / ((Mpa - vap_pressure) - 2 * dlambdadptm * m)
     )  # Eq 4.33
 
-    zee = gas.gas_z(p=p, sg=_SG_METHANE, degf=degf, zmethod='BNS',
+    zee = gas.gas_z(p=p, sg=_SG_METHANE, degf=degf, zmethod='BNS', cmethod='BNS',
                     co2=0, h2s=0, n2=0, h2=0)  # Z-Factor of pure methane
 
     vmch4g = zee * _R_CM3_MPA * degk / Mpa  # Eq 4.34
@@ -342,7 +342,7 @@ def brine_props(p: float = None, degf: float = None, wt: float = None, ch4_sat: 
 
 
 
-    zee_sc = gas.gas_z(p=psc, sg=_SG_METHANE, degf=tsc, zmethod='BNS',
+    zee_sc = gas.gas_z(p=psc, sg=_SG_METHANE, degf=tsc, zmethod='BNS', cmethod='BNS',
                        co2=0, h2s=0, n2=0, h2=0)
     vmch4g_sc = zee_sc * _R_CM3_MPA * (273 + 15) / 0.1013  # Eq 4.34
     rsw_new = mch4 * vmch4g_sc / ((1000 + m * 58.4428) * vb0_sc)
@@ -1552,7 +1552,7 @@ class SoreideWhitson:
                 self.gas_comp.get(g, 0) * _SW_GAS_MW.get(g, 28.97)
                 for g in self.gas_comp
             ) / MW_AIR
-            zee = gas.gas_z(p=self.psia, sg=gas_sg, degf=self.degF, zmethod='BNS',
+            zee = gas.gas_z(p=self.psia, sg=gas_sg, degf=self.degF, zmethod='BNS', cmethod='BNS',
                             co2=self.gas_comp.get('CO2', 0),
                             h2s=self.gas_comp.get('H2S', 0),
                             n2=self.gas_comp.get('N2', 0),

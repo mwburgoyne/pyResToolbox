@@ -117,15 +117,26 @@ class TestGasZFactorEquivalence:
         self._compare_z(p=3000, sg=0.65, degf=180, zmethod='HY', cmethod='SUT')
 
     def test_bns_single(self):
-        self._compare_z(p=2000, sg=0.75, degf=200, zmethod='BNS')
+        self._compare_z(p=2000, sg=0.75, degf=200, zmethod='BNS', cmethod='BNS')
 
     def test_bns_with_inerts(self):
-        self._compare_z(p=3000, sg=0.75, degf=200, zmethod='BNS',
+        self._compare_z(p=3000, sg=0.75, degf=200, zmethod='BNS', cmethod='BNS',
                          co2=0.05, h2s=0.02, n2=0.03)
 
     def test_bns_array(self):
         self._compare_z(p=[500, 1000, 3000, 6000, 10000], sg=0.7, degf=250,
-                         zmethod='BNS')
+                         zmethod='BNS', cmethod='BNS')
+
+    def test_bns_user_tc_pc_hc_only(self):
+        # WS-8.5: Rust BNS path honors user HC Tc/Pc override (not mixture)
+        self._compare_z(p=[1000, 3000, 6000], sg=0.75, degf=200,
+                         zmethod='BNS', cmethod='BNS',
+                         co2=0.1, h2s=0.05, tc=343.0, pc=667.8)
+
+    def test_dak_user_tc_pc(self):
+        # WS-8.5: Rust DAK+SUT batch path honors user mixture Tc/Pc
+        self._compare_z(p=[1000, 3000, 6000], sg=0.75, degf=200,
+                         zmethod='DAK', cmethod='SUT', tc=380.0, pc=670.0)
 
 
 # =============================================================================
@@ -150,7 +161,13 @@ class TestGasViscosityEquivalence:
         self._compare_ug(p=2000, sg=0.75, degf=200)
 
     def test_lbc_viscosity_bns(self):
-        self._compare_ug(p=2000, sg=0.75, degf=200, zmethod='BNS')
+        self._compare_ug(p=2000, sg=0.75, degf=200, zmethod='BNS', cmethod='BNS')
+
+    def test_lbc_viscosity_bns_user_tc_pc(self):
+        # WS-8.5: Rust LBC path honors user HC Tc/Pc override
+        self._compare_ug(p=[1000, 3000, 6000], sg=0.75, degf=200,
+                          zmethod='BNS', cmethod='BNS',
+                          co2=0.1, h2s=0.05, tc=343.0, pc=667.8)
 
     def test_viscosity_array(self):
         self._compare_ug(p=[1000, 3000, 5000], sg=0.7, degf=250)

@@ -7,7 +7,9 @@ Or standalone: PYTHONPATH=/home/mark/projects python3 tests/test_gas.py
 
 import sys
 import os
+import warnings
 import numpy as np
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 import pyrestoolbox.gas as gas
@@ -820,6 +822,112 @@ def test_hydrate_new_fields_no_inhibitor():
     assert r.water_vaporized_op > 0, "vaporized water at operating should be positive"
     assert r.inhibitor_mass_rate == 0.0, "mass rate should be 0 without inhibitor"
     assert r.inhibitor_vol_rate == 0.0, "vol rate should be 0 without inhibitor"
+
+
+# =============================================================================
+# BNS coupling policy (WS-8.3)
+# =============================================================================
+
+def test_bns_coupling_zmethod_upgrades_cmethod():
+    """When zmethod=BNS and cmethod is default, cmethod is upgraded with a UserWarning."""
+    with pytest.warns(UserWarning, match="BNS coupling.*cmethod.*'PMC'"):
+        z = gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='BNS')
+    assert 0.5 < z < 1.2
+
+def test_bns_coupling_cmethod_upgrades_zmethod():
+    """When cmethod=BNS and zmethod is default, zmethod is upgraded with a UserWarning."""
+    with pytest.warns(UserWarning, match="BNS coupling.*zmethod.*'DAK'"):
+        z = gas.gas_z(p=2000, sg=0.75, degf=200, cmethod='BNS')
+    assert 0.5 < z < 1.2
+
+def test_bns_coupling_both_bns_no_warning():
+    """Passing both zmethod=BNS and cmethod=BNS produces no coupling warning."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        # If any coupling warning fires, this raises and the test fails.
+        # Use explicit filter to ignore unrelated warnings (e.g. calibration-range).
+        warnings.filterwarnings("default", message=".*outside calibration range.*")
+        z = gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='BNS', cmethod='BNS')
+    assert 0.5 < z < 1.2
+
+def test_bns_coupling_h2_auto_select_no_warning():
+    """h2 > 0 auto-selects BNS silently (no coupling warning)."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        warnings.filterwarnings("default", message=".*outside calibration range.*")
+        z = gas.gas_z(p=2000, sg=0.75, degf=200, h2=0.1)
+    assert 0.5 < z < 1.5
+
+def test_bns_coupling_non_bns_not_coupled():
+    """Non-BNS methods are not coupled: DAK+PMC, DAK+SUT, HY+PMC all pass without warning."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        warnings.filterwarnings("default", message=".*outside calibration range.*")
+        gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='DAK', cmethod='SUT')
+        gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='HY', cmethod='PMC')
+        gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='WYW', cmethod='PMC')
+
+def test_bns_user_tc_pc_overrides_hc_only():
+    """For BNS, user tc/pc override only the hydrocarbon pseudo-component Tc/Pc."""
+    z_default = gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='BNS', cmethod='BNS',
+                          co2=0.1, h2s=0.05)
+    z_override = gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='BNS', cmethod='BNS',
+                           co2=0.1, h2s=0.05, tc=343.0, pc=667.8)  # CH4 HC Tc/Pc
+    # Different HC Tc/Pc should produce a different Z, but inert handling is unchanged
+    assert z_default != z_override
+    assert 0.5 < z_override < 1.2
+
+
+# =============================================================================
+# GasPVT user-supplied Tc/Pc (WS-8.4)
+# =============================================================================
+
+def test_gaspvt_user_tc_pc_stored():
+    """GasPVT stores user-supplied tc/pc verbatim when both > 0."""
+    pvt = gas.GasPVT(sg=0.75, zmethod='DAK', cmethod='SUT', tc=380.0, pc=670.0)
+    assert pvt._user_tc_pc is True
+    assert pvt.tc == 380.0
+    assert pvt.pc == 670.0
+
+def test_gaspvt_default_tc_pc_from_correlation():
+    """When tc/pc not supplied, GasPVT stores correlation-derived values and flag is False."""
+    pvt = gas.GasPVT(sg=0.75, zmethod='DAK', cmethod='SUT')
+    assert pvt._user_tc_pc is False
+    assert pvt.tc > 0 and pvt.pc > 0
+
+def test_gaspvt_user_tc_pc_metric_converted():
+    """Metric tc/pc inputs are converted to oilfield units for internal storage."""
+    pvt = gas.GasPVT(sg=0.75, zmethod='DAK', cmethod='SUT',
+                     tc=211.1, pc=46.2, metric=True)  # K, barsa
+    assert abs(pvt.tc - 211.1 * 1.8) < 1e-6  # K -> deg R
+    assert abs(pvt.pc - 46.2 * 14.5037738) < 1e-3  # bar -> psi
+
+def test_gaspvt_user_tc_pc_affects_z():
+    """User tc/pc overrides propagate through GasPVT.z()."""
+    pvt_default = gas.GasPVT(sg=0.75, zmethod='DAK', cmethod='SUT')
+    pvt_override = gas.GasPVT(sg=0.75, zmethod='DAK', cmethod='SUT',
+                              tc=380.0, pc=670.0)
+    z_default = pvt_default.z(p=2000, degf=200)
+    z_override = pvt_override.z(p=2000, degf=200)
+    assert z_default != z_override
+
+def test_gaspvt_bns_user_tc_pc_hc_only():
+    """GasPVT with BNS and user tc/pc overrides only the HC pseudo-critical values."""
+    pvt_default = gas.GasPVT(sg=0.75, zmethod='BNS', cmethod='BNS', co2=0.1, h2s=0.05)
+    pvt_override = gas.GasPVT(sg=0.75, zmethod='BNS', cmethod='BNS', co2=0.1, h2s=0.05,
+                              tc=343.0, pc=667.8)
+    z_default = pvt_default.z(p=2000, degf=200)
+    z_override = pvt_override.z(p=2000, degf=200)
+    assert z_default != z_override
+
+def test_gaspvt_bns_coupling_warning():
+    """GasPVT coupling policy forces both methods to BNS when either is BNS."""
+    with pytest.warns(UserWarning, match="BNS coupling"):
+        pvt = gas.GasPVT(sg=0.75, zmethod='BNS')
+    # z_method: BNS=3, BUR=3 (BNS defined first → canonical name is BNS)
+    assert pvt.zmethod.name == 'BNS'
+    # c_method: BNS=3 (distinct from BUR=2)
+    assert pvt.cmethod.name == 'BNS'
 
 
 if __name__ == '__main__':

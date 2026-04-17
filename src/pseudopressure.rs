@@ -192,30 +192,41 @@ pub fn gas_dmp_rust(
         }
     };
 
-    // Precompute critical properties
-    let (tpc_sut, ppc_sut) = if tc > 0.0 && pc > 0.0 {
-        (tc, pc)
-    } else {
-        match method {
-            ZMethod::DakSut | ZMethod::HySut => {
+    // Precompute critical properties — user tc/pc override is method-dependent:
+    // DAK/HY+SUT: (tc, pc) replace the mixture Tc/Pc.
+    // BNS: (tc, pc) replace only the HC pseudo-component Tc/Pc; inert Tc/Pc
+    //      remain at BNS internal constants. LBC params also honor the HC override.
+    let user_tc_pc = tc > 0.0 && pc > 0.0;
+    let (tpc_sut, ppc_sut) = match method {
+        ZMethod::DakSut | ZMethod::HySut => {
+            if user_tc_pc {
+                (tc, pc)
+            } else {
                 critical_properties::sutton_wa_internal(sg, co2, h2s, n2)
                     .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?
             }
-            ZMethod::Bns => (0.0, 0.0), // Not used
         }
+        ZMethod::Bns => (0.0, 0.0), // Not used
     };
 
     let (tpc_bns, ppc_bns) = match method {
         ZMethod::Bns => {
-            let (t, p, _) = critical_properties::bns_pseudocritical_internal(sg, co2, h2s, n2, h2);
-            (t, p)
+            if user_tc_pc {
+                (tc, pc)
+            } else {
+                let (t, p, _) = critical_properties::bns_pseudocritical_internal(sg, co2, h2s, n2, h2);
+                (t, p)
+            }
         }
         _ => (0.0, 0.0),
     };
 
-    // Precompute LBC params for BNS method
+    // Precompute LBC params for BNS method (propagates HC Tc/Pc override)
     let lbc_p = match method {
-        ZMethod::Bns => Some(gas_viscosity::lbc_params(degf, sg, co2, h2s, n2, h2)),
+        ZMethod::Bns => {
+            let (tc_lbc, pc_lbc) = if user_tc_pc { (tc, pc) } else { (0.0, 0.0) };
+            Some(gas_viscosity::lbc_params(degf, sg, co2, h2s, n2, h2, tc_lbc, pc_lbc))
+        }
         _ => None,
     };
 
@@ -381,23 +392,28 @@ pub fn gas_ponz2p_rust(
         }
     };
 
-    // Precompute critical properties
-    let (tpc_sut, ppc_sut) = if tc > 0.0 && pc > 0.0 {
-        (tc, pc)
-    } else {
-        match method {
-            ZMethod::DakSut | ZMethod::HySut => {
+    // Precompute critical properties — see gas_dmp_rust for override semantics.
+    let user_tc_pc = tc > 0.0 && pc > 0.0;
+    let (tpc_sut, ppc_sut) = match method {
+        ZMethod::DakSut | ZMethod::HySut => {
+            if user_tc_pc {
+                (tc, pc)
+            } else {
                 critical_properties::sutton_wa_internal(sg, co2, h2s, n2)
                     .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?
             }
-            ZMethod::Bns => (0.0, 0.0),
         }
+        ZMethod::Bns => (0.0, 0.0),
     };
 
     let (tpc_bns, ppc_bns) = match method {
         ZMethod::Bns => {
-            let (t, p, _) = critical_properties::bns_pseudocritical_internal(sg, co2, h2s, n2, h2);
-            (t, p)
+            if user_tc_pc {
+                (tc, pc)
+            } else {
+                let (t, p, _) = critical_properties::bns_pseudocritical_internal(sg, co2, h2s, n2, h2);
+                (t, p)
+            }
         }
         _ => (0.0, 0.0),
     };

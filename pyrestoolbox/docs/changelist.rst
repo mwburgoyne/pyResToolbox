@@ -1,3 +1,18 @@
+Changelist in 3.3.0:
+
+- **BNS Z-factor / critical-property coupling**: When either ``zmethod`` or ``cmethod`` is ``BNS``, both are now forced to ``BNS`` for thermodynamic consistency with a ``UserWarning`` naming the overruled counterpart. ``h2 > 0`` continues to auto-select BNS silently. Non-BNS methods (e.g. ``DAK`` + ``SUT``) remain freely mixable. Implemented via a single ``_resolve_methods`` helper applied at all gas public entry points plus ``GasPVT.__init__``.
+
+- **User-supplied ``tc`` / ``pc`` honored across every method** (including BNS). Semantics:
+
+  - ``SUT`` / ``PMC``: supplied values replace the *mixture* pseudo-critical Tc/Pc.
+  - ``BNS``: supplied values replace only the *inert-free hydrocarbon* pseudo-component Tc/Pc. Inert Tc/Pc (CO2, H2S, N2, H2) remain at BNS internal constants, and the BNS 5-component PR-EOS mixes them with the user-supplied HC Tc/Pc.
+
+  This is reflected in ``gas_tc_pc``, ``gas_z``, ``gas_ug``, ``gas_cg``, ``gas_bg``, ``gas_den``, ``gas_dmp``, ``gas_ponz2p``, ``gas_grad2sg``, and ``GasPVT`` (new ``tc=0, pc=0`` kwargs on the class constructor).
+
+- **Rust parity for user Tc/Pc**: The Rust batch paths (``dak_zfactor_batch``, ``hy_zfactor_batch``, ``bns_zfactor_batch``, ``gas_ug_lbc``/``gas_ug_lbc_batch``, ``gas_dmp_rust``, ``gas_ponz2p_rust``) now accept optional ``tc_user`` / ``pc_user`` parameters and apply the same override semantics as Python. Removes the previous Python fallback for BNS+user-Tc/Pc; Rust path is now always exercised.
+
+- 716 validation tests (up from 701 in 3.2.0). New coverage for BNS coupling warnings, ``GasPVT`` user Tc/Pc, and Rust-vs-Python parity for user Tc/Pc.
+
 Changelist in 3.2.0:
 
 - **DCA bug fixes**:
