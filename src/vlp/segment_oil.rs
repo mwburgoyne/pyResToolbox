@@ -99,7 +99,22 @@ pub fn hb_fbhp_oil(
 
             let ql = qo + qw;
             let lsg = (qo * osg + qw * wsg) / ql;
-            let ul = ql * 5.615 / 86400.0 / area;
+            let rho_w = wsg * 62.4;
+            // Liquid mixture density using the live-oil (McCain) density for the
+            // oil fraction — matches Python _segment_march_oil. Using 62.4*lsg
+            // here instead would drop the dissolved-gas density correction and
+            // cause 5-10% BHP drift vs Python at low-rate/low-P conditions.
+            let rho_l = if ql > 0.0 {
+                (qo * rho_oil_local + qw * rho_w) / ql
+            } else {
+                rho_oil_local
+            };
+            // Superficial liquid velocity at reservoir conditions (mass_flow / density),
+            // matching Python _segment_march_oil. Using `ql * 5.615 / 86400 / area` would
+            // be the stock-tank volumetric rate and miss the live-oil expansion factor —
+            // causing ~2-3% BHP drift at low-rate conditions.
+            let mflow_l_lbs = (mflow_o + mflow_w) / 86400.0;
+            let ul = mflow_l_lbs / rho_l.max(1e-10) / area;
 
             let water_visc = water_viscosity(p_avg, temp_f_i, 0.0);
             let ift_val = interfacial_tension(
@@ -118,15 +133,23 @@ pub fn hb_fbhp_oil(
             };
 
             let (mut yl, _nvl, _nvg, _nd) =
-                hb_holdup(ul, ugas, tid, lsg, ift_val, mul, p_avg);
+                hb_holdup(ul, ugas, tid, rho_l, ift_val, mul, p_avg);
 
-            let rho_g = MW_AIR * gsg * p_avg / (zee * 10.73 * temp_r);
+            let rho_g = MW_AIR * gsg * p_avg / (zee * 10.732 * temp_r);
             let mass_frac_liq = if mflow > 0.0 {
                 (lsg * 62.4 * ql * 5.615) / mflow
             } else {
                 0.0
             };
-            let min_l = mass_frac_liq * rho_g * 62.37 / (rho_g * 62.37 + lsg * 62.37);
+            // Convert rho_g (lb/cuft) to dimensionless SG so the ratio is dimensionally
+            // consistent with lsg (already SG). Matches nodal.py _hb_gradient_gas Eq at
+            // the "Minimum holdup from mass fraction" block.
+            let rho_g_sg = rho_g / 62.37;
+            let min_l = if (rho_g_sg + lsg) > 0.0 {
+                mass_frac_liq * rho_g_sg / (rho_g_sg + lsg)
+            } else {
+                0.0
+            };
             if yl < min_l {
                 yl = min_l;
             }
@@ -142,7 +165,9 @@ pub fn hb_fbhp_oil(
             let eond = rough / tid;
             let f_fan = serghides_fanning(nre, eond);
 
-            let rho_avg = yl * rho_oil_local + (1.0 - yl) * rho_g;
+            // rho_avg uses the oil+water mixture density (rho_l), not rho_oil alone,
+            // so the hydrostatic column reflects the water-cut weighted liquid density.
+            let rho_avg = yl * rho_l + (1.0 - yl) * rho_g;
 
             let fric_term =
                 f_fan * mflow * mflow / 7.413e10 / (tid / 12.0).powi(5) / rho_avg;

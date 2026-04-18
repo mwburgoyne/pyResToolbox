@@ -39,6 +39,8 @@ Function List
      - `pyrestoolbox.nodal.Reservoir`_
    * - Flowing BHP
      - `pyrestoolbox.nodal.fbhp`_
+   * - Tubing Head Pressure (inverse)
+     - `pyrestoolbox.nodal.fthp`_
    * - VLP Outflow Curve
      - `pyrestoolbox.nodal.outflow_curve`_
    * - IPR Inflow Curve
@@ -505,7 +507,7 @@ Oil well:
 
     >>> c = nodal.Completion(tid=2.441, length=8000, tht=100, bht=180)
     >>> nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil', qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65, pb=2500, rsb=500, sgsp=0.65, api=35)
-    2256.2340921828286
+    1771.4717888847196
 
 Oil well using OilPVT object:
 
@@ -514,7 +516,7 @@ Oil well using OilPVT object:
     >>> from pyrestoolbox import oil
     >>> opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     >>> nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil', oil_pvt=opvt, qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65)
-    2258.2220198140935
+    1772.2397895054948
 
 Deviated well using WellSegment:
 
@@ -529,13 +531,59 @@ Deviated well using WellSegment:
 
    Not all VLP methods are equally suitable for deviated wells. For wells with deviation > 30 degrees, prefer **BB** or **WG** which have explicit inclination modelling. See `VLP Method Suitability for Deviated and Horizontal Wells`_ for detailed guidance.
 
+Pressure traverse output
+------------------------
+
+Pass ``return_profile=True`` to ``fbhp`` to get the wellbore pressure profile at each segment boundary (in addition to the bottom-hole pressure):
+
+.. code-block:: python
+
+    >>> segs = [nodal.WellSegment(md=5000, id=2.441, deviation=0),
+    ...         nodal.WellSegment(md=5000, id=2.441, deviation=45)]
+    >>> c = nodal.Completion(segments=segs, tht=100, bht=200)
+    >>> profile = nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas',
+    ...                      qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45,
+    ...                      oil_vis=1.0, return_profile=True)
+    >>> profile['md']         # cumulative MD at each segment boundary
+    array([    0.,  5000., 10000.])
+    >>> profile['tvd']        # cumulative TVD (respects deviation)
+    array([   0.        , 5000.        , 8535.53390593])
+    >>> profile['p']          # pressure at each boundary (psia; barsa if metric)
+    # array([500., ..., bhp_final])
+    >>> profile['bhp']        # scalar BHP, same as return_profile=False
+
+
+pyrestoolbox.nodal.fthp
+=======================
+
+.. code-block:: python
+
+    fthp(bhp, completion, vlpmethod='WG', well_type='gas', ..., thp_min=14.7, thp_max=20000.0, tol=1e-3) -> float
+
+Inverse of ``fbhp``. Solves for the tubing head pressure that produces the target flowing bottom-hole pressure, for the given flow parameters and VLP correlation. Internally wraps ``bisect_solve`` around ``fbhp`` between ``thp_min`` and ``thp_max``.
+
+All flow / well / unit kwargs accepted by ``fbhp`` (``qg_mmscfd``, ``qt_stbpd``, ``gor``, ``wc``, ``api``, ``pb``, ``rsb``, ``metric`` ...) are accepted here identically. ``metric=True`` switches bhp inputs and the return to ``barsa``.
+
+.. code-block:: python
+
+    >>> c = nodal.Completion(tid=2.441, length=8000, tht=100, bht=180)
+    >>> thp_target = 800.0
+    >>> bhp = nodal.fbhp(thp=thp_target, completion=c, vlpmethod='HB', well_type='gas',
+    ...                  qg_mmscfd=3.0, gsg=0.65, cgr=0, qw_bwpd=0, api=45, oil_vis=1.0)
+    >>> thp_recovered = nodal.fthp(bhp=bhp, completion=c, vlpmethod='HB', well_type='gas',
+    ...                             qg_mmscfd=3.0, gsg=0.65, cgr=0, qw_bwpd=0, api=45, oil_vis=1.0)
+    >>> abs(thp_recovered - thp_target) < 1.0
+    True
+
+Useful for: wellhead choke sizing (target BHP above the reservoir is known, need surface pressure), back-calculating THP from downhole gauge data, or matching shut-in surface pressures against a downhole model.
+
 
 pyrestoolbox.nodal.outflow_curve
 ================================
 
 .. code-block:: python
 
-    outflow_curve(thp, completion, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, rates=None, n_rates=20, max_rate=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65, metric=False) -> dict
+    outflow_curve(thp, completion, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, rates=None, n_points=20, max_rate=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65, metric=False) -> dict
 
 Returns VLP outflow curve as a dictionary with keys ``'rates'`` and ``'bhp'``. Evaluates ``fbhp()`` at each rate point. Rates are MMscf/d for gas wells (sm3/d if metric=True), STB/d for oil wells (sm3/d if metric=True). BHP is in psia (barsa if metric=True).
 
@@ -561,9 +609,9 @@ Returns VLP outflow curve as a dictionary with keys ``'rates'`` and ``'bhp'``. E
    * - rates
      - list
      - Explicit list of rates to evaluate (same units as output rates). If None, auto-generated
-   * - n_rates
+   * - n_points
      - int
-     - Number of rate points if rates is None. Defaults to 20
+     - Number of rate points if rates is None. Defaults to 20. ``n_rates`` is kept as a deprecated alias for backward compatibility.
    * - max_rate
      - float
      - Maximum rate for auto-generation. Defaults to 50 MMscf/d (gas) or 10000 STB/d (oil)
@@ -772,9 +820,9 @@ Oil well operating point:
     >>> opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     >>> result = nodal.operating_point(thp=200, completion=c, reservoir=r, vlpmethod='HB', well_type='oil', oil_pvt=opvt, gor=800, wc=0.3, gsg=0.65)
     >>> round(result['rate'], 1)
-    1412.6
+    2019.0
     >>> round(result['bhp'], 1)
-    2193.0
+    1778.5
 
 
 Calculation Methods and Class Objects

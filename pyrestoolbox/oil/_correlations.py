@@ -23,7 +23,7 @@ from ._constants import (
     _BO_STAN_A, _BO_STAN_B, _BO_STAN_C, _BO_STAN_EXP,
     _BO_MC_WDEN, _BO_MC_RS_COEFF,
 )
-from ._utils import check_sgs, get_real_part, oil_sg
+from ._utils import check_sgs, get_real_part
 from ._density import oil_deno
 
 

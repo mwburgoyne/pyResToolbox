@@ -3,7 +3,7 @@
 from typing import Tuple
 
 from pyrestoolbox.constants import (
-    psc, BAR_TO_PSI, PSI_TO_BAR, degc_to_degf,
+    BAR_TO_PSI, PSI_TO_BAR, degc_to_degf,
     SM3_PER_SM3_TO_SCF_PER_STB, SCF_PER_STB_TO_SM3_PER_SM3,
 )
 from pyrestoolbox.classes import pb_method, rs_method

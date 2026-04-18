@@ -4,7 +4,7 @@ import warnings
 import numpy as np
 
 from pyrestoolbox.constants import (
-    psc, tsc, BAR_TO_PSI, degc_to_degf,
+    tsc, BAR_TO_PSI, degc_to_degf,
     SM3_PER_SM3_TO_SCF_PER_STB, LBCUFT_TO_KGM3,
 )
 from pyrestoolbox.classes import deno_method

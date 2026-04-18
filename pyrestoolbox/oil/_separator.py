@@ -4,7 +4,10 @@ import numpy as np
 
 from pyrestoolbox.constants import BAR_TO_PSI, degc_to_degf
 from pyrestoolbox.shared_fns import validate_pe_inputs
-from ._constants import _SGEVOL_THRESHOLD, _SGEVOL_HIGH, _SGEVOL_LOW
+from ._constants import (
+    _SGEVOL_THRESHOLD, _SGEVOL_HIGH, _SGEVOL_LOW,
+    _SG_ST_C, _SG_ST_POLY, _RS_ST_C, _RS_ST_POLY,
+)
 
 
 def sg_evolved_gas(
@@ -56,18 +59,10 @@ def sg_st_gas(
         degf_sp: Separator temperature (deg f)
     """
     var = [np.log(psp), np.log(rsp), api, sg_sp, degf_sp]
-    C = [
-        [-17.275, -0.3354, 3.705, -155.52, 2.085],
-        [7.9597, -0.3346, -0.4273, 629.61, -7.097e-2],
-        [-1.1013, 0.1956, 1.818e-2, -957.38, 9.859e-4],
-        [2.7735e-2, -3.4374e-2, -3.459e-4, 647.57, -6.312e-6],
-        [3.2287e-3, 2.08e-3, 2.505e-6, -163.26, 1.4e-8],
-    ]
-    Zn = [sum([C[i][n] * var[n] ** i for i in range(5)]) for n in range(5)]
+    Zn = [sum([_SG_ST_C[i][n] * var[n] ** i for i in range(5)]) for n in range(5)]
     Z = sum(Zn)
-    sg_st = (
-        1.219 + 0.198 * Z + 0.0845 * Z ** 2 + 0.03 * Z ** 3 + 0.003 * Z ** 4
-    )
+    a, b, c, d, e = _SG_ST_POLY
+    sg_st = a + b * Z + c * Z ** 2 + d * Z ** 3 + e * Z ** 4
     return sg_st
 
 
@@ -106,7 +101,7 @@ def oil_rs_st(psp: float, degf_sp: float, api: float, metric: bool = False) -> f
     validate_pe_inputs(p=psp, degf=degf_sp)
 
     var = [np.log(psp), np.log(degf_sp), api]
-    C = [[-8.005, 1.224, -1.587], [2.7, -0.5, 0.0441], [-0.161, 0, -2.29e-5]]
-    Zn = [sum([C[i][n] * var[n] ** i for i in range(3)]) for n in range(3)]
+    Zn = [sum([_RS_ST_C[i][n] * var[n] ** i for i in range(3)]) for n in range(3)]
     Z = sum(Zn)
-    return max(0, 3.955 + 0.83 * Z - 0.024 * Z ** 2 + 0.075 * Z ** 3)
+    a, b, c, d = _RS_ST_POLY
+    return max(0, a + b * Z + c * Z ** 2 + d * Z ** 3)

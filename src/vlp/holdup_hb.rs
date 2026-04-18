@@ -11,17 +11,21 @@ fn log10_safe(x: f64) -> f64 {
 }
 
 /// Compute HB liquid holdup from dimensionless numbers.
+/// `rho_l` is the actual liquid density (lb/cuft) — for oil wells this must be
+/// the McCain live-oil-plus-water mixture density (NOT `62.4 * lsg`, which
+/// ignores the gas-in-solution density reduction). Gas wells pass
+/// `62.4 * lsg` to match the prior behaviour.
 /// Returns (yl, nvl, nvg, nd).
 pub fn hb_holdup(
-    ul: f64, ugas: f64, tid: f64, lsg: f64, ift: f64,
+    ul: f64, ugas: f64, tid: f64, rho_l: f64, ift: f64,
     mul: f64, p_avg: f64,
 ) -> (f64, f64, f64, f64) {
-    let nvl = 1.938 * ul * (62.4 * lsg / ift).powf(0.25);
-    let nvg = 1.938 * ugas * (62.4 * lsg / ift).powf(0.25);
-    let nd = 120.872 * tid / 12.0 * (62.4 * lsg / ift).powf(0.5);
+    let nvl = 1.938 * ul * (rho_l / ift).powf(0.25);
+    let nvg = 1.938 * ugas * (rho_l / ift).powf(0.25);
+    let nd = 120.872 * tid / 12.0 * (rho_l / ift).powf(0.5);
 
     let nl = if mul > 0.0 {
-        let v = 0.15726 * mul * (1.0 / (62.4 * lsg * ift.powi(3))).powf(0.25);
+        let v = 0.15726 * mul * (1.0 / (rho_l * ift.powi(3))).powf(0.25);
         if v <= 0.0 { 1e-8 } else { v }
     } else {
         1e-8

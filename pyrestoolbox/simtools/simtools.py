@@ -88,7 +88,7 @@ from pyrestoolbox.validate import validate_methods
 import pyrestoolbox.gas as gas
 import pyrestoolbox.brine as brine
 import pyrestoolbox.oil as oil
-import pyrestoolbox.oil as _oil_impl
+from pyrestoolbox.oil import _tables as _oil_tables
 
 EPS_T = 1e-15
 MAX_ITR = 100
@@ -1777,7 +1777,7 @@ def make_bot_og(
     sg_o = oil.oil_sg(api)
 
     # Step 1: Resolve Pb, Rsb, and scaling factor
-    pb, rsb, rsb_frac, rsb_max, pb_i, rsb_i = _oil_impl._resolve_pb_rsb(
+    pb, rsb, rsb_frac, rsb_max, pb_i, rsb_i = _oil_tables._resolve_pb_rsb(
         pb, rsb, degf, api, sg_sp, sg_g, pvto, pmax, rsmethod, pbmethod
     )
 
@@ -1803,7 +1803,7 @@ def make_bot_og(
 
     # Step 3: Compute all PVT properties
     (rss, bos, denos, uos, co, gz, gfvf, cg, visg, bws, visws,
-     usat_p, usat_bo, usat_uo) = _oil_impl._build_bot_tables(
+     usat_p, usat_bo, usat_uo) = _oil_tables._build_bot_tables(
         pressures, pb, rsb, rsb_frac, rsb_max, sg_o, sg_g, sg_sp,
         api, degf, pvto, wt, ch4_sat,
         zmethod, rsmethod, cmethod, denomethod, bomethod, pbmethod,
@@ -1811,7 +1811,7 @@ def make_bot_og(
     )
 
     # Step 4: Assemble results and optionally export
-    results = _oil_impl._format_bot_results(
+    results = _oil_tables._format_bot_results(
         pressures, rss, bos, denos, uos, co, gz, gfvf, cg, visg, bws, visws,
         usat_p, usat_bo, usat_uo, sg_o, sg_g, pi, degf, wt, ch4_sat,
         pb_i, rsb_i, rsb_frac, pvto, export, zmethod, cmethod,

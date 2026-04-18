@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "pyrestoolbox"
-version = "3.3.0"
+version = "3.4.0"
 description = "pyResToolbox - A collection of Reservoir Engineering Utilities"
 license = {text = "GPL-3.0-or-later"}
 authors = [{name = "Mark W. Burgoyne", email = "mark.w.burgoyne@gmail.com"}]

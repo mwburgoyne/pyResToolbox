@@ -51,12 +51,73 @@ __all__ = [
 
 import numpy as np
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Union
+from numpy.typing import ArrayLike
 
 from pyrestoolbox.shared_fns import convert_to_numpy, process_output, ransac_linreg
 from pyrestoolbox._accelerator import RUST_AVAILABLE as _RUST_AVAILABLE
 if _RUST_AVAILABLE:
     from pyrestoolbox import _native as _rust
+
+
+# ---------------------------------------------------------------------------
+# Named constants — extracted from inline magic numbers per CLAUDE.md rules.
+# ---------------------------------------------------------------------------
+
+# Arps hyperbolic b-grid search (Arps 1945; b physically in (0, 1))
+# 0.05-0.95 avoids exponential (b=0) / harmonic (b=1) degeneracies.
+_B_GRID_MIN = 0.05
+_B_GRID_MAX = 0.96
+_B_GRID_STEP = 0.01
+
+# Duong (2011) cumulative integration grid
+_DUONG_TRAP_LB = 0.001      # Lower trap bound to avoid t=0 singularity
+_DUONG_GRID_MIN = 500       # Minimum trap grid points per integration
+_DUONG_GRID_DENSITY = 10    # Additional points per unit t
+
+# Duong curve_fit bounds and initial guess (Duong 2011, Eq. 5)
+_DUONG_BOUNDS_LO = (0.0, 0.01, 1.001)
+_DUONG_BOUNDS_HI_QI_FACTOR = 5.0   # Upper qi bound = first q * factor
+_DUONG_BOUNDS_HI_A = 10.0
+_DUONG_BOUNDS_HI_M = 3.0
+_DUONG_P0_A = 1.0              # Initial guess a
+_DUONG_P0_M = 1.2              # Initial guess m
+
+# scipy.curve_fit iteration cap (covers Duong + logistic fits)
+_CURVE_FIT_MAXFEV = 5000
+
+# Numerical floors / near-zero guards
+_HYPER_INNER_FLOOR = 1e-10     # Floor for (1 - di*Np*exp/qi)^(1/exp) argument
+_ZERO_DIV_EPS = 1e-30          # General division-by-zero guard
+
+# Logistic ratio curve_fit (unconventional GOR/WOR trending)
+_LOGISTIC_P0_RMAX_INIT = 1.5   # Initial Rmax guess = max(ratio) * factor
+_LOGISTIC_P0_TC = 0.01         # Initial carryover constant
+_LOGISTIC_P0_ALPHA = 10.0      # Initial curvature
+_LOGISTIC_BOUNDS_LO = (1e-8, 1e-3)  # Lower (tc, alpha) bounds
+_LOGISTIC_BOUNDS_RMAX_FACTOR = 5.0  # Upper Rmax = max(ratio) * factor
+_LOGISTIC_BOUNDS_HI = 1e6      # Upper tc / alpha bound
+
+
+def _build_decline_result(method, q_obs, q_pred, **params):
+    """DRY helper: compute R-squared + residuals, return a DeclineResult.
+
+    Parameters
+    ----------
+    method : str
+    q_obs, q_pred : np.ndarray  (observed and predicted rates)
+    **params : scalar DeclineResult fields (qi, di, b, a, m)
+    """
+    residuals = q_obs - q_pred
+    ss_res = np.sum(residuals ** 2)
+    ss_tot = np.sum((q_obs - np.mean(q_obs)) ** 2)
+    r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+    return DeclineResult(
+        method=method,
+        r_squared=r2,
+        residuals=residuals,
+        **params,
+    )
 
 
 def _fmt_array(a, name):
@@ -189,7 +250,7 @@ class RatioResult:
         )
 
 
-def arps_rate(qi, di, b, t):
+def arps_rate(qi: float, di: float, b: float, t: ArrayLike) -> Union[float, np.ndarray]:
     """Arps decline rate.
 
     Parameters
@@ -226,7 +287,7 @@ def arps_rate(qi, di, b, t):
     return process_output(q, is_list)
 
 
-def arps_cum(qi, di, b, t):
+def arps_cum(qi: float, di: float, b: float, t: ArrayLike) -> Union[float, np.ndarray]:
     """Arps cumulative production.
 
     Parameters
@@ -263,7 +324,7 @@ def arps_cum(qi, di, b, t):
     return process_output(Qcum, is_list)
 
 
-def duong_rate(qi, a, m, t):
+def duong_rate(qi: float, a: float, m: float, t: ArrayLike) -> Union[float, np.ndarray]:
     """Duong decline rate for unconventional reservoirs.
 
     q(t) = qi * t^(-m) * exp(a/(1-m) * (t^(1-m) - 1))
@@ -296,7 +357,7 @@ def duong_rate(qi, a, m, t):
     return process_output(q, is_list)
 
 
-def duong_cum(qi, a, m, t):
+def duong_cum(qi: float, a: float, m: float, t: ArrayLike) -> Union[float, np.ndarray]:
     """Duong cumulative production via trapezoidal integration.
 
     Parameters
@@ -328,15 +389,15 @@ def duong_cum(qi, a, m, t):
     # integrates over a descending axis and returns negative cumulative.
     results = np.zeros_like(t, dtype=float)
     for i, ti in enumerate(t):
-        lower = min(0.001, ti * 0.001)
-        t_fine = np.linspace(lower, ti, max(500, int(ti * 10)))
+        lower = min(_DUONG_TRAP_LB, ti * _DUONG_TRAP_LB)
+        t_fine = np.linspace(lower, ti, max(_DUONG_GRID_MIN, int(ti * _DUONG_GRID_DENSITY)))
         q_fine = qi * t_fine ** (-m) * np.exp(a / (1.0 - m) * (t_fine ** (1.0 - m) - 1.0))
         results[i] = np.trapezoid(q_fine, t_fine)
 
     return process_output(results, is_list)
 
 
-def eur(qi, di, b, q_min):
+def eur(qi: float, di: float, b: float, q_min: float) -> float:
     """Estimated ultimate recovery for Arps decline.
 
     Parameters
@@ -382,13 +443,7 @@ def _fit_exponential(t, q):
     if di <= 0:
         return None
     q_pred = qi * np.exp(-di * t)
-    ss_res = np.sum((q - q_pred) ** 2)
-    ss_tot = np.sum((q - np.mean(q)) ** 2)
-    r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
-    return DeclineResult(
-        method='exponential', qi=qi, di=di, b=0.0,
-        r_squared=r2, residuals=q - q_pred,
-    )
+    return _build_decline_result('exponential', q, q_pred, qi=qi, di=di, b=0.0)
 
 
 def _fit_harmonic(t, q):
@@ -403,13 +458,7 @@ def _fit_harmonic(t, q):
     if di <= 0:
         return None
     q_pred = qi / (1.0 + di * t)
-    ss_res = np.sum((q - q_pred) ** 2)
-    ss_tot = np.sum((q - np.mean(q)) ** 2)
-    r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
-    return DeclineResult(
-        method='harmonic', qi=qi, di=di, b=1.0,
-        r_squared=r2, residuals=q - q_pred,
-    )
+    return _build_decline_result('harmonic', q, q_pred, qi=qi, di=di, b=1.0)
 
 
 def _fit_hyperbolic(t, q):
@@ -423,18 +472,14 @@ def _fit_hyperbolic(t, q):
         try:
             qi, di, b, r2 = _rust.fit_hyperbolic_rust(t.tolist(), q.tolist())
             q_pred = qi / (1.0 + b * di * t) ** (1.0 / b)
-            return DeclineResult(
-                method='hyperbolic', qi=qi, di=di, b=b,
-                r_squared=r2, residuals=q - q_pred,
-            )
+            return _build_decline_result('hyperbolic', q, q_pred, qi=qi, di=di, b=b)
         except (ImportError, AttributeError):
             pass
 
     best_r2 = -np.inf
     best_result = None
-    ss_tot = np.sum((q - np.mean(q)) ** 2)
 
-    for b_trial in np.arange(0.05, 0.96, 0.01):
+    for b_trial in np.arange(_B_GRID_MIN, _B_GRID_MAX, _B_GRID_STEP):
         # Transform: Y = q^(-b) is linear in t
         Y = q ** (-b_trial)
         slope, intercept, _ = ransac_linreg(t, Y)
@@ -451,15 +496,10 @@ def _fit_hyperbolic(t, q):
 
         # Compute R-squared in original rate space
         q_pred = qi / (1.0 + b_trial * di * t) ** (1.0 / b_trial)
-        ss_res = np.sum((q - q_pred) ** 2)
-        r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
-
-        if r2 > best_r2:
-            best_r2 = r2
-            best_result = DeclineResult(
-                method='hyperbolic', qi=qi, di=di, b=b_trial,
-                r_squared=r2, residuals=q - q_pred,
-            )
+        result = _build_decline_result('hyperbolic', q, q_pred, qi=qi, di=di, b=b_trial)
+        if result.r_squared > best_r2:
+            best_r2 = result.r_squared
+            best_result = result
 
     return best_result
 
@@ -478,20 +518,19 @@ def _fit_duong(t, q):
     t_f, q_f = t[mask], q[mask]
 
     try:
-        popt, _ = curve_fit(duong_func, t_f, q_f, p0=[q_f[0], 1.0, 1.2],
-                            bounds=([0, 0.01, 1.001], [q_f[0] * 5, 10.0, 3.0]),
-                            maxfev=5000)
-        qi, a, m = popt
-        q_pred_full = np.full_like(q, np.nan, dtype=float)
-        q_pred_full[mask] = duong_func(t_f, qi, a, m)
-        q_pred_valid = q_pred_full[mask]
-        ss_res = np.sum((q_f - q_pred_valid) ** 2)
-        ss_tot = np.sum((q_f - np.mean(q_f)) ** 2)
-        r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
-        return DeclineResult(
-            method='duong', qi=qi, a=a, m=m,
-            r_squared=r2, residuals=q_f - q_pred_valid,
+        popt, _ = curve_fit(
+            duong_func, t_f, q_f,
+            p0=[q_f[0], _DUONG_P0_A, _DUONG_P0_M],
+            bounds=(
+                list(_DUONG_BOUNDS_LO),
+                [q_f[0] * _DUONG_BOUNDS_HI_QI_FACTOR,
+                 _DUONG_BOUNDS_HI_A, _DUONG_BOUNDS_HI_M],
+            ),
+            maxfev=_CURVE_FIT_MAXFEV,
         )
+        qi, a, m = popt
+        q_pred_valid = duong_func(t_f, qi, a, m)
+        return _build_decline_result('duong', q_f, q_pred_valid, qi=qi, a=a, m=m)
     except (RuntimeError, ValueError):
         return None
 
@@ -507,13 +546,7 @@ def _fit_exponential_cum(Np, q):
     if di <= 0 or qi <= 0:
         return None
     q_pred = qi - di * Np
-    ss_res = np.sum((q - q_pred) ** 2)
-    ss_tot = np.sum((q - np.mean(q)) ** 2)
-    r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
-    return DeclineResult(
-        method='exponential', qi=qi, di=di, b=0.0,
-        r_squared=r2, residuals=q - q_pred,
-    )
+    return _build_decline_result('exponential', q, q_pred, qi=qi, di=di, b=0.0)
 
 
 def _fit_harmonic_cum(Np, q):
@@ -529,13 +562,7 @@ def _fit_harmonic_cum(Np, q):
     if di <= 0 or qi <= 0:
         return None
     q_pred = qi * np.exp(-di / qi * Np)
-    ss_res = np.sum((q - q_pred) ** 2)
-    ss_tot = np.sum((q - np.mean(q)) ** 2)
-    r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
-    return DeclineResult(
-        method='harmonic', qi=qi, di=di, b=1.0,
-        r_squared=r2, residuals=q - q_pred,
-    )
+    return _build_decline_result('harmonic', q, q_pred, qi=qi, di=di, b=1.0)
 
 
 def _fit_hyperbolic_cum(Np, q):
@@ -550,20 +577,16 @@ def _fit_hyperbolic_cum(Np, q):
         try:
             qi, di, b, r2 = _rust.fit_hyperbolic_cum_rust(Np.tolist(), q.tolist())
             exp = 1.0 - b
-            inner = np.maximum(1.0 - exp * di * Np / qi, 1e-10)
+            inner = np.maximum(1.0 - exp * di * Np / qi, _HYPER_INNER_FLOOR)
             q_pred = qi * inner ** (1.0 / exp)
-            return DeclineResult(
-                method='hyperbolic', qi=qi, di=di, b=b,
-                r_squared=r2, residuals=q - q_pred,
-            )
+            return _build_decline_result('hyperbolic', q, q_pred, qi=qi, di=di, b=b)
         except (ImportError, AttributeError):
             pass
 
     best_r2 = -np.inf
     best_result = None
-    ss_tot = np.sum((q - np.mean(q)) ** 2)
 
-    for b_trial in np.arange(0.05, 0.96, 0.01):
+    for b_trial in np.arange(_B_GRID_MIN, _B_GRID_MAX, _B_GRID_STEP):
         exp = 1.0 - b_trial
         # Transform: Np = A + B * q^(1-b)
         X = q ** exp
@@ -572,7 +595,7 @@ def _fit_hyperbolic_cum(Np, q):
         # A = intercept = qi / ((1-b)*di)
         # B = slope = -qi^b / ((1-b)*di)
         # B/A = -qi^b / qi = -qi^(b-1) = -1/qi^(1-b)
-        if abs(slope) < 1e-30 or abs(intercept) < 1e-30:
+        if abs(slope) < _ZERO_DIV_EPS or abs(intercept) < _ZERO_DIV_EPS:
             continue
         ratio = slope / intercept  # = -1/qi^(1-b)
         if ratio >= 0:
@@ -588,23 +611,20 @@ def _fit_hyperbolic_cum(Np, q):
             continue
 
         # Compute R-squared in original rate space
-        inner = 1.0 - exp * di * Np / qi
-        inner = np.maximum(inner, 1e-10)
+        inner = np.maximum(1.0 - exp * di * Np / qi, _HYPER_INNER_FLOOR)
         q_pred = qi * inner ** (1.0 / exp)
-        ss_res = np.sum((q - q_pred) ** 2)
-        r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
-
-        if r2 > best_r2:
-            best_r2 = r2
-            best_result = DeclineResult(
-                method='hyperbolic', qi=qi, di=di, b=b_trial,
-                r_squared=r2, residuals=q - q_pred,
-            )
+        result = _build_decline_result('hyperbolic', q, q_pred, qi=qi, di=di, b=b_trial)
+        if result.r_squared > best_r2:
+            best_r2 = result.r_squared
+            best_result = result
 
     return best_result
 
 
-def fit_decline_cum(Np, q, method='best', t_calendar=None, Np_start=None, Np_end=None):
+def fit_decline_cum(Np: ArrayLike, q: ArrayLike, method: str = 'best',
+                    t_calendar: Optional[ArrayLike] = None,
+                    Np_start: Optional[float] = None,
+                    Np_end: Optional[float] = None) -> 'DeclineResult':
     """Fit a decline model to rate-vs-cumulative data.
 
     Eliminates time from the Arps equations to fit q as a function of Np.
@@ -708,7 +728,9 @@ def fit_decline_cum(Np, q, method='best', t_calendar=None, Np_start=None, Np_end
     return best
 
 
-def fit_decline(t, q, method='best', t_start=None, t_end=None):
+def fit_decline(t: ArrayLike, q: ArrayLike, method: str = 'best',
+                t_start: Optional[float] = None,
+                t_end: Optional[float] = None) -> 'DeclineResult':
     """Fit a decline model to production data.
 
     Parameters
@@ -832,11 +854,17 @@ def _fit_ratio_logistic(x, ratio):
         return Rmax / (1.0 + c * np.exp(-b * x))
 
     try:
-        Rmax_guess = np.max(ratio) * 1.5
-        popt, _ = curve_fit(logistic_func, x, ratio,
-                            p0=[Rmax_guess, 0.01, 10.0],
-                            bounds=([0, 1e-8, 1e-3], [Rmax_guess * 5, 10.0, 1e6]),
-                            maxfev=5000)
+        Rmax_guess = np.max(ratio) * _LOGISTIC_P0_RMAX_INIT
+        popt, _ = curve_fit(
+            logistic_func, x, ratio,
+            p0=[Rmax_guess, _LOGISTIC_P0_TC, _LOGISTIC_P0_ALPHA],
+            bounds=(
+                [0.0, _LOGISTIC_BOUNDS_LO[0], _LOGISTIC_BOUNDS_LO[1]],
+                [Rmax_guess * _LOGISTIC_BOUNDS_RMAX_FACTOR,
+                 _LOGISTIC_BOUNDS_HI, _LOGISTIC_BOUNDS_HI],
+            ),
+            maxfev=_CURVE_FIT_MAXFEV,
+        )
         Rmax, b, c = popt
         r_pred = logistic_func(x, Rmax, b, c)
         ss_res = np.sum((ratio - r_pred) ** 2)
@@ -850,7 +878,8 @@ def _fit_ratio_logistic(x, ratio):
         return None
 
 
-def fit_ratio(x, ratio, method='best', domain='cum'):
+def fit_ratio(x: ArrayLike, ratio: ArrayLike,
+              method: str = 'best', domain: str = 'cum') -> 'RatioResult':
     """Fit a ratio model (e.g. GOR, WOR) to data.
 
     Parameters
@@ -904,7 +933,7 @@ def fit_ratio(x, ratio, method='best', domain='cum'):
         return result
 
 
-def ratio_forecast(result, x):
+def ratio_forecast(result: 'RatioResult', x: ArrayLike) -> np.ndarray:
     """Evaluate a fitted ratio model at given x values.
 
     Parameters
@@ -935,7 +964,9 @@ def ratio_forecast(result, x):
     return process_output(r, is_list)
 
 
-def forecast(result, t_end, dt=1.0, q_min=0.0, uptime=1.0, ratios=None):
+def forecast(result: 'DeclineResult', t_end: float, dt: float = 1.0,
+             q_min: float = 0.0, uptime: float = 1.0,
+             ratios: Optional[dict] = None) -> 'ForecastResult':
     """Generate a rate and cumulative forecast from a fitted decline model.
 
     Parameters

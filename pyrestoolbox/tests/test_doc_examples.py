@@ -502,7 +502,7 @@ def test_doc_co2_brine_field():
 
 def test_doc_co2_brine_metric():
     """brine.rst: CO2_Brine_Mixture metric units"""
-    mix = brine.CO2_Brine_Mixture(pres=175, temp=85)
+    mix = brine.CO2_Brine_Mixture(pres=175, temp=85, metric=True)
     assert abs(mix.Rs - 24.743651168969475) / 24.743651168969475 < RTOL
 
 def test_doc_make_pvtw_table_keys():
@@ -933,7 +933,7 @@ def test_doc_nodal_fbhp_oil():
     result = nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil',
                         qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65,
                         pb=2500, rsb=500, sgsp=0.65, api=35)
-    assert abs(result - 2271.7216221715075) / 2271.7216221715075 < RTOL
+    assert abs(result - 1771.4717888847196) / 1771.4717888847196 < RTOL
 
 def test_doc_nodal_fbhp_oil_pvt():
     """nodal.rst: fbhp oil well with OilPVT"""
@@ -941,7 +941,7 @@ def test_doc_nodal_fbhp_oil_pvt():
     opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     result = nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil',
                         oil_pvt=opvt, qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65)
-    assert abs(result - 2273.716972560404) / 2273.716972560404 < RTOL
+    assert abs(result - 1772.2397895054948) / 1772.2397895054948 < RTOL
 
 def test_doc_nodal_outflow_curve():
     """nodal.rst: outflow_curve gas"""
@@ -981,8 +981,8 @@ def test_doc_nodal_operating_point_oil():
     result = nodal.operating_point(thp=200, completion=c, reservoir=r,
                                     vlpmethod='HB', well_type='oil',
                                     oil_pvt=opvt, gor=800, wc=0.3, gsg=0.65)
-    assert abs(round(result['rate'], 1) - 1391.4) < 1.0
-    assert abs(round(result['bhp'], 1) - 2206.3) < 1.0
+    assert abs(round(result['rate'], 1) - 2019.0) < 1.0
+    assert abs(round(result['bhp'], 1) - 1778.5) < 1.0
 
 
 def test_doc_nodal_wellsegment_vertical():

@@ -111,6 +111,46 @@ def test_co2_brine_converged_flag():
     mix = brine.CO2_Brine_Mixture(pres=200, temp=80, ppm=0, metric=True)
     assert mix.converged is True, "Spycher iteration should converge at 200 bar / 80 C"
 
+
+def test_sw_framework_and_salinity_method_exposed():
+    """SoreideWhitson should accept framework + salinity_method kwargs and store them."""
+    mix = brine.SoreideWhitson(pres=200, temp=80, ppm=30000, y_CO2=1.0,
+                               metric=True, framework='proposed',
+                               salinity_method='gamma_phi')
+    assert mix.framework == 'proposed'
+    assert mix.salinity_method == 'gamma_phi'
+
+
+def test_sw_rejects_invalid_framework():
+    import pytest
+    with pytest.raises(ValueError, match='framework'):
+        brine.SoreideWhitson(pres=200, temp=80, ppm=0, metric=True, framework='bogus')
+
+
+def test_sw_rejects_invalid_salinity_method():
+    import pytest
+    with pytest.raises(ValueError, match='salinity_method'):
+        brine.SoreideWhitson(pres=200, temp=80, ppm=0, metric=True,
+                             salinity_method='bogus')
+
+
+def test_brine_props_rejects_both_wt_and_ppm():
+    import pytest
+    with pytest.raises(ValueError, match='not both'):
+        brine.brine_props(p=3000, degf=200, wt=5.0, ppm=50000)
+
+
+def test_co2_brine_rejects_both_wt_and_ppm():
+    import pytest
+    with pytest.raises(ValueError, match='not both'):
+        brine.CO2_Brine_Mixture(pres=200, temp=80, wt=5.0, ppm=50000, metric=True)
+
+
+def test_sw_rejects_both_wt_and_ppm():
+    import pytest
+    with pytest.raises(ValueError, match='not both'):
+        brine.SoreideWhitson(pres=200, temp=80, wt=5.0, ppm=50000, metric=True)
+
 # =============================================================================
 # Regression baselines
 # =============================================================================

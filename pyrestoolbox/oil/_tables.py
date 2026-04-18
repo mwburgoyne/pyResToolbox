@@ -1,6 +1,5 @@
 """Black oil table generation helpers."""
 
-import numpy as np
 import pandas as pd
 from tabulate import tabulate
 
@@ -8,8 +7,7 @@ from pyrestoolbox.constants import psc, tsc, CUFTperBBL, WDEN
 import pyrestoolbox.gas as gas
 import pyrestoolbox.brine as brine
 
-from ._utils import oil_sg
-from ._correlations import oil_pbub, oil_rs_bub, oil_rs, oil_bo, oil_deno, oil_viso
+from ._correlations import oil_rs_bub, oil_rs, oil_bo, oil_deno, oil_viso
 from ._compressibility import oil_co
 from ._harmonize import oil_harmonize
 

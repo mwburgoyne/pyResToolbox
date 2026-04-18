@@ -301,6 +301,169 @@ class TestNodalVLPEquivalence:
 
 
 # =============================================================================
+# Parity harness: broader nodal grid (VLP × THP × rate × geometry)
+# =============================================================================
+# Prophylactic — catches future one-sided edits between Python and Rust VLP
+# implementations. Tolerance is tight; any drift above 1e-4 relative is a
+# genuine divergence, not numerical noise. Grid spans representative gas/oil
+# operating conditions including both vertical and deviated wellbores.
+
+
+def _nodal_parity_check_gas(vlpmethod, thp, qg, completion, rtol):
+    """Run both Rust and Python fbhp paths and assert agreement."""
+    from pyrestoolbox.nodal import nodal
+    kwargs = dict(
+        thp=thp, completion=completion, vlpmethod=vlpmethod,
+        well_type='gas', qg_mmscfd=qg, gsg=0.75, cgr=0, qw_bwpd=0,
+        api=45, oil_vis=1.0,
+    )
+    result_rust = nodal.fbhp(**kwargs)
+    with force_python():
+        result_python = nodal.fbhp(**kwargs)
+    np.testing.assert_allclose(
+        result_rust, result_python,
+        rtol=rtol, atol=1.0,
+        err_msg=f"Nodal {vlpmethod} gas parity drift at thp={thp}, qg={qg}",
+    )
+
+
+def _nodal_parity_check_oil(vlpmethod, thp, qt, completion, rtol):
+    from pyrestoolbox.nodal import nodal
+    from pyrestoolbox.oil import OilPVT
+    opvt = OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
+    kwargs = dict(
+        thp=thp, completion=completion, vlpmethod=vlpmethod,
+        well_type='oil', qt_stbpd=qt, oil_pvt=opvt,
+        gor=500, wc=0.2, gsg=0.65,
+    )
+    result_rust = nodal.fbhp(**kwargs)
+    with force_python():
+        result_python = nodal.fbhp(**kwargs)
+    np.testing.assert_allclose(
+        result_rust, result_python,
+        rtol=rtol, atol=1.0,
+        err_msg=f"Nodal {vlpmethod} oil parity drift at thp={thp}, qt={qt}",
+    )
+
+
+def _build_vertical_completion():
+    from pyrestoolbox.nodal import nodal
+    return nodal.Completion(tid=2.441, length=8000, tht=100, bht=200)
+
+
+def _build_deviated_completion():
+    from pyrestoolbox.nodal import nodal
+    segs = [
+        nodal.WellSegment(md=4000, id=2.441, deviation=0),
+        nodal.WellSegment(md=4000, id=2.441, deviation=45),
+    ]
+    return nodal.Completion(segments=segs, tht=100, bht=200)
+
+
+@rust_required
+@pytest.mark.parametrize('vlpmethod', ['HB', 'WG', 'GRAY', 'BB'])
+@pytest.mark.parametrize('thp,qg', [
+    (300, 1.0), (300, 5.0),
+    (800, 1.0), (800, 5.0), (800, 15.0),
+    (1500, 10.0),
+])
+def test_nodal_gas_parity_vertical(vlpmethod, thp, qg):
+    """Gas-well VLP: Rust ≈ Python across methods × (THP, rate) grid, vertical."""
+    comp = _build_vertical_completion()
+    _nodal_parity_check_gas(vlpmethod, thp, qg, comp, rtol=RTOL_MEDIUM)
+
+
+@rust_required
+@pytest.mark.parametrize('vlpmethod', ['WG', 'BB'])  # HB and GRAY are vertical-only
+@pytest.mark.parametrize('thp,qg', [(500, 3.0), (1200, 8.0)])
+def test_nodal_gas_parity_deviated(vlpmethod, thp, qg):
+    """Gas-well VLP: Rust ≈ Python on deviated wells (WG/BB only — HB/GRAY are vertical)."""
+    comp = _build_deviated_completion()
+    _nodal_parity_check_gas(vlpmethod, thp, qg, comp, rtol=RTOL_MEDIUM)
+
+
+@rust_required
+@pytest.mark.parametrize('vlpmethod', ['HB', 'WG', 'GRAY', 'BB'])
+@pytest.mark.parametrize('thp,qt', [
+    (100, 500), (100, 2000),
+    (300, 500), (300, 2000), (300, 5000),
+])
+def test_nodal_oil_parity_vertical(vlpmethod, thp, qt):
+    """Oil-well VLP: Rust ≈ Python across methods × (THP, rate) grid, vertical."""
+    comp = _build_vertical_completion()
+    _nodal_parity_check_oil(vlpmethod, thp, qt, comp, rtol=RTOL_MEDIUM)
+
+
+@rust_required
+@pytest.mark.parametrize('vlpmethod', ['WG', 'BB'])
+@pytest.mark.parametrize('thp,qt', [(200, 1000), (500, 3000)])
+def test_nodal_oil_parity_deviated(vlpmethod, thp, qt):
+    """Oil-well VLP: Rust ≈ Python on deviated wells (WG/BB only)."""
+    comp = _build_deviated_completion()
+    _nodal_parity_check_oil(vlpmethod, thp, qt, comp, rtol=RTOL_MEDIUM)
+
+
+# =============================================================================
+# Parity harness: broader brine SoreideWhitson grid
+# =============================================================================
+
+
+def _sw_parity_check(pres, temp, ppm, y_CO2, y_H2S, y_N2, sg, rtol):
+    """Compare SoreideWhitson Python and Rust paths on a given (P,T,comp) point."""
+    from pyrestoolbox.brine import brine
+    kwargs = dict(pres=pres, temp=temp, ppm=ppm, y_CO2=y_CO2, y_H2S=y_H2S,
+                  y_N2=y_N2, sg=sg, metric=False)
+    mix_rust = brine.SoreideWhitson(**kwargs)
+    with force_python():
+        mix_python = brine.SoreideWhitson(**kwargs)
+    # Compare dissolved-gas mole fractions (primary flash output)
+    for comp in mix_rust.x:
+        np.testing.assert_allclose(
+            mix_rust.x[comp], mix_python.x[comp], rtol=rtol, atol=1e-10,
+            err_msg=f"SW x[{comp}] drift at P={pres}, T={temp}, ppm={ppm}",
+        )
+    # Compare water content and total Rs
+    np.testing.assert_allclose(
+        mix_rust.y_H2O, mix_python.y_H2O, rtol=rtol, atol=1e-10,
+        err_msg=f"SW y_H2O drift at P={pres}, T={temp}",
+    )
+    np.testing.assert_allclose(
+        mix_rust.Rs_total, mix_python.Rs_total, rtol=rtol, atol=1e-6,
+        err_msg=f"SW Rs_total drift at P={pres}, T={temp}",
+    )
+
+
+@rust_required
+@pytest.mark.parametrize('pres,temp', [
+    (1000, 150),
+    (3000, 200),
+    (5000, 275),
+    (8000, 300),
+])
+@pytest.mark.parametrize('ppm', [0, 30000, 100000])
+def test_sw_parity_pure_co2(pres, temp, ppm):
+    """Pure-CO2 brine flash: Rust ≈ Python across P/T/salinity grid."""
+    _sw_parity_check(pres, temp, ppm, y_CO2=1.0, y_H2S=0, y_N2=0, sg=0.65,
+                     rtol=RTOL_MEDIUM)
+
+
+@rust_required
+@pytest.mark.parametrize('pres,temp', [(2500, 200), (5000, 250)])
+def test_sw_parity_sour_gas(pres, temp):
+    """CO2+H2S+N2 mix in brine: Rust ≈ Python across the representative sour-gas case."""
+    _sw_parity_check(pres, temp, ppm=50000, y_CO2=0.15, y_H2S=0.05, y_N2=0.03,
+                     sg=0.75, rtol=RTOL_MEDIUM)
+
+
+@rust_required
+@pytest.mark.parametrize('pres,temp', [(1500, 180), (4000, 250)])
+def test_sw_parity_natural_gas_only(pres, temp):
+    """Pure natural gas in brine (HC-only): Rust ≈ Python."""
+    _sw_parity_check(pres, temp, ppm=20000, y_CO2=0, y_H2S=0, y_N2=0,
+                     sg=0.65, rtol=RTOL_MEDIUM)
+
+
+# =============================================================================
 # DCA module: Hyperbolic fitting equivalence
 # =============================================================================
 
