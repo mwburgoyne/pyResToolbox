@@ -123,3 +123,21 @@ _BO_STAN_EXP = 1.175  # Overall exponent
 # Bo McCain — Eq 3.21
 _BO_MC_WDEN = 62.372       # Water density used in McCain Bo (lb/cuft at 60°F)
 _BO_MC_RS_COEFF = 0.01357  # coefficient on Rs·sg_g term
+
+# Valko-McCain (2003) stock-tank gas SG — Eq 4-2
+_SG_ST_C = [
+    [-17.275, -0.3354, 3.705, -155.52, 2.085],
+    [7.9597, -0.3346, -0.4273, 629.61, -7.097e-2],
+    [-1.1013, 0.1956, 1.818e-2, -957.38, 9.859e-4],
+    [2.7735e-2, -3.4374e-2, -3.459e-4, 647.57, -6.312e-6],
+    [3.2287e-3, 2.08e-3, 2.505e-6, -163.26, 1.4e-8],
+]
+_SG_ST_POLY = (1.219, 0.198, 0.0845, 0.03, 0.003)  # sg_st = a + bZ + cZ^2 + dZ^3 + eZ^4
+
+# Valko-McCain (2003) stock-tank Rs — Eq 3-2
+_RS_ST_C = [
+    [-8.005, 1.224, -1.587],
+    [2.7, -0.5, 0.0441],
+    [-0.161, 0, -2.29e-5],
+]
+_RS_ST_POLY = (3.955, 0.83, -0.024, 0.075)  # rs_st = a + bZ + cZ^2 + dZ^3

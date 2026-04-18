@@ -14,11 +14,11 @@ Returns tuple of (Bw (rb/stb), Density (sg), viscosity (cP), Compressibility (1/
 Unit System Support
 ----------------------
 
-All three brine models support both oilfield and metric unit systems via a ``metric`` parameter:
+All three brine models default to oilfield units (psia, degF, 1/psi, scf/stb) and accept ``metric=True`` to switch to Eclipse METRIC (barsa, degC, 1/bar, sm3/sm3):
 
-- ``brine_props``: ``metric=False`` (default). When ``metric=True``, pressure is in barsa, temperature is in degC, compressibility is in 1/barsa, and Rsw is in sm3/sm3.
-- ``CO2_Brine_Mixture``: ``metric=True`` (default). When ``metric=False``, pressure is in psia and temperature is in degF.
-- ``SoreideWhitson``: ``metric=True`` (default). When ``metric=False``, pressure is in psia and temperature is in degF.
+- ``brine_props``: ``metric=False`` (default).
+- ``CO2_Brine_Mixture``: ``metric=False`` (default).
+- ``SoreideWhitson``: ``metric=False`` (default).
 
 .. note::
 
@@ -126,7 +126,7 @@ pyrestoolbox.brine.CO2_Brine_Mixture
 
 .. code-block:: python
 
-    CO2_Brine_Mixture(pres, temp, ppm = 0, metric = True) -> class
+    CO2_Brine_Mixture(pres, temp, ppm = 0, metric = False) -> class
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -211,7 +211,7 @@ Usage example for 175 Bara x 85 degC and 0% NaCl brine:
 
 .. code-block:: python
 
-    >>> mix = brine.CO2_Brine_Mixture(pres = 175, temp = 85)
+    >>> mix = brine.CO2_Brine_Mixture(pres = 175, temp = 85, metric = True)
     >>> mix.Rs  # Returns sm3 dissolved CO2 / sm3 Brine
     24.743651168969475
 
@@ -312,7 +312,7 @@ pyrestoolbox.brine.SoreideWhitson
 
 .. code-block:: python
 
-    SoreideWhitson(pres, temp, ppm=0, y_CO2=0, y_H2S=0, y_N2=0, y_H2=0, sg=0.65, metric=True, cw_sat=False) -> class
+    SoreideWhitson(pres, temp, ppm=0, y_CO2=0, y_H2S=0, y_N2=0, y_H2=0, sg=0.65, metric=False, cw_sat=False, framework='proposed', salinity_method='gamma_phi') -> class
 
 Soreide-Whitson (1992) VLE model for multicomponent gas solubility in water/brine, with Garcia/Plyasunov
 density corrections and calibrated viscosity corrections. Supports gas mixtures containing any combination
@@ -377,6 +377,12 @@ based on the gas specific gravity using constrained exponential decay to match t
    * - cw_sat
      - Boolean
      - If True, will also calculate saturated brine compressibility. Default False
+   * - framework
+     - str
+     - VLE framework used by the S&W engine. ``'proposed'`` (default, Soreide-Whitson 1992 re-fit), ``'sw_original'`` (original 1992 published coefficients), or ``'dropin'`` (PR-EOS fitted with brine-aware water alpha). Affects kij and ks correlations.
+   * - salinity_method
+     - str
+     - How salinity enters the flash. ``'gamma_phi'`` (default, Sechenov salting-out via activity coefficient), ``'embedded'`` (salinity inside kij — only compatible with ``'dropin'``/``'sw_original'``), ``'explicit'`` (brine treated as a component in the flash), ``'sechenov'`` (alias for ``gamma_phi``), or ``'auto'`` (pick per-gas default). ``framework='proposed'`` + ``salinity_method='embedded'`` emits a warning and falls back to ``gamma_phi``.
 
 .. list-table:: Returns (SoreideWhitson)
    :widths: 10 15 40

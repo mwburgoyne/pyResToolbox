@@ -33,11 +33,13 @@ class OilPVT:
         bomethod: Method for Bo calculation. Defaults to 'MCAIN'
         metric: If True, constructor inputs (pb, rsb) and method inputs/outputs use Eclipse METRIC units. Defaults to False (FIELD)
     """
-    def __init__(self, api, sg_sp, pb, rsb=0, sg_g=0, degf=0,
-                 uo_target=0, p_uo=0,
-                 vis_frac=1.0, rsb_frac=1.0,
-                 rsmethod='VELAR', pbmethod='VALMC', bomethod='MCAIN',
-                 metric=False):
+    def __init__(self, api: float, sg_sp: float, pb: float, rsb: float = 0,
+                 sg_g: float = 0, degf: float = 0,
+                 uo_target: float = 0, p_uo: float = 0,
+                 vis_frac: float = 1.0, rsb_frac: float = 1.0,
+                 rsmethod: str = 'VELAR', pbmethod: str = 'VALMC',
+                 bomethod: str = 'MCAIN',
+                 metric: bool = False):
         self.api = api
         self.sg_sp = sg_sp
         self.metric = metric
@@ -70,10 +72,12 @@ class OilPVT:
         self.bomethod = validate_methods(["bomethod"], [bomethod])
 
     @classmethod
-    def from_harmonize(cls, degf, api, sg_sp=0, sg_g=0, pb=0, rsb=0,
-                       uo_target=0, p_uo=0,
-                       rsmethod='VELAR', pbmethod='VELAR', bomethod='MCAIN',
-                       metric=False):
+    def from_harmonize(cls, degf: float, api: float, sg_sp: float = 0,
+                       sg_g: float = 0, pb: float = 0, rsb: float = 0,
+                       uo_target: float = 0, p_uo: float = 0,
+                       rsmethod: str = 'VELAR', pbmethod: str = 'VELAR',
+                       bomethod: str = 'MCAIN',
+                       metric: bool = False) -> 'OilPVT':
         """Deprecated: use OilPVT(degf=...) directly.
 
         Convenience constructor that calls oil_harmonize() internally.
@@ -94,7 +98,7 @@ class OilPVT:
     def _is_array(x):
         return isinstance(x, (list, tuple, np.ndarray))
 
-    def rs(self, p, degf):
+    def rs(self, p, degf: float):
         """ Returns solution GOR (scf/stb | sm3/sm3) at pressure p (psia | barsa) and temperature degf (deg F | deg C).
             p can be a scalar, list, or array. degf must be scalar. """
         if self._is_array(p):
@@ -107,7 +111,7 @@ class OilPVT:
             return result * SCF_PER_STB_TO_SM3_PER_SM3
         return result
 
-    def bo(self, p, degf, rs=None):
+    def bo(self, p, degf: float, rs=None):
         """ Returns oil FVF (rb/stb | rm3/sm3) at pressure p (psia | barsa) and temperature degf (deg F | deg C).
             p can be a scalar, list, or array. degf must be scalar. """
         if self._is_array(p):
@@ -128,7 +132,7 @@ class OilPVT:
                       sg_o=self.sg_o, sg_g=self.sg_g, sg_sp=self.sg_sp,
                       bomethod=self.bomethod)
 
-    def density(self, p, degf, rs=None):
+    def density(self, p, degf: float, rs=None):
         """ Returns live oil density (lb/cuft | kg/m3) at pressure p (psia | barsa) and temperature degf (deg F | deg C).
             p can be a scalar, list, or array. degf must be scalar. """
         if self._is_array(p):
@@ -152,7 +156,7 @@ class OilPVT:
             return result * LBCUFT_TO_KGM3
         return result
 
-    def viscosity(self, p, degf, rs=None):
+    def viscosity(self, p, degf: float, rs=None):
         """ Returns oil viscosity (cP) at pressure p (psia | barsa) and temperature degf (deg F | deg C).
             p can be a scalar, list, or array. degf must be scalar. """
         if self._is_array(p):

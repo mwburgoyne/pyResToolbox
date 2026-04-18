@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(project_root))
 from pyrestoolbox.gas import GasPVT, gas_z, gas_ug, gas_den, gas_bg
 from pyrestoolbox.oil import OilPVT, oil_rs, oil_bo, oil_deno, oil_viso
 from pyrestoolbox.nodal import (
-    WellSegment, Completion, Reservoir, fbhp, outflow_curve, ipr_curve, operating_point
+    WellSegment, Completion, Reservoir, fbhp, fthp, outflow_curve, ipr_curve, operating_point
 )
 
 
@@ -439,6 +439,74 @@ def test_vlp_gas_injection():
                    api=45, oil_vis=1.0, injection=True)
     # Injection friction opposes gravity, so BHP should be lower
     assert bhp_inj < bhp_prod, f"Injection BHP {bhp_inj} should be less than production {bhp_prod}"
+
+
+# ============================================================================
+#  fthp reverse solve
+# ============================================================================
+
+def test_fthp_roundtrip_gas():
+    """fthp(fbhp(thp)) should recover the original THP within bisect tolerance."""
+    c = Completion(tid=2.441, length=8000, tht=100, bht=180)
+    thp_in = 1200.0
+    bhp = fbhp(thp=thp_in, completion=c, vlpmethod='HB', well_type='gas',
+               qg_mmscfd=3.0, gsg=0.65, cgr=0, qw_bwpd=0,
+               api=45, oil_vis=1.0)
+    thp_out = fthp(bhp=bhp, completion=c, vlpmethod='HB', well_type='gas',
+                   qg_mmscfd=3.0, gsg=0.65, cgr=0, qw_bwpd=0,
+                   api=45, oil_vis=1.0)
+    assert abs(thp_out - thp_in) < 1.0, f"THP roundtrip failed: {thp_in} -> {bhp} -> {thp_out}"
+
+
+def test_fthp_roundtrip_oil():
+    """fthp should work for oil wells too."""
+    c = Completion(tid=2.441, length=6000, tht=100, bht=170)
+    thp_in = 400.0
+    bhp = fbhp(thp=thp_in, completion=c, vlpmethod='HB', well_type='oil',
+               qt_stbpd=1500, gor=700, wc=0.2, gsg=0.65,
+               pb=2500, rsb=500, sgsp=0.65, api=35)
+    thp_out = fthp(bhp=bhp, completion=c, vlpmethod='HB', well_type='oil',
+                   qt_stbpd=1500, gor=700, wc=0.2, gsg=0.65,
+                   pb=2500, rsb=500, sgsp=0.65, api=35)
+    assert abs(thp_out - thp_in) < 1.0
+
+
+# ============================================================================
+#  return_profile pressure traverse
+# ============================================================================
+
+def test_fbhp_return_profile_shape_and_bounds():
+    """return_profile=True yields md/tvd/p arrays with matching length and BHP match."""
+    segments = [
+        WellSegment(md=3000, id=2.441, deviation=0),
+        WellSegment(md=2000, id=2.441, deviation=60),
+    ]
+    c = Completion(segments=segments, tht=100, bht=200)
+    thp_in = 600.0
+    bhp_scalar = fbhp(thp=thp_in, completion=c, vlpmethod='HB', well_type='gas',
+                      qg_mmscfd=2.0, gsg=0.65, cgr=0, qw_bwpd=0,
+                      api=45, oil_vis=1.0)
+    profile = fbhp(thp=thp_in, completion=c, vlpmethod='HB', well_type='gas',
+                   qg_mmscfd=2.0, gsg=0.65, cgr=0, qw_bwpd=0,
+                   api=45, oil_vis=1.0, return_profile=True)
+    assert len(profile['md']) == 3  # THP + 2 segment boundaries
+    assert len(profile['tvd']) == 3
+    assert len(profile['p']) == 3
+    assert profile['md'][0] == 0.0
+    assert profile['tvd'][0] == 0.0
+    assert abs(profile['p'][0] - thp_in) < 1e-9
+    assert abs(profile['bhp'] - bhp_scalar) < 1e-9
+
+
+def test_operating_point_reports_converged_flag():
+    """operating_point should expose a 'converged' boolean in the result dict."""
+    c = Completion(tid=2.441, length=10000, tht=100, bht=200)
+    r = Reservoir(pr=3000, degf=200, k=10, h=50, re=1500, rw=0.35)
+    result = operating_point(thp=500, completion=c, reservoir=r,
+                             vlpmethod='HB', well_type='gas',
+                             gsg=0.65, cgr=0, qw_bwpd=0, api=45, oil_vis=1.0)
+    assert 'converged' in result
+    assert result['converged'] is True
 
 
 # ============================================================================

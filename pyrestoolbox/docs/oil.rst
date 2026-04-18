@@ -777,12 +777,12 @@ pb only needs to be set when pressures are above pb. For saturated oil, this can
    * - pb
      - float
      - Original bubble point pressure (psia, or barsa if metric=True)
-   * - sg_sto
+   * - sg_o
      - float
      - Specific gravity of stock tank liquid (rel water). Will calculate from api if not specified
    * - api
      - float
-     - Density of stock tank liquid (API). Will calculate from sg_sto if not specified
+     - Density of stock tank liquid (API). If both sg_o and api are supplied, api takes precedence.
    * - denomethod
      - string or deno_method
      - The method of live oil density  calculation to be employed. `Calculation Methods and Class Objects`_.
@@ -1156,7 +1156,10 @@ If user species Pb or Rsb only, the corresponding property will be calculated. I
      - Solution GOR at Pb (scf/stb)
    * - 'rsb_scale'
      - float
-     - Scaling factor for Pb/Rsb harmonization
+     - Scaling factor for Pb/Rsb harmonization (aliased as ``rsb_frac`` elsewhere in the oil API)
+   * - 'vis_frac'
+     - float
+     - Viscosity scaling factor applied to match user-supplied viscosity measurement (1.0 if no tuning)
    * - 'usat'
      - list
      - Undersaturated values [usat_p, usat_bo, usat_uo] if pvto=True
@@ -1198,7 +1201,7 @@ Returns estimated specific gravity of gas evolved from insitu-oil due to depress
      - Original solution GOR at original bubble point pressure (scf/stb)
    * - api
      - float
-     - Density of stock tank liquid (API). Will calculate from sg_sto if not specified
+     - Density of stock tank liquid (API)
    * - sg_sp
      - float
      - Separator gas gravity (relative to air).

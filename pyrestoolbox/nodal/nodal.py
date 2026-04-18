@@ -39,11 +39,13 @@ operating_point     VLP/IPR intersection via bisection
 
 __all__ = [
     'WellSegment', 'Completion', 'Reservoir', 'NodalResult',
-    'fbhp', 'outflow_curve', 'ipr_curve', 'operating_point',
+    'fbhp', 'fthp', 'outflow_curve', 'ipr_curve', 'operating_point',
 ]
 
 import math
 import warnings
+from typing import Optional
+
 import numpy as np
 
 from pyrestoolbox.classes import vlp_method, class_dic
@@ -1654,13 +1656,14 @@ _OIL_METHOD_DIC = {
 #  Public API: fbhp
 # ============================================================================
 
-def fbhp(thp, completion, vlpmethod='WG', well_type='gas',
+def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type: str = 'gas',
          gas_pvt=None, oil_pvt=None,
-         qg_mmscfd=0, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0,
-         qt_stbpd=0, gor=0, wc=0,
-         wsg=1.07, injection=False,
-         gsg=0.65, pb=0, rsb=0, sgsp=0.65,
-         metric=False):
+         qg_mmscfd: float = 0, cgr: float = 0, qw_bwpd: float = 0,
+         oil_vis: float = 1.0, api: float = 45, pr: float = 0,
+         qt_stbpd: float = 0, gor: float = 0, wc: float = 0,
+         wsg: float = 1.07, injection: bool = False,
+         gsg: float = 0.65, pb: float = 0, rsb: float = 0, sgsp: float = 0.65,
+         metric: bool = False, return_profile: bool = False):
     """ Returns flowing bottom hole pressure (psia | barsa) using specified VLP correlation.
 
         thp: Tubing head pressure (psia | barsa)
@@ -1692,6 +1695,10 @@ def fbhp(thp, completion, vlpmethod='WG', well_type='gas',
 
         gas_pvt: GasPVT object (unused by VLP methods directly, reserved for future use)
         oil_pvt: OilPVT object. If provided for oil wells, extracts api, sgsp, pb, rsb from it
+        return_profile: If True, returns a NodalResult with per-segment-boundary arrays
+            ``md`` (cumulative MD), ``tvd`` (cumulative TVD), ``p`` (pressure at each
+            boundary, including THP at the top and BHP at the bottom). Defaults to False
+            (scalar BHP return).
     """
     if metric:
         thp = thp * BAR_TO_PSI
@@ -1751,7 +1758,11 @@ def fbhp(thp, completion, vlpmethod='WG', well_type='gas',
     # gradient is a function of vertical depth
     total_tvd = completion.total_tvd
     tvd_traversed = 0.0
+    md_traversed = 0.0
     p_current = thp
+    md_profile = [0.0]
+    tvd_profile = [0.0]
+    p_profile = [thp]
 
     for seg in completion.segments:
         frac_start = tvd_traversed / total_tvd if total_tvd > 0 else 0.0
@@ -1762,9 +1773,28 @@ def fbhp(thp, completion, vlpmethod='WG', well_type='gas',
         p_current = _run_section(p_current, seg.id, seg.roughness, seg.md,
                                  tht_seg, bht_seg, seg.theta)
         tvd_traversed += seg.tvd
+        md_traversed += seg.md
+        md_profile.append(md_traversed)
+        tvd_profile.append(tvd_traversed)
+        p_profile.append(p_current)
 
     if not math.isfinite(p_current):
         raise RuntimeError(f"VLP calculation produced non-finite BHP: {p_current}")
+
+    if return_profile:
+        md_arr = np.asarray(md_profile)
+        tvd_arr = np.asarray(tvd_profile)
+        p_arr = np.asarray(p_profile)
+        if metric:
+            md_arr = md_arr * FT_TO_M
+            tvd_arr = tvd_arr * FT_TO_M
+            p_arr = p_arr * PSI_TO_BAR
+        return NodalResult({
+            'md': md_arr,
+            'tvd': tvd_arr,
+            'p': p_arr,
+            'bhp': p_arr[-1],
+        })
 
     if metric:
         return p_current * PSI_TO_BAR
@@ -1773,17 +1803,75 @@ def fbhp(thp, completion, vlpmethod='WG', well_type='gas',
 
 
 # ============================================================================
+#  Public API: fthp
+# ============================================================================
+
+def fthp(bhp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type: str = 'gas',
+         gas_pvt=None, oil_pvt=None,
+         qg_mmscfd: float = 0, cgr: float = 0, qw_bwpd: float = 0,
+         oil_vis: float = 1.0, api: float = 45, pr: float = 0,
+         qt_stbpd: float = 0, gor: float = 0, wc: float = 0,
+         wsg: float = 1.07, injection: bool = False,
+         gsg: float = 0.65, pb: float = 0, rsb: float = 0, sgsp: float = 0.65,
+         metric: bool = False, thp_min: float = 14.7, thp_max: float = 20000.0,
+         tol: float = 1e-3) -> float:
+    """ Solves for tubing head pressure (psia | barsa) that produces the specified BHP
+        under the given VLP correlation. Inverse of fbhp.
+
+        bhp: Target flowing bottom hole pressure (psia | barsa)
+        completion, vlpmethod, well_type, gas/oil flow parameters: same as fbhp()
+        thp_min: Lower bracket for THP search (psia). Default atmospheric
+        thp_max: Upper bracket for THP search (psia). Default 20,000 psi
+        tol: Absolute convergence tolerance on THP (psia). Default 1e-3
+        metric: If True, bhp and return are in barsa. Default False.
+    """
+    if metric:
+        bhp_oilfield = bhp * BAR_TO_PSI
+        thp_min_oilfield = thp_min * BAR_TO_PSI if thp_min != 14.7 else thp_min
+        thp_max_oilfield = thp_max * BAR_TO_PSI if thp_max != 20000.0 else thp_max
+    else:
+        bhp_oilfield = bhp
+        thp_min_oilfield = thp_min
+        thp_max_oilfield = thp_max
+
+    def _err(_args, thp_trial):
+        calculated_bhp = fbhp(thp=thp_trial, completion=completion, vlpmethod=vlpmethod,
+                              well_type=well_type, gas_pvt=gas_pvt, oil_pvt=oil_pvt,
+                              qg_mmscfd=qg_mmscfd, cgr=cgr, qw_bwpd=qw_bwpd,
+                              oil_vis=oil_vis, api=api, pr=pr,
+                              qt_stbpd=qt_stbpd, gor=gor, wc=wc,
+                              wsg=wsg, injection=injection,
+                              gsg=gsg, pb=pb, rsb=rsb, sgsp=sgsp,
+                              metric=False)
+        return calculated_bhp - bhp_oilfield
+
+    try:
+        thp_solved = bisect_solve(None, _err, thp_min_oilfield, thp_max_oilfield, tol)
+    except (RuntimeError, ValueError) as exc:
+        raise RuntimeError(
+            f"fthp could not bracket THP in [{thp_min_oilfield}, {thp_max_oilfield}] psi "
+            f"for target BHP {bhp_oilfield} psi: {exc}"
+        )
+
+    if metric:
+        return thp_solved * PSI_TO_BAR
+    return thp_solved
+
+
+# ============================================================================
 #  Public API: outflow_curve
 # ============================================================================
 
-def outflow_curve(thp, completion, vlpmethod='WG', well_type='gas',
+def outflow_curve(thp: float, completion: 'Completion', vlpmethod: str = 'WG',
+                  well_type: str = 'gas',
                   gas_pvt=None, oil_pvt=None,
-                  rates=None, n_rates=20, max_rate=None,
-                  cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0,
-                  gor=0, wc=0,
-                  wsg=1.07, injection=False,
-                  gsg=0.65, pb=0, rsb=0, sgsp=0.65,
-                  metric=False):
+                  rates=None, n_points: int = 20, max_rate: Optional[float] = None,
+                  cgr: float = 0, qw_bwpd: float = 0, oil_vis: float = 1.0,
+                  api: float = 45, pr: float = 0,
+                  gor: float = 0, wc: float = 0,
+                  wsg: float = 1.07, injection: bool = False,
+                  gsg: float = 0.65, pb: float = 0, rsb: float = 0, sgsp: float = 0.65,
+                  metric: bool = False, n_rates: Optional[int] = None) -> 'NodalResult':
     """ Returns VLP outflow curve as a dictionary.
 
         thp: Tubing head pressure (psia | barsa)
@@ -1791,14 +1879,16 @@ def outflow_curve(thp, completion, vlpmethod='WG', well_type='gas',
         vlpmethod: VLP method string
         well_type: 'gas' or 'oil'
         rates: List of rates to evaluate (MMscf/d | sm3/d for gas, STB/d | sm3/d for oil). If None, auto-generated
-        n_rates: Number of rate points if rates is None
+        n_points: Number of rate points if rates is None. Default 20.
+        n_rates: Deprecated alias for n_points (kept for backward compatibility; takes precedence if both given).
         max_rate: Maximum rate for auto-generation
         Other parameters: Same as fbhp()
         metric: If True, inputs/outputs in Eclipse METRIC units. Default False.
 
         Returns:
             dict with keys:
-                'rates': list of flow rates (MMscf/d for gas, STB/d for oil; sm3/d if metric)
+                'rate': list of flow rates (MMscf/d for gas, STB/d for oil; sm3/d if metric)
+                'rates': alias for 'rate' (kept for backward compatibility)
                 'bhp': list of flowing BHP values (psia; barsa if metric) at each rate
     """
     validate_choice(well_type, ('gas', 'oil'), 'well_type')
@@ -1839,7 +1929,8 @@ def outflow_curve(thp, completion, vlpmethod='WG', well_type='gas',
             min_rate = 0.01 * MMSCF_TO_SM3 if well_type == 'gas' else 1.0 * STB_TO_SM3
         else:
             min_rate = 0.01 if well_type == 'gas' else 1.0
-        rates = list(np.linspace(min_rate, max_rate, n_rates))
+        n = n_rates if n_rates is not None else n_points
+        rates = list(np.linspace(min_rate, max_rate, n))
 
     bhp_list = []
     for rate in rates:
@@ -1862,17 +1953,20 @@ def outflow_curve(thp, completion, vlpmethod='WG', well_type='gas',
             bhp_val = bhp_val * PSI_TO_BAR
         bhp_list.append(bhp_val)
 
-    return NodalResult({'rates': list(rates), 'bhp': bhp_list})
+    rates_out = list(rates)
+    return NodalResult({'rate': rates_out, 'rates': rates_out, 'bhp': bhp_list})
 
 
 # ============================================================================
 #  Public API: ipr_curve
 # ============================================================================
 
-def ipr_curve(reservoir, well_type='gas', gas_pvt=None, oil_pvt=None,
-              n_points=20, min_pwf=None,
-              wc=0, wsg=1.07, bo=1.2, uo=1.0, gsg=0.65,
-              metric=False):
+def ipr_curve(reservoir: 'Reservoir', well_type: str = 'gas',
+              gas_pvt=None, oil_pvt=None,
+              n_points: int = 20, min_pwf: Optional[float] = None,
+              wc: float = 0, wsg: float = 1.07, bo: float = 1.2,
+              uo: float = 1.0, gsg: float = 0.65,
+              metric: bool = False) -> 'NodalResult':
     """ Returns IPR curve as dict {'pwf': [...], 'rate': [...]}.
 
         reservoir: Reservoir object (constructed with matching metric flag)
@@ -1976,16 +2070,18 @@ def ipr_curve(reservoir, well_type='gas', gas_pvt=None, oil_pvt=None,
 #  Public API: operating_point
 # ============================================================================
 
-def operating_point(thp, completion, reservoir,
-                    vlpmethod='WG', well_type='gas',
+def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir',
+                    vlpmethod: str = 'WG', well_type: str = 'gas',
                     gas_pvt=None, oil_pvt=None,
-                    cgr=0, qw_bwpd=0, oil_vis=1.0, api=45,
-                    gor=0, wc=0,
-                    wsg=1.07, gsg=0.65, pb=0, rsb=0, sgsp=0.65,
-                    bo=1.2, uo=1.0,
-                    n_points=25,
-                    metric=False):
-    """ Returns operating point as dict with 'rate', 'bhp', 'vlp', 'ipr'.
+                    cgr: float = 0, qw_bwpd: float = 0, oil_vis: float = 1.0,
+                    api: float = 45,
+                    gor: float = 0, wc: float = 0,
+                    wsg: float = 1.07, injection: bool = False,
+                    gsg: float = 0.65, pb: float = 0, rsb: float = 0, sgsp: float = 0.65,
+                    bo: float = 1.2, uo: float = 1.0,
+                    n_points: int = 25,
+                    metric: bool = False) -> 'NodalResult':
+    """ Returns operating point as dict with 'rate', 'bhp', 'vlp', 'ipr', 'converged'.
 
         Finds intersection of VLP outflow curve and IPR inflow curve via bisection.
 
@@ -1994,6 +2090,8 @@ def operating_point(thp, completion, reservoir,
         reservoir: Reservoir object (constructed with matching metric flag)
         vlpmethod: VLP method string
         well_type: 'gas' or 'oil'
+        injection: True for injection wells — forwarded to the internal fbhp and
+            outflow_curve calls. Defaults to False.
         Other parameters: Same as fbhp() and ipr_curve()
         metric: If True, inputs/outputs in Eclipse METRIC units. Default False.
 
@@ -2002,6 +2100,8 @@ def operating_point(thp, completion, reservoir,
             bhp: Operating BHP (psia | barsa)
             vlp: VLP outflow curve dict
             ipr: IPR inflow curve dict
+            converged: True if VLP/IPR intersection was found; False if bisection failed
+                and result is a fallback (rate=0, bhp=pr).
     """
     validate_choice(well_type, ('gas', 'oil'), 'well_type')
     # Convert metric inputs to oilfield at the boundary
@@ -2040,12 +2140,12 @@ def operating_point(thp, completion, reservoir,
     # Find AOF (maximum rate at minimum pwf)
     aof = max(ipr['rate'])
     if aof <= 0:
-        result = {'rate': 0.0, 'bhp': pr, 'vlp': {'rates': [], 'bhp': []},
-                  'ipr': ipr}
+        result = {'rate': 0.0, 'bhp': pr, 'vlp': {'rate': [], 'rates': [], 'bhp': []},
+                  'ipr': ipr, 'converged': False}
         if metric:
             result['bhp'] = pr * PSI_TO_BAR
             result['ipr'] = _convert_ipr_to_metric(ipr, well_type)
-        return result
+        return NodalResult(result)
 
     # IPR gas rates are in Mscf/d; VLP uses MMscf/d. Scale factor:
     gas_scale = 1000.0 if well_type == 'gas' else 1.0
@@ -2061,11 +2161,11 @@ def operating_point(thp, completion, reservoir,
             vlp_bhp = fbhp(thp=thp, completion=completion, vlpmethod=vlpmethod,
                            well_type='gas', qg_mmscfd=rate / gas_scale, cgr=cgr,
                            qw_bwpd=qw_bwpd, oil_vis=oil_vis, api=api, pr=pr,
-                           wsg=wsg, gsg=gsg)
+                           wsg=wsg, injection=injection, gsg=gsg)
         else:
             vlp_bhp = fbhp(thp=thp, completion=completion, vlpmethod=vlpmethod,
                            well_type='oil', qt_stbpd=rate, gor=gor, wc=wc,
-                           wsg=wsg, gsg=gsg, pb=pb, rsb=rsb, sgsp=sgsp,
+                           wsg=wsg, injection=injection, gsg=gsg, pb=pb, rsb=rsb, sgsp=sgsp,
                            api=api, oil_pvt=oil_pvt)
 
         # IPR BHP: interpolate from IPR curve
@@ -2076,25 +2176,46 @@ def operating_point(thp, completion, reservoir,
 
         return vlp_bhp - ipr_bhp
 
-    # Bisect to find operating rate (in IPR units)
+    # Bisect to find operating rate (in IPR units).
+    # VLP curves for oil wells can be non-monotonic at very low rates (spurious
+    # near-shut-in high BHP from holdup correlations), so a naive bisect between
+    # min_rate and AOF may miss the true crossing. Scan the rate range first and
+    # pick the sign-change closest to AOF — that's the physical operating point.
     min_rate = 0.1 * gas_scale if well_type == 'gas' else 1.0
     max_rate_search = aof * 0.999
 
-    try:
-        op_rate = bisect_solve(None, _err, min_rate, max_rate_search, 1e-4)
-    except (RuntimeError, ValueError):
+    converged = True
+    scan_rates = list(np.linspace(min_rate, max_rate_search, max(n_points, 25)))
+    scan_errs = [_err(None, r) for r in scan_rates]
+
+    # Find all sign changes; prefer the one at the highest rate
+    brackets = [
+        (scan_rates[i], scan_rates[i + 1])
+        for i in range(len(scan_rates) - 1)
+        if scan_errs[i] * scan_errs[i + 1] < 0
+    ]
+
+    if brackets:
+        lo, hi = brackets[-1]
+        try:
+            op_rate = bisect_solve(None, _err, lo, hi, 1e-4)
+        except (RuntimeError, ValueError):
+            op_rate = 0.0
+            converged = False
+    else:
         op_rate = 0.0
+        converged = False
 
     # Calculate operating BHP
     if well_type == 'gas' and op_rate > 0:
         op_bhp = fbhp(thp=thp, completion=completion, vlpmethod=vlpmethod,
                       well_type='gas', qg_mmscfd=op_rate / gas_scale, cgr=cgr,
                       qw_bwpd=qw_bwpd, oil_vis=oil_vis, api=api, pr=pr,
-                      wsg=wsg, gsg=gsg)
+                      wsg=wsg, injection=injection, gsg=gsg)
     elif well_type == 'oil' and op_rate > 0:
         op_bhp = fbhp(thp=thp, completion=completion, vlpmethod=vlpmethod,
                       well_type='oil', qt_stbpd=op_rate, gor=gor, wc=wc,
-                      wsg=wsg, gsg=gsg, pb=pb, rsb=rsb, sgsp=sgsp,
+                      wsg=wsg, injection=injection, gsg=gsg, pb=pb, rsb=rsb, sgsp=sgsp,
                       api=api, oil_pvt=oil_pvt)
     else:
         op_bhp = pr
@@ -2106,7 +2227,7 @@ def operating_point(thp, completion, reservoir,
     vlp = outflow_curve(thp=thp, completion=completion, vlpmethod=vlpmethod,
                         well_type=well_type, rates=vlp_rates,
                         cgr=cgr, qw_bwpd=qw_bwpd, oil_vis=oil_vis, api=api,
-                        pr=pr, gor=gor, wc=wc, wsg=wsg, gsg=gsg,
+                        pr=pr, gor=gor, wc=wc, wsg=wsg, injection=injection, gsg=gsg,
                         pb=pb, rsb=rsb, sgsp=sgsp, oil_pvt=oil_pvt)
 
     # Convert operating rate to VLP units for return
@@ -2122,17 +2243,19 @@ def operating_point(thp, completion, reservoir,
         vlp = _convert_vlp_to_metric(vlp, well_type)
         ipr = _convert_ipr_to_metric(ipr, well_type)
 
-    return NodalResult({'rate': op_rate_out, 'bhp': op_bhp, 'vlp': vlp, 'ipr': ipr})
+    return NodalResult({'rate': op_rate_out, 'bhp': op_bhp,
+                        'vlp': vlp, 'ipr': ipr,
+                        'converged': converged})
 
 
 def _convert_vlp_to_metric(vlp, well_type):
     """Convert VLP outflow curve dict from oilfield to metric units."""
     if well_type == 'gas':
-        rates = [r * MMSCF_TO_SM3 for r in vlp['rates']]  # MMscf/d -> sm3/d
+        rates = [r * MMSCF_TO_SM3 for r in vlp['rate']]  # MMscf/d -> sm3/d
     else:
-        rates = [r * STB_TO_SM3 for r in vlp['rates']]  # STB/d -> sm3/d
+        rates = [r * STB_TO_SM3 for r in vlp['rate']]  # STB/d -> sm3/d
     bhps = [b * PSI_TO_BAR for b in vlp['bhp']]  # psia -> barsa
-    return {'rates': rates, 'bhp': bhps}
+    return {'rate': rates, 'rates': rates, 'bhp': bhps}
 
 
 def _convert_ipr_to_metric(ipr, well_type):

@@ -12,6 +12,8 @@ from ._constants import (
     _DARCY_RADIAL, _DARCY_SKIN_OFFSET,
     _VOGEL_AOF_DENOM, _VOGEL_LIN, _VOGEL_QUAD,
 )
+from typing import Optional
+
 from ._correlations import oil_bo, oil_viso
 
 
@@ -27,7 +29,7 @@ def oil_rate_radial(
     S: float = 0,
     vogel: bool = False,
     pb: float = 0,
-    oil_pvt = None,
+    oil_pvt: Optional['OilPVT'] = None,
     degf: float = 0,
     metric: bool = False,
 ) -> np.ndarray:
@@ -118,7 +120,7 @@ def oil_rate_linear(
     bo: float = 0,
     vogel: bool = False,
     pb: float = 0,
-    oil_pvt = None,
+    oil_pvt: Optional['OilPVT'] = None,
     degf: float = 0,
     metric: bool = False,
 ) -> np.ndarray:

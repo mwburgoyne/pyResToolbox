@@ -70,7 +70,5 @@ from ._correlations import oil_pbub, oil_rs_bub, oil_rs, oil_bo, oil_viso
 from ._compressibility import oil_co, oil_bt
 from ._rate import oil_rate_radial, oil_rate_linear
 from ._harmonize import oil_harmonize, oil_harmonize_pb_rsb
-from ._tables import _resolve_pb_rsb, _build_bot_tables, _format_bot_results, make_bot_og
+from ._tables import make_bot_og
 from ._pvt_class import OilPVT
-from ._density import _cofb_mccain
-from ._compressibility import _perrine_co_sat

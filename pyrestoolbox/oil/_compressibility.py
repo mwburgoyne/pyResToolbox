@@ -1,11 +1,9 @@
 """Oil compressibility and total two-phase FVF."""
 
-import numpy as np
-
 from pyrestoolbox.constants import (
     psc, CUFTperBBL, BAR_TO_PSI, degc_to_degf,
-    SM3_PER_SM3_TO_SCF_PER_STB, SCF_PER_STB_TO_SM3_PER_SM3,
-    INVPSI_TO_INVBAR, INVBAR_TO_INVPSI,
+    SM3_PER_SM3_TO_SCF_PER_STB,
+    INVPSI_TO_INVBAR,
 )
 from pyrestoolbox.classes import (
     z_method, c_method, pb_method, rs_method, bo_method, deno_method, co_method,
@@ -16,7 +14,7 @@ import pyrestoolbox.gas as gas
 
 from ._utils import check_sgs, oil_sg
 from ._density import _cofb_mccain
-from ._correlations import oil_pbub, oil_rs_bub, oil_rs, oil_bo, oil_deno, oil_viso
+from ._correlations import oil_pbub, oil_rs_bub, oil_rs, oil_bo
 
 
 def _perrine_co_sat(p, api, degf, sg_sp, sg_g, pb, rsb, zmethod, cmethod,
@@ -67,7 +65,7 @@ def oil_co(
     bomethod: bo_method = bo_method.MCAIN,
     pbmethod: pb_method = pb_method.VALMC,
     metric: bool = False,
-):
+) -> float:
     """ Returns oil compressibility (1/psi | 1/bar).
 
         By default (co_sat=False) returns undersaturated compressibility calculated with

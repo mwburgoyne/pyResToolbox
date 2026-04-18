@@ -37,6 +37,8 @@ __all__ = [
     'brine_props', 'CO2_Brine_Mixture', 'SoreideWhitson', 'make_pvtw_table',
 ]
 
+import warnings
+
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
@@ -133,6 +135,8 @@ def brine_props(p: float = None, degf: float = None, wt: float = None, ch4_sat: 
         p = pres
     if degf is None and temp is not None:
         degf = temp
+    if wt is not None and ppm is not None:
+        raise ValueError("Supply either wt or ppm, not both.")
     if wt is None:
         wt = ppm / 10000 if ppm is not None else 0
     if p is None or degf is None:
@@ -467,19 +471,21 @@ class CO2_Brine_Mixture():
                 >> array([0.02431245, 0.95743175])
                 
             Usage example for 175 Bara x 85 degC and 0% NaCl brine:
-                mix = brine.CO2_Brine_Mixture(pres = 175, temp = 85)
+                mix = brine.CO2_Brine_Mixture(pres = 175, temp = 85, metric = True)
                 mix.Rs  # Returns sm3 dissolved CO2 / sm3 Brine
                 >> 24.742923469934272
                 
            
     """
-    def __init__(self, pres=None, temp=None, ppm=None, metric=True, cw_sat=False,
+    def __init__(self, pres=None, temp=None, ppm=None, metric=False, cw_sat=False,
                  *, p=None, degf=None, wt=None):
         # Resolve parameter aliases (p/degf/wt -> pres/temp/ppm)
         if pres is None and p is not None:
             pres = p
         if temp is None and degf is not None:
             temp = degf
+        if ppm is not None and wt is not None:
+            raise ValueError("Supply either ppm or wt, not both.")
         if ppm is None:
             ppm = wt * 10000 if wt is not None else 0
         if pres is None or temp is None:
@@ -1436,8 +1442,15 @@ class SoreideWhitson:
             y_N2: Mole fraction N2 in dry gas (default 0)
             y_H2: Mole fraction H2 in dry gas (default 0)
             sg: Gas specific gravity — used to estimate HC split among C1-C4 (default 0.65)
-            metric: Boolean for units (True=metric, False=oilfield). Default True.
+            metric: Boolean for units (True=metric, False=oilfield). Default False.
             cw_sat: If True, also calculate saturated compressibility (default False)
+            framework: VLE framework. 'proposed' (default, Soreide-Whitson 1992 re-fit),
+                'sw_original' (original 1992 published), or 'dropin' (fitted to PR-EOS with
+                brine-aware water alpha). Affects kij and ks correlations.
+            salinity_method: How salinity enters the flash. 'gamma_phi' (default, Sechenov
+                salting-out via activity coefficient), 'embedded' (salinity inside kij —
+                only for 'dropin'/'sw_original'), 'explicit' (brine treated as a component),
+                'sechenov' (legacy alias for gamma_phi), or 'auto' (pick per-gas defaults).
 
         Returns object with following calculated properties:
             .x          : Dict of dissolved gas mole fractions, e.g. {'CO2': 0.024, 'CH4': 0.0015}
@@ -1462,7 +1475,7 @@ class SoreideWhitson:
             mix.Rs  # Returns per-gas Rs dict, e.g. {'CO2': 15.2}
 
             # Mixed gas, metric units
-            mix = brine.SoreideWhitson(pres=200, temp=80, ppm=10000, y_CO2=0.1, y_H2S=0.05, sg=0.7)
+            mix = brine.SoreideWhitson(pres=200, temp=80, ppm=10000, y_CO2=0.1, y_H2S=0.05, sg=0.7, metric=True)
             mix.bDen  # Returns [gas-saturated, gas-free, freshwater] densities
 
         References:
@@ -1482,13 +1495,20 @@ class SoreideWhitson:
             Murphy, W.R. and Gaines, T.M. (1974), J. Chem. Eng. Data 19(4), 359-362.
     """
 
+    _VALID_FRAMEWORKS = ('proposed', 'sw_original', 'dropin')
+    _VALID_SALINITY_METHODS = ('gamma_phi', 'embedded', 'explicit', 'auto', 'sechenov')
+
     def __init__(self, pres=None, temp=None, ppm=None, y_CO2=0, y_H2S=0, y_N2=0, y_H2=0,
-                 sg=0.65, metric=True, cw_sat=False, *, p=None, degf=None, wt=None):
+                 sg=0.65, metric=False, cw_sat=False,
+                 framework='proposed', salinity_method='gamma_phi',
+                 *, p=None, degf=None, wt=None):
         # Resolve parameter aliases (p/degf/wt -> pres/temp/ppm)
         if pres is None and p is not None:
             pres = p
         if temp is None and degf is not None:
             temp = degf
+        if ppm is not None and wt is not None:
+            raise ValueError("Supply either ppm or wt, not both.")
         if ppm is None:
             ppm = wt * 10000 if wt is not None else 0
         if pres is None or temp is None:
@@ -1497,6 +1517,22 @@ class SoreideWhitson:
             raise ValueError(f"ppm must be non-negative, got {ppm}")
         if ppm >= 1e6:
             raise ValueError(f"ppm must be less than 1,000,000, got {ppm}")
+        if framework not in self._VALID_FRAMEWORKS:
+            raise ValueError(
+                f"Invalid framework: {framework!r}. Valid options: {list(self._VALID_FRAMEWORKS)}"
+            )
+        if salinity_method not in self._VALID_SALINITY_METHODS:
+            raise ValueError(
+                f"Invalid salinity_method: {salinity_method!r}. Valid options: {list(self._VALID_SALINITY_METHODS)}"
+            )
+        if framework == 'proposed' and salinity_method == 'embedded':
+            warnings.warn(
+                "framework='proposed' does not define embedded-salinity kij; engine will "
+                "fall back to the 'gamma_phi' behaviour.",
+                stacklevel=2,
+            )
+        self.framework = framework
+        self.salinity_method = salinity_method
         # Validate pressure and temperature (convert to oilfield units for validation)
         _p_val = pres if not metric else pres * BAR2PSI
         _t_val = temp if not metric else temp * 1.8 + 32
@@ -1742,8 +1778,8 @@ class SoreideWhitson:
             y_H2S=self.gas_comp.get('H2S', 0),
             y_H2=self.gas_comp.get('H2', 0),
             method='flash',
-            salinity_method='gamma_phi',
-            framework='proposed',
+            salinity_method=self.salinity_method,
+            framework=self.framework,
         )
 
         self.x = x_gas

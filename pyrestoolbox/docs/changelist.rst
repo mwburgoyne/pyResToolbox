@@ -1,3 +1,64 @@
+Changelist in 3.4.0:
+
+- **BREAKING — Brine metric default standardization**: ``CO2_Brine_Mixture`` and ``SoreideWhitson`` constructors now default to ``metric=False`` (oilfield units) to match ``brine_props`` and every other pyrestoolbox API. Previously they defaulted to ``metric=True``. Existing callers that relied on the old default must either pass ``metric=True`` explicitly or switch their input units to psia / degF. RST and notebook examples that relied on the default have been updated to pass ``metric=True`` explicitly.
+
+- **nodal.outflow_curve parameter unification**: ``n_rates`` has been renamed to ``n_points`` to match ``ipr_curve`` / ``operating_point``. ``n_rates`` remains accepted as a deprecated alias (takes precedence when both are passed) — existing callers keep working without changes.
+
+- **Type hints on public APIs**: ``nodal`` (fbhp / fthp / outflow_curve / ipr_curve / operating_point), ``oil`` (oil_co/bt return types, OilPVT constructor + methods, oil_rate_radial/linear), and ``dca`` (arps_*, duong_*, eur, fit_*, ratio_forecast, forecast) public signatures now carry type annotations. IDE autocomplete and static analysis now work out of the box for the primary user surface. ``matbal`` / ``simtools`` / ``plyasunov`` type-hint backfill deferred.
+
+- **Rust-vs-Python parity harness**: 63 new parametrized tests added to ``test_rust_acceleration.py``. Coverage:
+
+  - Nodal gas VLP: 4 methods × 6 (THP, rate) points on a vertical well; WG/BB × 2 points on a deviated well (45-degree lower segment).
+  - Nodal oil VLP: 4 methods × 5 (THP, rate) points on a vertical well; WG/BB × 2 points on a deviated well.
+  - SoreideWhitson: pure CO2 across 4 (P, T) × 3 salinity points; sour-gas mix (CO2 + H2S + N2) at 2 points; natural-gas-only at 2 points.
+
+  Purpose is prophylactic — catches future one-sided edits between Python and Rust. Tolerance is ``RTOL_MEDIUM = 1e-4``.
+
+- **Rust HB-oil VLP bugfix (correctness)**. Three dimensional bugs in ``src/vlp/segment_oil.rs`` (HB oil only — WG/GRAY/BB oil were coded correctly):
+
+  1. ``min_l`` formula (``rho_g * 62.37 / (rho_g * 62.37 + lsg * 62.37)`` simplified to ``rho_g_lbft3 / (rho_g_lbft3 + lsg_SG)``) mixed lb/cuft with dimensionless SG. Forced ~35% minimum liquid holdup at low rate when Python computed ~2%. Dominant contributor to the divergence.
+  2. ``rho_avg`` averaged gas vs stock-tank oil density, not the oil+water mixture density that includes live-oil McCain correction and water cut.
+  3. ``ul`` superficial liquid velocity used stock-tank volumetric flow (``ql * 5.615 / 86400 / area``) instead of reservoir-conditions volumetric (``mflow_l / rho_l / area``). Missed the live-oil expansion / water-cut weighting.
+
+  Combined effect was up to ~75% over-prediction of BHP for HB oil wells at low rate / low THP. Python path was always correct; bug was isolated to the Rust accelerator. The ``hb_holdup`` helper signature changed from taking ``lsg`` (implicit ``62.4 * lsg`` internally) to taking ``rho_l`` directly; gas-segment callers updated to pass ``62.4 * lsg_loc`` to preserve prior behaviour. Parity harness drift reduced from 75% to <0.1% on the affected grid.
+
+- **Nodal ``operating_point`` non-monotonic VLP handling**. HB oil VLP curves can be non-monotonic at very low rate (spurious near-shut-in high BHP from holdup correlations). The previous bisection bracketed ``[min_rate, AOF]`` and failed when both endpoints had the same sign despite a crossing existing in between. Replaced with a scan-then-bisect: sample 25 rates, locate all sign changes in the error function, and bisect in the highest-rate bracket — the physical operating point. Sets ``converged=False`` if no sign change is found.
+
+- **HB oil doc-example values updated**. Three expected values changed due to the Rust HB-oil bugfix (Python values unchanged, Rust values now match Python):
+
+  - ``fbhp(thp=200, ..., vlpmethod='HB', well_type='oil', qt_stbpd=2000, ...)``: 2271.72 psi → 1771.47 psi
+  - ``fbhp`` with ``oil_pvt=opvt``: 2273.72 psi → 1772.24 psi
+  - ``operating_point`` (HB oil, thp=200, reservoir pr=3000): rate 1391.4 → 2019.0 stb/d, bhp 2206.3 → 1778.5 psi
+
+  RST and notebook examples updated to match the corrected values.
+
+- **nodal.fthp**: New reverse-solve function. ``fthp(bhp, completion, ...)`` returns the tubing head pressure that produces the specified BHP under the given VLP correlation. Wraps ``bisect_solve`` over ``fbhp``, accepts the same flow/well parameters as ``fbhp``, and has matching units/metric handling. Users no longer need to hand-roll a bisection for wellhead back-calculation workflows.
+
+- **nodal.fbhp ``return_profile=True``**: New kwarg. When enabled, ``fbhp`` returns a ``NodalResult`` with per-segment-boundary ``md``, ``tvd``, and ``p`` arrays (plus scalar ``bhp``) instead of just the bottom-hole scalar. Exposes the wellbore pressure traverse without forking the internal segment march. Metric-aware outputs.
+
+- **nodal.operating_point extensions**:
+
+  - New ``injection=False`` kwarg, forwarded to internal ``fbhp`` and ``outflow_curve`` calls so injection wells can be solved directly through ``operating_point``. Previously ``injection=True`` was honoured only by direct ``fbhp`` calls.
+  - New ``converged`` key in the returned ``NodalResult``. ``True`` when the VLP/IPR bisection succeeded, ``False`` when it fell back to ``rate=0, bhp=pr`` (no intersection). Surfaces a condition that previously looked like a plausible zero-rate answer.
+
+- **nodal.outflow_curve dict key**: Returned ``NodalResult`` now carries both ``'rate'`` and ``'rates'`` entries (same list). ``'rate'`` matches ``ipr_curve`` and ``operating_point``; ``'rates'`` is kept for backward compatibility.
+
+- **SoreideWhitson framework / salinity_method exposed**: New ``framework`` (``'proposed'`` | ``'sw_original'`` | ``'dropin'``) and ``salinity_method`` (``'gamma_phi'`` | ``'embedded'`` | ``'explicit'`` | ``'sechenov'`` | ``'auto'``) constructor kwargs, forwarded to the VLE engine. Defaults unchanged (``'proposed'`` + ``'gamma_phi'``). Combining ``framework='proposed'`` with ``salinity_method='embedded'`` now emits a warning because the engine falls back to ``gamma_phi`` for the ``proposed`` kij set.
+
+- **Brine ``ppm`` / ``wt`` conflict detection**: ``brine_props``, ``CO2_Brine_Mixture``, and ``SoreideWhitson`` now raise ``ValueError("Supply either ... not both.")`` when both aliases are passed. Previously one silently won with no feedback.
+
+- **Oil API cleanup**:
+
+  - Removed private-helper re-exports ``_cofb_mccain``, ``_perrine_co_sat``, ``_resolve_pb_rsb``, ``_build_bot_tables``, ``_format_bot_results`` from ``pyrestoolbox.oil`` public namespace. Still reachable via ``pyrestoolbox.oil._tables`` / ``._density`` / ``._compressibility`` for advanced users; ``simtools.make_bot_og`` updated internally.
+  - Dead imports removed across ``_compressibility``, ``_correlations``, ``_density``, ``_harmonize``, ``_tables`` sub-files (11 symbols total).
+  - Valko-McCain (2003) coefficient matrices for ``sg_st_gas`` and ``oil_rs_st`` extracted to ``_constants.py`` with paper citations, per CLAUDE.md named-constants rule.
+
+- **Oil documentation sync**: ``docs/oil.rst`` updated — ``oil_deno`` parameter listed as ``sg_o`` (matches code; was incorrectly ``sg_sto``). ``make_bot_og`` result-dict table now documents ``vis_frac`` (was previously omitted despite being returned).
+
+- **DCA internals**: 20 previously inline magic numbers extracted to named constants at the top of ``dca.py`` (Arps b-grid 0.05/0.96/0.01, Duong trap bounds and curve_fit bounds, logistic fit bounds, hyperbolic numerical floor). ``_build_decline_result`` helper deduplicates R-squared/residual/DeclineResult construction across the six ``_fit_*`` helpers (~60 lines removed).
+
+- 726 validation tests (up from 716 in 3.3.0). New coverage for ``fthp`` roundtrip, ``fbhp`` pressure-traverse return, ``operating_point.converged``, ``SoreideWhitson`` framework/salinity_method validation, and the three ``ppm``/``wt`` conflict raises.
+
 Changelist in 3.3.0:
 
 - **BNS Z-factor / critical-property coupling**: When either ``zmethod`` or ``cmethod`` is ``BNS``, both are now forced to ``BNS`` for thermodynamic consistency with a ``UserWarning`` naming the overruled counterpart. ``h2 > 0`` continues to auto-select BNS silently. Non-BNS methods (e.g. ``DAK`` + ``SUT``) remain freely mixable. Implemented via a single ``_resolve_methods`` helper applied at all gas public entry points plus ``GasPVT.__init__``.

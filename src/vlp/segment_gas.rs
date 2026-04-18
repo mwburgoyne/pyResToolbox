@@ -128,7 +128,7 @@ pub fn hb_fbhp_gas(
             };
 
             let (mut yl, _nvl, _nvg, _nd) =
-                hb_holdup(ul, ugas, tid, lsg_loc, ift_val, mul, p_avg);
+                hb_holdup(ul, ugas, tid, 62.4 * lsg_loc, ift_val, mul, p_avg);
 
             // Minimum holdup from mass fraction
             let rho = 29.0 * gsg * p_avg / (temp_r * zee * 10.732 * 62.37);
