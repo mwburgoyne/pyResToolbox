@@ -811,6 +811,73 @@ def test_doc_gas_pvt_metric_density():
     result = gpvt_m.density(137.9, 82.2)
     assert abs(result - 97.36871728783241) / 97.36871728783241 < RTOL
 
+def test_doc_gas_hvf_beta_fk():
+    """gas.rst: gas_hvf_beta default FK, 100 md"""
+    assert abs(gas.gas_hvf_beta(100.0) - 86071589.04028143) / 86071589.04028143 < 1e-6
+
+def test_doc_gas_hvf_beta_jones():
+    """gas.rst: gas_hvf_beta Jones 1987"""
+    assert abs(gas.gas_hvf_beta(100.0, method='JONES') - 48851186.4355433) / 48851186.4355433 < 1e-6
+
+def test_doc_gas_hvf_beta_tck():
+    """gas.rst: gas_hvf_beta Tek-Coats-Katz 1962"""
+    assert abs(gas.gas_hvf_beta(100.0, method='TCK', phi=0.25) - 45003847.531218514) / 45003847.531218514 < 1e-6
+
+def test_doc_gas_hvf_beta_metric():
+    """gas.rst: gas_hvf_beta metric (1/m)"""
+    assert abs(gas.gas_hvf_beta(100.0, metric=True) - 282387103.1505296) / 282387103.1505296 < 1e-4
+
+def test_doc_gas_non_darcy_skin_basic():
+    """gas.rst: gas_non_darcy_skin default FK example"""
+    r = gas.gas_non_darcy_skin(qg=10000, k=100, h_perf=100, rw=0.33, mug=0.025, sg=0.7)
+    assert round(r['beta'], 0) == 86071589.0
+    assert round(r['D'] * 1e5, 4) == 1.6227
+    assert round(r['S_hvf'], 4) == 0.1623
+
+def test_doc_gas_non_darcy_skin_damaged_tck():
+    """gas.rst: gas_non_darcy_skin damaged-zone TCK example"""
+    r = gas.gas_non_darcy_skin(qg=10000, k=100, h_perf=100, rw=0.33,
+                                mug=0.025, sg=0.7, krg=0.7,
+                                beta_method='TCK', phi=0.22)
+    assert round(r['S_hvf'], 4) == 0.1534
+
+def test_doc_gas_non_darcy_skin_metric():
+    """gas.rst: gas_non_darcy_skin metric example (same well as field)"""
+    r = gas.gas_non_darcy_skin(qg=283168.5, k=100, h_perf=30.48, rw=0.1006,
+                                mug=0.025, sg=0.7, metric=True)
+    assert round(r['S_hvf'], 4) == 0.1622
+
+def test_doc_gas_partial_penetration_skin_field():
+    """gas.rst: gas_partial_penetration_skin field-unit example"""
+    sp = gas.gas_partial_penetration_skin(htot=164.04, htop=32.81, hbot=147.64,
+                                          rw=0.3543, kh_kv=8.0)
+    assert abs(sp - 2.155398050852645) < 1e-6
+
+def test_doc_gas_partial_penetration_skin_metric():
+    """gas.rst: gas_partial_penetration_skin metric-unit equivalent"""
+    sp = gas.gas_partial_penetration_skin(htot=50.0, htop=10.0, hbot=45.0,
+                                          rw=0.108, kh_kv=8.0)
+    assert abs(sp - 2.155481748242132) < 1e-6
+
+def test_doc_gas_partial_penetration_skin_full():
+    """gas.rst: gas_partial_penetration_skin fully perforated => ~0"""
+    sp = gas.gas_partial_penetration_skin(htot=100, htop=0, hbot=100, rw=0.33)
+    assert abs(sp) < 1e-9
+
+def test_doc_gaspvt_non_darcy_skin():
+    """gas.rst: GasPVT.non_darcy_skin convenience method"""
+    gpvt = gas.GasPVT(sg=0.70)
+    r = gpvt.non_darcy_skin(qg=10000, p=3000, degf=200,
+                            k=100, h_perf=100, rw=0.33, krg=0.7)
+    assert round(r['S_hvf'], 4) == 0.3044
+
+def test_doc_gaspvt_partial_penetration_skin():
+    """gas.rst: GasPVT.partial_penetration_skin convenience method"""
+    gpvt = gas.GasPVT(sg=0.70)
+    sp = gpvt.partial_penetration_skin(htot=50, htop=10, hbot=45,
+                                       rw=0.108, kh_kv=8)
+    assert round(sp, 4) == 2.1555
+
 def test_doc_nodal_gas_pvt_z():
     """nodal.rst: GasPVT z-factor"""
     gpvt = gas.GasPVT(sg=0.65, co2=0.1)

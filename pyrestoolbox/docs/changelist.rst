@@ -1,3 +1,16 @@
+Changelist in 3.5.0:
+
+- **Gas non-Darcy & partial-penetration pseudoskins** — three new public functions in ``pyrestoolbox.gas`` plus two matching ``GasPVT`` convenience methods. Oilfield + metric unit support throughout.
+
+  - ``gas.gas_hvf_beta(k, method='FK' | 'JONES' | 'TCK', phi=0, metric=False)`` — Forchheimer high-velocity-flow coefficient β. Three correlations: ``'FK'`` (default, log-log fit of Firoozabadi & Katz 1979 JPT Feb, consolidated-rock β(k) chart), ``'JONES'`` (Jones 1987 SPE-16949), ``'TCK'`` (Tek, Coats, Katz 1962 JPT Jul, requires ``phi``). Returns β in 1/ft (or 1/m if ``metric=True``).
+  - ``gas.gas_non_darcy_skin(qg, k, h_perf, rw, mug, sg, krg=1.0, beta_method='FK', phi=0, metric=False)`` — returns ``{'beta', 'D', 'S_hvf'}`` where D uses the standard ``2.222e-15 · β · γg · k / (μg · h · rw)`` form (Jones 1987; Odeh, Moreland & Schueler 1975 JPT Dec). Output ``D`` is in day/MSCF (or day/sm3 if metric) and can be passed directly to ``gas_rate_radial(D=...)``. ``krg < 1`` evaluates β at the damaged-zone permeability ``k' = k·krg`` for a pessimistic S\ :sub:`hvf`.
+  - ``gas.gas_partial_penetration_skin(htot, htop, hbot, rw, kh_kv=10)`` — partial-penetration pseudoskin by direct evaluation of the Streltsova-Adams (1979) SPE-7486 analytical series. Bessel K\ :sub:`0` from ``scipy.special.k0``; vectorised summation to 20,000 terms (sub-millisecond). Warns when the series tail suggests incomplete convergence for very thin wellbores. Unit-agnostic — only ratios enter the formula, so inputs share any consistent length unit.
+  - ``GasPVT.non_darcy_skin(qg, p, degf, k, h_perf, rw, krg=1, beta_method='FK', phi=0)`` and ``GasPVT.partial_penetration_skin(htot, htop, hbot, rw, kh_kv=10)`` — the former auto-computes μ\ :sub:`g` from stored PVT state; both honour the ``GasPVT.metric`` flag.
+
+  18 new unit tests in ``test_gas.py`` (all three β correlations, metric round-trip, damaged-zone, series convergence, geometry validation, ``GasPVT`` delegation). 12 new doc-example tests in ``test_doc_examples.py`` pin every RST example value. Reference S\ :sub:`p` values verified against a 50,000-term direct evaluation of the Streltsova-Adams series.
+
+- 824 validation tests (up from 812 in 3.4.0).
+
 Changelist in 3.4.0:
 
 - **BREAKING — Brine metric default standardization**: ``CO2_Brine_Mixture`` and ``SoreideWhitson`` constructors now default to ``metric=False`` (oilfield units) to match ``brine_props`` and every other pyrestoolbox API. Previously they defaulted to ``metric=True``. Existing callers that relied on the old default must either pass ``metric=True`` explicitly or switch their input units to psia / degF. RST and notebook examples that relied on the default have been updated to pass ``metric=True`` explicitly.

@@ -138,6 +138,12 @@ Function List
      - `pyrestoolbox.gas.gas_rate_linear`_
    * - Gas Hydrate Prediction
      - `pyrestoolbox.gas.gas_hydrate`_
+   * - Forchheimer HVF Coefficient (β)
+     - `pyrestoolbox.gas.gas_hvf_beta`_
+   * - Non-Darcy (HVF) Skin
+     - `pyrestoolbox.gas.gas_non_darcy_skin`_
+   * - Partial-Penetration Pseudoskin
+     - `pyrestoolbox.gas.gas_partial_penetration_skin`_
    * - Gas PVT Wrapper
      - `pyrestoolbox.gas.GasPVT`_
 
@@ -1414,6 +1420,228 @@ With reservoir P,T (gas equilibrated at reservoir, hydrate assessment at wellhea
     True
 
 
+pyrestoolbox.gas.gas_hvf_beta
+=============================
+
+.. code-block:: python
+
+    gas_hvf_beta(k, method='FK', phi=0.0, metric=False) -> float
+
+Returns the Forchheimer high-velocity-flow (inertial) coefficient β, used in non-Darcy flow calculations. Three correlations are available. All return β in 1/ft (or 1/m when ``metric=True``) for permeability ``k`` in md.
+
+.. list-table:: β correlations
+   :widths: 8 25 20
+   :header-rows: 1
+
+   * - method
+     - Correlation
+     - Source
+   * - ``'FK'``
+     - β = 2.172e10 · k⁻¹·²⁰¹
+     - Log-log fit of Firoozabadi & Katz (1979) JPT Feb, pp.211-216 (SPE-6827) consolidated-rock β(k) chart. Default.
+   * - ``'JONES'``
+     - β = 6.15e10 · k⁻¹·⁵⁵
+     - Jones, S.C. (1987) SPE-16949
+   * - ``'TCK'``
+     - β = 1.88e10 / (k¹·⁴⁷ · φ⁰·⁵³)
+     - Tek, Coats, Katz (1962) JPT Jul, pp.799-806. Requires ``phi``.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - k
+     - float
+     - Permeability (md). To evaluate β at a damaged-zone permeability, pass ``k' = k * krg``.
+   * - method
+     - string
+     - ``'FK'`` (default), ``'JONES'``, or ``'TCK'``.
+   * - phi
+     - float
+     - Porosity fraction. Required for ``method='TCK'``.
+   * - metric
+     - bool
+     - If True, returns β in 1/m; else 1/ft. Defaults to False.
+
+Examples:
+
+.. code-block:: python
+
+    >>> gas.gas_hvf_beta(100.0)                           # FK, 100 md
+    86071589.04028143
+    >>> gas.gas_hvf_beta(100.0, method='JONES')
+    48851186.4355433
+    >>> gas.gas_hvf_beta(100.0, method='TCK', phi=0.25)
+    45003847.531218514
+    >>> gas.gas_hvf_beta(100.0, metric=True)              # 1/m
+    282387103.1505296
+
+
+pyrestoolbox.gas.gas_non_darcy_skin
+===================================
+
+.. code-block:: python
+
+    gas_non_darcy_skin(qg, k, h_perf, rw, mug, sg, krg=1.0,
+                       beta_method='FK', phi=0.0, metric=False) -> dict
+
+Returns the rate-dependent (high-velocity-flow) pseudoskin for a gas well. Computes β via ``gas_hvf_beta``, the non-Darcy coefficient D following Jones (1987) SPE-16949 / Odeh, Moreland, Schueler (1975) JPT Dec pp.1501-1504, and the skin S\ :sub:`hvf` = D · q\ :sub:`g`.
+
+Formula (field units):
+
+    D [day/MSCF] = 2.222×10⁻¹⁵ · β · γ\ :sub:`g` · k / (μ\ :sub:`g` · h\ :sub:`perf` · r\ :sub:`w`)
+
+where β is in 1/ft, k in md, μ\ :sub:`g` in cP, h\ :sub:`perf` and r\ :sub:`w` in ft.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - qg
+     - float
+     - Gas rate (MSCF/D | sm3/D).
+   * - k
+     - float
+     - Absolute permeability (md).
+   * - h_perf
+     - float
+     - Perforated interval thickness (ft | m).
+   * - rw
+     - float
+     - Wellbore radius (ft | m).
+   * - mug
+     - float
+     - Gas viscosity at reservoir conditions (cP). Obtain from ``gas_ug`` or ``GasPVT.viscosity()``.
+   * - sg
+     - float
+     - Gas specific gravity relative to air.
+   * - krg
+     - float
+     - Gas relative permeability at critical oil saturation. If < 1.0, β is evaluated at the damaged-zone permeability ``k' = k * krg``, producing a more pessimistic S\ :sub:`hvf`. Defaults to 1.0 (undamaged).
+   * - beta_method
+     - string
+     - ``'FK'`` | ``'JONES'`` | ``'TCK'`` (see `pyrestoolbox.gas.gas_hvf_beta`_). Defaults to ``'FK'``.
+   * - phi
+     - float
+     - Porosity fraction. Required for ``beta_method='TCK'``.
+   * - metric
+     - bool
+     - If True, inputs in (sm3/D, m, m) and D returned in day/sm3; else (MSCF/D, ft, ft) and D in day/MSCF. Defaults to False.
+
+Returns a ``dict`` with keys:
+
+.. list-table:: Returns
+   :widths: 10 40
+   :header-rows: 1
+
+   * - Key
+     - Description
+   * - ``'beta'``
+     - Forchheimer coefficient (1/ft | 1/m)
+   * - ``'D'``
+     - Non-Darcy coefficient (day/MSCF | day/sm3). Suitable for passing directly to ``gas_rate_radial(D=...)``.
+   * - ``'S_hvf'``
+     - Rate-dependent skin (dimensionless).
+
+Example (field units):
+
+.. code-block:: python
+
+    >>> r = gas.gas_non_darcy_skin(qg=10000, k=100, h_perf=100, rw=0.33,
+    ...                             mug=0.025, sg=0.7)
+    >>> round(r['beta'], 0)
+    86071589.0
+    >>> round(r['D'] * 1e5, 4)   # D in units of 1e-5 day/MSCF
+    1.6227
+    >>> round(r['S_hvf'], 4)
+    0.1623
+
+Using damaged-zone β (krg < 1) and the TCK correlation:
+
+.. code-block:: python
+
+    >>> r = gas.gas_non_darcy_skin(qg=10000, k=100, h_perf=100, rw=0.33,
+    ...                             mug=0.025, sg=0.7, krg=0.7,
+    ...                             beta_method='TCK', phi=0.22)
+    >>> round(r['S_hvf'], 4)
+    0.1534
+
+Metric units (sm3/D, m) — same well, same skin:
+
+.. code-block:: python
+
+    >>> r = gas.gas_non_darcy_skin(qg=283168.5, k=100, h_perf=30.48, rw=0.1006,
+    ...                             mug=0.025, sg=0.7, metric=True)
+    >>> round(r['S_hvf'], 4)
+    0.1622
+
+
+pyrestoolbox.gas.gas_partial_penetration_skin
+=============================================
+
+.. code-block:: python
+
+    gas_partial_penetration_skin(htot, htop, hbot, rw, kh_kv=10.0) -> float
+
+Returns the partial-penetration pseudoskin S\ :sub:`p` for a vertical well in a radial anisotropic reservoir, using the analytical series solution of Streltsova-Adams, T.D. (1979) "Pressure Drawdown in a Well with Limited Flow Entry," SPE J. Nov 1979, pp.1469-1476 (SPE-7486).
+
+The series is summed directly (up to 20,000 terms, vectorised) with Bessel K₀ evaluated via ``scipy.special.k0``. A warning is emitted when the tail of the summation suggests the series has not fully converged (typical for very thin wellbores, i.e. r\ :sub:`w`/h\ :sub:`tot` ≪ 10⁻³ combined with small k\ :sub:`v`).
+
+**All length inputs must share a consistent unit** (ft or m — only ratios enter the formula), so there is no separate ``metric`` flag on this function.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - htot
+     - float
+     - Total formation thickness (no-flow to no-flow).
+   * - htop
+     - float
+     - Distance from formation top to top of perforated interval.
+   * - hbot
+     - float
+     - Distance from formation top to bottom of perforated interval.
+   * - rw
+     - float
+     - Wellbore radius.
+   * - kh_kv
+     - float
+     - Horizontal-to-vertical permeability anisotropy ratio (k\ :sub:`h`/k\ :sub:`v`). Defaults to 10.0. Set to 0 to treat vertical permeability as negligible (returns S\ :sub:`p` = 0).
+
+Example (field units, ft):
+
+.. code-block:: python
+
+    >>> gas.gas_partial_penetration_skin(htot=164.04, htop=32.81, hbot=147.64,
+    ...                                   rw=0.3543, kh_kv=8.0)
+    2.155398050852645
+
+Metric call using meters — same well, dimensionless result is essentially identical:
+
+.. code-block:: python
+
+    >>> gas.gas_partial_penetration_skin(htot=50.0, htop=10.0, hbot=45.0,
+    ...                                   rw=0.108, kh_kv=8.0)
+    2.155481748242132
+
+Fully perforated interval (S\ :sub:`p` → 0):
+
+.. code-block:: python
+
+    >>> round(gas.gas_partial_penetration_skin(htot=100, htop=0, hbot=100, rw=0.33), 10)
+    0.0
+
+
 pyrestoolbox.gas.GasPVT
 ========================
 
@@ -1494,4 +1722,17 @@ Using metric units (pressure in barsa, temperature in deg C):
     0.9026433033953588
     >>> gpvt_m.density(137.9, 82.2)
     97.36871728783241
+
+``GasPVT`` also exposes two skin helpers that reuse stored PVT state for viscosity:
+
+.. code-block:: python
+
+    >>> gpvt = gas.GasPVT(sg=0.70)
+    >>> r = gpvt.non_darcy_skin(qg=10000, p=3000, degf=200,
+    ...                          k=100, h_perf=100, rw=0.33, krg=0.7)
+    >>> round(r['S_hvf'], 4)
+    0.3044
+    >>> round(gpvt.partial_penetration_skin(htot=50, htop=10, hbot=45,
+    ...                                      rw=0.108, kh_kv=8), 4)
+    2.1555
 
