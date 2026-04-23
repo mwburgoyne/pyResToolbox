@@ -930,6 +930,143 @@ def test_gaspvt_bns_coupling_warning():
     assert pvt.cmethod.name == 'BNS'
 
 
+# ---------------------------------------------------------------------------
+# Non-Darcy (HVF) and partial-penetration pseudoskin
+# Reference S_p values computed directly from the Streltsova-Adams (1979)
+# series — independent of any single implementation.
+# ---------------------------------------------------------------------------
+
+def test_gas_hvf_beta_fk():
+    """FK fit of Firoozabadi-Katz (1979) consolidated β(k) chart."""
+    beta = gas.gas_hvf_beta(70.0, method='FK')
+    assert abs(beta - 2.172e10 * 70.0 ** -1.201) / beta < 1e-12
+
+def test_gas_hvf_beta_jones():
+    """Jones (1987) SPE-16949."""
+    beta = gas.gas_hvf_beta(100.0, method='JONES')
+    assert abs(beta - 6.15e10 * 100.0 ** -1.55) / beta < 1e-12
+
+def test_gas_hvf_beta_tck():
+    """Tek-Coats-Katz (1962) with porosity."""
+    beta = gas.gas_hvf_beta(100.0, method='TCK', phi=0.25)
+    assert abs(beta - 1.88e10 / (100.0 ** 1.47 * 0.25 ** 0.53)) / beta < 1e-12
+
+def test_gas_hvf_beta_tck_requires_phi():
+    with pytest.raises(ValueError, match="TCK requires"):
+        gas.gas_hvf_beta(100.0, method='TCK')
+
+def test_gas_hvf_beta_metric():
+    b_ft = gas.gas_hvf_beta(100.0, method='FK')
+    b_m = gas.gas_hvf_beta(100.0, method='FK', metric=True)
+    # 1/ft -> 1/m: multiply by M_TO_FT (3.2808)
+    assert abs(b_m - b_ft * 3.2808) / b_m < 1e-4
+
+def test_gas_hvf_beta_invalid_method():
+    with pytest.raises(ValueError, match="beta method must be one of"):
+        gas.gas_hvf_beta(100.0, method='FOO')
+
+def test_gas_hvf_beta_invalid_k():
+    with pytest.raises(ValueError, match="Permeability must be positive"):
+        gas.gas_hvf_beta(-1.0)
+
+def test_gas_non_darcy_skin_basic():
+    """Standard D formula from Jones (1987): direct numerical check."""
+    # k=100 md, β=FK fit, γg=0.7, h_p=100 ft, rw=0.33 ft, μ=0.025 cp
+    # β = 2.172e10 * 100^-1.201 = 8.607e7 /ft
+    # D = 2.222e-15 * 8.607e7 * 0.7 * 100 / (0.025 * 100 * 0.33) = 1.622e-6 day/MSCF
+    # S_hvf = 1.622e-6 * 10,000 MSCF/D = 0.0162
+    r = gas.gas_non_darcy_skin(qg=10000.0, k=100.0, h_perf=100.0, rw=0.33,
+                               mug=0.025, sg=0.7, krg=1.0, beta_method='FK')
+    beta_expect = 2.172e10 * 100.0 ** -1.201
+    D_expect = 2.222e-15 * beta_expect * 0.7 * 100.0 / (0.025 * 100.0 * 0.33)
+    assert abs(r['beta'] - beta_expect) / beta_expect < 1e-6
+    assert abs(r['D'] - D_expect) / D_expect < 1e-6
+    assert abs(r['S_hvf'] - D_expect * 10000.0) / r['S_hvf'] < 1e-6
+
+def test_gas_non_darcy_skin_damaged_zone():
+    """krg<1 uses k'=k*krg for β, keeps k absolute for D prefactor."""
+    r1 = gas.gas_non_darcy_skin(qg=10000, k=100, h_perf=100, rw=0.33,
+                                mug=0.025, sg=0.7, krg=1.0)
+    r2 = gas.gas_non_darcy_skin(qg=10000, k=100, h_perf=100, rw=0.33,
+                                mug=0.025, sg=0.7, krg=0.5)
+    # β at k'=50 is larger than at k=100 (β ∝ k^-1.201), so D is larger
+    assert r2['beta'] > r1['beta']
+    assert r2['D'] > r1['D']
+    assert r2['S_hvf'] > r1['S_hvf']
+
+def test_gas_non_darcy_skin_metric_roundtrip():
+    """Field and metric calls for equivalent inputs must give the same S_hvf."""
+    M_TO_FT = 3.2808
+    q_mscf = 10000.0
+    q_sm3 = q_mscf * 1000.0 / 35.3147  # MSCF/D -> sm3/D
+    field = gas.gas_non_darcy_skin(qg=q_mscf, k=100.0, h_perf=100.0, rw=0.33,
+                                   mug=0.025, sg=0.7)
+    metric = gas.gas_non_darcy_skin(qg=q_sm3, k=100.0,
+                                    h_perf=100.0/M_TO_FT, rw=0.33/M_TO_FT,
+                                    mug=0.025, sg=0.7, metric=True)
+    # Dimensionless skin must match
+    assert abs(metric['S_hvf'] - field['S_hvf']) / field['S_hvf'] < 1e-3
+
+def test_gas_non_darcy_skin_tck_requires_phi():
+    with pytest.raises(ValueError, match="TCK requires"):
+        gas.gas_non_darcy_skin(qg=1000, k=100, h_perf=30, rw=0.3,
+                               mug=0.02, sg=0.7, beta_method='TCK')
+
+def test_gas_non_darcy_skin_rejects_bad_inputs():
+    with pytest.raises(ValueError):
+        gas.gas_non_darcy_skin(qg=-1, k=100, h_perf=30, rw=0.3, mug=0.02, sg=0.7)
+    with pytest.raises(ValueError):
+        gas.gas_non_darcy_skin(qg=1000, k=100, h_perf=30, rw=0.3, mug=0.02, sg=0.7, krg=1.5)
+    with pytest.raises(ValueError):
+        gas.gas_non_darcy_skin(qg=1000, k=0, h_perf=30, rw=0.3, mug=0.02, sg=0.7)
+
+def test_gas_partial_penetration_skin_reference():
+    """S_p values verified against a 50,000-term Streltsova-Adams series."""
+    # (htot=50, htop=10, hbot=45, rw=0.108, kh/kv=8) -> S_p = 2.15548 (tight converge)
+    sp = gas.gas_partial_penetration_skin(htot=50.0, htop=10.0, hbot=45.0,
+                                          rw=0.108, kh_kv=8.0)
+    assert abs(sp - 2.15548) < 0.005
+
+def test_gas_partial_penetration_skin_central():
+    """Centrally-located perforations: even-n terms drive the sum, not odd."""
+    sp = gas.gas_partial_penetration_skin(htot=100.0, htop=25.0, hbot=75.0,
+                                          rw=0.3, kh_kv=5.0)
+    # Non-zero and on the order of a few units; regression anchor
+    assert 3.0 < sp < 6.0
+
+def test_gas_partial_penetration_skin_full():
+    """Full perforation (htop=0, hbot=htot): every term zero, S_p ≈ 0."""
+    sp = gas.gas_partial_penetration_skin(htot=100.0, htop=0.0, hbot=100.0,
+                                          rw=0.3, kh_kv=10.0)
+    assert abs(sp) < 1e-9
+
+def test_gas_partial_penetration_skin_no_kv():
+    """kh_kv=0 => no vertical-permeability penalty, returns exactly 0."""
+    sp = gas.gas_partial_penetration_skin(htot=100.0, htop=10.0, hbot=50.0,
+                                          rw=0.3, kh_kv=0.0)
+    assert sp == 0.0
+
+def test_gas_partial_penetration_skin_rejects_bad_geometry():
+    with pytest.raises(ValueError):
+        gas.gas_partial_penetration_skin(htot=100, htop=50, hbot=30, rw=0.3)
+    with pytest.raises(ValueError):
+        gas.gas_partial_penetration_skin(htot=100, htop=10, hbot=110, rw=0.3)
+    with pytest.raises(ValueError):
+        gas.gas_partial_penetration_skin(htot=-100, htop=10, hbot=50, rw=0.3)
+    with pytest.raises(ValueError):
+        gas.gas_partial_penetration_skin(htot=100, htop=10, hbot=50, rw=0.3, kh_kv=-1)
+
+def test_gaspvt_skin_methods():
+    """GasPVT.non_darcy_skin() auto-computes μ_g from stored state."""
+    pvt = gas.GasPVT(sg=0.70)
+    r = pvt.non_darcy_skin(qg=35314.7, p=3626.0, degf=212.0,
+                           k=100.0, h_perf=115.0, rw=0.354, krg=0.7)
+    assert r['beta'] > 0 and r['D'] > 0 and r['S_hvf'] > 0
+    sp = pvt.partial_penetration_skin(htot=50.0, htop=10.0, hbot=45.0,
+                                      rw=0.108, kh_kv=8.0)
+    assert abs(sp - 2.15548) < 0.005
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("GAS MODULE VALIDATION TESTS")

@@ -40,6 +40,9 @@ gas_rate_radial Radial gas flow rate (Mscf/d)
 gas_rate_linear Linear gas flow rate (Mscf/d)
 darcy_gas       Darcy gas rate from pseudopressure difference
 gas_hydrate     Gas hydrate formation prediction and inhibitor calculations
+gas_hvf_beta    Forchheimer β via Firoozabadi-Katz / Jones / Tek-Coats-Katz
+gas_non_darcy_skin          Rate-dependent (HVF) skin S_hvf = D·q_g
+gas_partial_penetration_skin  Streltsova-Adams partial-penetration pseudoskin
 
 Classes
 -------
@@ -52,6 +55,7 @@ __all__ = [
     'gas_tc_pc', 'gas_dmp', 'gas_ponz2p', 'gas_grad2sg', 'gas_fws_sg',
     'gas_water_content', 'gas_rate_radial', 'gas_rate_linear', 'darcy_gas',
     'gas_hydrate',
+    'gas_hvf_beta', 'gas_non_darcy_skin', 'gas_partial_penetration_skin',
     'GasPVT', 'HydrateResult',
     # Enum classes re-exported for convenience (gas.z_method.DAK, etc.)
     'z_method', 'c_method', 'hyd_method', 'inhibitor',
@@ -172,6 +176,43 @@ _TOWLER = (13.47, 34.27, -1.675, -20.35)
 # --- Hydrate formation pressure search bounds ---
 _HFP_P_LO = 14.696   # ~1 atm (psia)
 _HFP_P_HI = 15000.0   # Upper search bound (psia)
+
+# --- Non-Darcy / high-velocity-flow skin correlations ---
+# "FK": simple log-log fit of the consolidated-rock β(k) data published by
+# Firoozabadi & Katz (1979) "An Analysis of High-Velocity Gas Flow Through
+# Porous Media," JPT Feb 1979, pp.211-216 (SPE-6827):
+#   β[1/ft] = _FK_A * k^(-_FK_N), k in md
+_FK_A = 2.172e10
+_FK_N = 1.201
+
+# Jones, S.C. (1987) "Using the Inertial Coefficient b to Characterize
+# Heterogeneity in Reservoir Rock," SPE-16949:
+#   β[1/ft] = _JONES_A * k^(-_JONES_N), k in md
+_JONES_A = 6.15e10
+_JONES_N = 1.55
+
+# Tek, M.R., Coats, K.H., Katz, D.L. (1962) "The Effect of Turbulence on
+# Flow of Natural Gas through Porous Reservoirs," JPT July 1962, pp.799-806:
+#   β[1/ft] = _TCK_A / (k^_TCK_NK * φ^_TCK_NPHI), k in md, φ fraction
+_TCK_A = 1.88e10
+_TCK_NK = 1.47
+_TCK_NPHI = 0.53
+
+# Non-Darcy coefficient in field units -- Jones (1987) SPE-16949; also
+# derivable from Odeh, Moreland & Schueler (1975) "Characterization of a
+# Gas Well From One Flow-Test Sequence," JPT Dec 1975, pp.1501-1504.
+#   D[day/MSCF] = _D_COATS_KATZ * β[1/ft] * γg * k[md] / (μg[cp] * h[ft] * rw[ft])
+_D_COATS_KATZ = 2.222e-15
+
+# Streltsova-Adams partial-penetration series: sum up to _SP_MAX_N terms.
+# K_0 decays exponentially for large n·π·rD, but rD ≈ rw/h is typically ~1e-3
+# for gas wells, so convergence can require tens of thousands of terms.
+# Vectorised evaluation makes this sub-millisecond even at the cap.
+_SP_MAX_N = 20000
+_SP_CONV_TOL = 1.0e-6  # relative tail-block tolerance used to emit a warning
+
+# Valid β-correlation tags
+_BETA_METHODS = ('FK', 'JONES', 'TCK')
 
 def _h2_method_override(h2, zmethod, cmethod):
     """Force BNS method when hydrogen is present."""
@@ -1669,6 +1710,177 @@ def gas_fws_sg(sg_g: float, cgr: float, api_st: float, metric: bool = False) -> 
     fws_gas_mw = fws_gas_mass / fws_gas_moles  # lb/lb-moles
     return fws_gas_mw / MW_AIR
 
+
+def gas_hvf_beta(k: float, method: str = 'FK', phi: float = 0.0, *, metric: bool = False) -> float:
+    """ Returns the Forchheimer high-velocity-flow (inertial) coefficient β.
+
+        Three correlations for β as a function of rock properties:
+        'FK' -- Log-log fit of the Firoozabadi & Katz (1979) consolidated-rock
+                β(k) chart: β[1/ft] = 2.172e10 * k^-1.201, k in md. Default.
+                Source data: Firoozabadi, A. & Katz, D.L. "An Analysis of
+                High-Velocity Gas Flow Through Porous Media," JPT Feb 1979,
+                pp.211-216 (SPE-6827).
+        'JONES' -- Jones, S.C. (1987) "Using the Inertial Coefficient b to
+                   Characterize Heterogeneity in Reservoir Rock," SPE-16949:
+                   β[1/ft] = 6.15e10 * k^-1.55, k in md.
+        'TCK' -- Tek, Coats, Katz (1962) "The Effect of Turbulence on Flow of
+                 Natural Gas through Porous Reservoirs," JPT July 1962,
+                 pp.799-806: β[1/ft] = 1.88e10 / (k^1.47 * φ^0.53).
+                 Requires phi > 0.
+
+        k: Permeability (md). To evaluate β at a damaged-zone permeability,
+           pass k' = k * krg (absolute permeability times gas krg at critical
+           oil saturation).
+        method: 'FK' | 'JONES' | 'TCK'. Defaults to 'FK'.
+        phi: Porosity fraction, required for 'TCK'.
+        metric: If True, returns β in 1/m; else 1/ft. Defaults to False.
+    """
+    if k <= 0:
+        raise ValueError(f"Permeability must be positive, got k={k}")
+    m = method.upper()
+    if m not in _BETA_METHODS:
+        raise ValueError(f"beta method must be one of {_BETA_METHODS}, got '{method}'")
+    if m == 'FK':
+        beta_ft = _FK_A * k ** (-_FK_N)
+    elif m == 'JONES':
+        beta_ft = _JONES_A * k ** (-_JONES_N)
+    else:  # TCK
+        if phi <= 0 or phi >= 1:
+            raise ValueError(f"TCK requires 0 < phi < 1, got phi={phi}")
+        beta_ft = _TCK_A / (k ** _TCK_NK * phi ** _TCK_NPHI)
+    if metric:
+        return beta_ft * M_TO_FT  # 1/ft * ft/m = 1/m
+    return beta_ft
+
+
+def gas_non_darcy_skin(qg: float, k: float, h_perf: float, rw: float,
+                       mug: float, sg: float,
+                       krg: float = 1.0, beta_method: str = 'FK',
+                       phi: float = 0.0, *, metric: bool = False) -> dict:
+    """ Returns rate-dependent (high-velocity-flow) skin for a gas well.
+
+        Computes β via the selected correlation, the non-Darcy coefficient
+        D (Jones 1987 SPE-16949; see also Odeh, Moreland & Schueler 1975
+        JPT Dec 1975, pp.1501-1504), and S_hvf = D * qg.
+
+        qg: Gas rate (MSCF/D | sm3/D).
+        k: Absolute permeability (md).
+        h_perf: Perforated interval thickness (ft | m).
+        rw: Wellbore radius (ft | m).
+        mug: Gas viscosity at reservoir conditions (cP). Obtain from gas_ug
+             or GasPVT.viscosity().
+        sg: Gas specific gravity relative to air.
+        krg: Gas relative permeability at critical oil saturation. If < 1.0,
+             β is evaluated at the damaged-zone permeability k' = k * krg,
+             giving a more pessimistic S_hvf estimate. Defaults to 1.0
+             (undamaged).
+        beta_method: β correlation -- see gas_hvf_beta. Defaults to 'FK'.
+        phi: Porosity fraction. Required for beta_method='TCK'.
+        metric: If True, inputs in (sm3/D, m, m) and D returned in day/sm3;
+                else (MSCF/D, ft, ft) and D in day/MSCF. Defaults to False.
+
+        Returns dict:
+          'beta':  Forchheimer coefficient (1/ft or 1/m)
+          'D':     non-Darcy coefficient (day/MSCF or day/sm3)
+          'S_hvf': rate-dependent skin (dimensionless)
+    """
+    if qg <= 0:
+        raise ValueError(f"Gas rate qg must be positive, got {qg}")
+    if k <= 0 or h_perf <= 0 or rw <= 0 or mug <= 0 or sg <= 0:
+        raise ValueError("k, h_perf, rw, mug, sg must all be positive")
+    if not (0 < krg <= 1.0):
+        raise ValueError(f"krg must be in (0, 1.0], got {krg}")
+    validate_pe_inputs(sg=sg)
+
+    # Internally work in oilfield units: MSCF/D, ft, ft, md, cp
+    if metric:
+        qg_mscf = qg * (1.0 / MSCF_TO_SM3)  # sm3/D -> MSCF/D
+        h_ft = h_perf * M_TO_FT
+        rw_ft = rw * M_TO_FT
+    else:
+        qg_mscf = qg
+        h_ft = h_perf
+        rw_ft = rw
+
+    k_eff = k * krg  # damaged-zone permeability for β
+    beta_ft = gas_hvf_beta(k_eff, method=beta_method, phi=phi, metric=False)
+
+    # D in day/MSCF uses absolute permeability k; only β sees the optional
+    # damaged-zone k' = k*krg.
+    D_mscf = _D_COATS_KATZ * beta_ft * sg * k / (mug * h_ft * rw_ft)
+    S_hvf = D_mscf * qg_mscf
+
+    if metric:
+        beta_out = beta_ft * M_TO_FT  # 1/ft -> 1/m
+        D_out = D_mscf / D_PER_SM3_TO_D_PER_MSCF  # day/MSCF -> day/sm3
+    else:
+        beta_out = beta_ft
+        D_out = D_mscf
+
+    return {'beta': beta_out, 'D': D_out, 'S_hvf': S_hvf}
+
+
+def gas_partial_penetration_skin(htot: float, htop: float, hbot: float,
+                                 rw: float, kh_kv: float = 10.0) -> float:
+    """ Returns partial-penetration pseudoskin S_p using the analytical
+        series solution of Streltsova-Adams, T.D. (1979) "Pressure Drawdown
+        in a Well with Limited Flow Entry," SPE J. Nov 1979, pp.1469-1476
+        (SPE-7486). Bessel K₀ evaluated via scipy.special.k0; series summed
+        until three consecutive relative increments fall below 1e-4 (with
+        the symmetry optimisation that only odd n contribute when the
+        perforated interval is centrally located).
+
+        All thickness and radius inputs must use a consistent length unit
+        (ft or m; only ratios enter the formula).
+
+        htot: Total formation thickness (no-flow-to-no-flow).
+        htop: Distance from formation top to top of perforated interval.
+        hbot: Distance from formation top to bottom of perforated interval.
+        rw: Wellbore radius.
+        kh_kv: Horizontal-to-vertical permeability anisotropy ratio (k_h/k_v).
+               Defaults to 10.0. Set to 0 to treat vertical permeability as
+               negligible (returns S_p = 0, i.e. reservoir behaves as the
+               product k*h_perf and no partial-penetration penalty exists).
+    """
+    from scipy.special import k0 as _k0
+    if htot <= 0 or rw <= 0:
+        raise ValueError("htot and rw must be positive")
+    if not (0.0 <= htop < hbot <= htot):
+        raise ValueError(
+            f"Must satisfy 0 <= htop < hbot <= htot; got htop={htop}, hbot={hbot}, htot={htot}")
+    if kh_kv < 0:
+        raise ValueError(f"kh_kv must be >= 0, got {kh_kv}")
+    if kh_kv == 0:
+        return 0.0  # No vertical permeability => no partial-penetration penalty
+
+    htD = htop / htot
+    hbD = hbot / htot
+    rD = math.sqrt(1.0 / kh_kv) * rw / htot
+
+    # Vectorised series sum. Drop terms where n·π·rD exceeds the K_0 underflow
+    # threshold -- those contributions are negligible anyway.
+    n = np.arange(1, _SP_MAX_N + 1)
+    x = n * math.pi * rD
+    finite = x < 700.0
+    n_f = n[finite]
+    x_f = x[finite]
+    diff = np.sin(n_f * math.pi * hbD) - np.sin(n_f * math.pi * htD)
+    terms = diff * diff * _k0(x_f) / (n_f * n_f)
+    total = float(terms.sum())
+
+    # Convergence diagnostic: last 5% of terms should contribute negligibly
+    tail_start = max(1, int(len(terms) * 0.95))
+    tail = float(terms[tail_start:].sum())
+    if total != 0 and abs(tail / total) > _SP_CONV_TOL:
+        warnings.warn(
+            f"gas_partial_penetration_skin: series may not be fully converged at "
+            f"N={_SP_MAX_N} (tail/total={tail/total:.2e}). Result may be accurate "
+            f"to only ~{abs(tail/total)*100:.1f}%.",
+            stacklevel=2)
+
+    return 2.0 / (math.pi ** 2 * (hbD - htD) ** 2) * total
+
+
 class GasPVT:
     """ Gas PVT wrapper that stores composition and method choices, pre-computes critical properties.
         Exposes z(), viscosity(), density(), bg() methods delegating to gas_z, gas_ug, gas_den, gas_bg.
@@ -1759,6 +1971,33 @@ class GasPVT:
         return gas_bg(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
                       cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
                       n2=self.n2, h2=self.h2, tc=tc, pc=pc)
+
+    def non_darcy_skin(self, qg, p, degf, k, h_perf, rw,
+                       krg=1.0, beta_method='FK', phi=0.0):
+        """ Rate-dependent (HVF) skin for this gas. μ_g is computed internally
+            from stored PVT state at (p, degf). See gas_non_darcy_skin().
+
+            qg: Gas rate (MSCF/D | sm3/D)
+            p: Reservoir pressure (psia | barsa)
+            degf: Reservoir temperature (deg F | deg C)
+            k, h_perf, rw: Permeability (md), perforated thickness (ft | m),
+                           wellbore radius (ft | m).
+            krg, beta_method, phi: see gas_non_darcy_skin().
+
+            Returns dict with 'beta', 'D', 'S_hvf'.
+        """
+        mug = self.viscosity(p, degf)
+        return gas_non_darcy_skin(qg=qg, k=k, h_perf=h_perf, rw=rw, mug=mug,
+                                  sg=self.sg, krg=krg, beta_method=beta_method,
+                                  phi=phi, metric=self.metric)
+
+    def partial_penetration_skin(self, htot, htop, hbot, rw, kh_kv=10.0):
+        """ Partial-penetration skin (Streltsova-Adams 1979). No PVT state is
+            used; delegated for API consistency. See
+            gas_partial_penetration_skin().
+        """
+        return gas_partial_penetration_skin(htot=htot, htop=htop, hbot=hbot,
+                                            rw=rw, kh_kv=kh_kv)
 
 
 def gas_water_content(p: float, degf: float, salinity: float = 0, metric: bool = False) -> float:
