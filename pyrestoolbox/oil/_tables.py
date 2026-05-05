@@ -213,33 +213,39 @@ def _format_bot_results(pressures, rss, bos, denos, uos, co, gz, gfvf, cg,
                 "uo (cP)",
                 "",
             ]
+            # Eclipse PVTO: each stem is a saturated row optionally followed
+            # by undersaturated continuation rows (blank Rs). A single '/'
+            # terminates the LAST row of each stem; a final '/' on its own
+            # line is the null record that terminates the whole table.
             table = []
             for r, row in df.iterrows():
+                has_usat = (
+                    r > 0
+                    and (r - 1) < len(usat_p)
+                    and len(usat_p[r - 1]) > 1
+                )
                 table.append(
                     [
                         row["Rs (mscf/stb)"],
                         row["Pressure (psia)"],
                         row["Bo (rb/stb)"],
                         row["uo (cP)"],
-                        "/",
+                        "" if has_usat else "/",
                     ]
                 )
-                try:
-                    if r > 0:
-                        for e, entry in enumerate(usat_p[r - 1]):
-                            if e == 0:
-                                continue
-                            table.append(
-                                [
-                                    " ",
-                                    entry,
-                                    usat_bo[r - 1][e],
-                                    usat_uo[r - 1][e],
-                                    " ",
-                                ]
-                            )
-                except (IndexError, KeyError):
-                    pass
+                if has_usat:
+                    n_usat = len(usat_p[r - 1])
+                    for e in range(1, n_usat):
+                        is_last = e == n_usat - 1
+                        table.append(
+                            [
+                                " ",
+                                usat_p[r - 1][e],
+                                usat_bo[r - 1][e],
+                                usat_uo[r - 1][e],
+                                "/" if is_last else "",
+                            ]
+                        )
             pvto_out += tabulate(table, headers)
             pvto_out += "\n/"
             with open("PVTO.INC", "w") as text_file:
