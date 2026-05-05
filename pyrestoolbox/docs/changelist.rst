@@ -9,6 +9,10 @@ Changelist in 3.5.0:
 
   18 new unit tests in ``test_gas.py`` (all three β correlations, metric round-trip, damaged-zone, series convergence, geometry validation, ``GasPVT`` delegation). 12 new doc-example tests in ``test_doc_examples.py`` pin every RST example value. Reference S\ :sub:`p` values verified against a 50,000-term direct evaluation of the Streltsova-Adams series.
 
+- **PVTO export format fix** (``simtools.make_bot_og(pvto=True, export=True)``). The exported ``PVTO.INC`` placed Eclipse's ``/`` stem-terminator on every saturated row, prematurely closing each stem before its undersaturated continuation rows. A strict parser would then read each continuation row as an unset stem and either error or drop the data. The saturated row now omits ``/`` when undersaturated rows follow; the terminator moves to the LAST undersaturated row of the stem, matching the reference example in the Eclipse manual (``PVTO`` keyword). Stems with no undersaturated extension still carry ``/`` on the saturated row, and the final null-record ``/`` on its own line still terminates the table. Underlying ``usat`` data returned in the results dict was already correct — only the export layout changed.
+
+- **Removed dead module** ``pyrestoolbox/oil/oil.py``. Pre-April-2026 monolith superseded by the ``_correlations.py`` / ``_density.py`` / ``_tables.py`` / etc. sub-modules. Nothing in the package or tests imported from it. No public-API change — ``from pyrestoolbox import oil`` and ``oil.<func>`` keep working via ``oil/__init__.py`` re-exports.
+
 - 824 validation tests (up from 812 in 3.4.0).
 
 Changelist in 3.4.0:
