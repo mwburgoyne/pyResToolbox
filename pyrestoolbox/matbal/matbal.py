@@ -120,7 +120,8 @@ class OilMatbalResult:
         Formation and water compressibility term at each step.
     drive_indices : dict
         Drive index fractions at each step: 'DDI' (depletion), 'SDI' (segregation/gas cap),
-        'CDI' (compaction/water). Each maps to np.ndarray.
+        'CDI' (compaction/expansion), 'WDI' (water/aquifer influx). Each maps to np.ndarray.
+        'WDI' is all-zero when no ``We`` aquifer influx is supplied.
     p : np.ndarray
         Pressure array used.
     pvt : dict
@@ -334,7 +335,7 @@ def gas_matbal(p, Gp, degf, sg=0.65, co2=0, h2s=0, n2=0, h2=0,
 
 
 def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
-               Rp=None, Wp=None, Wi=None, Gi=None,
+               Rp=None, Wp=None, Wi=None, Gi=None, We=None,
                Bw=1.0, m=0, cf=0, sw_i=0, cw=0,
                rsmethod='VELAR', bomethod='MCAIN',
                zmethod='DAK', cmethod='PMC', metric=False,
@@ -369,6 +370,11 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
         Cumulative water injection (STB | sm3). Default all zeros.
     Gi : array-like, optional
         Cumulative gas injection (scf | sm3). Default all zeros.
+    We : array-like, optional
+        Cumulative aquifer water influx in reservoir volume (rb | rm3). Same
+        length as p. When provided, the influx is subtracted from underground
+        withdrawal before estimating OOIP (Havlena-Odeh ``F - We = N·Et``), and a
+        Water Drive Index ('WDI') is added to ``drive_indices``. Default all zeros.
     Bw : float
         Water FVF (rb/stb | rm3/sm3, default 1.0).
     m : float
@@ -478,6 +484,13 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
     Wp_arr = np.zeros(n) if Wp is None else np.asarray(Wp, dtype=float)
     Wi_arr = np.zeros(n) if Wi is None else np.asarray(Wi, dtype=float)
     Gi_arr = np.zeros(n) if Gi is None else np.asarray(Gi, dtype=float)
+    # Aquifer influx is already a reservoir volume (rb | rm3) matching F — no
+    # unit conversion is needed in either metric or oilfield mode.
+    We_arr = np.zeros(n) if We is None else np.asarray(We, dtype=float)
+    for _name, _arr in (('Rp', Rp_arr), ('Wp', Wp_arr), ('Wi', Wi_arr),
+                        ('Gi', Gi_arr), ('We', We_arr)):
+        if _arr is not None and len(_arr) != n:
+            raise ValueError(f"{_name} must have same length as p, got {len(_arr)} and {n}")
 
     if pvt_table is not None:
         # Check survey pressures within table range
@@ -534,6 +547,11 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
          + (Wp_arr - Wi_arr) * Bw
          - Gi_arr * Bg_arr)
 
+    # Net withdrawal driving oil/gas/rock expansion: aquifer influx supplies part
+    # of the withdrawn volume, so it is removed before estimating OOIP
+    # (Havlena-Odeh: F - We = N * [Eo + m*Eg + (1+m)*Efw]).
+    F_net = F - We_arr
+
     Eo = np.where(p_field >= pb_field,
                   Bo_arr - Boi,
                   (Bo_arr - Boi) + (Rsi - Rs_arr) * Bg_arr)
@@ -552,7 +570,7 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
         valid = np.abs(denom) > 1e-30
         if not np.any(valid):
             return None, Efw, denom, valid
-        N_estimates = F[valid] / denom[valid]
+        N_estimates = F_net[valid] / denom[valid]
         ooip = float(np.mean(N_estimates))
         return ooip, Efw, denom, valid
 
@@ -583,12 +601,15 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
                 x0.append((lo + hi) / 2.0)
 
         def objective(x):
+            # F_net (= F - We) is passed as the withdrawal series so the CV is
+            # computed over the aquifer-corrected OOIP estimates; the Rust kernel
+            # is agnostic — it minimises CV of (series)/denom.
             if _RUST_AVAILABLE:
                 try:
                     return _rust.matbal_objective_rust(
                         x.tolist() if hasattr(x, 'tolist') else list(x),
                         param_names,
-                        F.tolist(), Eo.tolist(), Eg.tolist(), p_field.tolist(),
+                        F_net.tolist(), Eo.tolist(), Eg.tolist(), p_field.tolist(),
                         Boi, base_vals['m'], base_vals['cf'], base_vals['cw'], base_vals['sw_i'],
                     )
                 except (ImportError, AttributeError):
@@ -605,7 +626,7 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
             valid_t = np.abs(denom_t) > 1e-30
             if not np.any(valid_t):
                 return 1e10
-            N_est = F[valid_t] / denom_t[valid_t]
+            N_est = F_net[valid_t] / denom_t[valid_t]
             mean_N = np.mean(N_est)
             if abs(mean_N) < 1e-30:
                 return 1e10
@@ -633,13 +654,16 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
     if ooip is None:
         raise RuntimeError("Cannot compute OOIP — all expansion terms are zero")
 
-    # Drive indices at each valid point
+    # Drive indices at each valid point. N is the aquifer-corrected estimate
+    # (F_net/denom); the indices are fractions of the TOTAL withdrawal F, so
+    # DDI + SDI + CDI + WDI = 1 when an aquifer is present.
     drive_valid = (np.abs(denom) > 1e-30) & (np.abs(F) > 1e-30)
-    N_pts = np.where(drive_valid, F / np.where(drive_valid, denom, 1.0), 0.0)
+    N_pts = np.where(drive_valid, F_net / np.where(drive_valid, denom, 1.0), 0.0)
     F_safe = np.where(drive_valid, F, 1.0)
     ddi = np.where(drive_valid, N_pts * Eo / F_safe, 0.0)
     sdi = np.where(drive_valid, N_pts * m * Eg / F_safe, 0.0)
     cdi = np.where(drive_valid, N_pts * (1.0 + m) * Efw / F_safe, 0.0)
+    wdi = np.where(drive_valid, We_arr / F_safe, 0.0)
 
     return OilMatbalResult(
         ooip=ooip,
@@ -647,7 +671,7 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
         Eo=Eo,
         Eg=Eg,
         Efw=Efw,
-        drive_indices={'DDI': ddi, 'SDI': sdi, 'CDI': cdi},
+        drive_indices={'DDI': ddi, 'SDI': sdi, 'CDI': cdi, 'WDI': wdi},
         p=p,
         pvt={'Rs': Rs_arr, 'Bo': Bo_arr, 'Bg': Bg_arr},
         regressed=regressed_result,

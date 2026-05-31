@@ -1280,6 +1280,18 @@ def test_doc_matbal_oil():
     assert abs(r.ooip - 82793519.84914012) / 82793519.84914012 < RTOL
     assert abs(r.drive_indices['DDI'][1] - 0.7108509458427899) / 0.7108509458427899 < RTOL
 
+def test_doc_matbal_oil_aquifer():
+    """matbal.rst: oil_matbal water-drive (We)"""
+    r = matbal.oil_matbal(
+        p=[4000, 3500, 3000, 2500],
+        Np=[0, 1e6, 3e6, 6e6],
+        degf=220, api=35, sg_sp=0.75,
+        pb=3500, rsb=500, cf=3e-6, sw_i=0.2, cw=3e-6,
+        We=[0, 3e5, 1.2e6, 3.0e6]
+    )
+    assert abs(r.ooip - 58621028.243056096) / 58621028.243056096 < RTOL
+    assert abs(r.drive_indices['WDI'][-1] - 0.4055063920332815) / 0.4055063920332815 < RTOL
+
 def test_doc_matbal_gas_cole():
     """matbal.rst: gas_matbal Cole plot example"""
     r = matbal.gas_matbal(

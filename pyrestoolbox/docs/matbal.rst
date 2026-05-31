@@ -192,13 +192,13 @@ pyrestoolbox.matbal.oil_matbal
 .. code-block:: python
 
     oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
-               Rp=None, Wp=None, Wi=None, Gi=None,
+               Rp=None, Wp=None, Wi=None, Gi=None, We=None,
                Bw=1.0, m=0, cf=0, sw_i=0, cw=0,
                rsmethod='VELAR', bomethod='MCAIN',
                zmethod='DAK', cmethod='PMC', metric=False,
                pvt_table=None, regress=None) -> OilMatbalResult
 
-Havlena-Odeh oil material balance for OOIP estimation. Computes underground withdrawal (F), oil expansion (Eo), gas cap expansion (Eg), and formation/water compressibility (Efw) terms at each pressure step. OOIP is estimated as the mean of F/(Eo + m*Eg + (1+m)*Efw) across valid steps. Drive indices (DDI, SDI, CDI) are computed at each step.
+Havlena-Odeh oil material balance for OOIP estimation. Computes underground withdrawal (F), oil expansion (Eo), gas cap expansion (Eg), and formation/water compressibility (Efw) terms at each pressure step. When cumulative aquifer influx ``We`` is supplied it is subtracted from the withdrawal first (``F - We = N·[Eo + m*Eg + (1+m)*Efw]``); OOIP is the mean of ``(F - We)/(Eo + m*Eg + (1+m)*Efw)`` across valid steps. Drive indices (DDI, SDI, CDI, WDI) are computed at each step.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -243,6 +243,9 @@ Havlena-Odeh oil material balance for OOIP estimation. Computes underground with
    * - Gi
      - array-like, optional
      - Cumulative gas injection (scf | sm3). Default all zeros
+   * - We
+     - array-like, optional
+     - Cumulative aquifer water influx in reservoir volume (rb | rm3). Subtracted from withdrawal before estimating OOIP and surfaced as the 'WDI' water-drive index. No metric conversion (already a reservoir volume). Default all zeros
    * - Bw
      - float
      - Water FVF (rb/stb | rm3/sm3, default 1.0)
@@ -304,7 +307,7 @@ Havlena-Odeh oil material balance for OOIP estimation. Computes underground with
      - Formation and water compressibility term at each step
    * - drive_indices
      - dict
-     - Drive index fractions at each step: 'DDI' (depletion), 'SDI' (segregation/gas cap), 'CDI' (compaction/water). Each maps to np.ndarray
+     - Drive index fractions at each step: 'DDI' (depletion), 'SDI' (segregation/gas cap), 'CDI' (compaction/expansion), 'WDI' (water/aquifer influx). Each maps to np.ndarray. 'WDI' is all-zero when no ``We`` is supplied
    * - p
      - np.ndarray
      - Pressure array used
@@ -329,6 +332,22 @@ Examples:
     82793519.84914012
     >>> r.drive_indices['DDI'][1]
     0.7108509458427899
+
+Water-drive Example (aquifer influx ``We``):
+
+.. code-block:: python
+
+    >>> r = matbal.oil_matbal(
+    ...     p=[4000, 3500, 3000, 2500],
+    ...     Np=[0, 1e6, 3e6, 6e6],
+    ...     degf=220, api=35, sg_sp=0.75,
+    ...     pb=3500, rsb=500, cf=3e-6, sw_i=0.2, cw=3e-6,
+    ...     We=[0, 3e5, 1.2e6, 3.0e6]
+    ... )
+    >>> r.ooip
+    58621028.243056096
+    >>> r.drive_indices['WDI'][-1]
+    0.4055063920332815
 
 Regression Example (optimizing m and cf):
 
