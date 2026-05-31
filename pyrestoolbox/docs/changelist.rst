@@ -35,7 +35,7 @@ Changelist in 3.5.0:
 
 - **Internal: hydrate code split out of ``gas.py``**. ``gas_hydrate``, ``HydrateResult``, the HFT/HFP/Østergaard helpers and their constants now live in ``pyrestoolbox/gas/_hydrate.py`` (≈480 lines carved off the ``gas.py`` monolith). Public API is unchanged — ``gas.gas_hydrate`` and ``gas.HydrateResult`` are re-exported. ``_hydrate`` imports ``gas_water_content`` lazily, so there is no circular import.
 
-- 838 validation tests (up from 824 earlier in 3.5.0).
+- 838 validation tests (up from 812 in 3.4.0).
 
 Changelist in 3.4.0:
 
