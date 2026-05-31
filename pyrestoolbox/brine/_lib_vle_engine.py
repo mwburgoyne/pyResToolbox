@@ -2106,15 +2106,21 @@ class SWMultiComponentFlash:
         # specialised ks models (Dubessy CO2, Akinfiev H2S, Li HC,
         # Mao-Duan N2, Duan-Sun CO2) are applied in self.calc_gamma()
         # on the Python side.
-        if _RUST_AVAILABLE:
+        #
+        # Restricted to framework='proposed': the Rust flash hardcodes the
+        # MC-3 water alpha and the proposed-framework kij_AQ. The 'dropin'
+        # and 'sw_original' frameworks use a salinity-dependent Soreide water
+        # alpha and different kij_AQ correlations that Rust does not implement,
+        # so they must take the Python path to avoid a silent downgrade.
+        if _RUST_AVAILABLE and self.framework == 'proposed':
             try:
                 gamma_arr = np.asarray(gamma, dtype=float) if gamma is not None \
                     else np.ones(self.nc)
-                V, x_r, y_r = _rust.flash_tp_rust(
+                V, x_r, y_r, conv_r = _rust.flash_tp_rust(
                     T_K, P_Pa, z.tolist(), list(self.names),
                     0.0, mode, gamma_arr.tolist(),
                 )
-                return V, np.array(x_r), np.array(y_r), True
+                return V, np.array(x_r), np.array(y_r), conv_r
             except (ImportError, AttributeError):
                 pass
 
@@ -2269,8 +2275,12 @@ class SWMultiComponentFlash:
             salinity_method = 'explicit'
 
         # Rust acceleration path: compute gamma in Python (correct ks models),
-        # then use Rust flash_tp for the two flashes.
-        if _RUST_AVAILABLE and salinity_method == 'gamma_phi':
+        # then use Rust flash_tp for the two flashes. Restricted to
+        # framework='proposed' — Rust only implements the proposed-framework
+        # water alpha (MC-3) and kij_AQ; 'dropin'/'sw_original' would be
+        # silently downgraded to 'proposed', so they take the Python path.
+        if (_RUST_AVAILABLE and salinity_method == 'gamma_phi'
+                and self.framework == 'proposed'):
             try:
                 gamma_aq = None
                 if self.salinity > 0:
@@ -2281,11 +2291,11 @@ class SWMultiComponentFlash:
                     else [1.0] * self.nc
                 names_list = list(self.names)
 
-                V_aq, x_aq_r, y_aq_r = _rust.flash_tp_rust(
+                V_aq, x_aq_r, y_aq_r, conv_aq = _rust.flash_tp_rust(
                     T_K, P_Pa, z.tolist(), names_list,
                     self.salinity, 'AQ', gamma_list,
                 )
-                V_na, x_na_r, y_na_r = _rust.flash_tp_rust(
+                V_na, x_na_r, y_na_r, conv_na = _rust.flash_tp_rust(
                     T_K, P_Pa, z.tolist(), names_list,
                     self.salinity, 'NA', [1.0] * self.nc,
                 )
@@ -2296,7 +2306,7 @@ class SWMultiComponentFlash:
                 result = {
                     'x_aq': x_aq, 'y_na': y_na, 'K_true': K_true,
                     'V_aq': V_aq, 'V_na': V_na,
-                    'converged_aq': True, 'converged_na': True,
+                    'converged_aq': conv_aq, 'converged_na': conv_na,
                     'component_names': self.names,
                     'salinity_method': salinity_method,
                     'vlle_warning': False,

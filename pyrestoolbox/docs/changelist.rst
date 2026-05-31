@@ -13,7 +13,25 @@ Changelist in 3.5.0:
 
 - **Removed dead module** ``pyrestoolbox/oil/oil.py``. Pre-April-2026 monolith superseded by the ``_correlations.py`` / ``_density.py`` / ``_tables.py`` / etc. sub-modules. Nothing in the package or tests imported from it. No public-API change — ``from pyrestoolbox import oil`` and ``oil.<func>`` keep working via ``oil/__init__.py`` re-exports.
 
-- 824 validation tests (up from 812 in 3.4.0).
+- **Brine framework correctness (Rust path)**. ``SoreideWhitson(framework='dropin')`` and ``framework='sw_original'`` were silently computed as ``'proposed'`` whenever the Rust accelerator was installed: the Rust flash hardcodes the proposed-framework MC-3 water alpha and kij\ :sub:`AQ`, with no framework parameter. The Rust dispatch in ``brine._lib_vle_engine`` (``flash_tp`` and ``calc_equilibrium``) is now gated on ``framework == 'proposed'``; the other two frameworks take the framework-aware Python path. Pure-Python results were always correct. Adds a regression test exercising both non-proposed frameworks.
+
+- **Brine convergence flag (Rust path)**. ``flash_tp_rust`` and ``co2_brine_solubility_rust`` now return the convergence bool they compute, so ``SoreideWhitson``/``CO2_Brine_Mixture`` ``.converged`` (and the ``converged_aq``/``converged_na`` flash flags) report the real outcome instead of being hardcoded ``True`` when Rust is active.
+
+- **Oil ``oil_harmonize`` default ``pbmethod`` unified to VALMC** (was ``VELAR``), matching ``oil_pbub`` / ``oil_rs`` / ``oil_co`` / ``OilPVT``. Previously ``oil_harmonize`` and the other oil functions returned mutually inconsistent Pb/Rsb on identical inputs. The deprecated ``OilPVT.from_harmonize`` default was aligned too. **Behaviour change**: default ``oil_harmonize`` output shifts for callers that relied on the old default (e.g. the ``rsb_frac`` returned when both ``pb`` and ``rsb`` are supplied). Pass ``pbmethod='VELAR'`` explicitly to retain the old behaviour.
+
+- **Nodal HB VLP Rust/Python parity**. Hampson-Brill superficial-gas-velocity and gas-density constants in the Rust accelerator (``35.3741`` molar-volume factor, ``10.73`` vs ``10.732``, ``29.0`` vs ``28.97`` air MW) are aligned with the Python path, making all four VLP methods bit-exact between Rust and Python. The HB-oil/HB-gas parity tests are tightened from ``rtol=1e-3`` to ``1e-4``. Affected HB doc-example BHPs shifted by ~0.05–0.25% to the now-identical Rust/Python value (e.g. ``fbhp`` oil 1771.47 → 1770.58 psi); RST examples updated to match.
+
+- **``simtools.rr_solver`` single-phase guard**. Single-phase feeds (all-liquid or all-vapor) previously fell through to the two-phase Nielsen-Lia solver and returned ``inf``/``nan`` with only a divide-by-zero warning. They are now detected up front and return the trivial split (V=0 or V=1); non-positive K-values raise ``ValueError``.
+
+- **``nodal.fthp`` input validation**. ``fthp`` now validates ``well_type`` / ``vlpmethod`` / ``bhp`` at entry like the other public nodal functions, instead of only erroring transitively through the inner ``fbhp`` solve.
+
+- **``validate_pe_inputs`` array safety**. The ``sg`` and inert-fraction checks are now array-safe (previously ``sg <= 0`` raised an ambiguous-truth-value error on array inputs).
+
+- **Brine undersaturated-compressibility density** now uses the same algebraically reformulated, non-singular Garcia Eq. 18 as the saturated-density step (removes the ``xCO2 → 1`` singularity from the P+1 density used in ``Cf_usat``). Mathematically identical for ``xCO2 < 1``.
+
+- **Removed dead Rust exports** ``oil_bo_mccain_rust`` and ``calc_equilibrium_rust`` (and their now-orphaned internals), which had no Python callers. New Rust-vs-Python parity tests added for ``gas_ponz2p`` and ``simtools.influence_tables`` — the two live accelerated paths that previously had no parity coverage.
+
+- 835 validation tests (up from 824 earlier in 3.5.0).
 
 Changelist in 3.4.0:
 

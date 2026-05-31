@@ -967,9 +967,10 @@ class CO2_Brine_Mixture():
         """
         if _RUST_AVAILABLE:
             try:
-                xco2, yco2, yh2o, rhogas, gasz = _rust.co2_brine_solubility_rust(
+                xco2, yco2, yh2o, rhogas, gasz, conv = _rust.co2_brine_solubility_rust(
                     self.pBar, self.degC, self.ppm
                 )
+                self.converged = conv
                 self.x = np.array([xco2, 1.0 - xco2 - (self.xSalt if self.xSalt else 0.0)])
                 self.y = np.array([yco2, yh2o])
                 self.rhoGas = rhogas
@@ -1939,8 +1940,10 @@ class SoreideWhitson:
                 gas_ply = _VLE_TO_PLYASUNOV.get(gas_vle, gas_vle.upper())
                 vphi_eff_p1 += yi * _plyasunov_V_phi(gas_ply, tKel, Mpa_p1)
 
-            numerator_p1 = 1.0 + self.x_total * mw_eff / (MWWAT * x1)
-            denom_p1 = self.x_total * vphi_eff_p1 / (MWWAT * x1) + 1.0 / rho_brine_p1_gcc
+            # Garcia Eq. 18 at P+1, same algebraically reformulated (non-singular)
+            # form as Step 3 — multiply top/bot through by M1*x1.
+            numerator_p1 = MWWAT * x1 + self.x_total * mw_eff
+            denom_p1 = self.x_total * vphi_eff_p1 + MWWAT * x1 / rho_brine_p1_gcc
             rho_p1_gcc = numerator_p1 / denom_p1
         else:
             rho_p1_gcc = rho_brine_p1_gcc

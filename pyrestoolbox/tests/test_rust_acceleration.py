@@ -57,6 +57,12 @@ def force_python():
     except ImportError:
         pass
 
+    try:
+        import pyrestoolbox.simtools.simtools as simtools_mod
+        modules.append((simtools_mod, 'RUST_AVAILABLE'))
+    except ImportError:
+        pass
+
     saved = [(mod, attr, getattr(mod, attr)) for mod, attr in modules]
 
     for mod, attr, _ in saved:
@@ -197,6 +203,44 @@ class TestPseudopressureEquivalence:
     def test_dmp_high_pressure(self):
         self._compare_dmp(p1=14.7, p2=5000, sg=0.7, degf=250)
 
+    def _compare_ponz2p(self, **kwargs):
+        import pyrestoolbox.gas as gas
+        p_rust = gas.gas_ponz2p(**kwargs)
+        with force_python():
+            p_python = gas.gas_ponz2p(**kwargs)
+        np.testing.assert_allclose(
+            np.atleast_1d(p_rust), np.atleast_1d(p_python),
+            rtol=RTOL_MEDIUM, atol=1.0,
+            err_msg=f"gas_ponz2p mismatch for {kwargs}"
+        )
+
+    def test_ponz2p_single(self):
+        self._compare_ponz2p(poverz=3000, sg=0.75, degf=200)
+
+    def test_ponz2p_array(self):
+        self._compare_ponz2p(poverz=[1000, 3000, 5000], sg=0.7, degf=180)
+
+    def test_ponz2p_with_inerts(self):
+        self._compare_ponz2p(poverz=3500, sg=0.8, degf=220, co2=0.1, n2=0.05)
+
+
+@rust_required
+class TestInfluenceTableEquivalence:
+    """Van Everdingen-Hurst influence tables: Rust ≈ Python."""
+
+    def test_influence_tables(self):
+        import pyrestoolbox.simtools as simtools
+        # Small grid keeps the (slow) Python ilt path fast.
+        kwargs = dict(ReDs=[2.0, 5.0], min_td=0.1, max_td=50, n_incr=5, M=7)
+        tD_r, pDs_r = simtools.influence_tables(**kwargs)
+        with force_python():
+            tD_p, pDs_p = simtools.influence_tables(**kwargs)
+        np.testing.assert_allclose(np.asarray(tD_r), np.asarray(tD_p),
+                                   rtol=1e-10, err_msg="influence_tables tD drift")
+        np.testing.assert_allclose(np.asarray(pDs_r), np.asarray(pDs_p),
+                                   rtol=RTOL_MEDIUM, atol=1e-4,
+                                   err_msg="influence_tables pD drift Rust vs Python")
+
 
 # =============================================================================
 # Oil module: Density equivalence
@@ -247,7 +291,7 @@ class TestNodalVLPEquivalence:
         pvt = OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
         return pvt, comp
 
-    def _compare_fbhp_gas(self, vlpmethod, rtol=RTOL_LOOSE):
+    def _compare_fbhp_gas(self, vlpmethod, rtol=RTOL_MEDIUM):
         from pyrestoolbox.nodal import nodal
         pvt, comp = self._gas_completion()
         kwargs = dict(thp=500, gas_pvt=pvt, completion=comp,
@@ -261,7 +305,7 @@ class TestNodalVLPEquivalence:
             err_msg=f"VLP {vlpmethod} gas mismatch"
         )
 
-    def _compare_fbhp_oil(self, vlpmethod, rtol=RTOL_LOOSE):
+    def _compare_fbhp_oil(self, vlpmethod, rtol=RTOL_MEDIUM):
         from pyrestoolbox.nodal import nodal
         pvt, comp = self._oil_completion()
         kwargs = dict(thp=200, oil_pvt=pvt, completion=comp,
@@ -461,6 +505,35 @@ def test_sw_parity_natural_gas_only(pres, temp):
     """Pure natural gas in brine (HC-only): Rust ≈ Python."""
     _sw_parity_check(pres, temp, ppm=20000, y_CO2=0, y_H2S=0, y_N2=0,
                      sg=0.65, rtol=RTOL_MEDIUM)
+
+
+@rust_required
+@pytest.mark.parametrize('framework', ['dropin', 'sw_original'])
+def test_sw_non_proposed_framework_not_downgraded(framework):
+    """Regression: the Rust flash only implements the 'proposed' framework
+    (MC-3 water alpha + proposed kij_AQ). 'dropin'/'sw_original' must take the
+    Python path so they are not silently computed as 'proposed'.
+
+    With Rust available, a non-proposed framework must (a) match its own
+    forced-Python result and (b) differ from the 'proposed' result on a
+    saline point where the framework choice matters.
+    """
+    from pyrestoolbox.brine import brine
+    kwargs = dict(pres=3000, temp=200, ppm=50000, y_CO2=1.0, y_H2S=0, y_N2=0,
+                  sg=0.65, metric=False)
+    mix_rust = brine.SoreideWhitson(framework=framework, **kwargs)
+    with force_python():
+        mix_python = brine.SoreideWhitson(framework=framework, **kwargs)
+    # (a) Rust-available path must not downgrade — equals forced-Python path.
+    np.testing.assert_allclose(
+        mix_rust.Rs_total, mix_python.Rs_total, rtol=RTOL_MEDIUM, atol=1e-6,
+        err_msg=f"framework={framework} silently downgraded on Rust path",
+    )
+    # (b) The framework choice must actually change the answer vs 'proposed'.
+    mix_proposed = brine.SoreideWhitson(framework='proposed', **kwargs)
+    assert abs(mix_rust.Rs_total - mix_proposed.Rs_total) > 1e-4, (
+        f"framework={framework} produced the 'proposed' result — gate ineffective"
+    )
 
 
 # =============================================================================

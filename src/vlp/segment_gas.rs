@@ -116,10 +116,11 @@ pub fn hb_fbhp_gas(
                 p_avg, temp_f_i, api, rs_est, mflow_o, mflow_w, mflow_g,
             );
 
-            let ugas = qg_mmscfd * 1e6
-                / (p_avg * 35.3741 / (zee * temp_r))
-                / 86400.0
-                / area;
+            // Gas density (lb/ft3) and superficial gas velocity, matching the
+            // Python path (nodal.py): rho_g = MW_AIR*gsg*p/(zee*R*Tr),
+            // v_sg = (mflow_g/rho_g)/area. mflow_g is lb/day here, hence /86400.
+            let rho_g = MW_AIR * gsg * p_avg / (zee * 10.732 * temp_r);
+            let ugas = (mflow_g / 86400.0) / rho_g.max(1e-10) / area;
 
             let mul = if ql_loc > 0.0 {
                 (qo_loc * oil_vis_loc + qw_bwpd * water_visc) / (qo_loc + qw_bwpd)
@@ -130,15 +131,16 @@ pub fn hb_fbhp_gas(
             let (mut yl, _nvl, _nvg, _nd) =
                 hb_holdup(ul, ugas, tid, 62.4 * lsg_loc, ift_val, mul, p_avg);
 
-            // Minimum holdup from mass fraction
-            let rho = 29.0 * gsg * p_avg / (temp_r * zee * 10.732 * 62.37);
+            // Minimum holdup from mass fraction (Python: rho_g_sg = rho_g/62.37,
+            // min_l = mass_frac * rho_g_sg/(rho_g_sg + lsg_loc), which is the
+            // form below after multiplying through by 62.37).
             let mflow = lsg_loc * 62.4 * ql_loc * 5.615 + 0.0765 * gsg * qg_mmscfd * 1e6;
             let mass_frac_liq = if mflow > 0.0 {
                 (lsg_loc * 62.4 * ql_loc * 5.615) / mflow
             } else {
                 0.0
             };
-            let min_l = mass_frac_liq * rho * 62.37 / (rho * 62.37 + lsg_loc * 62.37);
+            let min_l = mass_frac_liq * rho_g / (rho_g + lsg_loc * 62.37);
             if yl < min_l {
                 yl = min_l;
             }
@@ -156,7 +158,6 @@ pub fn hb_fbhp_gas(
             let eond = rough / tid;
             let f = serghides_fanning(nre, eond);
 
-            let rho_g = MW_AIR * gsg * p_avg / (zee * 10.73 * temp_r);
             let rho_avg = yl * lsg_loc * 62.4 + (1.0 - yl) * rho_g;
 
             let fric_term =

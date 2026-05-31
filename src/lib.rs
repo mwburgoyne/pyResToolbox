@@ -76,14 +76,12 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // Oil density chain
     m.add_function(wrap_pyfunction!(oil::oil_deno_mccain_rust, m)?)?;
-    m.add_function(wrap_pyfunction!(oil::oil_bo_mccain_rust, m)?)?;
 
     // Spycher-Pruess CO2-Brine solubility
     m.add_function(wrap_pyfunction!(spycher_pruess::co2_brine_solubility_rust, m)?)?;
 
     // VLE Flash Engine
     m.add_function(wrap_pyfunction!(vle::flash_tp_rust, m)?)?;
-    m.add_function(wrap_pyfunction!(vle::calc_equilibrium_rust, m)?)?;
 
     // GWR inverse Laplace transform / influence tables
     m.add_function(wrap_pyfunction!(gwr::influence_tables_rust, m)?)?;

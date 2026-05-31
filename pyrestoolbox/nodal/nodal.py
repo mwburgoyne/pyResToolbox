@@ -1834,6 +1834,10 @@ def fthp(bhp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
         thp_min_oilfield = thp_min
         thp_max_oilfield = thp_max
 
+    validate_pe_inputs(p=bhp_oilfield)
+    validate_choice(well_type, ('gas', 'oil'), 'well_type')
+    vlpmethod = validate_methods(["vlpmethod"], [vlpmethod])
+
     def _err(_args, thp_trial):
         calculated_bhp = fbhp(thp=thp_trial, completion=completion, vlpmethod=vlpmethod,
                               well_type=well_type, gas_pvt=gas_pvt, oil_pvt=oil_pvt,

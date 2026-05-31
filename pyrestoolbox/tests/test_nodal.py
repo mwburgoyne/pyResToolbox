@@ -6,6 +6,7 @@ Tests for pyRestoolbox nodal module (VLP/IPR/Nodal Analysis).
 import sys
 import os
 import math
+import pytest
 
 # Ensure project parent is on path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -469,6 +470,20 @@ def test_fthp_roundtrip_oil():
                    qt_stbpd=1500, gor=700, wc=0.2, gsg=0.65,
                    pb=2500, rsb=500, sgsp=0.65, api=35)
     assert abs(thp_out - thp_in) < 1.0
+
+
+def test_fthp_validates_inputs():
+    """fthp validates well_type / vlpmethod / bhp up front, like fbhp."""
+    c = Completion(tid=2.441, length=6000, tht=100, bht=170)
+    with pytest.raises(ValueError):
+        fthp(bhp=1500, completion=c, vlpmethod='HB', well_type='banana',
+             qg_mmscfd=3.0)
+    with pytest.raises(ValueError):
+        fthp(bhp=1500, completion=c, vlpmethod='NOSUCH', well_type='gas',
+             qg_mmscfd=3.0)
+    with pytest.raises(ValueError):
+        fthp(bhp=-1.0, completion=c, vlpmethod='HB', well_type='gas',
+             qg_mmscfd=3.0)
 
 
 # ============================================================================

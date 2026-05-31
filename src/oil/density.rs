@@ -164,31 +164,6 @@ pub fn oil_deno_mccain(
     }
 }
 
-/// Oil formation volume factor via McCain method (rb/STB).
-///
-/// Bo = (sg_o * 62.372 + 0.01357 * rs * sg_g) / rho_r   (Eq 3.21)
-pub fn oil_bo_mccain(
-    p: f64,
-    degf: f64,
-    rs: f64,
-    rsb: f64,
-    sg_g: f64,
-    sg_sp: f64,
-    pb: f64,
-    sg_o: f64,
-    api: f64,
-) -> f64 {
-    // Resolve sg_o consistently
-    let sg_o_r = if api > 0.0 { oil_sg(api) } else { sg_o };
-    let sg_g_r = if sg_g > 0.0 { sg_g } else { sg_sp };
-
-    let rho_r = oil_deno_mccain(p, degf, rs, rsb, sg_g, sg_sp, pb, sg_o, api);
-    if rho_r <= 0.0 {
-        return 1.0; // guard against division by zero
-    }
-    (sg_o_r * 62.372 + 0.01357 * rs * sg_g_r) / rho_r // Eq 3.21
-}
-
 // ─── Tests ──────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -254,27 +229,6 @@ mod tests {
         assert!(rho_above > rho_at_pb,
             "above-Pb density ({}) should exceed density at Pb ({})",
             rho_above, rho_at_pb);
-    }
-
-    #[test]
-    fn test_oil_bo_mccain_range() {
-        let pb = 3000.0;
-        // Bo at bubble point — typical range 1.1–1.8
-        let bo = oil_bo_mccain(pb, 200.0, 600.0, 600.0, 0.8, 0.8, pb, 0.0, 35.0);
-        assert!(bo > 1.0 && bo < 2.5, "bo={} out of range", bo);
-    }
-
-    #[test]
-    fn test_oil_bo_above_pb_decreases() {
-        // Bo should decrease above Pb as oil is compressed
-        let pb = 3000.0;
-        let bo_pb = oil_bo_mccain(pb, 200.0, 600.0, 600.0, 0.8, 0.8, pb, 0.0, 35.0);
-        let bo_hi = oil_bo_mccain(5000.0, 200.0, 600.0, 600.0, 0.8, 0.8, pb, 0.0, 35.0);
-        assert!(
-            bo_hi < bo_pb,
-            "Bo above Pb ({}) should be less than Bo at Pb ({})",
-            bo_hi, bo_pb
-        );
     }
 
     #[test]

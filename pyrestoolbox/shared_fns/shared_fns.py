@@ -187,17 +187,20 @@ def validate_pe_inputs(p=None, degf=None, sg=None, co2=None, h2s=None, n2=None, 
         degf_arr = np.atleast_1d(degf)
         if np.any(degf_arr <= -459.67):
             raise ValueError(f"Temperature must be above absolute zero (-459.67 degF), got: {np.min(degf_arr)}")
-    if sg is not None and sg <= 0:
-        raise ValueError(f"Specific gravity must be positive, got: {sg}")
+    if sg is not None:
+        sg_arr = np.atleast_1d(sg)
+        if np.any(sg_arr <= 0):
+            raise ValueError(f"Specific gravity must be positive, got min value: {np.min(sg_arr)}")
     fracs = {'co2': co2, 'h2s': h2s, 'n2': n2, 'h2': h2}
-    frac_sum = 0
+    frac_sum = 0.0
     for name, val in fracs.items():
         if val is not None:
-            if val < 0:
-                raise ValueError(f"Mole fraction {name} must be non-negative, got: {val}")
-            frac_sum += val
-    if frac_sum > 1.0:
-        raise ValueError(f"Sum of non-hydrocarbon mole fractions ({frac_sum}) exceeds 1.0")
+            val_arr = np.atleast_1d(val)
+            if np.any(val_arr < 0):
+                raise ValueError(f"Mole fraction {name} must be non-negative, got min value: {np.min(val_arr)}")
+            frac_sum = frac_sum + val_arr
+    if np.any(frac_sum > 1.0):
+        raise ValueError(f"Sum of non-hydrocarbon mole fractions ({np.max(frac_sum)}) exceeds 1.0")
 
 
 def check_2_inputs(x: Union[float, List[float]], y: Union[float, List[float]]) -> bool:

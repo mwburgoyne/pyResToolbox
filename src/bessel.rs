@@ -79,7 +79,9 @@ pub fn besselk0e(x: f64) -> f64 {
                         + t * (0.00262698
                             + t * (0.00010750
                                 + t * 0.00000740)))));
-        ((-x.ln() + std::f64::consts::LN_2 - 0.5772156649015329) * i0 + poly) * x.exp()
+        // A&S 9.8.5: K0(x) = -ln(x/2)*I0(x) + poly, where Euler-gamma is already
+        // baked into the leading -0.57721566 polynomial term. -ln(x/2) = -ln(x)+ln(2).
+        ((-x.ln() + std::f64::consts::LN_2) * i0 + poly) * x.exp()
     } else {
         let t = 2.0 / x;
         let ans = 1.25331414
@@ -109,7 +111,9 @@ pub fn besselk1e(x: f64) -> f64 {
                             + t * (-0.01919402
                                 + t * (-0.00110404
                                     + t * (-0.00004686)))))));
-        ((x.ln() - std::f64::consts::LN_2 + 0.5772156649015329) * i1 + poly) * x.exp()
+        // A&S 9.8.7: K1(x) = ln(x/2)*I1(x) + (1/x)*poly (no separate gamma term).
+        // ln(x/2) = ln(x) - ln(2).
+        ((x.ln() - std::f64::consts::LN_2) * i1 + poly) * x.exp()
     } else {
         let t = 2.0 / x;
         let ans = 1.25331414
@@ -165,7 +169,7 @@ mod tests {
     #[test]
     fn test_besselk0() {
         assert!((besselk0(1.0) - 0.42102443824070833).abs() < 1e-7);
-        assert!((besselk0(5.0) - 0.0036910982234656676).abs() < 1e-10);
+        assert!((besselk0(5.0) - 0.0036910983340425942).abs() < 1e-10);
     }
 
     #[test]
