@@ -75,7 +75,7 @@ class OilPVT:
     def from_harmonize(cls, degf: float, api: float, sg_sp: float = 0,
                        sg_g: float = 0, pb: float = 0, rsb: float = 0,
                        uo_target: float = 0, p_uo: float = 0,
-                       rsmethod: str = 'VELAR', pbmethod: str = 'VELAR',
+                       rsmethod: str = 'VELAR', pbmethod: str = 'VALMC',
                        bomethod: str = 'MCAIN',
                        metric: bool = False) -> 'OilPVT':
         """Deprecated: use OilPVT(degf=...) directly.

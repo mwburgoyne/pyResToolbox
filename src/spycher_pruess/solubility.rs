@@ -569,7 +569,7 @@ pub fn co2_brine_solubility(
     p_bar: f64,
     deg_c: f64,
     ppm: f64,
-) -> (f64, f64, f64, f64, f64) {
+) -> (f64, f64, f64, f64, f64, bool) {
     let mut s = SpState::new(p_bar, deg_c, ppm);
 
     // Clamp pressure floor
@@ -679,7 +679,11 @@ pub fn co2_brine_solubility(
     s.x_salt = 2.0 * s.molal / (2.0 * s.molal + CONMOLA + m_co2);
     s.x[1] = (1.0 - s.x[0] - s.x_salt).clamp(0.0, 1.0);
 
-    // Iterative refinement for high-temp path
+    // Iterative refinement for high-temp path. The low-temp path is direct
+    // (non-iterative) so it is always treated as converged; the high-temp
+    // loop clears the flag if it exits on the 100-iteration cap, mirroring
+    // the Python `.converged` semantics (brine.py: err > EPS => not converged).
+    let mut converged = true;
     if !s.low_temp {
         let mut err = 1.0;
         let mut iter_num = 0;
@@ -720,6 +724,9 @@ pub fn co2_brine_solubility(
             err = (s.y[1] / yh2o_last - 1.0).abs();
             iter_num += 1;
         }
+        if err > EPS {
+            converged = false;
+        }
     }
 
     // Re-compute gas phase density
@@ -727,7 +734,7 @@ pub fn co2_brine_solubility(
     let rho_gas = mw_gas / s.molar_vol;
     let gas_z = s.molar_vol * s.p_rt;
 
-    (s.x[0], s.y[0], s.y[1], rho_gas, gas_z)
+    (s.x[0], s.y[0], s.y[1], rho_gas, gas_z, converged)
 }
 
 // =========================================================================
@@ -762,7 +769,7 @@ mod tests {
     #[test]
     fn test_low_temp_basic() {
         // 100 bar, 50 degC, 0 ppm -- should produce reasonable xCO2
-        let (x_co2, y_co2, y_h2o, rho_gas, gas_z) = co2_brine_solubility(100.0, 50.0, 0.0);
+        let (x_co2, y_co2, y_h2o, rho_gas, gas_z, _converged) = co2_brine_solubility(100.0, 50.0, 0.0);
         assert!(x_co2 > 0.0 && x_co2 < 0.1, "xCO2 out of range: {}", x_co2);
         assert!(y_co2 > 0.9 && y_co2 <= 1.0, "yCO2 out of range: {}", y_co2);
         assert!(y_h2o >= 0.0 && y_h2o < 0.1, "yH2O out of range: {}", y_h2o);
@@ -773,7 +780,7 @@ mod tests {
     #[test]
     fn test_high_temp() {
         // 200 bar, 150 degC, 30000 ppm
-        let (x_co2, y_co2, y_h2o, rho_gas, gas_z) = co2_brine_solubility(200.0, 150.0, 30000.0);
+        let (x_co2, y_co2, y_h2o, rho_gas, gas_z, _converged) = co2_brine_solubility(200.0, 150.0, 30000.0);
         assert!(x_co2 > 0.0 && x_co2 < 0.1, "xCO2 out of range: {}", x_co2);
         assert!(y_co2 > 0.5 && y_co2 <= 1.0, "yCO2 out of range: {}", y_co2);
         assert!(y_h2o > 0.0, "yH2O should be > 0 at high temp: {}", y_h2o);
@@ -784,7 +791,7 @@ mod tests {
     #[test]
     fn test_scaled_range() {
         // 150 bar, 105 degC, 10000 ppm -- falls in blended range
-        let (x_co2, y_co2, y_h2o, rho_gas, gas_z) = co2_brine_solubility(150.0, 105.0, 10000.0);
+        let (x_co2, y_co2, y_h2o, rho_gas, gas_z, _converged) = co2_brine_solubility(150.0, 105.0, 10000.0);
         assert!(x_co2 > 0.0 && x_co2 < 0.1, "xCO2 out of range: {}", x_co2);
         assert!(y_co2 > 0.5, "yCO2 should be dominant: {}", y_co2);
         assert!(y_h2o >= 0.0, "yH2O must be non-negative: {}", y_h2o);

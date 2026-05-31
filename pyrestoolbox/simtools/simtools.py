@@ -1033,6 +1033,10 @@ def rr_solver(
     gracefully handles catastrophic roundoff errors.
     The method is outlined in 2022 'Fluid Phase Equilibria' paper by M. Nielsen & H. Lia
 
+    Single-phase feeds (all-liquid or all-vapor) are detected and returned as the
+    trivial split (V=0 or V=1) rather than passed to the two-phase solver, which
+    is only valid inside the two-phase region.
+
     Input:
     zi: np.Array of Molar composition (Percent, Fraction or Amounts - will be normalized)
     ki: K-values of the respective molar species.
@@ -1057,6 +1061,25 @@ def rr_solver(
     zi_sum = np.sum(zi)
     if zi_sum <= 0:
         raise ValueError("Sum of zi must be positive")
+    if np.any(ki <= 0):
+        raise ValueError("All ki values must be positive")
+
+    # The Nielsen-Lia solver is only valid inside the two-phase region; for a
+    # single-phase feed it returns physically meaningless inf/nan. Detect the
+    # single-phase cases up front and return the trivial split, mirroring the
+    # guards in brine._lib_vle_engine.solve_rachford_rice.
+    zi_norm = zi / zi_sum
+    Km1 = ki - 1.0
+    if np.sum(zi_norm * Km1) <= 0:
+        # All liquid — V = 0
+        xi = zi_norm.copy()
+        yi = (ki * zi_norm) / np.sum(ki * zi_norm)
+        return 0, yi, xi, 0.0, 1.0
+    if np.sum(zi_norm * Km1 / ki) >= 0:
+        # All vapor — V = 1
+        yi = zi_norm.copy()
+        xi = (zi_norm / ki) / np.sum(zi_norm / ki)
+        return 0, yi, xi, 1.0, 0.0
 
     return _brine_rr_solver(zi, ki, tol=EPS_T, max_iter=MAX_ITR)
 

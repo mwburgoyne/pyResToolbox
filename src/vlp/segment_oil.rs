@@ -121,10 +121,11 @@ pub fn hb_fbhp_oil(
                 p_avg, temp_f_i, api, rs_local, mflow_o, mflow_w, mflow_g,
             );
 
-            let ugas = qg_mmscfd * 1e6
-                / (p_avg * 35.3741 / (zee * temp_r))
-                / 86400.0
-                / area;
+            // Gas density (lb/ft3) and superficial gas velocity, matching the
+            // Python oil path (nodal.py): rho_g = MW_AIR*gsg*p/(zee*R*Tr),
+            // v_sg = (mflow_g/rho_g)/area. mflow_g is lb/day here, hence /86400.
+            let rho_g = MW_AIR * gsg * p_avg / (zee * 10.732 * temp_r);
+            let ugas = (mflow_g / 86400.0) / rho_g.max(1e-10) / area;
 
             let mul = if ql > 0.0 {
                 (qo * oil_vis_seg + qw * water_visc) / ql
@@ -135,7 +136,6 @@ pub fn hb_fbhp_oil(
             let (mut yl, _nvl, _nvg, _nd) =
                 hb_holdup(ul, ugas, tid, rho_l, ift_val, mul, p_avg);
 
-            let rho_g = MW_AIR * gsg * p_avg / (zee * 10.732 * temp_r);
             let mass_frac_liq = if mflow > 0.0 {
                 (lsg * 62.4 * ql * 5.615) / mflow
             } else {

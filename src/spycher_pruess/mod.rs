@@ -13,17 +13,18 @@ mod solubility;
 /// * `ppm`    - NaCl concentration in weight parts per million of brine
 ///
 /// # Returns
-/// Tuple of (x_co2, y_co2, y_h2o, rho_gas, gas_z) where:
+/// Tuple of (x_co2, y_co2, y_h2o, rho_gas, gas_z, converged) where:
 /// * `x_co2`   - Mole fraction of CO2 in the aqueous phase
 /// * `y_co2`   - Mole fraction of CO2 in the gas phase
 /// * `y_h2o`   - Mole fraction of H2O in the gas phase
 /// * `rho_gas`  - CO2-rich gas density (g/cm3)
 /// * `gas_z`   - Gas phase Z-factor
+/// * `converged` - False if the high-temp fugacity iteration hit its cap
 #[pyfunction]
 pub fn co2_brine_solubility_rust(
     p_bar: f64,
     deg_c: f64,
     ppm: f64,
-) -> PyResult<(f64, f64, f64, f64, f64)> {
+) -> PyResult<(f64, f64, f64, f64, f64, bool)> {
     Ok(solubility::co2_brine_solubility(p_bar, deg_c, ppm))
 }

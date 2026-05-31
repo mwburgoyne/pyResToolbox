@@ -24,7 +24,7 @@ def oil_harmonize(
     uo_target: float = 0,
     p_uo: float = 0,
     rsmethod: rs_method = rs_method.VELAR,
-    pbmethod: pb_method = pb_method.VELAR,
+    pbmethod: pb_method = pb_method.VALMC,
     metric: bool = False,
 ) -> Tuple:
     """Resolves consistent Pb, Rsb, rsb_frac, and vis_frac from user inputs.
@@ -47,7 +47,7 @@ def oil_harmonize(
     uo_target: Target oil viscosity (cP) at pressure p_uo. Default 0 (no viscosity tuning)
     p_uo: Pressure at which uo_target was measured (psia | barsa). Required if uo_target > 0
     rsmethod: Rs calculation method. Default VELAR
-    pbmethod: Pb calculation method. Default VELAR
+    pbmethod: Pb calculation method. Default VALMC
     metric: If True, input/output in Eclipse METRIC units (barsa, degC, sm3/sm3). Defaults to False (FIELD)
 
     Returns tuple of (pb, rsb, rsb_frac, vis_frac) where:

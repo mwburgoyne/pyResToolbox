@@ -7,6 +7,7 @@ IX extraction and influence tables require external files/long runtimes).
 import sys
 import os
 import numpy as np
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 import pyrestoolbox.simtools as simtools
@@ -149,6 +150,40 @@ def test_rr_solver_near_dew():
     N_it, yi, xi, V, L = simtools.rr_solver(zi, ki)
     assert 0 <= V <= 1
     assert abs(V + L - 1.0) < 1e-10
+
+
+def test_rr_solver_single_phase_liquid():
+    """All K < 1 (undersaturated liquid): V=0, not -inf/inf."""
+    zi = np.array([0.5, 0.3, 0.2])
+    ki = np.array([0.5, 0.3, 0.1])
+    N_it, yi, xi, V, L = simtools.rr_solver(zi, ki)
+    assert V == 0.0 and L == 1.0
+    np.testing.assert_allclose(xi, zi / zi.sum())
+    assert np.all(np.isfinite(yi)) and abs(yi.sum() - 1.0) < 1e-12
+
+
+def test_rr_solver_single_phase_vapor():
+    """All K > 1 (superheated vapor): V=1, not -inf/inf."""
+    zi = np.array([0.5, 0.3, 0.2])
+    ki = np.array([5.0, 3.0, 2.0])
+    N_it, yi, xi, V, L = simtools.rr_solver(zi, ki)
+    assert V == 1.0 and L == 0.0
+    np.testing.assert_allclose(yi, zi / zi.sum())
+    assert np.all(np.isfinite(xi)) and abs(xi.sum() - 1.0) < 1e-12
+
+
+def test_rr_solver_all_k_unity():
+    """All K = 1 boundary must not return garbage (treated as all-liquid)."""
+    zi = np.array([0.4, 0.6])
+    ki = np.array([1.0, 1.0])
+    N_it, yi, xi, V, L = simtools.rr_solver(zi, ki)
+    assert np.isfinite(V) and 0.0 <= V <= 1.0
+
+
+def test_rr_solver_nonpositive_ki_raises():
+    """Non-positive K-values raise rather than emit a divide warning."""
+    with pytest.raises(ValueError):
+        simtools.rr_solver(np.array([0.5, 0.5]), np.array([1.5, 0.0]))
 
 
 # =============================================================================

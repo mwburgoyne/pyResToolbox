@@ -1825,10 +1825,11 @@ def gas_partial_penetration_skin(htot: float, htop: float, hbot: float,
     """ Returns partial-penetration pseudoskin S_p using the analytical
         series solution of Streltsova-Adams, T.D. (1979) "Pressure Drawdown
         in a Well with Limited Flow Entry," SPE J. Nov 1979, pp.1469-1476
-        (SPE-7486). Bessel K₀ evaluated via scipy.special.k0; series summed
-        until three consecutive relative increments fall below 1e-4 (with
-        the symmetry optimisation that only odd n contribute when the
-        perforated interval is centrally located).
+        (SPE-7486). Bessel K₀ evaluated via scipy.special.k0; the series is
+        summed (vectorised) over n = 1..._SP_MAX_N, dropping terms where
+        n·π·rD exceeds the K₀ underflow threshold (~700). A tail-block
+        diagnostic (contribution of the last 5% of terms) warns when the
+        series may not be fully converged.
 
         All thickness and radius inputs must use a consistent length unit
         (ft or m; only ratios enter the formula).

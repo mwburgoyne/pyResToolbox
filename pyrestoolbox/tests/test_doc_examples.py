@@ -444,7 +444,7 @@ def test_doc_oil_harmonize_pb_only():
 def test_doc_oil_harmonize_both():
     """oil.rst: oil_harmonize with both pb and rsb"""
     pb, rsb, frac, vf = oil.oil_harmonize(pb=3500, rsb=1200, degf=175, api=38, sg_sp=0.68, sg_g=0.68)
-    assert abs(frac - 1.5095) < 0.001
+    assert abs(frac - 1.3807) < 0.001
 
 def test_doc_oil_harmonize_viscosity():
     """oil.rst: oil_harmonize with viscosity target"""
@@ -464,7 +464,7 @@ def test_doc_oilpvt_from_harmonize_full():
     opvt = oil.OilPVT.from_harmonize(degf=200, api=35, sg_sp=0.75, sg_g=0.75,
                                       pb=3000, rsb=500, uo_target=1.0, p_uo=3000)
     assert abs(opvt.vis_frac - 1.7675446945) / 1.7675446945 < RTOL
-    assert abs(opvt.rsb_frac - 0.7622708012) / 0.7622708012 < RTOL
+    assert abs(opvt.rsb_frac - 0.7130969275743666) / 0.7130969275743666 < RTOL
 
 # =============================================================================
 # Brine Module Documentation Examples (docs/brine.rst)
@@ -971,7 +971,7 @@ def test_doc_nodal_fbhp_gas():
     c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
     result = nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas',
                         qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    assert abs(result - 954.757900205952) / 954.757900205952 < RTOL
+    assert abs(result - 954.8384864703888) / 954.8384864703888 < RTOL
 
 def test_doc_nodal_fbhp_gas_wg():
     """nodal.rst: fbhp gas well WG"""
@@ -1000,7 +1000,7 @@ def test_doc_nodal_fbhp_oil():
     result = nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil',
                         qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65,
                         pb=2500, rsb=500, sgsp=0.65, api=35)
-    assert abs(result - 1771.4717888847196) / 1771.4717888847196 < RTOL
+    assert abs(result - 1770.5840097037972) / 1770.5840097037972 < RTOL
 
 def test_doc_nodal_fbhp_oil_pvt():
     """nodal.rst: fbhp oil well with OilPVT"""
@@ -1008,7 +1008,7 @@ def test_doc_nodal_fbhp_oil_pvt():
     opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     result = nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil',
                         oil_pvt=opvt, qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65)
-    assert abs(result - 1772.2397895054948) / 1772.2397895054948 < RTOL
+    assert abs(result - 1771.3518436635964) / 1771.3518436635964 < RTOL
 
 def test_doc_nodal_outflow_curve():
     """nodal.rst: outflow_curve gas"""
@@ -1114,7 +1114,7 @@ def test_doc_nodal_fbhp_deviated():
     c_dev = nodal.Completion(segments=segs, tht=100, bht=200)
     result = nodal.fbhp(thp=500, completion=c_dev, vlpmethod='HB', well_type='gas',
                         qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    assert abs(result - 926.585403839484) < 0.01
+    assert abs(result - 926.7968375529219) < 0.01
 
 
 # =============================================================================
