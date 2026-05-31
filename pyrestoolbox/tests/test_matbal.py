@@ -5,6 +5,7 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 import numpy as np
+import pytest
 from pyrestoolbox import matbal
 
 
@@ -379,6 +380,43 @@ def test_oil_matbal_drive_indices_sum():
         total = ddi[i] + sdi[i] + cdi[i]
         if total > 0:
             assert abs(total - 1.0) < 0.05, f"Drive indices sum to {total} at step {i}"
+
+
+def test_oil_matbal_aquifer_we():
+    """We aquifer influx: adds WDI, reduces OOIP vs no-influx, indices sum to 1."""
+    kwargs = dict(
+        p=[4000, 3500, 3000, 2500, 2000],
+        Np=[0, 500000, 1200000, 2100000, 3200000],
+        degf=200, api=35, sg_sp=0.65, pb=3000, rsb=500,
+    )
+    base = matbal.oil_matbal(**kwargs)
+    # Increasing reservoir-volume water influx (rb) as pressure declines.
+    We = [0.0, 2.0e5, 6.0e5, 1.2e6, 2.0e6]
+    aq = matbal.oil_matbal(We=We, **kwargs)
+
+    # WDI present and zero in the no-aquifer result.
+    assert 'WDI' in aq.drive_indices
+    assert np.allclose(base.drive_indices['WDI'], 0.0)
+    # Aquifer support is non-trivial at later steps.
+    assert aq.drive_indices['WDI'][-1] > 0.0
+    # Removing influx from withdrawal lowers the OOIP estimate.
+    assert aq.ooip < base.ooip
+    # All four indices sum to ~1 at producing steps.
+    di = aq.drive_indices
+    for i in range(1, len(di['DDI'])):
+        total = di['DDI'][i] + di['SDI'][i] + di['CDI'][i] + di['WDI'][i]
+        if abs(total) > 1e-9:
+            assert abs(total - 1.0) < 0.05, f"indices sum to {total} at step {i}"
+
+
+def test_oil_matbal_we_length_validation():
+    """We must match the pressure-array length."""
+    with pytest.raises(ValueError):
+        matbal.oil_matbal(
+            p=[4000, 3500, 3000], Np=[0, 500000, 1200000],
+            degf=200, api=35, sg_sp=0.65, pb=3000, rsb=500,
+            We=[0.0, 1.0e5],  # wrong length
+        )
 
 
 # ======================== oil_matbal regression tests ========================

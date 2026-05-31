@@ -521,7 +521,7 @@ def test_hydrate_required_concentration_round_trip():
     """Required concentration should round-trip through depression calculation"""
     r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, inhibitor_type='MEG', inhibitor_wt_pct=20)
     # Compute what 20wt% gives as depression, then check required_concentration for that depression
-    from pyrestoolbox.gas.gas import _ostergaard_depression, _required_concentration
+    from pyrestoolbox.gas._hydrate import _ostergaard_depression, _required_concentration
     from pyrestoolbox.classes import inhibitor as inh_enum
     dep_c = _ostergaard_depression(20, inh_enum.MEG)
     conc = _required_concentration(dep_c, inh_enum.MEG)

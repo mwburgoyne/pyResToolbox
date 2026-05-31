@@ -31,7 +31,11 @@ Changelist in 3.5.0:
 
 - **Removed dead Rust exports** ``oil_bo_mccain_rust`` and ``calc_equilibrium_rust`` (and their now-orphaned internals), which had no Python callers. New Rust-vs-Python parity tests added for ``gas_ponz2p`` and ``simtools.influence_tables`` — the two live accelerated paths that previously had no parity coverage.
 
-- 835 validation tests (up from 824 earlier in 3.5.0).
+- **``oil_matbal`` aquifer water influx**. New optional ``We`` parameter (cumulative aquifer influx in reservoir volume, rb | rm3) brings oil material balance to parity with ``gas_matbal``. The influx is subtracted from underground withdrawal before estimating OOIP (Havlena-Odeh ``F - We = N·[Eo + m·Eg + (1+m)·Efw]``) — feeding both the Python and Rust regression objectives — and a Water Drive Index (``'WDI'``) is added to ``drive_indices`` so the indices sum to 1 under water drive. Fully backward-compatible: with ``We`` omitted, ``WDI`` is all-zero and OOIP/DDI/SDI/CDI are unchanged.
+
+- **Internal: hydrate code split out of ``gas.py``**. ``gas_hydrate``, ``HydrateResult``, the HFT/HFP/Østergaard helpers and their constants now live in ``pyrestoolbox/gas/_hydrate.py`` (≈480 lines carved off the ``gas.py`` monolith). Public API is unchanged — ``gas.gas_hydrate`` and ``gas.HydrateResult`` are re-exported. ``_hydrate`` imports ``gas_water_content`` lazily, so there is no circular import.
+
+- 838 validation tests (up from 824 earlier in 3.5.0).
 
 Changelist in 3.4.0:
 
