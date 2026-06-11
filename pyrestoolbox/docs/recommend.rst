@@ -67,7 +67,7 @@ Examples:
     >>> r['zmethod'].recommended
     'DAK'
     >>> r['zmethod'].alternatives
-    ['HY', 'WYW', 'BNS']
+    ['HY', 'BNS']
 
     >>> r = recommend.recommend_gas_methods(h2=0.1)
     >>> r['zmethod'].recommended

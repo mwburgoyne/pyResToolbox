@@ -62,11 +62,13 @@ fn dak_core(pr: f64, tr: f64) -> f64 {
             break;
         }
 
+        // d/drhor of r5*rhor^2*(1+a11*rhor^2)*exp(-a11*rhor^2)
+        // = 2*r5*rhor*exp(-a11*rhor^2) * (1 + a11*rhor^2 - (a11*rhor^2)^2)
         let fp_val = r1 + r2 / (rhor * rhor)
             + 2.0 * r3 * rhor
             - 5.0 * r4 * rhor * rhor * rhor * rhor
             + 2.0 * r5 * rhor * exp_term
-                * ((1.0 + 2.0 * a11 * rhor * rhor * rhor) - a11 * r2_val * (1.0 + a11 * r2_val));
+                * (1.0 + a11 * r2_val - (a11 * r2_val) * (a11 * r2_val));
 
         let fp_safe = if fp_val.abs() < 1e-30 { 1e-30 } else { fp_val };
         let step = f_val / fp_safe;
@@ -103,32 +105,32 @@ fn hy_core(pr: f64, tr: f64) -> f64 {
     let c = tpr_inv * (90.7 - 242.2 * tpr_inv + 42.4 * t2);
     let d_exp = 2.18 + 2.82 * tpr_inv;
 
-    // Initial guess from WYW
+    // Initial guess for reduced density y from explicit WYW evaluation
     let z_init = wyw_core(pr, tr);
-    let mut yi = (a * pr / z_init).max(1e-10);
-    let mut y = 0.01_f64;
+    let mut y = (a * pr / z_init).max(1e-10);
 
     for _ in 0..100 {
-        let rel_err = (y - yi).abs() / y.abs().max(1e-10);
+        // Newton-Raphson step on y, then compare successive iterates
+        let y_safe = y.clamp(1e-10, 0.99);
+        let omy = 1.0 - y_safe;
+        let omy3 = omy * omy * omy;
+        let omy4 = omy3 * omy;
+        let y2 = y_safe * y_safe;
+        let y3 = y2 * y_safe;
+        let y4 = y3 * y_safe;
+
+        let f_val = (y_safe + y2 + y3 - y4) / omy3
+            - a * pr - b * y2 + c * y_safe.powf(d_exp);
+        let df_val = (1.0 + 4.0 * y_safe + 4.0 * y2 - 4.0 * y3 + y4) / omy4
+            - 2.0 * b * y_safe + c * d_exp * y_safe.powf(d_exp - 1.0);
+
+        let df_safe = if df_val.abs() < 1e-30 { 1e-30 } else { df_val };
+        let y_new = (y_safe - f_val / df_safe).max(1e-10);
+        let rel_err = (y_new - y).abs() / y_new.abs().max(1e-10);
+        y = y_new;
         if rel_err <= 0.0005 {
             break;
         }
-        let yi_safe = yi.clamp(1e-10, 0.99);
-        let omy = 1.0 - yi_safe;
-        let omy3 = omy * omy * omy;
-        let omy4 = omy3 * omy;
-        let yi2 = yi_safe * yi_safe;
-        let yi3 = yi2 * yi_safe;
-        let yi4 = yi3 * yi_safe;
-
-        let f_val = (yi_safe + yi2 + yi3 - yi4) / omy3
-            - a * pr - b * yi2 + c * yi_safe.powf(d_exp);
-        let df_val = (1.0 + 4.0 * yi_safe + 4.0 * yi2 - 4.0 * yi3 + yi4) / omy4
-            - 2.0 * b * yi_safe + c * d_exp * yi_safe.powf(d_exp - 1.0);
-
-        let df_safe = if df_val.abs() < 1e-30 { 1e-30 } else { df_val };
-        y = (yi_safe - f_val / df_safe).max(1e-10);
-        yi = y;
     }
 
     y = y.max(1e-30);

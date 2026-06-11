@@ -610,16 +610,16 @@ Examples:
     >>> dr = dca.DeclineResult(method='exponential', qi=1000, di=0.05, b=0)
     >>> fc = dca.forecast(dr, t_end=50, dt=1.0)
     >>> fc.eur
-    17903.167013322283
+    18358.300027522022
 
     >>> fc2 = dca.forecast(dr, t_end=50, dt=1.0, uptime=0.8)
     >>> fc2.eur
-    14322.533610657827
+    14686.640022017618
 
     >>> rr = dca.RatioResult(method='linear', a=0.5, b=0.001, domain='cum')
     >>> fc3 = dca.forecast(dr, t_end=50, dt=1.0, ratios={'GOR': rr})
     >>> fc3.secondary['GOR']['ratio'][0]
-    1.451229424500714
+    1.4754115099857197
 
 
 Class Objects

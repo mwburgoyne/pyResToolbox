@@ -29,6 +29,15 @@ def validate_methods(names, variables):
                     f"Invalid {method}: {variables[m]!r}. "
                     f"Valid options: {valid}"
                 )
+        else:
+            expected = class_dic[method]
+            if not isinstance(variables[m], expected):
+                valid = list(expected.__members__.keys())
+                raise ValueError(
+                    f"Invalid {method}: {variables[m]!r}. "
+                    f"Expected a {expected.__name__} Enum member or one of "
+                    f"the strings {valid}"
+                )
     if len(variables) == 1:
         return variables[0]
     else:

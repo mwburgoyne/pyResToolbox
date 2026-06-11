@@ -67,13 +67,45 @@ def __dir__():
     return __all__
 
 
+def _get_version():
+    """Resolve the package version lazily.
+
+    A repo checkout has pyproject.toml next to the package directory; read it
+    so the version matches the imported code even when a different release is
+    installed in site-packages. Installed packages have no adjacent
+    pyproject.toml and use distribution metadata instead.
+    """
+    import os
+    import re
+    pyproject = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        'pyproject.toml',
+    )
+    try:
+        with open(pyproject, encoding='utf-8') as f:
+            text = f.read()
+        if re.search(r'^name\s*=\s*"pyrestoolbox"', text, re.M):
+            match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
+            if match:
+                return match.group(1)
+    except OSError:
+        pass
+    try:
+        from importlib.metadata import version, PackageNotFoundError
+        try:
+            return version('pyrestoolbox')
+        except PackageNotFoundError:
+            pass
+    except ImportError:  # Python < 3.8 has no importlib.metadata
+        pass
+    return 'unknown'
+
+
 def __getattr__(name):
     if name in submodules:
         return importlib.import_module(f'pyrestoolbox.{name}')
-    else:
-        try:
-            return globals()[name]
-        except KeyError:
-            raise AttributeError(
-                f"Module 'pyrestoolbox' has no attribute '{name}'"
-            )
+    if name == '__version__':
+        return _get_version()
+    raise AttributeError(
+        f"Module 'pyrestoolbox' has no attribute '{name}'"
+    )

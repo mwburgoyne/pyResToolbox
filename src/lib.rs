@@ -22,6 +22,7 @@ fn _smoke_test() -> PyResult<()> {
 
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_function(wrap_pyfunction!(_smoke_test, m)?)?;
 
     // Critical properties

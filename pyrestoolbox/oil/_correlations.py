@@ -23,8 +23,8 @@ from ._constants import (
     _BO_STAN_A, _BO_STAN_B, _BO_STAN_C, _BO_STAN_EXP,
     _BO_MC_WDEN, _BO_MC_RS_COEFF,
 )
-from ._utils import check_sgs, get_real_part
-from ._density import oil_deno
+from ._utils import check_sgs, get_real_part, oil_api
+from ._density import oil_deno, _cofb_mccain
 
 
 def oil_pbub(
@@ -147,8 +147,8 @@ def oil_rs_bub(
 ) -> float:
     """ Returns Solution GOR (scf/stb | sm3/sm3) at bubble point pressure.
         Uses the inverse of the Bubble point pressure correlations, with the same method families
-        Note: At low pressures, the VALMC method will fail (generally when Rsb < 10 scf/stb).
-              The VALMC method will revert to the STAN method in these cases
+        Note: The VALMC Pb correlation has a representable maximum Pb for any given fluid
+              properties. Requesting a pb above that maximum raises a ValueError.
 
         api: Stock tank oil density (deg API)
         degf: Reservoir Temperature (deg F | deg C)
@@ -176,40 +176,66 @@ def oil_rs_bub(
 
 
     def rsbub_standing(api, degf, pb, sg_g, sg_sp) -> float:
-        #print('Standing')
         a = _STAN_T_COEFF * degf - _STAN_API_COEFF * api  # Eq 1.64
         return sg_g * (((pb - psc) / _STAN_DENOM + _STAN_OFFSET) / 10 ** a) ** (
             1 / _STAN_SG_EXP
         )  # Eq 1.72 - Subtracting 14.7 as suspect this pressure in psig
 
     def rsbub_valko_mccain(api, degf, pb, sg_g, sg_sp) -> float:
-        #print('Valko McCain')
-        # Solve via iteration. First guess using Velarde Rsb, then simple Newton Iterations
-        old_rsb = rsbub_velarde(api, degf, pb, sg_g, sg_sp)
-        standing = False
+        # Analytic inversion of the Valko-McCain (2003) Pb correlation.
+        # Step 1: solve the quadratic ln(pb) = A0 + A1*Z + A2*Z^2 for Z, taking
+        # the '+' root since ln(Pb) increases monotonically with Z over the
+        # physical range. Step 2: subtract the api, sg_sp and degf contributions
+        # to leave a target for the z1(ln(rsb)) cubic. Step 3: solve that cubic
+        # in closed form and select the real root on the physical ascending branch.
+        c_rs = [_VALMC_C[i][0] for i in range(4)]  # z1 cubic coefficients, ascending powers
+        other_vars = [api, sg_sp, degf]
+        z_other = sum(
+            _VALMC_C[i][n + 1] * other_vars[n] ** i
+            for n in range(3) for i in range(4)
+        )
 
-        old_pbcalc = oil_pbub(degf=degf, api=api, sg_sp=sg_sp, rsb=old_rsb, pbmethod=pbmethod)
-        old_err = old_pbcalc - pb
-        new_rsb = old_rsb * pb / old_pbcalc
-        i = 0
-        new_err = 1000
-        while abs(new_err) > 1e-5:
-            i += 1
-            new_pbcalc = oil_pbub(degf=degf,api=api,sg_sp=sg_sp,rsb=new_rsb,pbmethod=pbmethod)
-            new_err = new_pbcalc - pb
+        # Mirror the low-Rs linear extrapolation in pbub_valko_mccain (rsb <= 1)
+        pb_at_rsb1 = oil_pbub(degf=degf, api=api, sg_sp=sg_sp, rsb=1, pbmethod=pbmethod)
+        if pb <= pb_at_rsb1:
+            return (pb - psc) / (pb_at_rsb1 - psc)
 
-            error_slope = (new_rsb - old_rsb) / (new_err - old_err)
-            intcpt = new_rsb - error_slope * new_err
+        disc = _VALMC_LNPB_A1 ** 2 - 4 * _VALMC_LNPB_A2 * (_VALMC_LNPB_A0 - np.log(pb))
+        Z = (-_VALMC_LNPB_A1 + np.sqrt(disc)) / (2 * _VALMC_LNPB_A2)
+        z1_target = Z - z_other
 
-            old_err, old_rsb = new_err, new_rsb
+        # Upper stationary point of the z1 cubic: top of the physical ascending
+        # branch (~ln(rsb) = 9.03, i.e. rsb ~8300 scf/stb). z1 decreases beyond it,
+        # so larger Pb targets are not representable by the correlation.
+        stat_disc = (2 * c_rs[2]) ** 2 - 4 * (3 * c_rs[3]) * c_rs[1]
+        x_peak = (-2 * c_rs[2] - np.sqrt(stat_disc)) / (6 * c_rs[3])
 
-            new_rsb = intcpt
+        roots = np.roots([c_rs[3], c_rs[2], c_rs[1], c_rs[0] - z1_target])
+        branch = [
+            r.real for r in roots
+            if abs(r.imag) < 1e-9 and -1e-9 <= r.real <= x_peak + 1e-9
+        ]
+        if not branch:
+            z_max = sum(c * x_peak ** i for i, c in enumerate(c_rs)) + z_other
+            pb_max = np.exp(
+                _VALMC_LNPB_A0 + _VALMC_LNPB_A1 * z_max + _VALMC_LNPB_A2 * z_max ** 2
+            )
+            raise ValueError(
+                f"oil_rs_bub: requested pb={pb:.1f} psia exceeds the maximum Pb "
+                f"(~{pb_max:.0f} psia) representable by the Valko-McCain correlation "
+                f"for api={api}, sg_sp={sg_sp}, degf={degf}. "
+                "Use a different rsmethod (e.g. VELAR) or revise the fluid properties."
+            )
+        rsb = float(np.exp(min(branch)))
 
-            if (i > 100):
-                import warnings
-                warnings.warn("oil_rs_bub: Valko-McCain did not converge after 100 iterations", RuntimeWarning)
-                return new_rsb
-        return new_rsb
+        # Round-trip sanity check against the forward correlation
+        pb_check = oil_pbub(degf=degf, api=api, sg_sp=sg_sp, rsb=rsb, pbmethod=pbmethod)
+        if abs(pb_check - pb) > 1e-6 * pb:
+            raise ValueError(
+                f"oil_rs_bub: Valko-McCain inversion failed round-trip check for "
+                f"pb={pb:.1f} psia (recovered {pb_check:.1f} psia)"
+            )
+        return rsb
 
     def rsbub_velarde(api, degf, pb, sg_g, sg_sp) -> float:
         x = _VEL_X_C0 * degf ** _VEL_X_T_EXP - (_VEL_X_API_C * api ** _VEL_X_API_EXP) # Eq 14
@@ -236,7 +262,6 @@ def oil_rs_bub(
         api=api, degf=degf, pb=pb, sg_g=sg_g, sg_sp=sg_sp
     )
     if np.isnan(rsbub):
-        import warnings
         warnings.warn("oil_rs_bub: correlation returned NaN, returning 0", RuntimeWarning)
         return 0
     if metric:
@@ -305,8 +330,6 @@ def oil_rs(
         )
         rsb = get_real_part(rsb)
 
-    #print(rsb)
-
     if p >= pb:
         if metric:
             return rsb * SCF_PER_STB_TO_SM3_PER_SM3
@@ -344,9 +367,16 @@ def oil_rs(
 
     def rs_standing(api, degf, sg_g, sg_sp, p, pb, rsb):
         a = _STAN_T_COEFF * degf - _STAN_API_COEFF * api  # Eq 1.64
-        return sg_g * (((p - psc) / _STAN_DENOM + _STAN_OFFSET) / 10 ** a) ** (
-            1 / _STAN_SG_EXP
-        )  # Eq 1.72 - Subtracting 14.7 as suspect this pressure in psig
+
+        def rs_stan_raw(press):
+            return sg_g * (((press - psc) / _STAN_DENOM + _STAN_OFFSET) / 10 ** a) ** (
+                1 / _STAN_SG_EXP
+            )  # Eq 1.72 - Subtracting 14.7 as suspect this pressure in psig
+
+        # Scale so that Rs(pb) == rsb, mirroring the VALMC rs_scaler approach.
+        # Without this, user-supplied rsb/pb pairs produce an Rs discontinuity at Pb.
+        rs_scaler = rsb / rs_stan_raw(pb)
+        return rs_scaler * rs_stan_raw(p)
 
     def rs_valko_mccain(api, degf, sg_g, sg_sp, p, pb, rsb):
         rsb_valko = oil_rs_bub(api, degf, pb, sg_g, sg_sp, rsmethod = 'VALMC') # Rsb from Valko-McCain approach
@@ -392,7 +422,7 @@ def oil_bo(
         sg_sp: Separator gas specific gravity (relative to air).
         sg_o: Stock tank oil specific gravity (SG relative to water).
         bomethod: A string or deno_method Enum class that specifies one of following calculation choices;
-                   STAN: Standing Correlation
+                   STAN: Standing Correlation for saturated Bo, with McCain cofb undersaturated correction above Pb
                    MCAIN: McCain approach, calculating from densities
         denomethod: A string or deno_method Enum class that specifies one of following calculation choices;
                    SWMH: Standing, Witte, McCain-Hill (1995) - Default
@@ -413,6 +443,15 @@ def oil_bo(
     )
 
     def Bo_standing(p, pb, degf, rs, rsb, sg_sp, sg_g, sg_o):
+        if p > pb:
+            # Saturated Bo at Pb (Rs = rsb), then McCain Eq 3.20 undersaturated
+            # correction using the cofb compressibility evaluated at p
+            Bob = (
+                _BO_STAN_A
+                + _BO_STAN_B * (rsb * (sg_g / sg_o) ** 0.5 + _BO_STAN_C * degf) ** _BO_STAN_EXP
+            )
+            cofb_p = _cofb_mccain(oil_api(sg_o), sg_sp, pb, p, rsb, degf)
+            return Bob * np.exp(-cofb_p * (p - pb))
         Bob = (
             _BO_STAN_A
             + _BO_STAN_B * (rs * (sg_g / sg_o) ** 0.5 + _BO_STAN_C * degf) ** _BO_STAN_EXP
@@ -478,7 +517,7 @@ def oil_viso(p: float, api: float, degf: float, pb: float, rs: float, metric: bo
         uob = uo_br(pb, api, degf, pb, rs)
         if uob <= 0:
             uob = 0.01  # Safety floor
-        loguob = np.log(uob)
+        loguob = np.log10(uob)  # Eq 3.24b defines X in terms of log10(uob)
         A = (
             _PF_POLY[0]
             + _PF_POLY[1] * loguob

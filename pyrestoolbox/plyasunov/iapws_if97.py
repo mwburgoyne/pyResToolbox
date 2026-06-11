@@ -99,7 +99,10 @@ def _check_region1(T, P):
     if T < 273.15 or T > 623.15:
         raise ValueError(f"Temperature {T} K is outside IAPWS-IF97 Region 1 bounds (273.15-623.15 K)")
     if P <= 0 or P > 100:
-        raise ValueError(f"Pressure {P} MPa is outside IAPWS-IF97 Region 1 bounds (0-100 MPa)")
+        raise ValueError(
+            f"Pressure {P} MPa is outside IAPWS-IF97 Region 1 bounds. "
+            "The correlation is valid only to the Region 1 limit of "
+            "100 MPa (14,503 psia); supply a lower pressure.")
 
 def rho_if97(T, P):
     """

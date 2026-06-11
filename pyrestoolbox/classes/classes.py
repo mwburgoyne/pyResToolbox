@@ -24,14 +24,14 @@ Enum classes for method selection and class_dic registry.
 
 Enums
 -----
-z_method      Z-factor calculation method (DAK, HY, WYW, BNS)
-c_method      Critical property method (PMC, SUT, BNS)
+z_method      Z-factor calculation method (DAK, HY, BNS)
+c_method      Critical property method (PMC, SUT, BUR, BNS)
 pb_method     Bubble point method (STAN, VALMC, VELAR)
 rs_method     Solution GOR method (VELAR, STAN, VALMC)
 bo_method     Oil FVF method (MCAIN, STAN)
 uo_method     Oil viscosity method (BR)
 deno_method   Oil density method (SWMH)
-co_method     Oil compressibility method (NUM)
+co_method     Oil compressibility method (EXPLT)
 kr_family     Relative permeability model family (COR, LET, JER)
 kr_table      Relative permeability table type (SWOF, SGOF, SGWFN)
 vlp_method    VLP multiphase flow correlation (HB, WG, GRAY, BB)
@@ -54,7 +54,6 @@ from enum import Enum
 class z_method(Enum):  # Gas Z-Factor calculation model
     DAK = 0
     HY = 1
-    WYW = 2
     BNS = 3
     BUR = 3  # Legacy alias for BNS
 

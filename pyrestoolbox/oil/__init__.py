@@ -33,7 +33,7 @@ oil_sg              Oil specific gravity from API
 oil_api             API gravity from specific gravity
 oil_ja_sg           Jacoby aromaticity SG
 oil_twu_props       Twu critical property correlations
-oil_rs_st           Standing Rs correlation
+oil_rs_st           Stock-tank GOR (Valko-McCain 2003 Eq 3-2)
 oil_rate_radial     Radial oil flow rate (STB/d)
 oil_rate_linear     Linear oil flow rate (STB/d)
 oil_harmonize         Harmonize consistent Pb, Rsb, and viscosity

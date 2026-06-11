@@ -148,7 +148,7 @@ def test_doc_gas_sg_pure_methane():
 def test_bns_recommended_for_high_inerts():
     """gas.rst: BNS method is strongly recommended for high CO2/H2S/N2/H2 gases.
 
-    Standard correlations (DAK/HY/WYW with PMC/SUT) were developed for sweet natural
+    Standard correlations (DAK/HY with PMC/SUT) were developed for sweet natural
     gas and become unreliable at high impurity concentrations. The BNS method (tuned
     5-component Peng-Robinson EOS) handles the full range from pure hydrocarbon to
     100% inerts. This test demonstrates the BNS method working correctly for:
@@ -245,13 +245,13 @@ def test_doc_gas_rate_linear_scalar():
     """gas.rst: gas_rate_linear scalar"""
     result = gas.gas_rate_linear(k=0.1, area=50, length=200, pr=2000, pwf=250, degf=180, sg=0.8)
     assert isinstance(result, float)
-    assert abs(result - 8.202200317597859) / 8.202200317597859 < RTOL
+    assert abs(result - 1.3054025082153438) / 1.3054025082153438 < RTOL
 
 def test_doc_gas_rate_linear_array():
     """gas.rst: gas_rate_linear array"""
     result = gas.gas_rate_linear(k=0.1, area=50, length=200, pr=[2000, 1000, 500], pwf=250, degf=180, sg=0.8)
     assert isinstance(result, np.ndarray)
-    expected = np.array([8.20220032, 2.10691337, 0.42685002])
+    expected = np.array([1.30540251, 0.33532381, 0.06793513])
     np.testing.assert_allclose(result, expected, rtol=RTOL)
 
 # =============================================================================
@@ -277,7 +277,7 @@ def test_doc_oil_rs_st():
     """oil.rst: oil_rs_st"""
     result = oil.oil_rs_st(psp=114.7, degf_sp=80, api=38)
     assert isinstance(result, float)
-    assert abs(result - 4.176458005559282) / 4.176458005559282 < RTOL
+    assert abs(result - 65.13473727262924) / 65.13473727262924 < RTOL
 
 def test_doc_oil_pbub_valmc():
     """oil.rst: oil_pbub with VALMC default"""
@@ -402,13 +402,13 @@ def test_doc_oil_rate_radial_scalar():
     """oil.rst: oil_rate_radial scalar with Vogel"""
     result = oil.oil_rate_radial(k=20, h=20, pr=1500, pwf=250, r_w=0.3, r_ext=1500, uo=0.8, bo=1.4, vogel=True, pb=1800)
     assert isinstance(result, float)
-    assert abs(result - 213.8147848023242) / 213.8147848023242 < RTOL
+    assert abs(result - 256.21602502158214) / 256.21602502158214 < RTOL
 
 def test_doc_oil_rate_radial_array():
     """oil.rst: oil_rate_radial array with Vogel"""
     result = oil.oil_rate_radial(k=20, h=20, pr=[1500, 2000], pwf=250, r_w=0.3, r_ext=1500, uo=0.8, bo=1.4, vogel=True, pb=1800)
     assert isinstance(result, np.ndarray)
-    expected = np.array([213.8147848, 376.58731835])
+    expected = np.array([256.21602502, 376.58731835])
     np.testing.assert_allclose(result, expected, rtol=RTOL)
 
 def test_doc_oil_rate_linear_scalar():
@@ -477,26 +477,26 @@ def test_doc_make_pvtw_table():
     assert abs(result['bw_ref'] - 1.027589195773527) / 1.027589195773527 < RTOL
     assert isinstance(result['cw_ref'], list) and len(result['cw_ref']) == 2, "cw_ref should be [usat, sat] list"
     assert abs(result['cw_ref'][0] - 3.0887176266534516e-06) / 3.0887176266534516e-06 < RTOL
-    assert abs(result['visw_ref'] - 0.3083544960904146) / 0.3083544960904146 < RTOL
+    assert abs(result['visw_ref'] - 0.30791821315761636) / 0.30791821315761636 < RTOL
     assert 'table' in result
 
 def test_doc_brine_props():
     """brine.rst: brine_props"""
     bw, lsg, visw, cw, rsw = brine.brine_props(p=160, degf=135, wt=1.5, ch4_sat=1.0)
-    assert abs(bw - 1.0152007040056148) / 1.0152007040056148 < RTOL
-    assert abs(lsg - 0.9950108179684295) / 0.9950108179684295 < RTOL
-    assert abs(visw - 0.4994004662758671) / 0.4994004662758671 < RTOL
+    assert abs(bw - 1.0152005799432318) / 1.0152005799432318 < RTOL
+    assert abs(lsg - 0.9950108380379709) / 0.9950108380379709 < RTOL
+    assert abs(visw - 0.49829396877490323) / 0.49829396877490323 < RTOL
     assert isinstance(cw, list) and len(cw) == 2, f"Cw should be [usat, sat] list, got {cw}"
-    assert abs(cw[0] - 2.969627494768876e-06) / 2.969627494768876e-06 < RTOL  # Undersaturated Cw
-    assert abs(cw[1] - 0.0001539690974662865) / 0.0001539690974662865 < RTOL  # Saturated Cw
-    assert abs(rsw - 1.2540982731813703) / 1.2540982731813703 < RTOL
+    assert abs(cw[0] - 2.9696277255527504e-06) / 2.9696277255527504e-06 < RTOL  # Undersaturated Cw
+    assert abs(cw[1] - 0.0001539877228225709) / 0.0001539877228225709 < RTOL  # Saturated Cw
+    assert abs(rsw - 1.2567682353688225) / 1.2567682353688225 < RTOL
 
 def test_doc_co2_brine_field():
     """brine.rst: CO2_Brine_Mixture field units"""
     mix = brine.CO2_Brine_Mixture(pres=5000, temp=275, ppm=30000, metric=False)
     assert isinstance(mix.bw, list)
     assert len(mix.bw) == 3
-    assert abs(float(mix.bw[0]) - 1.108578337107381) / 1.108578337107381 < RTOL
+    assert abs(float(mix.bw[0]) - 1.1091672843736888) / 1.1091672843736888 < RTOL
     assert isinstance(mix.x, np.ndarray)
     assert abs(mix.x[0] - 0.02431225) / 0.02431225 < RTOL
 
@@ -518,19 +518,19 @@ def test_doc_sw_pure_co2_field():
     mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=1.0, metric=False)
     assert isinstance(mix.bDen, list) and len(mix.bDen) == 3
     assert abs(mix.bDen[0] - 0.9733769457162755) / 0.9733769457162755 < RTOL
-    assert abs(mix.Rs['CO2'] - 140.90858294709142) / 140.90858294709142 < RTOL
-    assert abs(mix.bw[0] - 1.0968991160573776) / 1.0968991160573776 < RTOL
+    assert abs(mix.Rs['CO2'] - 139.57908352590252) / 139.57908352590252 < RTOL
+    assert abs(mix.bw[0] - 1.096443890843725) / 1.096443890843725 < RTOL
 
 def test_doc_sw_pure_ch4_field():
     """brine.rst: SoreideWhitson pure CH4 field units"""
     mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=0, sg=0.554, metric=False)
-    assert abs(mix.Rs['CH4'] - 21.414423540331008) / 21.414423540331008 < RTOL
+    assert abs(mix.Rs['CH4'] - 21.21234560600256) / 21.21234560600256 < RTOL
     assert abs(mix.bDen[0] - 0.9641137202631425) / 0.9641137202631425 < RTOL
 
 def test_doc_sw_mixed_gas_metric():
     """brine.rst: SoreideWhitson mixed gas metric"""
     mix = brine.SoreideWhitson(pres=200, temp=80, ppm=10000, y_CO2=0.1, y_H2S=0.05, sg=0.7, metric=True)
-    assert abs(mix.Rs_total - 6.32875877743837) / 6.32875877743837 < RTOL
+    assert abs(mix.Rs_total - 6.30912473356662) / 6.30912473356662 < RTOL
     assert abs(mix.bDen[0] - 0.9854845215724698) / 0.9854845215724698 < RTOL
     assert 'CO2' in mix.gas_comp and 'H2S' in mix.gas_comp and 'CH4' in mix.gas_comp
 
@@ -671,19 +671,19 @@ def test_doc_oil_rate_radial_with_pvt():
     """oil.rst: oil_rate_radial using OilPVT object"""
     opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     result = oil.oil_rate_radial(k=20, h=20, pr=3000, pwf=2000, r_w=0.3, r_ext=1500, oil_pvt=opvt, degf=180)
-    assert abs(result - 423.031513775435) / 423.031513775435 < RTOL
+    assert abs(result - 411.5386897307136) / 411.5386897307136 < RTOL
 
 def test_doc_oil_rate_radial_with_vis_tuned_pvt():
     """oil.rst: oil_rate_radial using viscosity-tuned OilPVT"""
     opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500, degf=180, uo_target=1.0, p_uo=2500)
     result = oil.oil_rate_radial(k=20, h=20, pr=3000, pwf=2000, r_w=0.3, r_ext=1500, oil_pvt=opvt, degf=180)
-    assert abs(result - 270.5491761896866) / 270.5491761896866 < RTOL
+    assert abs(result - 263.1989576453467) / 263.1989576453467 < RTOL
 
 def test_doc_oil_rate_linear_with_pvt():
     """oil.rst: oil_rate_linear using OilPVT object"""
     opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     result = oil.oil_rate_linear(k=0.1, area=15000, pr=3000, pwf=500, length=500, oil_pvt=opvt, degf=180)
-    assert abs(result - 7.342528629971546) / 7.342528629971546 < RTOL
+    assert abs(result - 7.1430484805272005) / 7.1430484805272005 < RTOL
 
 def test_doc_oilpvt_auto_harmonize_pb_only():
     """oil.rst: OilPVT auto-harmonization with pb only"""
@@ -711,7 +711,7 @@ def test_doc_gas_rate_linear_with_pvt():
     """gas.rst: gas_rate_linear using GasPVT object"""
     gpvt = gas.GasPVT(sg=0.8)
     result = gas.gas_rate_linear(k=0.1, area=50, length=200, pr=2000, pwf=250, degf=180, gas_pvt=gpvt)
-    assert abs(result - 8.202199932859799) / 8.202199932859799 < RTOL
+    assert abs(result - 1.3054025082153438) / 1.3054025082153438 < RTOL
 
 # =============================================================================
 # Gas Hydrate Documentation Examples (docs/gas.rst)
@@ -728,14 +728,14 @@ def test_doc_gas_hydrate_basic():
 def test_doc_gas_hydrate_motiee():
     """gas.rst: gas_hydrate with Motiee method"""
     r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, hydmethod='MOTIEE')
-    assert abs(r.hft - 96.20360674625366) / 96.20360674625366 < RTOL
+    assert abs(r.hft - 60.151725150000026) / 60.151725150000026 < RTOL
 
 def test_doc_gas_hydrate_meg_inhibitor():
     """gas.rst: gas_hydrate with MEG 25wt%"""
-    r = gas.gas_hydrate(p=2000, degf=80, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEG', inhibitor_wt_pct=25)
-    assert abs(r.inhibited_hft - 97.97592063045367) / 97.97592063045367 < RTOL
+    r = gas.gas_hydrate(p=2000, degf=50, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEG', inhibitor_wt_pct=25)
+    assert abs(r.inhibited_hft - 60.10064544530876) / 60.10064544530876 < RTOL
     assert abs(r.inhibitor_depression - 11.0109375) / 11.0109375 < RTOL
-    assert abs(r.required_inhibitor_wt_pct - 58.27975454526845) / 58.27975454526845 < RTOL
+    assert abs(r.required_inhibitor_wt_pct - 45.41491129114502) / 45.41491129114502 < RTOL
 
 def test_doc_gas_hydrate_metric():
     """gas.rst: gas_hydrate with metric units"""
@@ -745,22 +745,22 @@ def test_doc_gas_hydrate_metric():
 
 def test_doc_gas_hydrate_meoh_capped():
     """gas.rst: gas_hydrate with MEOH inhibitor capping and injection rate"""
-    r = gas.gas_hydrate(p=2000, degf=60, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH',
+    r = gas.gas_hydrate(p=2000, degf=40, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH',
                          p_res=4000, degf_res=250)
     assert r.inhibitor_underdosed is True
     assert r.required_inhibitor_wt_pct == 25.0
     assert r.max_inhibitor_wt_pct == 25.0
-    assert abs(r.water_condensed - 1.6171304990445141) / 1.6171304990445141 < RTOL
-    assert abs(r.inhibitor_mass_rate - 188.77303358846294) / 188.77303358846294 < RTOL
-    assert abs(r.inhibitor_vol_rate - 28.596710738497325) / 28.596710738497325 < RTOL
+    assert abs(r.water_condensed - 1.6332263666472937) / 1.6332263666472937 < RTOL
+    assert abs(r.inhibitor_mass_rate - 190.6519578666274) / 190.6519578666274 < RTOL
+    assert abs(r.inhibitor_vol_rate - 28.881343840274702) / 28.881343840274702 < RTOL
 
 def test_doc_gas_hydrate_composition():
     """gas.rst: gas_hydrate with CO2 composition and reservoir P,T"""
-    r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, hydmethod='MOTIEE', inhibitor_type='MEG', co2=0.05,
+    r = gas.gas_hydrate(p=1000, degf=50, sg=0.65, hydmethod='MOTIEE', inhibitor_type='MEG', co2=0.05,
                          p_res=3000, degf_res=200)
-    assert abs(r.water_vaporized_res - 0.9105104447421333) / 0.9105104447421333 < RTOL
-    assert abs(r.water_condensed - 0.8606277674562288) / 0.8606277674562288 < RTOL
-    assert abs(r.required_inhibitor_wt_pct - 68.1447380066354) / 68.1447380066354 < RTOL
+    assert abs(r.water_vaporized_res - 0.9105104447419109) / 0.9105104447419109 < RTOL
+    assert abs(r.water_condensed - 0.8751584110633173) / 0.8751584110633173 < RTOL
+    assert abs(r.required_inhibitor_wt_pct - 23.07967423824071) / 23.07967423824071 < RTOL
     assert r.inhibitor_underdosed is False
 
 def test_doc_gas_hydrate_reservoir_pt():
@@ -768,8 +768,8 @@ def test_doc_gas_hydrate_reservoir_pt():
     r = gas.gas_hydrate(p=500, degf=40, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEG',
                          p_res=4000, degf_res=250)
     assert abs(r.water_vaporized_res - 1.651022101177945) / 1.651022101177945 < RTOL
-    assert abs(r.inhibitor_mass_rate - 1314.312441059706) / 1314.312441059706 < RTOL
-    assert r.inhibitor_underdosed is True
+    assert abs(r.inhibitor_mass_rate - 272.313861641059) / 272.313861641059 < RTOL
+    assert r.inhibitor_underdosed is False
 
 # =============================================================================
 # Gas/Oil Module GasPVT/OilPVT Documentation Examples (docs/gas.rst, docs/oil.rst)
@@ -971,7 +971,7 @@ def test_doc_nodal_fbhp_gas():
     c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
     result = nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas',
                         qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    assert abs(result - 954.8384864703888) / 954.8384864703888 < RTOL
+    assert abs(result - 962.1287441454741) / 962.1287441454741 < RTOL
 
 def test_doc_nodal_fbhp_gas_wg():
     """nodal.rst: fbhp gas well WG"""
@@ -985,14 +985,14 @@ def test_doc_nodal_fbhp_gas_gray():
     c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
     result = nodal.fbhp(thp=500, completion=c, vlpmethod='GRAY', well_type='gas',
                         qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    assert abs(result - 1940.034905804135) / 1940.034905804135 < RTOL
+    assert abs(result - 1066.6990456110436) / 1066.6990456110436 < RTOL
 
 def test_doc_nodal_fbhp_gas_bb():
     """nodal.rst: fbhp gas well BB"""
     c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
     result = nodal.fbhp(thp=500, completion=c, vlpmethod='BB', well_type='gas',
                         qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    assert abs(result - 1213.2399909265969) / 1213.2399909265969 < RTOL
+    assert abs(result - 1224.493443200605) / 1224.493443200605 < RTOL
 
 def test_doc_nodal_fbhp_oil():
     """nodal.rst: fbhp oil well HB"""
@@ -1000,7 +1000,7 @@ def test_doc_nodal_fbhp_oil():
     result = nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil',
                         qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65,
                         pb=2500, rsb=500, sgsp=0.65, api=35)
-    assert abs(result - 1770.5840097037972) / 1770.5840097037972 < RTOL
+    assert abs(result - 1783.6902402593976) / 1783.6902402593976 < RTOL
 
 def test_doc_nodal_fbhp_oil_pvt():
     """nodal.rst: fbhp oil well with OilPVT"""
@@ -1008,7 +1008,7 @@ def test_doc_nodal_fbhp_oil_pvt():
     opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     result = nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil',
                         oil_pvt=opvt, qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65)
-    assert abs(result - 1771.3518436635964) / 1771.3518436635964 < RTOL
+    assert abs(result - 1784.4602074684308) / 1784.4602074684308 < RTOL
 
 def test_doc_nodal_outflow_curve():
     """nodal.rst: outflow_curve gas"""
@@ -1016,7 +1016,7 @@ def test_doc_nodal_outflow_curve():
     result = nodal.outflow_curve(thp=500, completion=c, vlpmethod='HB',
                                   well_type='gas', rates=[2.0, 5.0, 10.0, 15.0, 20.0], gsg=0.65)
     assert result['rates'] == [2.0, 5.0, 10.0, 15.0, 20.0]
-    expected_bhp = [677.8, 927.6, 1502.5, 2127.0, 2765.2]
+    expected_bhp = [681.6, 935.2, 1512.3, 2138.0, 2777.1]
     for actual, expected in zip(result['bhp'], expected_bhp):
         assert abs(round(actual, 1) - expected) < 0.2, f"BHP mismatch: {round(actual, 1)} vs {expected}"
 
@@ -1037,8 +1037,8 @@ def test_doc_nodal_operating_point_gas():
     r = nodal.Reservoir(pr=3000, degf=200, k=10, h=50, re=1500, rw=0.35, S=2, D=0.001)
     result = nodal.operating_point(thp=500, completion=c, reservoir=r,
                                     vlpmethod='HB', well_type='gas', gsg=0.65)
-    assert abs(round(result['rate'], 2) - 10.60) < 0.02
-    assert abs(round(result['bhp'], 1) - 1576.4) < 0.5
+    assert abs(round(result['rate'], 2) - 10.58) < 0.02
+    assert abs(round(result['bhp'], 1) - 1583.2) < 0.5
 
 def test_doc_nodal_operating_point_oil():
     """nodal.rst: operating_point oil"""
@@ -1048,8 +1048,8 @@ def test_doc_nodal_operating_point_oil():
     result = nodal.operating_point(thp=200, completion=c, reservoir=r,
                                     vlpmethod='HB', well_type='oil',
                                     oil_pvt=opvt, gor=800, wc=0.3, gsg=0.65)
-    assert abs(round(result['rate'], 1) - 2019.0) < 1.0
-    assert abs(round(result['bhp'], 1) - 1778.5) < 1.0
+    assert abs(round(result['rate'], 1) - 1969.8) < 1.0
+    assert abs(round(result['bhp'], 1) - 1774.3) < 1.0
 
 
 def test_doc_nodal_wellsegment_vertical():
@@ -1114,7 +1114,7 @@ def test_doc_nodal_fbhp_deviated():
     c_dev = nodal.Completion(segments=segs, tht=100, bht=200)
     result = nodal.fbhp(thp=500, completion=c_dev, vlpmethod='HB', well_type='gas',
                         qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    assert abs(result - 926.7968375529219) < 0.01
+    assert abs(result - 933.6848384590953) < 0.01
 
 
 # =============================================================================
@@ -1216,13 +1216,13 @@ def test_doc_dca_forecast():
     """dca.rst: forecast basic"""
     dr = dca.DeclineResult(method='exponential', qi=1000, di=0.05, b=0)
     fc = dca.forecast(dr, t_end=50, dt=1.0)
-    assert abs(fc.eur - 17903.167013322283) / 17903.167013322283 < RTOL
+    assert abs(fc.eur - 18358.300027522022) / 18358.300027522022 < RTOL
 
 def test_doc_dca_forecast_uptime():
     """dca.rst: forecast with uptime"""
     dr = dca.DeclineResult(method='exponential', qi=1000, di=0.05, b=0)
     fc = dca.forecast(dr, t_end=50, dt=1.0, uptime=0.8)
-    assert abs(fc.eur - 14322.533610657827) / 14322.533610657827 < RTOL
+    assert abs(fc.eur - 14686.640022017618) / 14686.640022017618 < RTOL
 
 def test_doc_dca_forecast_ratio():
     """dca.rst: forecast with ratio"""
@@ -1230,7 +1230,7 @@ def test_doc_dca_forecast_ratio():
     rr = dca.RatioResult(method='linear', a=0.5, b=0.001, domain='cum')
     fc = dca.forecast(dr, t_end=50, dt=1.0, ratios={'GOR': rr})
     assert fc.secondary is not None
-    assert abs(fc.secondary['GOR']['ratio'][0] - 1.451229424500714) / 1.451229424500714 < RTOL
+    assert abs(fc.secondary['GOR']['ratio'][0] - 1.4754115099857197) / 1.4754115099857197 < RTOL
 
 def test_doc_dca_fit_decline_windowed():
     """dca.rst: fit_decline windowed example"""
@@ -1265,9 +1265,9 @@ def test_doc_matbal_gas():
         Gp=[0, 5, 12, 22, 35],
         degf=200, sg=0.65
     )
-    assert abs(r.ogip - 87.602774253829) / 87.602774253829 < RTOL
-    assert abs(r.z_initial - 0.9163208839373836) / 0.9163208839373836 < RTOL
-    assert abs(r.r_squared - 0.9734794008096929) / 0.9734794008096929 < RTOL
+    assert abs(r.ogip - 87.60264634235111) / 87.60264634235111 < RTOL
+    assert abs(r.z_initial - 0.9163202021564056) / 0.9163202021564056 < RTOL
+    assert abs(r.r_squared - 0.9734793606102145) / 0.9734793606102145 < RTOL
 
 def test_doc_matbal_oil():
     """matbal.rst: oil_matbal"""
@@ -1277,8 +1277,8 @@ def test_doc_matbal_oil():
         degf=220, api=35, sg_sp=0.75,
         pb=3500, rsb=500, cf=3e-6, sw_i=0.2, cw=3e-6
     )
-    assert abs(r.ooip - 82793519.84914012) / 82793519.84914012 < RTOL
-    assert abs(r.drive_indices['DDI'][1] - 0.7108509458427899) / 0.7108509458427899 < RTOL
+    assert abs(r.ooip - 82793518.1467637) / 82793518.1467637 < RTOL
+    assert abs(r.drive_indices['DDI'][1] - 0.7108509527793809) / 0.7108509527793809 < RTOL
 
 def test_doc_matbal_oil_aquifer():
     """matbal.rst: oil_matbal water-drive (We)"""
@@ -1289,7 +1289,7 @@ def test_doc_matbal_oil_aquifer():
         pb=3500, rsb=500, cf=3e-6, sw_i=0.2, cw=3e-6,
         We=[0, 3e5, 1.2e6, 3.0e6]
     )
-    assert abs(r.ooip - 58621028.243056096) / 58621028.243056096 < RTOL
+    assert abs(r.ooip - 58621027.15996399) / 58621027.15996399 < RTOL
     assert abs(r.drive_indices['WDI'][-1] - 0.4055063920332815) / 0.4055063920332815 < RTOL
 
 def test_doc_matbal_gas_cole():
@@ -1300,8 +1300,8 @@ def test_doc_matbal_gas_cole():
         degf=200, sg=0.65
     )
     assert r.method == 'pz'
-    assert abs(r.cole_F_over_Et[1] - 53.34214259832056) / 53.34214259832056 < RTOL
-    assert abs(r.cole_F_over_Et[2] - 62.64134359331348) / 62.64134359331348 < RTOL
+    assert abs(r.cole_F_over_Et[1] - 53.342120020574896) / 53.342120020574896 < RTOL
+    assert abs(r.cole_F_over_Et[2] - 62.641251784427226) / 62.641251784427226 < RTOL
 
 def test_doc_matbal_gas_havlena_odeh():
     """matbal.rst: gas_matbal Havlena-Odeh example"""
@@ -1312,7 +1312,7 @@ def test_doc_matbal_gas_havlena_odeh():
         We=[0, 5e6, 15e6, 35e6, 60e6]
     )
     assert r.method == 'havlena_odeh'
-    assert abs(r.ogip - 67036445117.070206) / 67036445117.070206 < RTOL
+    assert abs(r.ogip - 67036355572.60765) / 67036355572.60765 < RTOL
 
 def test_doc_matbal_gas_pvt_z_table():
     """matbal.rst: gas_matbal tabulated PVT (Z) example"""
@@ -1325,8 +1325,8 @@ def test_doc_matbal_gas_pvt_z_table():
         degf=200, sg=0.65,
         pvt_table={'p': p_table, 'Z': Z_table}
     )
-    assert abs(r.ogip - 87.602774253829) / 87.602774253829 < RTOL
-    assert abs(r.z_initial - 0.9163208839373836) / 0.9163208839373836 < RTOL
+    assert abs(r.ogip - 87.60264634235111) / 87.60264634235111 < RTOL
+    assert abs(r.z_initial - 0.9163202021564056) / 0.9163202021564056 < RTOL
 
 def test_doc_matbal_oil_regression():
     """matbal.rst: oil_matbal regression example"""
@@ -1340,7 +1340,7 @@ def test_doc_matbal_oil_regression():
     )
     assert abs(r.regressed['m'] - 2.0) < RTOL
     assert abs(r.regressed['cf'] - 5e-05) / 5e-05 < RTOL
-    assert abs(r.ooip - 1468306.5302524716) / 1468306.5302524716 < RTOL
+    assert abs(r.ooip - 1468312.3564986854) / 1468312.3564986854 < RTOL
 
 def test_doc_matbal_oil_pvt_table():
     """matbal.rst: oil_matbal tabulated PVT example"""
@@ -1358,7 +1358,7 @@ def test_doc_matbal_oil_pvt_table():
         pb=pb, rsb=rsb, cf=3e-6, sw_i=0.2, cw=3e-6,
         pvt_table={'p': p_table, 'Rs': Rs_t, 'Bo': Bo_t, 'Bg': Bg_t}
     )
-    assert abs(r.ooip - 82793519.84914012) / 82793519.84914012 < RTOL
+    assert abs(r.ooip - 82793518.1467637) / 82793518.1467637 < RTOL
 
 
 # =============================================================================
@@ -1372,7 +1372,7 @@ def test_doc_recommend_gas_defaults():
     r = recommend.recommend_gas_methods()
     assert r['zmethod'].recommended == 'DAK'
     assert r['cmethod'].recommended == 'PMC'
-    assert r['zmethod'].alternatives == ['HY', 'WYW', 'BNS']
+    assert r['zmethod'].alternatives == ['HY', 'BNS']
 
 def test_doc_recommend_gas_h2():
     """recommend.rst: recommend_gas_methods with H2"""

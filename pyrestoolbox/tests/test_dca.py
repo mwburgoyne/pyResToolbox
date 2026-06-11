@@ -673,3 +673,32 @@ def test_fit_hyperbolic_cum_outliers():
     q_noisy[45] = q[45] * 3
     result = dca.fit_decline_cum(Np, q_noisy, method='hyperbolic')
     assert 0.1 < result.b < 0.9
+
+
+# ======================== forecast analytic cumulative regression ========================
+
+def test_forecast_eur_matches_analytic_eur():
+    """Regression: forecast now uses analytic cumulative (arps_cum/duong_cum)
+    instead of right-rectangle cumsum, which biased EUR low by ~half a
+    timestep of production. Truncated forecast EUR must match eur() to
+    within grid resolution."""
+    result = dca.DeclineResult(method='exponential', qi=1000, di=0.05, b=0)
+    fc = dca.forecast(result, t_end=500, dt=1.0, q_min=50)
+    analytic = dca.eur(qi=1000, di=0.05, b=0, q_min=50)
+    assert abs(fc.eur - analytic) / analytic < 0.01
+
+    # Untruncated case: Qcum at t equals arps_cum exactly
+    fc2 = dca.forecast(result, t_end=50, dt=1.0)
+    expected = float(dca.arps_cum(1000, 0.05, 0, 50))
+    assert abs(fc2.eur - expected) / expected < 1e-12
+
+
+def test_fit_best_common_subset_with_t0():
+    """Regression: with a t=0 point present, method='best' compares all
+    models on the common t > 0 subset (the Duong fitter drops t <= 0
+    internally, so its stored r_squared covers a different subset)."""
+    t = np.arange(0, 51, dtype=float)
+    q = 1000 * np.exp(-0.05 * t)
+    result = dca.fit_decline(t, q, method='best')
+    assert result.method == 'exponential'
+    assert result.r_squared > 0.999

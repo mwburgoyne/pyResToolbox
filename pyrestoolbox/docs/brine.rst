@@ -20,6 +20,10 @@ All three brine models default to oilfield units (psia, degF, 1/psi, scf/stb) an
 - ``CO2_Brine_Mixture``: ``metric=False`` (default).
 - ``SoreideWhitson``: ``metric=False`` (default).
 
+All three models compute freshwater density with IAPWS-IF97 Region 1, which is
+valid up to the Region 1 limit of 100 MPa (14,503 psia). Supplying a higher
+pressure raises ``ValueError``.
+
 .. note::
 
     All "standard" volumes (Bw, Rs) use oilfield standard conditions (60 deg F, 14.696 psia) regardless of unit system.
@@ -109,12 +113,12 @@ Examples:
     >>> print('Cw_usat:', cw[0])
     >>> print('Cw_sat:', cw[1])
     >>> print('Rsw:', rsw)
-    Bw: 1.0152007040056148
-    SGw: 0.9950108179684295
-    Visw: 0.4994004662758671
-    Cw_usat: 2.969627494768876e-06
-    Cw_sat: 0.0001539690974662865
-    Rsw: 1.2540982731813703
+    Bw: 1.0152005799432318
+    SGw: 0.9950108380379709
+    Visw: 0.49829396877490323
+    Cw_usat: 2.9696277255527504e-06
+    Cw_sat: 0.0001539877228225709
+    Rsw: 1.2567682353688225
 
 .. note::
 
@@ -203,7 +207,7 @@ Usage example for 5000 psia x 275 deg F and 3% NaCl brine:
     >>> from pyrestoolbox import brine
     >>> mix = brine.CO2_Brine_Mixture(pres = 5000, temp = 275, ppm = 30000, metric = False)
     >>> mix.bw  # Returns [CO2 Saturated, Pure Brine, Freshwater]
-    [1.108578337107381, 1.054302417027164, 1.0542033928155845]
+    [1.1091672843736888, 1.054302417027164, 1.0542033928155845]
     >>> mix.x  # Returns molar fractions in aqueous phase [xCO2, xH2O]
     array([0.02431225, 0.95743209])
     
@@ -305,7 +309,7 @@ Examples:
     >>> result['cw_ref']
     [3.0887176266534516e-06, 3.0887176266534516e-06]
     >>> result['visw_ref']
-    0.3083544960904146
+    0.30791821315761636
 
 pyrestoolbox.brine.SoreideWhitson
 ======================
@@ -373,7 +377,7 @@ based on the gas specific gravity using constrained exponential decay to match t
      - Gas specific gravity, used to estimate HC split among C1-C4. Default 0.65
    * - metric
      - Boolean
-     - If True, treats input pressure & temperature as metric, otherwise treats as Field units. Default True
+     - If True, treats input pressure & temperature as metric, otherwise treats as Field units. Default False
    * - cw_sat
      - Boolean
      - If True, will also calculate saturated brine compressibility. Default False
@@ -382,7 +386,7 @@ based on the gas specific gravity using constrained exponential decay to match t
      - VLE framework used by the S&W engine. ``'proposed'`` (default, Soreide-Whitson 1992 re-fit), ``'sw_original'`` (original 1992 published coefficients), or ``'dropin'`` (PR-EOS fitted with brine-aware water alpha). Affects kij and ks correlations.
    * - salinity_method
      - str
-     - How salinity enters the flash. ``'gamma_phi'`` (default, Sechenov salting-out via activity coefficient), ``'embedded'`` (salinity inside kij — only compatible with ``'dropin'``/``'sw_original'``), ``'explicit'`` (brine treated as a component in the flash), ``'sechenov'`` (alias for ``gamma_phi``), or ``'auto'`` (pick per-gas default). ``framework='proposed'`` + ``salinity_method='embedded'`` emits a warning and falls back to ``gamma_phi``.
+     - How salinity enters the flash. ``'gamma_phi'`` (default, Sechenov salting-out via activity coefficient), ``'embedded'`` (salinity inside kij — only compatible with ``'dropin'``/``'sw_original'``), ``'explicit'`` (brine treated as a component in the flash), ``'sechenov'`` and ``'auto'`` (both accepted aliases that normalise to ``gamma_phi``). ``framework='proposed'`` + ``salinity_method='embedded'`` emits a warning and falls back to ``gamma_phi``. Note that the Rust-accelerated flash runs only for ``framework='proposed'`` with ``salinity_method='gamma_phi'``; other combinations use the pure-Python flash.
 
 .. list-table:: Returns (SoreideWhitson)
    :widths: 10 15 40
@@ -446,11 +450,11 @@ Pure CO2 case at 5000 psia x 275 deg F and 3% NaCl brine:
     >>> from pyrestoolbox import brine
     >>> mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=1.0, metric=False)
     >>> mix.bDen  # Returns [Gas Saturated, Gas-Free Brine, Freshwater]
-    [0.9733769457162755, 0.968164592979362, 0.9476497407774847]
+    [0.973376988330695, 0.968164592979362, 0.9476497407774847]
     >>> mix.Rs  # Returns per-gas Rs dict (scf/stb)
-    {'CO2': 140.90858294709142}
+    {'CO2': 139.57908352590252}
     >>> mix.bw  # Returns [Gas Saturated, Gas-Free, Freshwater]
-    [1.0968991160573776, 1.0543023174291248, 1.0542033190822462]
+    [1.096443890843725, 1.0543023174291248, 1.0542033190822462]
 
 Pure CH4 case (SG=0.554) at 5000 psia x 275 deg F and 3% NaCl brine:
 
@@ -458,9 +462,9 @@ Pure CH4 case (SG=0.554) at 5000 psia x 275 deg F and 3% NaCl brine:
 
     >>> mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=0, sg=0.554, metric=False)
     >>> mix.Rs
-    {'CH4': 21.414423540331008}
+    {'CH4': 21.21234560600256}
     >>> mix.bDen
-    [0.9641137202631425, 0.968164592979362, 0.9476497407774847]
+    [0.9641136914617666, 0.968164592979362, 0.9476497407774847]
 
 Mixed gas (10% CO2, 5% H2S, SG=0.7) at 200 Bar x 80 degC and 10,000 ppm NaCl:
 
@@ -470,9 +474,9 @@ Mixed gas (10% CO2, 5% H2S, SG=0.7) at 200 Bar x 80 degC and 10,000 ppm NaCl:
     >>> mix.gas_comp  # Estimated gas composition including HC split
     {'CO2': 0.1, 'H2S': 0.05, 'CH4': 0.8133, 'C2H6': 0.0351, 'C3H8': 0.0015, 'nC4H10': 0.0001}
     >>> mix.Rs_total  # Total dissolved gas (sm3/sm3)
-    6.32875877743837
+    6.30912473356662
     >>> mix.bDen
-    [0.9854845215724698, 0.9871360082710434, 0.9804911502375318]
+    [0.9854845175444145, 0.9871360082710434, 0.9804911502375318]
 
 Pure CO2 fresh water at 175 Bar x 85 degC with saturated compressibility:
 

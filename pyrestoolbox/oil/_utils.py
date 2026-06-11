@@ -4,6 +4,7 @@ import numpy as np
 from typing import Tuple
 
 from ._constants import _API_NUMER, _API_DENOM
+from ._separator import sgg_wt_avg
 from pyrestoolbox.constants import PSI_TO_BAR
 
 
@@ -47,7 +48,7 @@ def check_sgs(
     if sg_g > 0 and sg_sp > 0:
         return sg_g, sg_sp
     if sg_g <= 0 and sg_sp > 0:  # Estimate sg_g from sg_sp
-        sg_g = (sg_sp * rsp + sg_st * rst) / (rsp + rst)
+        sg_g = sgg_wt_avg(sg_sp=sg_sp, rsp=rsp, sg_st=sg_st, rst=rst)
     if sg_g > 0 and sg_sp <= 0:  # Estimate sg_sp from sg_g
         sg_sp = (sg_g * (rsp + rst) - (sg_st * rst)) / rsp
     if sg_g <= 0 and sg_sp <= 0:

@@ -1,0 +1,64 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Pure-Python test suite (no Rust extension) ───────────────────────
+  test-pure-python:
+    name: Pure Python (PYRESTOOLBOX_NO_RUST=1)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install numpy scipy pandas tabulate openpyxl mpmath ilt-inversion pytest
+
+      - name: Run test suite (pure Python)
+        env:
+          PYRESTOOLBOX_NO_RUST: "1"
+        run: python3 -m pytest pyrestoolbox/tests/ -q
+
+  # ── Full test suite with Rust extension (includes parity tests) ──────
+  test-with-rust:
+    name: Rust-accelerated (parity tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install m4 (needed by gmp-mpfr-sys for the rug crate)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq m4
+
+      - name: Install dependencies
+        run: pip install numpy scipy pandas tabulate openpyxl mpmath ilt-inversion pytest maturin
+
+      - name: Build Rust extension wheel
+        run: maturin build --release --out dist
+
+      # Tests import the repo source tree, so the compiled extension must
+      # live inside it for the Rust paths to load.
+      - name: Copy extension into source tree
+        run: unzip -o dist/*.whl "pyrestoolbox/_native*" -d .
+
+      - name: Verify Rust extension loads
+        run: python3 -c "from pyrestoolbox._accelerator import get_status; s = get_status(); print(s); assert s['rust_available'], s"
+
+      - name: Run full test suite (Rust + parity)
+        run: python3 -m pytest pyrestoolbox/tests/ -q

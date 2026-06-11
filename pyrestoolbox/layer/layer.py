@@ -265,7 +265,7 @@ def lorenz_2_layers(
         )
         nlayers = len(phi_h_fracs)
     else:
-        phih = np.arange(0, 1 + 1 / (nlayers), 1 / (nlayers))
+        phih = np.linspace(0.0, 1.0, nlayers + 1)
         phi_h_fracs = np.array([1 / nlayers for i in range(len(phih) - 1)])
     sumkh = []
 

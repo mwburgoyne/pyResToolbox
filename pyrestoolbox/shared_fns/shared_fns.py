@@ -60,8 +60,6 @@ def bisect_solve(args, f, xmin, xmax, rtol):
             raise RuntimeError("bisect_solve: failed to converge after 99 iterations")
         if (err_hi * err_mid < 0):  # Solution point must be higher than current mid_val case
             xmin = mid_val
-            err_lo = err_mid
-            mid_val = (mid_val + xmax) / 2
         else:
             xmax = mid_val  # Otherwise must be lower than current mid_val case
             err_hi = err_mid
@@ -177,18 +175,66 @@ def validate_pe_inputs(p=None, degf=None, sg=None, co2=None, h2s=None, n2=None, 
     """Validate common petroleum engineering inputs.
     Checks physical constraints: positive pressure, temperature above absolute zero,
     positive specific gravity, non-negative mole fractions summing to <= 1.0.
+    NaN values are rejected for all parameters.
     Raises ValueError with descriptive message on failure.
+
+    Scalar inputs take a fast path with direct comparisons (no numpy machinery);
+    lists/arrays use the vectorized numpy path.
     """
+    # Scalar fast path: every provided value is a plain int/float
+    if (
+        (p is None or isinstance(p, (int, float)))
+        and (degf is None or isinstance(degf, (int, float)))
+        and (sg is None or isinstance(sg, (int, float)))
+        and (co2 is None or isinstance(co2, (int, float)))
+        and (h2s is None or isinstance(h2s, (int, float)))
+        and (n2 is None or isinstance(n2, (int, float)))
+        and (h2 is None or isinstance(h2, (int, float)))
+    ):
+        if p is not None:
+            if p != p:
+                raise ValueError("Parameter 'p' must not be NaN")
+            if p <= 0:
+                raise ValueError(f"Pressure must be positive, got min value: {p}")
+        if degf is not None:
+            if degf != degf:
+                raise ValueError("Parameter 'degf' must not be NaN")
+            if degf <= -459.67:
+                raise ValueError(f"Temperature must be above absolute zero (-459.67 degF), got: {degf}")
+        if sg is not None:
+            if sg != sg:
+                raise ValueError("Parameter 'sg' must not be NaN")
+            if sg <= 0:
+                raise ValueError(f"Specific gravity must be positive, got min value: {sg}")
+        frac_sum = 0.0
+        for name, val in (('co2', co2), ('h2s', h2s), ('n2', n2), ('h2', h2)):
+            if val is not None:
+                if val != val:
+                    raise ValueError(f"Parameter '{name}' must not be NaN")
+                if val < 0:
+                    raise ValueError(f"Mole fraction {name} must be non-negative, got min value: {val}")
+                frac_sum += val
+        if frac_sum > 1.0:
+            raise ValueError(f"Sum of non-hydrocarbon mole fractions ({frac_sum}) exceeds 1.0")
+        return
+
+    # Vectorized numpy path for lists/arrays (or mixed scalar/array inputs)
     if p is not None:
         p_arr = np.atleast_1d(p)
+        if np.any(np.isnan(p_arr)):
+            raise ValueError("Parameter 'p' must not be NaN")
         if np.any(p_arr <= 0):
             raise ValueError(f"Pressure must be positive, got min value: {np.min(p_arr)}")
     if degf is not None:
         degf_arr = np.atleast_1d(degf)
+        if np.any(np.isnan(degf_arr)):
+            raise ValueError("Parameter 'degf' must not be NaN")
         if np.any(degf_arr <= -459.67):
             raise ValueError(f"Temperature must be above absolute zero (-459.67 degF), got: {np.min(degf_arr)}")
     if sg is not None:
         sg_arr = np.atleast_1d(sg)
+        if np.any(np.isnan(sg_arr)):
+            raise ValueError("Parameter 'sg' must not be NaN")
         if np.any(sg_arr <= 0):
             raise ValueError(f"Specific gravity must be positive, got min value: {np.min(sg_arr)}")
     fracs = {'co2': co2, 'h2s': h2s, 'n2': n2, 'h2': h2}
@@ -196,6 +242,8 @@ def validate_pe_inputs(p=None, degf=None, sg=None, co2=None, h2s=None, n2=None, 
     for name, val in fracs.items():
         if val is not None:
             val_arr = np.atleast_1d(val)
+            if np.any(np.isnan(val_arr)):
+                raise ValueError(f"Parameter '{name}' must not be NaN")
             if np.any(val_arr < 0):
                 raise ValueError(f"Mole fraction {name} must be non-negative, got min value: {np.min(val_arr)}")
             frac_sum = frac_sum + val_arr

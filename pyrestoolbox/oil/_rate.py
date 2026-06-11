@@ -17,6 +17,39 @@ from typing import Optional
 from ._correlations import oil_bo, oil_viso
 
 
+def _vogel_rate(J, pr, pwf, pb, vogel):
+    """Inflow rate from productivity index J, elementwise over pr/pwf.
+
+    vogel=False: pure Darcy, q = J * (pr - pwf).
+    vogel=True, pr > pb: composite Darcy above Pb plus Vogel below Pb.
+    vogel=True, pr <= pb (saturated): pure Vogel driven by pr,
+    q = J*pr/1.8 * (1 - 0.2*(pwf/pr) - 0.8*(pwf/pr)^2), so q = 0 at pwf = pr.
+    pwf is clamped into the Vogel curve elementwise: when pwf >= pb the
+    composite form reduces to pure Darcy.
+    """
+    if not vogel:
+        return J * (pr - pwf)
+    if np.any(np.asarray(pb) <= 0):
+        raise ValueError("Bubble point pressure pb must be positive when vogel=True")
+    # Elementwise clamp: no Vogel correction once pwf is at or above Pb
+    pb_eff = np.maximum(pb, pwf)
+    qsat_max = J * pb_eff / _VOGEL_AOF_DENOM
+    qusat = J * (pr - pb_eff)
+    q_composite = (
+        qsat_max * (1 - _VOGEL_LIN * (pwf / pb_eff) - _VOGEL_QUAD * (pwf / pb_eff) ** 2)
+        + qusat
+    )
+    # Saturated reservoir: pure Vogel form driven by pr
+    q_vogel = (
+        J * pr / _VOGEL_AOF_DENOM
+        * (1 - _VOGEL_LIN * (pwf / pr) - _VOGEL_QUAD * (pwf / pr) ** 2)
+    )
+    qoil = np.where(pr <= pb, q_vogel, q_composite)
+    if qoil.ndim == 0:
+        return qoil.item()
+    return qoil
+
+
 def oil_rate_radial(
     k: npt.ArrayLike,
     h: npt.ArrayLike,
@@ -85,9 +118,6 @@ def oil_rate_radial(
     elif uo <= 0 or bo <= 0:
         raise ValueError("Either oil_pvt or both uo and bo must be specified")
 
-    if pwf.size > 1:
-        pb = np.array([max(pb, pwf[i]) for i in range(pwf.size)])
-
     if r_w <= 0:
         raise ValueError("Wellbore radius r_w must be positive")
     if r_ext <= r_w:
@@ -96,16 +126,7 @@ def oil_rate_radial(
     J = (
         _DARCY_RADIAL * k * h / (uo * bo * (np.log(r_ext / r_w) + S - _DARCY_SKIN_OFFSET))
     )  # Productivity index
-    if not vogel:
-        qoil = J * (pr - pwf)
-    else:
-        if np.any(pb <= 0):
-            raise ValueError("Bubble point pressure pb must be positive when vogel=True")
-        qsat_max = J * pb / _VOGEL_AOF_DENOM
-        qusat = J * (pr - pb)
-        qoil = (
-            qsat_max * (1 - _VOGEL_LIN * (pwf / pb) - _VOGEL_QUAD * (pwf / pb) ** 2) + qusat
-        )
+    qoil = _vogel_rate(J, pr, pwf, pb, vogel)
     if metric:
         return qoil * STB_TO_SM3  # stb/d -> sm3/d
     return qoil
@@ -179,16 +200,7 @@ def oil_rate_linear(
     J = (
         _DARCY_RADIAL * k * area / (2 * np.pi * uo * bo * length)
     )  # Productivity index (linear Darcy: 0.00708/(2*pi) = 0.001127)
-    if not vogel:
-        qoil = J * (pr - pwf)
-    else:
-        if np.any(pb <= 0):
-            raise ValueError("Bubble point pressure pb must be positive when vogel=True")
-        qsat_max = J * pb / _VOGEL_AOF_DENOM
-        qusat = J * (pr - pb)
-        qoil = (
-            qsat_max * (1 - _VOGEL_LIN * (pwf / pb) - _VOGEL_QUAD * (pwf / pb) ** 2) + qusat
-        )
+    qoil = _vogel_rate(J, pr, pwf, pb, vogel)
     if metric:
         return qoil * STB_TO_SM3  # stb/d -> sm3/d
     return qoil

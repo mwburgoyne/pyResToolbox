@@ -136,10 +136,13 @@ def oil_deno(
         )  # Eq 3.19d
 
         rho_bs = rho_po + drho_p  # fake density used in calculations, Eq 3.19e
+        # Clamp temperature difference >= 0.001 degF so fractional exponents stay
+        # real for degf < 60 degF (matches Rust deno_below_pb)
+        dt = max(degf - tsc, 0.001)
         drho_t = (
-            (_SWMH_DT_A + _SWMH_DT_B * rho_bs ** _SWMH_DT_C) * (degf - tsc) ** _SWMH_DT_D
+            (_SWMH_DT_A + _SWMH_DT_B * rho_bs ** _SWMH_DT_C) * dt ** _SWMH_DT_D
             - (_SWMH_DT_E + _SWMH_DT_F * 10 ** (_SWMH_DT_G * rho_bs))
-            * (degf - tsc) ** _SWMH_DT_H
+            * dt ** _SWMH_DT_H
         )  # Eq 3.19f
         rho_or = rho_bs - drho_t  # Eq 3.19g
 
@@ -156,10 +159,13 @@ def oil_deno(
         sg_o: float,
         api: float,
     ) -> float:
+        # Density at Pb is evaluated with rsb (the solution GOR at Pb), not the
+        # rs argument: above Pb composition is fixed at rsb. Matches Rust
+        # deno_above_pb and keeps density continuous at Pb.
         rhorb = Deno_standing_white_mccainhill(
             p=pb,
             degf=degf,
-            rs=rs,
+            rs=rsb,
             rsb=rsb,
             sg_g=sg_g,
             sg_sp=sg_sp,

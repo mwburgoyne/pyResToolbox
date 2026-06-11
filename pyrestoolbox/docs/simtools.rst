@@ -399,7 +399,7 @@ pyrestoolbox.simtools.rel_perm_table
      - Maximum oil saturation relative to water for imobile oil. Default value = 0
    * - sgcr
      - float
-     - Maximum gas saturation relative to water for imobile gas. Default value = 0
+     - Maximum gas saturation for immobile gas (honoured in both SGOF and SGWFN tables). Default value = 0
    * - no, nw, ng
      - float
      - Corey exponents to oil, water and gas respectively. Default values = 1
@@ -445,7 +445,7 @@ pyrestoolbox.simtools.rel_perm_table
        Options are:
         + SWOF: Water / Oil table
         + SGOF: Gas / Oil table
-        + SGFN: Gas / Water table
+        + SGWFN: Gas / Water table
 
 .. list-table:: Returns
    :widths: 10 15 40

@@ -19,8 +19,15 @@ from pyrestoolbox.constants import (
     LB_PER_MMSCF_TO_KG_PER_SM3, GAL_PER_MMSCF_TO_L_PER_SM3)
 
 # --- Motiee (1991) hydrate formation temperature ---
-# Hydrocarbon Processing 70, pp 98-99
-_MOTIEE = (-283.24469, 78.99667, -5.352544, 349.473877, -150.854675, -27.604065)
+# Hydrocarbon Processing 70, pp 98-99. degF-output, psia-input form:
+# T(degF) = b0 + b1*log10(P) + b2*log10(P)^2 + b3*g + b4*g^2 + b5*g*log10(P)
+# Coefficient set per the degF/psia statement of the correlation (intercept
+# -238.24469); cross-checked against GPSA chart values (1000 psia, sg 0.6
+# gives 56.3 degF vs chart ~60-62 degF, consistent with Motiee's documented
+# 3-7 degF under-prediction of the GPSA chart). Other unit/intercept variants
+# circulating in the literature (degC/kPa or degF/psia with -283.24469) fail
+# this sanity check by 30-50 degF.
+_MOTIEE = (-238.24469, 78.99181, -5.352544, 349.47324, -150.85396, -27.604065)
 
 # --- Towler & Mokhatab (2005) hydrate formation temperature ---
 # Hydrocarbon Processing 84, pp 61-62
@@ -29,17 +36,6 @@ _TOWLER = (13.47, 34.27, -1.675, -20.35)
 # --- Hydrate formation pressure search bounds ---
 _HFP_P_LO = 14.696   # ~1 atm (psia)
 _HFP_P_HI = 15000.0   # Upper search bound (psia)
-
-_PSI_TO_KPA = 6.894757  # psia to kPa
-
-# Hammerschmidt (1934) inhibitor constants: (K, MW, w_max as fraction)
-_HAMMERSCHMIDT = {
-    inhibitor.MEOH: (2335, 32.04, 0.25),
-    inhibitor.MEG:  (2700, 62.07, 0.70),
-    inhibitor.DEG:  (2700, 106.12, 0.70),
-    inhibitor.TEG:  (5400, 150.17, 0.50),
-    inhibitor.ETOH: (1297, 46.07, 0.30),
-}
 
 # Østergaard et al. (2005) coefficients: delta_T(degC) = C1*w + C2*w^2 + C3*w^3, w in wt% (0-100)
 _OSTERGAARD = {
@@ -171,21 +167,22 @@ class HydrateResult:
 def _motiee_hft(p_psia, sg):
     """Motiee (1991) hydrate formation temperature.
 
-    Published form uses degC and kPa with log10.
-    T(degC) = -283.24469 + 78.99667*log10(P_kPa) - 5.352544*log10(P_kPa)^2
-              + 349.473877*gamma - 150.854675*gamma^2 - 27.604065*gamma*log10(P_kPa)
+    Published form gives T directly in degF from log10 of pressure in psia:
+    T(degF) = -238.24469 + 78.99181*log10(P_psia) - 5.352544*log10(P_psia)^2
+              + 349.47324*gamma - 150.85396*gamma^2 - 27.604065*gamma*log10(P_psia)
+
+    Valid for 100-4000 psia and gas SG 0.55-0.90. Fitted to the GPSA (Katz)
+    gravity chart; tends to under-predict the chart by roughly 3-7 degF.
 
     Reference: Motiee, M. (1991). Hydrocarbon Processing 70, pp 98-99.
     """
-    p_kpa = p_psia * _PSI_TO_KPA
-    log_p = math.log10(p_kpa)
-    t_c = (_MOTIEE[0]
-           + _MOTIEE[1] * log_p
-           + _MOTIEE[2] * log_p * log_p
-           + _MOTIEE[3] * sg
-           + _MOTIEE[4] * sg * sg
-           + _MOTIEE[5] * sg * log_p)
-    return t_c * 9.0 / 5.0 + 32.0  # degC -> degF
+    log_p = math.log10(p_psia)
+    return (_MOTIEE[0]
+            + _MOTIEE[1] * log_p
+            + _MOTIEE[2] * log_p * log_p
+            + _MOTIEE[3] * sg
+            + _MOTIEE[4] * sg * sg
+            + _MOTIEE[5] * sg * log_p)
 
 
 def _towler_mokhatab_hft(p_psia, sg):
@@ -201,9 +198,9 @@ def _towler_mokhatab_hft(p_psia, sg):
 
 
 def _hydrate_formation_press(degf_target, sg, hft_fn):
-    """Invert HFT correlation to find hydrate formation pressure via bisection.
+    """Invert the supplied HFT correlation (hft_fn) to find the hydrate
+    formation pressure via bisection.
 
-    Uses Motiee for inversion (consistent with ResToolbox3).
     Returns pressure in psia, or NaN if target T is outside correlation range.
     """
     p_lo = _HFP_P_LO

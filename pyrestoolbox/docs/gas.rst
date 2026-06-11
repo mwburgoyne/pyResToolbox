@@ -21,7 +21,6 @@ pyResToolBox uses class objects to track calculation options through the functio
        Options are:
         + 'DAK': Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al. - Slowest, Most Accurate
         + 'HY': Hall & Yarborough (1973) - Second Fastest
-        + 'WYW': Wang, Ye & Wu (2021) - Fastest, Least Accurate
         + 'BUR'/'BNS': Tuned five component Peng Robinson EOS model, Burgoyne, Nielsen & Stanko (2025), `SPE-229932-MS <https://doi.org/10.2118/229932-MS>`_ - Fast, reliable, and able to handle wide range of mixture types including CO2, H2S, N2 and H2 at concentrations up to pure inerts. More information about the method can be found `here <https://github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor>`_
    * - cmethod
      - c_method
@@ -62,7 +61,7 @@ Calculating gas Z-Factor of pure methane using DAK and PMC for critical properti
 .. note::
 
    **BNS method strongly recommended for high-inert or hydrogen-bearing gases.**
-   When modelling gases with significant CO2 (>10%), H2S, N2, or any H2 content, the ``'BNS'`` Z-factor and critical property methods (tuned 5-component Peng-Robinson EOS) should be used. Standard correlations (DAK/HY/WYW with PMC/SUT) were developed for sweet natural gas and become unreliable at high impurity concentrations. The BNS method handles the full range from pure hydrocarbon to 100% inerts. When ``h2 > 0``, BNS is auto-selected. For pure or high-concentration CO2/H2S/N2 gases, explicitly set ``zmethod='BNS', cmethod='BNS'``.
+   When modelling gases with significant CO2 (>10%), H2S, N2, or any H2 content, the ``'BNS'`` Z-factor and critical property methods (tuned 5-component Peng-Robinson EOS) should be used. Standard correlations (DAK/HY with PMC/SUT) were developed for sweet natural gas and become unreliable at high impurity concentrations. The BNS method handles the full range from pure hydrocarbon to 100% inerts. When ``h2 > 0``, BNS is auto-selected. For pure or high-concentration CO2/H2S/N2 gases, explicitly set ``zmethod='BNS', cmethod='BNS'``.
 
 .. note::
 
@@ -1190,10 +1189,10 @@ Examples:
 .. code-block:: python
 
     >>> gas.gas_rate_linear(k=0.1, area=50, length=200, pr=2000, pwf=250, degf=180, sg = 0.8)
-    8.202200317597859
+    1.3054025082153438
 
     >>> gas.gas_rate_linear(k=0.1, area=50, length=200, pr=[2000, 1000, 500], pwf=250, degf=180, sg = 0.8)
-    array([8.20220032, 2.10691337, 0.42685002])
+    array([1.30540251, 0.33532381, 0.06793513])
 
 Using a GasPVT object:
 
@@ -1201,7 +1200,7 @@ Using a GasPVT object:
 
     >>> gpvt = gas.GasPVT(sg=0.8)
     >>> gas.gas_rate_linear(k=0.1, area=50, length=200, pr=2000, pwf=250, degf=180, gas_pvt=gpvt)
-    8.202199932859799
+    1.3054025082153438
 
 
 pyrestoolbox.gas.gas_hydrate
@@ -1348,19 +1347,19 @@ Using Motiee method:
 
     >>> r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, hydmethod='MOTIEE')
     >>> r.hft
-    96.20360674625366
+    60.151725150000026
 
 With MEG inhibitor (25 wt%):
 
 .. code-block:: python
 
-    >>> r = gas.gas_hydrate(p=2000, degf=80, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEG', inhibitor_wt_pct=25)
+    >>> r = gas.gas_hydrate(p=2000, degf=50, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEG', inhibitor_wt_pct=25)
     >>> r.inhibited_hft
-    97.97592063045367
+    60.10064544530876
     >>> r.inhibitor_depression
     11.0109375
     >>> r.required_inhibitor_wt_pct
-    58.27975454526845
+    45.41491129114502
 
 Using metric units (barsa, deg C):
 
@@ -1376,7 +1375,7 @@ MEOH inhibitor with capping and injection rate (reservoir P,T specified, MEOH ma
 
 .. code-block:: python
 
-    >>> r = gas.gas_hydrate(p=2000, degf=60, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH',
+    >>> r = gas.gas_hydrate(p=2000, degf=40, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH',
     ...                      p_res=4000, degf_res=250)
     >>> r.inhibitor_underdosed
     True
@@ -1385,24 +1384,24 @@ MEOH inhibitor with capping and injection rate (reservoir P,T specified, MEOH ma
     >>> r.max_inhibitor_wt_pct
     25.0
     >>> r.water_condensed
-    1.6171304990445141
+    1.6332263666472937
     >>> r.inhibitor_mass_rate
-    188.77303358846294
+    190.6519578666274
     >>> r.inhibitor_vol_rate
-    28.596710738497325
+    28.881343840274702
 
 With CO2 composition and reservoir P,T (SoreideWhitson water content):
 
 .. code-block:: python
 
-    >>> r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, hydmethod='MOTIEE', inhibitor_type='MEG', co2=0.05,
+    >>> r = gas.gas_hydrate(p=1000, degf=50, sg=0.65, hydmethod='MOTIEE', inhibitor_type='MEG', co2=0.05,
     ...                      p_res=3000, degf_res=200)
     >>> r.water_vaporized_res
-    0.9105104447421333
+    0.9105104447419109
     >>> r.water_condensed
-    0.8606277674562288
+    0.8751584110633173
     >>> r.required_inhibitor_wt_pct
-    68.1447380066354
+    23.07967423824071
     >>> r.inhibitor_underdosed
     False
 
@@ -1415,9 +1414,9 @@ With reservoir P,T (gas equilibrated at reservoir, hydrate assessment at wellhea
     >>> r.water_vaporized_res
     1.651022101177945
     >>> r.inhibitor_mass_rate
-    1314.312441059706
+    272.313861641059
     >>> r.inhibitor_underdosed
-    True
+    False
 
 
 pyrestoolbox.gas.gas_hvf_beta

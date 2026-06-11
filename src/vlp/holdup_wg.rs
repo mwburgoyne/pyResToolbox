@@ -1,11 +1,9 @@
 /// Woldesemayat-Ghajar drift-flux void fraction and LM friction gradient.
 /// Direct port of nodal.py lines 1044-1110.
 
+use super::constants::*;
 use super::pvt_helpers::clamp;
 use super::friction::serghides_fanning;
-
-const G_SI: f64 = 9.80665;
-const P_ATM_PA: f64 = 101325.0;
 
 /// WG drift-flux void fraction (gas fraction).
 pub fn wg_void_fraction(
@@ -27,9 +25,9 @@ pub fn wg_void_fraction(
     let co = lam * (1.0 + (u_sl / u_sg).powf(density_ratio));
     let buoy = G_SI * diam * sigma * (1.0 + theta.cos())
         * (rho_l - rho_g) / (rho_l * rho_l);
-    let u_gm_base = 2.9 * buoy.max(0.0).powf(0.25);
+    let u_gm_base = WG_DRIFT_K * buoy.max(0.0).powf(0.25);
     let p_exp = P_ATM_PA / p_sys;
-    let incl_factor = (1.22 + 1.22 * theta.sin()).powf(p_exp);
+    let incl_factor = (WG_INCL_K + WG_INCL_K * theta.sin()).powf(p_exp);
     let u_gm = u_gm_base * incl_factor;
     let denom = co * u_m + u_gm;
     if denom <= 0.0 {
@@ -84,10 +82,10 @@ pub fn wg_friction_gradient_lm(
     let liq_turb = re_l >= 2100.0;
     let gas_turb = re_g >= 2100.0;
     let chisholm_c = match (liq_turb, gas_turb) {
-        (true, true) => 20.0,
-        (false, true) => 12.0,
-        (true, false) => 10.0,
-        (false, false) => 5.0,
+        (true, true) => WG_CHIS_TT,
+        (false, true) => WG_CHIS_LT,
+        (true, false) => WG_CHIS_TL,
+        (false, false) => WG_CHIS_LL,
     };
     let phi2_l = 1.0 + chisholm_c / x_param + 1.0 / (x_param * x_param);
     phi2_l * dpdz_l

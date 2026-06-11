@@ -58,7 +58,7 @@ pyResToolBox uses class objects to track calculation options through the functio
      - bo_method
      - Method for calculating oil formation volume factor. Defaults to 'MCAIN'
        Options are:
-        + 'STAN': Standing Correlation
+        + 'STAN': Standing Correlation for saturated Bo, with McCain cofb undersaturated correction applied above Pb
         + 'MCAIN': McCain approach, calculating from densities -- Default
 
 Users can specify which calculation method to use either by passing an option string, or a class object to any given function. The implementation of class objects should make it easier to program in an IDE that supports type hinting
@@ -344,7 +344,7 @@ Examples:
 .. code-block:: python
 
     >>> oil.oil_rs_st(psp=114.7, degf_sp=80, api=38)
-    4.176458005559282
+    65.13473727262924
     
 pyrestoolbox.oil.oil_pbub
 ====================
@@ -418,7 +418,7 @@ pyrestoolbox.oil.oil_rs_bub
 
     oil_rs_bub(api, degf, pb, sg_g =0, sg_sp =0, pbmethod ='VALMC', rsmethod='VELAR', metric = False) -> float
 
-Returns solution GOR (scf/stb, or sm3/sm3 if metric=True) at bubble point pressure. Uses the inverse of the Bubble point pressure correlations, with the same method families. Note: At low pressures, the VALMC method will fail (generally when rsb < 10 scf/stb). The VALMC method will revert to the Standing method in these cases.
+Returns solution GOR (scf/stb, or sm3/sm3 if metric=True) at bubble point pressure. Uses the inverse of the Bubble point pressure correlations, with the same method families. Note: The VALMC Pb correlation has a representable maximum Pb for any given fluid properties. Requesting a pb above that maximum raises a ValueError.
 At least one of sg_g and sg_sp must be supplied. This function will make simple assumption to estimate missing gas sg if only one is provided.
 
 .. list-table:: Inputs
@@ -1408,6 +1408,7 @@ pyrestoolbox.oil.oil_rate_radial
 
 Returns liquid rate (stb/d, or sm3/d if metric=True) for radial flow using Darcy pseudo steady state equation with optional Vogel correction.
 Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D array of rates. Using more than one input array -- while not prohibited -- will not return expected results.
+With Vogel correction active, a saturated reservoir (pr <= pb) uses the pure Vogel relationship driven by pr, so the rate is zero at pwf = pr. An undersaturated reservoir (pr > pb) uses the composite Darcy plus Vogel form, which reduces to pure Darcy when pwf >= pb.
 
 Either ``uo`` and ``bo`` must be provided explicitly, or an ``oil_pvt`` object with ``degf`` can be provided to calculate them automatically. When ``oil_pvt`` is provided, Vogel correction is automatically enabled using the PVT object's bubble point.
 
@@ -1477,10 +1478,10 @@ Examples:
 .. code-block:: python
 
     >>> oil.oil_rate_radial(k=20, h=20, pr=1500, pwf=250, r_w=0.3, r_ext=1500, uo=0.8, bo=1.4, vogel=True, pb=1800)
-    213.8147848023242
+    256.21602502158214
 
     >>> oil.oil_rate_radial(k=20, h=20, pr=[1500, 2000], pwf=250, r_w=0.3, r_ext=1500, uo=0.8, bo=1.4, vogel=True, pb=1800)
-    array([213.8147848 , 376.58731835])
+    array([256.21602502, 376.58731835])
 
 Using an OilPVT object (uo, bo, pb, and Vogel correction handled automatically):
 
@@ -1488,7 +1489,7 @@ Using an OilPVT object (uo, bo, pb, and Vogel correction handled automatically):
 
     >>> opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     >>> oil.oil_rate_radial(k=20, h=20, pr=3000, pwf=2000, r_w=0.3, r_ext=1500, oil_pvt=opvt, degf=180)
-    423.031513775435
+    411.5386897307136
 
 Using a viscosity-tuned OilPVT object (auto-harmonization sets vis_frac from measured viscosity):
 
@@ -1496,7 +1497,7 @@ Using a viscosity-tuned OilPVT object (auto-harmonization sets vis_frac from mea
 
     >>> opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500, degf=180, uo_target=1.0, p_uo=2500)
     >>> oil.oil_rate_radial(k=20, h=20, pr=3000, pwf=2000, r_w=0.3, r_ext=1500, oil_pvt=opvt, degf=180)
-    270.5491761896866
+    263.1989576453467
 
 pyrestoolbox.oil.oil_rate_linear
 ======================
@@ -1507,6 +1508,7 @@ pyrestoolbox.oil.oil_rate_linear
 
 Returns liquid rate (stb/d, or sm3/d if metric=True) for linear flow using Darcy steady state equation with optional Vogel correction.
 Arrays can be used for any one of k, pr, pwf or area, returning corresponding 1-D array of rates. Using more than one input array -- while not prohibited -- will not return expected results.
+With Vogel correction active, a saturated reservoir (pr <= pb) uses the pure Vogel relationship driven by pr, so the rate is zero at pwf = pr. An undersaturated reservoir (pr > pb) uses the composite Darcy plus Vogel form, which reduces to pure Darcy when pwf >= pb.
 
 Either ``uo`` and ``bo`` must be provided explicitly, or an ``oil_pvt`` object with ``degf`` can be provided to calculate them automatically.
 
@@ -1581,7 +1583,7 @@ Using an OilPVT object:
 
     >>> opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     >>> oil.oil_rate_linear(k=0.1, area=15000, pr=3000, pwf=500, length=500, oil_pvt=opvt, degf=180)
-    7.342528629971546
+    7.1430484805272005
 
 pyrestoolbox.oil.OilPVT
 ========================

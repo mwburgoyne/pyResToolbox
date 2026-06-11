@@ -111,9 +111,13 @@ impl SpState {
     }
 
     // ---- Blended value between 99-109 degC ----------------------------
+    // Spycher & Pruess (2010), Transp Porous Med 82:173-196, Sect. 2.2 (p.179):
+    // linear weighting between the low-T model (applies at <= 99 degC) and the
+    // high-T model (applies at >= 109 degC), so the blend returns low_val at
+    // 99 degC and high_val at 109 degC.
     #[inline]
     fn blended_val(&self, low_val: f64, high_val: f64) -> f64 {
-        ((self.deg_c - 99.0) * low_val + (109.0 - self.deg_c) * high_val) / 10.0
+        ((109.0 - self.deg_c) * low_val + (self.deg_c - 99.0) * high_val) / 10.0
     }
 
     // ---- Determine calculation type -----------------------------------

@@ -17,10 +17,59 @@ class TestValidation:
         with pytest.raises(ValueError, match="Invalid zmethod.*Valid options"):
             validate_methods(["zmethod"], ["NOSUCH"])
 
+    def test_validate_wrong_enum_type(self):
+        """Passing an Enum member of the wrong class raises ValueError, not KeyError."""
+        from pyrestoolbox.validate import validate_methods
+        from pyrestoolbox.classes import c_method
+        with pytest.raises(ValueError, match="Invalid zmethod.*z_method"):
+            validate_methods(["zmethod"], [c_method.PMC])
+
+    def test_validate_wrong_enum_type_via_gas_z(self):
+        from pyrestoolbox.gas import gas
+        from pyrestoolbox.classes import c_method
+        with pytest.raises(ValueError, match="zmethod"):
+            gas.gas_z(p=2000, sg=0.7, degf=200, zmethod=c_method.PMC)
+
+    def test_validate_correct_enum_passes_through(self):
+        from pyrestoolbox.validate import validate_methods
+        from pyrestoolbox.classes import z_method
+        assert validate_methods(["zmethod"], [z_method.DAK]) is z_method.DAK
+
     def test_validate_pe_negative_pressure(self):
         from pyrestoolbox.gas import gas
         with pytest.raises(ValueError, match="[Pp]ressure"):
             gas.gas_z(p=-100, sg=0.7, degf=200)
+
+    def test_validate_pe_nan_scalar(self):
+        from pyrestoolbox.shared_fns import validate_pe_inputs
+        with pytest.raises(ValueError, match="'p'.*NaN"):
+            validate_pe_inputs(p=float('nan'))
+        with pytest.raises(ValueError, match="'degf'.*NaN"):
+            validate_pe_inputs(p=2000.0, degf=float('nan'))
+        with pytest.raises(ValueError, match="'co2'.*NaN"):
+            validate_pe_inputs(p=2000.0, degf=200.0, co2=float('nan'))
+
+    def test_validate_pe_nan_array(self):
+        from pyrestoolbox.shared_fns import validate_pe_inputs
+        with pytest.raises(ValueError, match="'p'.*NaN"):
+            validate_pe_inputs(p=[1000.0, float('nan')])
+        with pytest.raises(ValueError, match="'sg'.*NaN"):
+            validate_pe_inputs(p=[1000.0, 2000.0], sg=np.array([np.nan]))
+
+    def test_validate_pe_scalar_and_array_paths_agree(self):
+        """Scalar fast path and numpy path must reject the same bad inputs."""
+        from pyrestoolbox.shared_fns import validate_pe_inputs
+        with pytest.raises(ValueError, match="[Pp]ressure"):
+            validate_pe_inputs(p=-100.0)
+        with pytest.raises(ValueError, match="[Pp]ressure"):
+            validate_pe_inputs(p=[-100.0])
+        with pytest.raises(ValueError, match="[Ff]raction"):
+            validate_pe_inputs(co2=0.6, h2s=0.5)
+        with pytest.raises(ValueError, match="[Ff]raction"):
+            validate_pe_inputs(co2=[0.6], h2s=[0.5])
+        # Valid inputs pass on both paths
+        validate_pe_inputs(p=2000.0, degf=200.0, sg=0.7, co2=0.05)
+        validate_pe_inputs(p=[2000.0], degf=[200.0], sg=[0.7], co2=[0.05])
 
     def test_validate_pe_negative_sg(self):
         from pyrestoolbox.gas import gas
@@ -369,6 +418,21 @@ class TestNodalErrors:
         from pyrestoolbox.nodal.nodal import Reservoir
         with pytest.raises(ValueError, match="[Pp]ermeability|k"):
             Reservoir(pr=4000, degf=200, k=-1, h=50, rw=0.328, re=1000)
+
+    def test_fbhp_negative_rate(self):
+        from pyrestoolbox import nodal
+        comp = nodal.Completion(tid=2.441, length=8000, tht=100, bht=180)
+        with pytest.raises(ValueError, match="non-negative"):
+            nodal.fbhp(thp=300, completion=comp, qg_mmscfd=-1.0)
+
+    def test_fbhp_diverged_injection_raises(self):
+        # Infeasible high-rate injection: the march pressure falls below
+        # atmospheric and must raise rather than return a large negative BHP.
+        # Exercises both the Python and Rust march guards (identical message).
+        from pyrestoolbox import nodal
+        comp = nodal.Completion(tid=2.441, length=8000, tht=100, bht=180)
+        with pytest.raises(RuntimeError, match="diverged"):
+            nodal.fbhp(thp=20, completion=comp, qg_mmscfd=50.0, injection=True)
 
 
 # ── simtools module ────────────────────────────────────────────────

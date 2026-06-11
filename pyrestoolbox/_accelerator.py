@@ -155,6 +155,26 @@ else:
                 _write_sentinel(_ext_identity, _failure_reason)
 
 
+# Registry of every module-level snapshot of the Rust availability flag.
+# Modules capture RUST_AVAILABLE at import time (some under the name
+# _RUST_AVAILABLE), so test helpers that force the pure-Python paths must
+# flip every snapshot, not just the flag in this module. Add an entry here
+# whenever a new module snapshots the flag; test_rust_acceleration.py
+# asserts this registry stays complete.
+RUST_FLAG_REGISTRY = [
+    ('pyrestoolbox._accelerator', 'RUST_AVAILABLE'),
+    ('pyrestoolbox.gas.gas', 'RUST_AVAILABLE'),
+    ('pyrestoolbox.oil._density', '_RUST_AVAILABLE'),
+    ('pyrestoolbox.brine.brine', '_RUST_AVAILABLE'),
+    ('pyrestoolbox.brine._lib_vle_engine', '_RUST_AVAILABLE'),
+    ('pyrestoolbox.nodal.nodal', '_RUST_AVAILABLE'),
+    ('pyrestoolbox.dca.dca', '_RUST_AVAILABLE'),
+    ('pyrestoolbox.matbal.matbal', '_RUST_AVAILABLE'),
+    ('pyrestoolbox.simtools.simtools', 'RUST_AVAILABLE'),
+    ('pyrestoolbox.simtools._aquifer', 'RUST_AVAILABLE'),
+]
+
+
 def get_status():
     status = {
         "rust_available": RUST_AVAILABLE,
@@ -172,7 +192,7 @@ def get_rust_version():
     """Return Rust extension version string, or None if unavailable."""
     if not RUST_AVAILABLE or _rust_module is None:
         return None
-    return getattr(_rust_module, '__version__', getattr(_rust_module, 'version', None))
+    return getattr(_rust_module, '__version__', None)
 
 
 def clear_block():
@@ -184,13 +204,18 @@ def clear_block():
     }
 
 
+_RUST_FN_UNRESOLVED = object()  # sentinel: Rust function not yet looked up
+
+
 def rust_accelerated(rust_fn_name):
     """Decorator that dispatches to a Rust implementation when available.
 
     The decorated function is the pure-Python fallback. When Rust is available,
     the decorator calls ``_rust_module.<rust_fn_name>`` with the same positional
-    and keyword arguments. On ImportError or AttributeError (missing function),
-    it falls back to the Python implementation transparently.
+    and keyword arguments. The Rust function is resolved once on first call and
+    cached; if it is missing from the extension a warning is logged and the
+    Python fallback is used. Exceptions raised by the Rust call itself
+    propagate - they are never silently masked by the Python fallback.
 
     Usage::
 
@@ -201,14 +226,21 @@ def rust_accelerated(rust_fn_name):
     import functools
 
     def decorator(fn):
+        rust_fn = _RUST_FN_UNRESOLVED
+
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
-            if RUST_AVAILABLE:
-                try:
-                    rust_fn = getattr(_rust_module, rust_fn_name)
+            nonlocal rust_fn
+            if RUST_AVAILABLE and _rust_module is not None:
+                if rust_fn is _RUST_FN_UNRESOLVED:
+                    rust_fn = getattr(_rust_module, rust_fn_name, None)
+                    if rust_fn is None:
+                        logger.warning(
+                            "Rust function %r not found in pyrestoolbox._native; "
+                            "using pure-Python %s", rust_fn_name, fn.__name__,
+                        )
+                if rust_fn is not None:
                     return rust_fn(*args, **kwargs)
-                except (ImportError, AttributeError):
-                    pass
             return fn(*args, **kwargs)
         wrapper._rust_fn_name = rust_fn_name
         wrapper._python_fn = fn

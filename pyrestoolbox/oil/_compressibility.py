@@ -10,7 +10,6 @@ from pyrestoolbox.classes import (
 )
 from pyrestoolbox.validate import validate_methods
 from pyrestoolbox.shared_fns import validate_pe_inputs
-import pyrestoolbox.gas as gas
 
 from ._utils import check_sgs, oil_sg
 from ._density import _cofb_mccain
@@ -20,6 +19,8 @@ from ._correlations import oil_pbub, oil_rs_bub, oil_rs, oil_bo
 def _perrine_co_sat(p, api, degf, sg_sp, sg_g, pb, rsb, zmethod, cmethod,
                     rsmethod, pbmethod, bomethod, denomethod):
     """Compute Perrine's saturated compressibility: co_sat = -(1/Bo)*dBo/dp + (Bg/Bo)*dRs/dp."""
+    import pyrestoolbox.gas as gas  # Local import keeps `import pyrestoolbox.oil` light
+
     sg_o = oil_sg(api)
     dp = max(0.5, p * 0.001)
     p_hi = p + dp
@@ -54,7 +55,6 @@ def oil_co(
     sg_g: float = 0,
     pb: float = 0,
     rsb: float = 0,
-    pi: float = 0,
     co_sat: bool = False,
     undersaturated_only: bool = False,
     comethod: co_method = co_method.EXPLT,
@@ -105,8 +105,6 @@ def oil_co(
             pb = pb * BAR_TO_PSI
         if rsb > 0:
             rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
-        if pi > 0:
-            pi = pi * BAR_TO_PSI
 
     validate_pe_inputs(p=p, degf=degf)
 
@@ -219,6 +217,14 @@ def oil_co(
 
         # Clamp to avoid negative pressures
         p_lo = max(p_lo, psc)
+
+        # Keep the stencil on a single smooth branch: the density model changes
+        # functional form at Pb, so a central difference straddling Pb would mix
+        # the two branches. Fall back to a one-sided difference instead.
+        if p > pb and p_lo < pb:
+            p_lo = p  # forward difference on the undersaturated branch
+        elif p <= pb and p_hi > pb:
+            p_hi = p  # backward difference on the saturated branch
 
         span = p_hi - p_lo
         if span < 1e-10:
@@ -365,6 +371,8 @@ def oil_bt(
 
     if p >= pb:
         return bo  # No free gas above Pb
+
+    import pyrestoolbox.gas as gas  # Local import keeps `import pyrestoolbox.oil` light
 
     # Bg in rcf/scf -> rb/scf
     bg = gas.gas_bg(p, sg_sp, degf, zmethod=zmethod, cmethod=cmethod) / CUFTperBBL
