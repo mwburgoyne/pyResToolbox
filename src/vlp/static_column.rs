@@ -1,9 +1,8 @@
 /// Static column pressure helpers.
 /// Direct port of nodal.py lines 685-721.
 
+use super::constants::{FW_GRAD, IN2_PER_FT2, MW_AIR, RHO_FW, R_GAS};
 use super::pvt_helpers::*;
-
-const MW_AIR: f64 = 28.97;
 
 /// Static gas column pressure (psia).
 pub fn static_gas_column_pressure(
@@ -19,8 +18,8 @@ pub fn static_gas_column_pressure(
         let temp_local = tht + (bht - tht) * frac;
         let temp_r = temp_local + 459.67;
         let zee = z_factor(gsg, temp_local, p.max(14.7), tc, pc);
-        let rho_gas = MW_AIR * gsg * p / (zee * 10.732 * temp_r);
-        p += rho_gas / 144.0 * d_len * sin_theta;
+        let rho_gas = MW_AIR * gsg * p / (zee * R_GAS * temp_r);
+        p += rho_gas / IN2_PER_FT2 * d_len * sin_theta;
     }
     p
 }
@@ -45,9 +44,9 @@ pub fn static_oil_column_pressure(
         } else {
             oil_density_mccain(rsb, sgsp, sgsto, pb, temp_local)
         };
-        let oil_sg_local = rho_oil / 62.4;
+        let oil_sg_local = rho_oil / RHO_FW;
         let mix_sg = (1.0 - wc) * oil_sg_local + wc * wsg;
-        p += 0.433 * mix_sg * d_len * sin_theta;
+        p += FW_GRAD * mix_sg * d_len * sin_theta;
     }
     p
 }

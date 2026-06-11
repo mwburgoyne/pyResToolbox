@@ -1,13 +1,14 @@
-"""Black oil table generation helpers."""
+"""Black oil table generation helpers.
 
-import pandas as pd
-from tabulate import tabulate
+Heavy third-party imports (pandas, tabulate) and the gas/brine modules are
+imported inside the functions that use them so that `import pyrestoolbox.oil`
+stays light.
+"""
 
 from pyrestoolbox.constants import psc, tsc, CUFTperBBL, WDEN
-import pyrestoolbox.gas as gas
-import pyrestoolbox.brine as brine
 
-from ._correlations import oil_rs_bub, oil_rs, oil_bo, oil_deno, oil_viso
+from ._correlations import oil_rs_bub, oil_rs, oil_bo, oil_viso
+from ._density import oil_deno
 from ._compressibility import oil_co
 from ._harmonize import oil_harmonize
 
@@ -16,15 +17,17 @@ def _resolve_pb_rsb(pb, rsb, degf, api, sg_sp, sg_g, pvto, pmax,
                      rsmethod, pbmethod):
     """Internal helper: resolves Pb/Rsb using oil_harmonize plus PVTO extension.
 
-    Returns (pb, rsb, rsb_frac, rsb_max, pb_i, rsb_i).
+    Returns (pb, rsb, rsb_frac, rsb_max, pb_i, rsb_i), where pb_i and rsb_i are
+    the harmonised Pb and Rsb (the imputed value is filled in when the user
+    supplied only one of the pair). These flow into the results dict.
     """
-    pb_i = pb
-    rsb_i = rsb
-
     pb, rsb, rsb_frac, _vis_frac = oil_harmonize(
         pb=pb, rsb=rsb, degf=degf, api=api, sg_sp=sg_sp, sg_g=sg_g,
         rsmethod=rsmethod, pbmethod=pbmethod,
     )
+
+    pb_i = pb
+    rsb_i = rsb
 
     rsb_max = rsb
 
@@ -68,6 +71,9 @@ def _build_bot_tables(pressures, pb, rsb, rsb_frac, rsb_max, sg_o, sg_g, sg_sp,
     Returns (rss, bos, denos, uos, co, gz, gfvf, cg, visg, bws, visws,
              usat_p, usat_bo, usat_uo) where usat_* are empty lists if not pvto.
     """
+    import pyrestoolbox.gas as gas  # Local imports keep `import pyrestoolbox.oil` light
+    import pyrestoolbox.brine as brine
+
     if pvto:
         pb = max(pb, max(pressures))
         rsb = rsb_max * rsb_frac
@@ -127,32 +133,33 @@ def _build_bot_tables(pressures, pb, rsb, rsb_frac, rsb_max, sg_o, sg_g, sg_sp,
         bws.append(bw)
         visws.append(visw)
 
-    # Undersaturated extension for PVTO
+    # Undersaturated extension for PVTO. Appends are all-or-nothing per stem:
+    # a failed Bo/uo computation appends empty lists so a failure cannot
+    # misalign the three arrays and silently shift PVTO stems.
     usat_p, usat_bo, usat_uo = [], [], []
     if pvto:
         for i, p in enumerate(pressures):
             if i == 0:
                 continue
+            p_stem = pressures[i:]
             try:
-                usat_p.append(pressures[i:])
-                usat_bo.append(
-                    [
-                        oil_bo(
-                            p=pusat, pb=p, degf=degf, rs=rss[i], rsb=rss[i],
-                            sg_g=sg_g, sg_sp=sg_sp, sg_o=sg_o,
-                            denomethod=denomethod, bomethod=bomethod,
-                        )
-                        for pusat in usat_p[-1]
-                    ]
-                )
-                usat_uo.append(
-                    [
-                        oil_viso(p=pusat, api=api, degf=degf, pb=p, rs=rss[i]) * vis_frac
-                        for pusat in usat_p[-1]
-                    ]
-                )
+                bo_stem = [
+                    oil_bo(
+                        p=pusat, pb=p, degf=degf, rs=rss[i], rsb=rss[i],
+                        sg_g=sg_g, sg_sp=sg_sp, sg_o=sg_o,
+                        denomethod=denomethod, bomethod=bomethod,
+                    )
+                    for pusat in p_stem
+                ]
+                uo_stem = [
+                    oil_viso(p=pusat, api=api, degf=degf, pb=p, rs=rss[i]) * vis_frac
+                    for pusat in p_stem
+                ]
             except (ValueError, IndexError, ZeroDivisionError):
-                pass
+                p_stem, bo_stem, uo_stem = [], [], []
+            usat_p.append(p_stem)
+            usat_bo.append(bo_stem)
+            usat_uo.append(uo_stem)
 
     return (rss, bos, denos, uos, co, gz, gfvf, cg, visg, bws, visws,
             usat_p, usat_bo, usat_uo)
@@ -164,6 +171,11 @@ def _format_bot_results(pressures, rss, bos, denos, uos, co, gz, gfvf, cg,
                         rsb_frac, pvto, export, zmethod, cmethod,
                         vis_frac=1.0):
     """Assemble DataFrame, optionally export Eclipse files, and return results dict."""
+    import pandas as pd  # Local imports keep `import pyrestoolbox.oil` light
+    from tabulate import tabulate
+    import pyrestoolbox.gas as gas
+    import pyrestoolbox.brine as brine
+
     st_deno = sg_o * WDEN
     st_deng = gas.gas_den(
         p=psc, sg=sg_g, degf=tsc, zmethod=zmethod, cmethod=cmethod

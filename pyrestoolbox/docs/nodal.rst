@@ -17,9 +17,9 @@ A minimal example finding the operating point for a gas well:
     >>> r = nodal.Reservoir(pr=3000, degf=200, k=10, h=50, re=1500, rw=0.35, S=2, D=0.001)
     >>> result = nodal.operating_point(thp=500, completion=c, reservoir=r, vlpmethod='HB', well_type='gas', gsg=0.65)
     >>> round(result['rate'], 2)
-    10.61
+    10.58
     >>> round(result['bhp'], 1)
-    1573.7
+    1583.2
 
 
 Function List
@@ -499,7 +499,7 @@ Gas well:
     >>> from pyrestoolbox import nodal
     >>> c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    954.8384864703888
+    962.1287441454741
 
 Oil well:
 
@@ -507,7 +507,7 @@ Oil well:
 
     >>> c = nodal.Completion(tid=2.441, length=8000, tht=100, bht=180)
     >>> nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil', qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65, pb=2500, rsb=500, sgsp=0.65, api=35)
-    1770.5840097037972
+    1783.6902402593976
 
 Oil well using OilPVT object:
 
@@ -516,7 +516,7 @@ Oil well using OilPVT object:
     >>> from pyrestoolbox import oil
     >>> opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     >>> nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil', oil_pvt=opvt, qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65)
-    1771.3518436635964
+    1784.4602074684308
 
 Deviated well using WellSegment:
 
@@ -525,7 +525,7 @@ Deviated well using WellSegment:
     >>> segs = [nodal.WellSegment(md=5000, id=2.441, deviation=0), nodal.WellSegment(md=5000, id=2.441, deviation=45)]
     >>> c_dev = nodal.Completion(segments=segs, tht=100, bht=200)
     >>> nodal.fbhp(thp=500, completion=c_dev, vlpmethod='HB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    926.7968375529219
+    933.6848384590953
 
 .. note::
 
@@ -645,7 +645,7 @@ Examples:
     >>> result['rates']
     [2.0, 5.0, 10.0, 15.0, 20.0]
     >>> [round(b, 1) for b in result['bhp']]
-    [676.8, 925.7, 1498.7, 2121.5, 2757.8]
+    [681.6, 935.2, 1512.3, 2138.0, 2777.1]
 
 
 pyrestoolbox.nodal.ipr_curve
@@ -806,9 +806,9 @@ Gas well operating point:
     >>> r = nodal.Reservoir(pr=3000, degf=200, k=10, h=50, re=1500, rw=0.35, S=2, D=0.001)
     >>> result = nodal.operating_point(thp=500, completion=c, reservoir=r, vlpmethod='HB', well_type='gas', gsg=0.65)
     >>> round(result['rate'], 2)
-    10.61
+    10.58
     >>> round(result['bhp'], 1)
-    1573.7
+    1583.2
 
 Oil well operating point:
 
@@ -820,9 +820,9 @@ Oil well operating point:
     >>> opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     >>> result = nodal.operating_point(thp=200, completion=c, reservoir=r, vlpmethod='HB', well_type='oil', oil_pvt=opvt, gor=800, wc=0.3, gsg=0.65)
     >>> round(result['rate'], 1)
-    2019.0
+    1969.8
     >>> round(result['bhp'], 1)
-    1778.5
+    1774.3
 
 
 Calculation Methods and Class Objects
@@ -854,20 +854,20 @@ Examples:
     >>> from pyrestoolbox import nodal
     >>> c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    954.8384864703888
+    962.1287441454741
 
 Comparing all four VLP methods for the same gas well:
 
 .. code-block:: python
 
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    954.8384864703888
+    962.1287441454741
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='WG', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
     1172.8626065704736
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='GRAY', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    1940.034905804135
+    1066.6990456110436
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='BB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    1213.2399909265969
+    1224.493443200605
 
 
 VLP Method Suitability for Deviated and Horizontal Wells

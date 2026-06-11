@@ -1,17 +1,20 @@
 /// VLP segment loop acceleration module.
-/// Exposes 8 pyfunction exports for the 4 VLP methods × 2 fluid types.
+/// Exposes 8 pyfunction exports for the 4 VLP methods x 2 fluid types.
+/// All entry points route through the shared segment march in march.rs.
+/// A diverged march (pressure below 1 psia) maps to a Python RuntimeError
+/// with the same message as the pure-Python implementation in nodal.py.
 
+use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 
+pub mod constants;
 pub mod pvt_helpers;
 pub mod ift;
 pub mod friction;
-pub mod holdup_hb;
 pub mod holdup_wg;
 pub mod holdup_gray;
 pub mod holdup_bb;
-pub mod segment_gas;
-pub mod segment_oil;
+pub mod march;
 pub mod static_column;
 
 /// HB gas VLP segment loop.
@@ -22,10 +25,11 @@ pub fn hb_fbhp_gas_rust(
     qg_mmscfd: f64, cgr: f64, qw_bwpd: f64, oil_vis: f64,
     injection: bool, pr: f64, theta: f64,
 ) -> PyResult<f64> {
-    Ok(segment_gas::hb_fbhp_gas(
+    march::hb_fbhp_gas(
         thp, api, gsg, tid, rough, length, tht, bht, wsg,
         qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta,
-    ))
+    )
+    .map_err(PyRuntimeError::new_err)
 }
 
 /// HB oil VLP segment loop.
@@ -37,11 +41,12 @@ pub fn hb_fbhp_oil_rust(
     rsb_scale: f64, injection: bool, theta: f64,
     vis_frac: f64, rsb_frac: f64,
 ) -> PyResult<f64> {
-    Ok(segment_oil::hb_fbhp_oil(
+    march::hb_fbhp_oil(
         thp, api, gsg, tid, rough, length, tht, bht, wsg,
         qt_stbpd, gor, wc, pb, rsb, sgsp, rsb_scale, injection, theta,
         vis_frac, rsb_frac,
-    ))
+    )
+    .map_err(PyRuntimeError::new_err)
 }
 
 /// WG gas VLP segment loop.
@@ -52,10 +57,11 @@ pub fn wg_fbhp_gas_rust(
     qg_mmscfd: f64, cgr: f64, qw_bwpd: f64, oil_vis: f64,
     injection: bool, pr: f64, theta: f64,
 ) -> PyResult<f64> {
-    Ok(segment_gas::wg_fbhp_gas(
+    march::wg_fbhp_gas(
         thp, api, gsg, tid, rough, length, tht, bht, wsg,
         qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta,
-    ))
+    )
+    .map_err(PyRuntimeError::new_err)
 }
 
 /// WG oil VLP segment loop.
@@ -67,11 +73,12 @@ pub fn wg_fbhp_oil_rust(
     rsb_scale: f64, injection: bool, theta: f64,
     vis_frac: f64, rsb_frac: f64,
 ) -> PyResult<f64> {
-    Ok(segment_oil::wg_fbhp_oil(
+    march::wg_fbhp_oil(
         thp, api, gsg, tid, rough, length, tht, bht, wsg,
         qt_stbpd, gor, wc, pb, rsb, sgsp, rsb_scale, injection, theta,
         vis_frac, rsb_frac,
-    ))
+    )
+    .map_err(PyRuntimeError::new_err)
 }
 
 /// Gray gas VLP segment loop.
@@ -82,10 +89,11 @@ pub fn gray_fbhp_gas_rust(
     qg_mmscfd: f64, cgr: f64, qw_bwpd: f64, oil_vis: f64,
     injection: bool, pr: f64, theta: f64,
 ) -> PyResult<f64> {
-    Ok(segment_gas::gray_fbhp_gas(
+    march::gray_fbhp_gas(
         thp, api, gsg, tid, rough, length, tht, bht, wsg,
         qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta,
-    ))
+    )
+    .map_err(PyRuntimeError::new_err)
 }
 
 /// Gray oil VLP segment loop.
@@ -97,11 +105,12 @@ pub fn gray_fbhp_oil_rust(
     rsb_scale: f64, injection: bool, theta: f64,
     vis_frac: f64, rsb_frac: f64,
 ) -> PyResult<f64> {
-    Ok(segment_oil::gray_fbhp_oil(
+    march::gray_fbhp_oil(
         thp, api, gsg, tid, rough, length, tht, bht, wsg,
         qt_stbpd, gor, wc, pb, rsb, sgsp, rsb_scale, injection, theta,
         vis_frac, rsb_frac,
-    ))
+    )
+    .map_err(PyRuntimeError::new_err)
 }
 
 /// BB gas VLP segment loop.
@@ -112,10 +121,11 @@ pub fn bb_fbhp_gas_rust(
     qg_mmscfd: f64, cgr: f64, qw_bwpd: f64, oil_vis: f64,
     injection: bool, pr: f64, theta: f64,
 ) -> PyResult<f64> {
-    Ok(segment_gas::bb_fbhp_gas(
+    march::bb_fbhp_gas(
         thp, api, gsg, tid, rough, length, tht, bht, wsg,
         qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta,
-    ))
+    )
+    .map_err(PyRuntimeError::new_err)
 }
 
 /// BB oil VLP segment loop.
@@ -127,9 +137,10 @@ pub fn bb_fbhp_oil_rust(
     rsb_scale: f64, injection: bool, theta: f64,
     vis_frac: f64, rsb_frac: f64,
 ) -> PyResult<f64> {
-    Ok(segment_oil::bb_fbhp_oil(
+    march::bb_fbhp_oil(
         thp, api, gsg, tid, rough, length, tht, bht, wsg,
         qt_stbpd, gor, wc, pb, rsb, sgsp, rsb_scale, injection, theta,
         vis_frac, rsb_frac,
-    ))
+    )
+    .map_err(PyRuntimeError::new_err)
 }

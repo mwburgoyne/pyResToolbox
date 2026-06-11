@@ -40,18 +40,13 @@ __all__ = [
 import warnings
 
 import numpy as np
-import numpy.typing as npt
-import pandas as pd
 
 from typing import Tuple
-from tabulate import tabulate
 
 import pyrestoolbox.gas as gas # Needed for Z-Factor
-from pyrestoolbox.classes import z_method, c_method, pb_method, rs_method, bo_method, uo_method, deno_method, co_method, kr_family, kr_table, class_dic
-from pyrestoolbox.shared_fns import convert_to_numpy, process_output, halley_solve_cubic, validate_pe_inputs
-from pyrestoolbox.validate import validate_methods
-from pyrestoolbox.constants import (R, psc, tsc, degF2R, tscr, scf_per_mol, CUFTperBBL, WDEN, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2,
-                                    BAR_TO_PSI, PSI_TO_BAR, degc_to_degf, degf_to_degc,
+from pyrestoolbox.shared_fns import halley_solve_cubic, validate_pe_inputs
+from pyrestoolbox.constants import (psc, tsc, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2,
+                                    BAR_TO_PSI, degc_to_degf,
                                     INVPSI_TO_INVBAR, SCF_PER_STB_TO_SM3_PER_SM3)
 from pyrestoolbox.plyasunov.iapws_if97 import rho_if97 as _rho_if97
 from pyrestoolbox._accelerator import RUST_AVAILABLE as _RUST_AVAILABLE
@@ -110,8 +105,13 @@ _GARCIA_VMV = [37.51, -0.09585, 0.000874, -0.0000005044]
 _MPA_TO_PSI = 145.038            # MPa -> psi
 _SM3_TO_SCFSTB = 0.1781076       # sm3/sm3 -> scf/stb
 
-# Standard temperature in K (60 degF)
+# Standard conditions (60 degF, 1 atm)
 _T_SC_K = (60 - 32) / 1.8 + 273.15  # 288.7056 K
+_P_SC_MPA = 0.101325                # 1 atm (MPa)
+
+# Standard pressure used in Spivey standard-conditions density evaluation
+# (McCain Ch 4 convention: 0.1013 MPa at 15 degC)
+_SPIVEY_SC_MPA = 0.1013
 
 # Methane specific gravity
 _SG_METHANE = 0.5537
@@ -129,6 +129,9 @@ def brine_props(p: float = None, degf: float = None, wt: float = None, ch4_sat: 
         wt: Salt wt% (0-100). Alias: ppm (auto-converted: wt = ppm / 10000)
         ch4_sat: Degree of methane saturation (0 - 1)
         metric: If True, inputs/outputs in Eclipse METRIC units (barsa, degC, 1/bar, sm3/sm3). Default False (oilfield).
+
+        Pressure limit: freshwater density uses IAPWS-IF97 Region 1, which is valid
+        to 100 MPa (14,503 psia). Higher pressures raise ValueError.
     """
     # Resolve parameter aliases
     if p is None and pres is not None:
@@ -152,7 +155,7 @@ def brine_props(p: float = None, degf: float = None, wt: float = None, ch4_sat: 
 
     Mpa = p * 0.00689476  # Pressure in mPa
     degc = (degf - 32) / 1.8  # Temperature in deg C
-    degk = degc + 273  # Temperature in deg K
+    degk = degc + 273.15  # Temperature in deg K
     m = (
         1000 * (wt / 100) / (58.4428 * (1 - (wt / 100)))
     )  # Molar concentration of NaCl from wt % in gram mol/kg water
@@ -180,8 +183,6 @@ def brine_props(p: float = None, degf: float = None, wt: float = None, ch4_sat: 
     Fm32t = Eq41(degc, Fm32t_arr)
     Fm1t = Eq41(degc, Fm1t_arr)
     Fm12t = Eq41(degc, Fm12t_arr)
-
-    cwtp = (1 / 70) * (1 / (Ewt * (Mpa / 70) + Fwt))  # Eq 4.2
 
     Iwt70 = (1 / Ewt) * np.log(abs(Ewt + Fwt))  # Eq 4.3
     Iwtp = (1 / Ewt) * np.log(abs(Ewt * (Mpa / 70) + Fwt))  # Eq 4.4
@@ -220,11 +221,10 @@ def brine_props(p: float = None, degf: float = None, wt: float = None, ch4_sat: 
     Fm1_sc = Eq41(15, Fm1t_arr)
     Fm12_sc = Eq41(15, Fm12t_arr)
 
-    cw_sc = (1 / 70) * (1 / (Ew_sc * (0.1013 / 70) + Fw_sc))
     Iw_sc70 = (1 / Ew_sc) * np.log(abs(Ew_sc + Fw_sc))
-    Iw_sc = (1 / Ew_sc) * np.log(abs(Ew_sc * (0.1013 / 70) + Fw_sc))
+    Iw_sc = (1 / Ew_sc) * np.log(abs(Ew_sc * (_SPIVEY_SC_MPA / 70) + Fw_sc))
     rhow_sc_spivey = rhow_sc70 * np.exp(Iw_sc - Iw_sc70)
-    rhow_sc = _rho_if97(273.15 + 15, 0.1013) / 1000.0  # IAPWS freshwater at SC
+    rhow_sc = _rho_if97(273.15 + 15, _SPIVEY_SC_MPA) / 1000.0  # IAPWS freshwater at SC
     rhob_sc70 = (
         rhow_sc70
         + Dm2_sc * m * m
@@ -234,9 +234,8 @@ def brine_props(p: float = None, degf: float = None, wt: float = None, ch4_sat: 
     )
     Eb_scm = Ew_sc + Em_sc * m
     Fb_scm = Fw_sc + Fm32_sc * m ** 1.5 + Fm1_sc * m + Fm12_sc * m ** 0.5
-    cb_scm = (1 / 70) * (1 / (Eb_scm * (0.1015 / 70) + Fb_scm))
     Ib_sc70 = (1 / Eb_scm) * np.log(abs(Eb_scm + Fb_scm))
-    Ib_scm = (1 / Eb_scm) * np.log(abs(Eb_scm * (0.1015 / 70) + Fb_scm))
+    Ib_scm = (1 / Eb_scm) * np.log(abs(Eb_scm * (_SPIVEY_SC_MPA / 70) + Fb_scm))
     Rhob_scm_spivey = rhob_sc70 * np.exp(
         Ib_scm - Ib_sc70
     )  # Spivey brine density at standard conditions
@@ -263,11 +262,15 @@ def brine_props(p: float = None, degf: float = None, wt: float = None, ch4_sat: 
     B_t = Eq41(degc, b_coefic)
     C_t = Eq41(degc, c_coefic)
 
-    try:
+    # Eq 4.15 requires p above the water vapour pressure. Below it, no free
+    # methane phase can exist, so methane solubility is zero. (np.log of a
+    # negative argument returns nan rather than raising, so guard explicitly.)
+    if Mpa > vap_pressure:
         mch4w = np.exp(A_t * np.power(np.log(Mpa - vap_pressure), 2) + B_t * np.log(Mpa - vap_pressure) + C_t)  # Eq 4.15
-    except (ValueError, FloatingPointError):
-        mch4w = 0
-    
+    else:
+        mch4w = 0.0
+
+
     u_arr = _DUAN_U
     lambda_arr = _DUAN_LAMBDA
     eta_arr = _DUAN_ETA
@@ -313,11 +316,16 @@ def brine_props(p: float = None, degf: float = None, wt: float = None, ch4_sat: 
     cwu = -((1000 + m * 58.4428) * dvbdp + mch4 * dVmch4dp) / (
         (1000 + m * 58.4428) * vb0 + (mch4 * Vmch4b)
     )  # Eq 4.32 -- Undersaturated brine Compressibility (Mpa-1)
-    satdmch4dp = (
-        mch4
-        * (2 * A_t * np.log(Mpa - vap_pressure) + B_t)
-        / ((Mpa - vap_pressure) - 2 * dlambdadptm * m)
-    )  # Eq 4.33
+    # Eq 4.33: d(mch4b)/dP from the chain rule on Eqs 4.15 and 4.18:
+    #   mch4b = exp(A*ln(P-Pv)^2 + B*ln(P-Pv) + C) * exp(-2*lambda(P)*m - eta*m^2)
+    #   d(ln mch4b)/dP = (2*A*ln(P-Pv) + B)/(P-Pv) - 2*m*dlambda/dP
+    if Mpa > vap_pressure:
+        satdmch4dp = mch4 * (
+            (2 * A_t * np.log(Mpa - vap_pressure) + B_t) / (Mpa - vap_pressure)
+            - 2 * m * dlambdadptm
+        )  # Eq 4.33
+    else:
+        satdmch4dp = 0.0
 
     zee = gas.gas_z(p=p, sg=_SG_METHANE, degf=degf, zmethod='BNS', cmethod='BNS',
                     co2=0, h2s=0, n2=0, h2=0)  # Z-Factor of pure methane
@@ -348,7 +356,7 @@ def brine_props(p: float = None, degf: float = None, wt: float = None, ch4_sat: 
 
     zee_sc = gas.gas_z(p=psc, sg=_SG_METHANE, degf=tsc, zmethod='BNS', cmethod='BNS',
                        co2=0, h2s=0, n2=0, h2=0)
-    vmch4g_sc = zee_sc * _R_CM3_MPA * (273 + 15) / 0.1013  # Eq 4.34
+    vmch4g_sc = zee_sc * _R_CM3_MPA * _T_SC_K / _P_SC_MPA  # Eq 4.34 at 60 degF, 1 atm
     rsw_new = mch4 * vmch4g_sc / ((1000 + m * 58.4428) * vb0_sc)
     rsw_new_oilfield = rsw_new / _SM3_TO_SCFSTB  # Convert to scf/stb
 
@@ -445,9 +453,12 @@ class CO2_Brine_Mixture():
                 pres: Pressure (Bar / psia)
                 temp: Temperature (deg C / deg F)
                 ppm: NaCL equivalent weight concentration in brine in parts NaCl per million parts of brine (default zero, Wt% = 100 * ppm / 1E6 )
-                metric: Boolean operator that determines units assumed for input, and return calculated (default True)
+                metric: Boolean operator that determines units assumed for input, and return calculated (default False)
                 cw_sat: Boolean operator that determines whether to calculate saturated brine compressibility, doubling calculations required (default False)
-    
+
+            Pressure limit: brine density uses IAPWS-IF97 Region 1 freshwater density,
+            which is valid to 100 MPa (14,503 psia). Higher pressures raise ValueError.
+
             Returns object with following calculated properties:
                 .x       : Mole fractions of CO2 and H2O in aqueous phase [xCO2, xH2O]
                 .y       : Mole fractions of CO2 and H2O in vapor phase [yCO2, yH2O]
@@ -531,8 +542,6 @@ class CO2_Brine_Mixture():
         self.CO2_sat = False              # Flag to determine if in P-T range for saturated liquid CO2 K values
         self.repeat = False               # Flag to trigger repeat of calculations depending on whether CO2 is saturated liquid phase
         self.converged = True             # Spycher-Pruess fugacity iteration convergence flag
-        #self.EzrokhiDenA = None           # Ezrokhi coefficient array for density (to be calculated with ezrokhi() function)
-        #self.EzrokhiVisB = None           # Ezrokhi coefficient array for viscosity (to be calculated with ezrokhi() function)
         self.Rs_STD = None                # Dissolved CO2 remaining at standard conditions (sm3/sm3)
         self.ppm_sat = None               # Maximum ppm Salt at specified temperature
         
@@ -595,60 +604,6 @@ class CO2_Brine_Mixture():
         # Equation of form: Y = A*EXP(B*EXP(C*X))+D <--- Gompertz + c
         self.Rs_STD = A * np.exp(B * np.exp(C * self.ppm)) + D
     
-    # Ezrokhi functionality removed due to (a) not needed with full brine definitions and (b) some concern  as to how
-    # IX is actually implementing subsequent density etc calculations (const CO2 molar volume which is incorrect).
-    # Accordingly I've removed the functionality below in this script
-    
-        # Additional function available to calculate Ezrokhi coefficients for effects of dissolved CO2 on brine density and viscosity
-        # .ezrokhi(lower_degC, upper_degC)
-        #
-        # Calculates and populates the following additional attributes;
-        # .EzrokhiDenA : List of A_CO2's for equation Ai(T) = A[0] + A[1] * degC + A[2] * degC**2, for Ezrokhi density adjustment
-        # .EzrokhiVisB : List of B_CO2's for equation Bi(T) = B[0] + B[1] * degC + B[2] * degC**2, for Ezrokhi viscosity adjustment
-        
-        #def ezrokhi(self, lower_degC, upper_degC):
-        #    # Function to regress on Ezrokhi coefficients for the mixture over the temperature range
-        #    # Will return arrays Ai and Bi for density and viscosity impact of dissolved CO2 in brine respectively
-        #    # Uses given sample pressure
-        #    
-        #    # Ensure reversed temperatures, or cases with same upper & lower values don't fall over
-        #    if lower_degC <= upper_degC: 
-        #        lower_degC, upper_degC = min(lower_degC, upper_degC), max(lower_degC, upper_degC)
-        #        lower_degC -= 10
-        #        lower_degC = max(10, lower_degC) # Ensure doesn't get below 10 deg C
-        #        upper_degC += 10
-        #    
-        #    
-        #    temps = np.linspace(lower_degC, upper_degC)
-        #    As, Bs = [], []
-        #    
-        #    # Grab the original temperature before doing calculations over range for Ezrokhi
-        #    original_degc = self.degC 
-        #    
-        #    for temp in temps:
-        #        self.degC = temp
-        #        self.co2BrineSolubility()
-        #        wt_co2 = self.x[0] * MWCO2 / (self.x[0] * MWCO2 + self.x[1] * self.MwBrine) # Weight fraction of dissolved CO2
-        #        results = brine_props(self.pBar, temp, self.ppm, self.x[0], self.MwBrine)
-        #        bDen, bVis, bVisblty, bw, Rs, Cf_usat = results
-        #        As.append(np.log10(bDen[0]/bDen[1])/wt_co2)  # Corrections relative to CO2 free brine
-        #        Bs.append(np.log10(bVis[0]/bVis[1])/wt_co2)  # Corrections relative to CO2 free brine
-        #    
-        #    # Because of the form of the Akand W. Islam and Eric S. Carlson viscosity adjustment, 
-        #    # the Ezrokhi B coefficient for viscosity will be a constant value for a given xCO2
-        #    self.EzrokhiVisB = [Bs[0], 0, 0]
-        #    
-        #    # Fit density data to quadratic form
-        #    z = np.polyfit(temps, np.array(As), 2)
-        #    # Numpy fits coefficients in reverse order to what is expected for Ezrokhi equation as follows
-        #    # Ai = ao + a1 * T + a2 * T**2
-        #    z = list(z)[::-1]  # Reverse order of fitted coefficients
-        #    self.EzrokhiDenA = z 
-        #    
-        #    # And reset to original temperature & recalculate
-        #    self.degC = original_degc
-        #    self.co2BrineSolubility()
-    
     def calc_type(self):
         # == Figure out which calculation method to employ ==========================
         # deg C <= 99: Non-iterative solution employed assuming negligible xCO2 for mixing rules
@@ -701,7 +656,8 @@ class CO2_Brine_Mixture():
         return self.ppm / MWSAL * 1000 / (1e6 - self.ppm)
     
     def blended_val(self, low_val, high_val): # Blends results between 99 - 109 deg C
-        return ((self.degC - 99) * low_val + (109 - self.degC) * high_val)/(109 - 99)
+        # Weights chosen so the blend returns low_val at 99 degC and high_val at 109 degC
+        return ((109 - self.degC) * low_val + (self.degC - 99) * high_val)/(109 - 99)
         
     def aCO2_RK(self):
     #=======================================================================
@@ -1066,7 +1022,7 @@ class CO2_Brine_Mixture():
         self.fugP()
         
         if self.scaled: # Recalculate mixing rules and fugacity pressure products with low temp relationships
-            phiP_ht = self.fugPi
+            phiP_ht = list(self.fugPi)  # copy: fugP() mutates self.fugPi in place
             self.low_temp = True  # Set flag for low temp coefficiencts
             self.aMix_RK()
             self.bMix_RK()
@@ -1105,7 +1061,7 @@ class CO2_Brine_Mixture():
                 self.fugP()
                 
                 if self.scaled:
-                    phiP_ht = self.fugPi
+                    phiP_ht = list(self.fugPi)  # copy: fugP() mutates self.fugPi in place
                     self.low_temp = True  # Set flag for low temp coefficient calculations
                     self.aMix_RK()
                     self.bMix_RK()
@@ -1342,8 +1298,13 @@ class CO2_Brine_Mixture():
         sc_volume_freshwater = water_mass / DENW / rhowSC # m3 freshwater
         bw_freshwater = 1/sc_volume_freshwater
         
-        # Rearrange: xCO2 = co2_moles / (co2_moles + brine_moles)
-        co2_moles = brine_moles * xCO2 / (1 - xCO2)    # kg Moles of dissolved CO2 per sm3
+        # Spycher xCO2 is on the IONISED aqueous basis (denominator counts
+        # H2O + Na+ + Cl-), so convert with ionised aqueous moles
+        # (CONMOLA + 2m per kg water), not the paired-NaCl brine moles
+        # (CONMOLA + m). The ratio reduces to 1 (current behaviour) at m=0.
+        ionised_moles = brine_moles * (CONMOLA + 2 * m) / (CONMOLA + m)
+        # Rearrange: xCO2 = co2_moles / (co2_moles + ionised_moles)
+        co2_moles = ionised_moles * xCO2 / (1 - xCO2)  # kg Moles of dissolved CO2 per sm3
         
         co2_mass = co2_moles * MWCO2                   # kg co2 / sm3 brine
         rs = KGMOL2SM3 * co2_moles                     # sm3 CO2 per sm3 Brine (23.545 m3/kgmol at 60 deg F and 1 atm)
@@ -1433,6 +1394,10 @@ class SoreideWhitson:
         - Brine FVF, compressibility, viscosibility
 
         Supports fresh and saline water (NaCl equivalent).
+
+        Pressure limit: brine density uses IAPWS-IF97 Region 1 freshwater
+        density, valid to 100 MPa (14,503 psia). Higher pressures raise
+        ValueError.
 
         Inputs:
             pres: Pressure (Bar / psia)
@@ -1528,10 +1493,16 @@ class SoreideWhitson:
             )
         if framework == 'proposed' and salinity_method == 'embedded':
             warnings.warn(
-                "framework='proposed' does not define embedded-salinity kij; engine will "
-                "fall back to the 'gamma_phi' behaviour.",
+                "framework='proposed' does not define embedded-salinity kij; "
+                "falling back to the 'gamma_phi' salinity method.",
                 stacklevel=2,
             )
+            salinity_method = 'gamma_phi'
+        # 'sechenov' and 'auto' are accepted aliases that normalise to the
+        # gamma_phi (Sechenov activity-coefficient) salting-out method. Without
+        # this, the flash path would silently apply no salinity correction.
+        if salinity_method in ('sechenov', 'auto'):
+            salinity_method = 'gamma_phi'
         self.framework = framework
         self.salinity_method = salinity_method
         # Validate pressure and temperature (convert to oilfield units for validation)
@@ -1894,7 +1865,14 @@ class SoreideWhitson:
         # ================================================================
         # Mass of 1 sm3 of gas-free brine at standard conditions
         brine_mass = rho_sc_brine_gcc * DENW  # kg/sm3
-        brine_moles = brine_mass / self.MwBrine  # kg-mol/sm3
+        brine_moles = brine_mass / self.MwBrine  # kg-mol (paired NaCl) /sm3
+
+        # The S&W flash x is on a salt-free basis (liquid = H2O + dissolved
+        # gases), so 1 - x_total = x_H2O. Convert dissolved-gas moles relative
+        # to WATER moles, not paired-brine moles. water_moles = brine_moles *
+        # CONMOLA/(CONMOLA + m); reduces to brine_moles (current) at m=0.
+        m_nacl = 1000.0 * (wt / 100.0) / (MWSAL * (1.0 - wt / 100.0)) if wt < 100 else 0.0
+        water_moles = brine_moles * CONMOLA / (CONMOLA + m_nacl)
 
         # Per-gas Rs
         self.Rs = {}
@@ -1902,7 +1880,7 @@ class SoreideWhitson:
         for gas_vle, x_i in x_gas.items():
             if x_i <= 0:
                 continue
-            gas_moles = brine_moles * x_i / (1.0 - self.x_total)  # kg-mol gas / sm3 brine
+            gas_moles = water_moles * x_i / (1.0 - self.x_total)  # kg-mol gas / sm3 brine
             gas_mw_val = _SW_GAS_MW.get(gas_vle, _plyasunov_gas_mw(
                 _VLE_TO_PLYASUNOV.get(gas_vle, gas_vle.upper())
             ))

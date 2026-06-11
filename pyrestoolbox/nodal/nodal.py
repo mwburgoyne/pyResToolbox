@@ -68,10 +68,9 @@ if _RUST_AVAILABLE:
 
 
 # Unit conversion constants used in VLP inner loops
-_DYNCM_TO_LBFFT = 6.852e-5        # dyne/cm -> lbf/ft
 _CP_TO_LBFTS = 6.7197e-4          # cP -> lb/(ft*s)
 _LB_TO_KG = 0.453592              # lb -> kg
-_LBFT3_TO_KGM3 = 16.01846         # lb/ft3 -> kg/m3
+_DYNCM_PER_LBM_S2 = 453.592       # dyne/cm per lbm/s^2 (1 lbm/s^2 = 453.592 dyne/cm)
 _R_GAS = 10.732                   # Gas constant, psia*ft3/(lb-mol*degR)
 
 
@@ -121,7 +120,6 @@ _FT3_PER_BBL = 5.615            # ft³ per barrel
 _SEC_PER_DAY = 86400.0          # seconds per day
 _IN2_PER_FT2 = 144.0            # in² per ft²
 _FW_GRAD = 0.433                # Freshwater pressure gradient (psi/ft)
-_GAS_COL_K = 0.01875            # Gas column static pressure constant
 
 # ============================================================================
 #  IFT Correlation Constants
@@ -211,7 +209,10 @@ _ORK_LB_B = -0.2218             # Bubble flow boundary velocity coefficient
 _ORK_LB_MIN = 0.13              # Minimum bubble flow boundary
 
 # HB Reynolds/friction dimensional constants
-_HB_RE_K = 96778.0              # Reynolds number dimensional constant
+# Hagedorn and Brown (1965), JPT 17(4): two-phase Reynolds number
+# NRe = 2.2e-2 * w / (D * muL^HL * muG^(1-HL)) with w in lbm/day.
+# Mass flow here is in lbm/s, so the constant is 2.2e-2 * 86400 = 1900.8
+_HB_RE_K = 1900.8               # Reynolds number dimensional constant (lbm/s basis)
 _HB_FRIC_K = 7.413e10           # Friction gradient dimensional constant
 
 # ============================================================================
@@ -247,14 +248,23 @@ _BB_SF_LO = -5.0
 _BB_SF_HI = 5.0
 
 # ============================================================================
-#  Gray (1978) Holdup & Roughness Constants
+#  Gray (1974) Holdup & Roughness Constants
+#  Gray, H.E. (1974), "Vertical Flow Correlation in Gas Wells", User's Manual
+#  for API 14B Subsurface Controlled Safety Valve Sizing Computer Program.
+#  Gas void fraction: fg = (1 - exp(A)) / (R + 1) with R = vsl/vsg,
+#  A = -2.314 * (NV * (1 + 205/ND))^B,
+#  B = 0.0814 * (1 - 0.0554 * ln(1 + 730*R/(R+1)))
 # ============================================================================
 
-_GRAY_HL_A = 0.0814             # Holdup coefficient a
-_GRAY_HL_B = 0.0554             # Holdup coefficient b (also used in f_e)
-_GRAY_HL_C = 730.0              # Holdup coefficient c
+_GRAY_A_COEF = 2.314            # Holdup exponent leading coefficient
+_GRAY_B1 = 0.0814               # Exponent B coefficient
+_GRAY_B2 = 0.0554               # Exponent B log coefficient
+_GRAY_B3 = 730.0                # Exponent B log argument coefficient
+_GRAY_ND_COEF = 205.0           # Diameter number coefficient in A
 
 _GRAY_ROUGH_K = 28.5            # Effective roughness coefficient
+_GRAY_R_THRESH = 0.007          # R threshold for roughness interpolation
+_GRAY_ROUGH_FLOOR = 2.77e-5     # Minimum effective roughness (ft)
 
 # ============================================================================
 #  WG (Woldesemayat-Ghajar 2007) Drift-Flux Constants
@@ -290,6 +300,16 @@ def _clamp(val, lo, hi):
     if isinstance(val, complex):
         val = abs(val)
     return max(lo, min(hi, val))
+
+
+def _validate_rates(qg_mmscfd=0.0, qt_stbpd=0.0, qw_bwpd=0.0):
+    """Raise ValueError for negative flow rates at public entry points."""
+    if qg_mmscfd < 0:
+        raise ValueError(f"Gas rate qg_mmscfd must be non-negative, got {qg_mmscfd}")
+    if qt_stbpd < 0:
+        raise ValueError(f"Liquid rate qt_stbpd must be non-negative, got {qt_stbpd}")
+    if qw_bwpd < 0:
+        raise ValueError(f"Water rate qw_bwpd must be non-negative, got {qw_bwpd}")
 
 
 # ============================================================================
@@ -679,13 +699,6 @@ def _gas_viscosity(sg, temp_f, press_psia, z=None, tc=None, pc=None):
     return max(1e-4 * k_val * math.exp(exp_arg), 1e-6)
 
 
-def _gas_density(sg, temp_f, press_psia, z=None, tc=None, pc=None):
-    """Gas density in lb/ft^3."""
-    if z is None:
-        z = _z_factor(sg, temp_f, press_psia, tc=tc, pc=pc)
-    return _MW_AIR * sg * press_psia / (z * _R_GAS * (temp_f + 459.67))
-
-
 def _water_viscosity(press_psia, temp_f, salinity=0.0):
     """Simplified water viscosity (cP)."""
     if temp_f < 32:
@@ -944,8 +957,7 @@ def _hb_gradient_gas(s):
     ylonsi = max(ylonsi, 0.0)
 
     f2 = nvg * nl ** _F2_VISC_EXP / nd ** _F2_DIAM_EXP
-    idex = 1.0 if f2 >= _SC_F2_CLAMP else -1.0
-    f2 = (1.0 - idex) / 2.0 * _SC_F2_CLAMP + (1.0 + idex) / 2.0 * f2
+    f2 = max(f2, _SC_F2_CLAMP)
 
     si = (_SC_C0 + _SC_C1 * f2 + _SC_C2 * f2 * f2 +
           _SC_C3 * f2 ** 3 + _SC_C4 * f2 ** 4)
@@ -1144,52 +1156,57 @@ def _wg_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
 #  3. GRAY VLP
 # ============================================================================
 
-def _gray_liquid_holdup(v_m, rho_l, rho_g, sigma, diam, lambda_l, p_sys):
+def _gray_liquid_holdup(v_sl, v_sg, rho_l, rho_g, sigma, diam, lambda_l):
+    """Gray (1974) liquid holdup, API 14B form.
+
+    R = vsl/vsg, fg = (1 - exp(A)) / (R + 1), HL = 1 - fg with
+    A = -2.314 * (NV * (1 + 205/ND))^B and
+    B = 0.0814 * (1 - 0.0554 * ln(1 + 730*R/(R+1))).
+    NV and ND use sigma in dyne/cm; 453.592 converts dyne/cm to lbm/s^2.
+    """
     if lambda_l <= 0:
         return 0.0
     if lambda_l >= 1.0:
         return 1.0
-    if v_m < 1e-10:
-        return lambda_l
-
-    sigma_lbf_ft = sigma * _DYNCM_TO_LBFFT
-    if sigma_lbf_ft <= 0:
+    if v_sg < 1e-10:
+        return 1.0
+    if sigma <= 0:
         return lambda_l
 
     rho_ns = rho_l * lambda_l + rho_g * (1.0 - lambda_l)
     if rho_ns <= 0:
         return lambda_l
 
-    rv = lambda_l
+    v_m = v_sl + v_sg
+    r = v_sl / v_sg
     drho = max(rho_l - rho_g, 0.1)
-    n1 = v_m ** 2 * rho_ns / (_G_FT * diam * drho)
-    n2 = _G_FT * diam ** 2 * drho / sigma_lbf_ft
+    nv = (_DYNCM_PER_LBM_S2 * rho_ns ** 2 * v_m ** 4 /
+          (_G_FT * sigma * drho))
+    nd = _DYNCM_PER_LBM_S2 * _G_FT * drho * diam ** 2 / sigma
 
-    a = _GRAY_HL_A * (1.0 - _GRAY_HL_B * math.log(1.0 + _GRAY_HL_C * rv / (1.0 + rv)))
-    b = _GRAY_HL_B
-
-    if n1 <= 1e-15:
-        return lambda_l
-
-    argument = (a + b * n2) / n1
-    if argument > 0:
-        f_e = -_GRAY_HL_B * math.log(argument)
-    else:
-        f_e = 0.0
-
-    hl = 1.0 - (1.0 - lambda_l) * math.exp(f_e)
-    return _clamp(hl, lambda_l, 1.0)
+    b = _GRAY_B1 * (1.0 - _GRAY_B2 * math.log(1.0 + _GRAY_B3 * r / (r + 1.0)))
+    a = -_GRAY_A_COEF * (nv * (1.0 + _GRAY_ND_COEF / nd)) ** b
+    fg = (1.0 - math.exp(a)) / (r + 1.0)
+    return _clamp(1.0 - fg, lambda_l, 1.0)
 
 
-def _gray_effective_roughness(rough_dry, sigma, rho_ns, v_m, lambda_l):
-    sigma_lbf_ft = sigma * _DYNCM_TO_LBFFT
-    if v_m < 1e-10 or rho_ns <= 0 or sigma_lbf_ft <= 0:
+def _gray_effective_roughness(rough_dry, sigma, rho_ns, v_sl, v_sg):
+    """Gray (1974) effective (wet film) roughness in ft, API 14B form.
+
+    ke0 = 28.5 * sigma / (453.592 * rho_ns * vm^2) with sigma in dyne/cm.
+    For R = vsl/vsg >= 0.007 use ke0; below, interpolate from the dry pipe
+    roughness. Result floored at 2.77e-5 ft.
+    """
+    v_m = v_sl + v_sg
+    if v_m < 1e-10 or rho_ns <= 0 or sigma <= 0 or v_sg < 1e-10:
         return rough_dry
-    ke = rho_ns * v_m * v_m
-    r1 = _GRAY_ROUGH_K * sigma_lbf_ft / max(ke, 1e-10)
-    r2 = ke * lambda_l / sigma_lbf_ft
-    film = r1 * (1.0 - math.exp(-r2))
-    return rough_dry + max(film, 0.0)
+    r = v_sl / v_sg
+    ke0 = _GRAY_ROUGH_K * sigma / (_DYNCM_PER_LBM_S2 * rho_ns * v_m * v_m)
+    if r >= _GRAY_R_THRESH:
+        ke = ke0
+    else:
+        ke = rough_dry + r * (ke0 - rough_dry) / _GRAY_R_THRESH
+    return max(ke, _GRAY_ROUGH_FLOOR)
 
 
 # ============================================================================
@@ -1215,6 +1232,13 @@ def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
             warnings.warn(
                 f"Gas rate {qg_mmscfd:.4f} MMscf/d with near-zero total mass; "
                 "using static gas column pressure.",
+                RuntimeWarning, stacklevel=3
+            )
+        elif qw_bwpd > 0 or cgr > 0:
+            warnings.warn(
+                f"Gas rate {qg_mmscfd:.4f} MMscf/d below the 0.001 MMscf/d "
+                "threshold: returning a static dry-gas column that ignores "
+                "the specified liquid rates (liquid loading not modelled).",
                 RuntimeWarning, stacklevel=3
             )
         return _static_gas_column_pressure(thp, length, tht, bht, gsg, theta=theta)
@@ -1293,6 +1317,10 @@ def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
             p_est = p_psia + dpdz * seg_len
 
         p_psia = p_est
+        if p_psia < 1.0:
+            raise RuntimeError(
+                "VLP march diverged: pressure fell below atmospheric - the "
+                "specified rates are not physically sustainable for this geometry")
 
     return p_psia
 
@@ -1361,11 +1389,6 @@ def _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
             mflow_l = mflow_o + mflow_w
             mflow_total = mflow_g + mflow_l
 
-            if mflow_total < 1e-15:
-                tavg_r = (tht + bht) / 2.0 + 459.67
-                p_psia *= math.exp(_GAS_COL_K * gsg * seg_len / (zee * tavg_r))
-                break
-
             ql = qo + qw
             rho_w = wsg * _RHO_FW
             rho_l = (qo * rho_oil + qw * rho_w) / ql if ql > 0 else rho_oil
@@ -1407,6 +1430,10 @@ def _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
             p_est = p_psia + dpdz * seg_len
 
         p_psia = p_est
+        if p_psia < 1.0:
+            raise RuntimeError(
+                "VLP march diverged: pressure fell below atmospheric - the "
+                "specified rates are not physically sustainable for this geometry")
 
     return p_psia
 
@@ -1417,12 +1444,12 @@ def _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
 
 def _gray_gradient_gas(s):
     """Gray method gradient: holdup via effective roughness, acceleration term."""
-    hl = _gray_liquid_holdup(s['v_m'], s['rho_l'], s['rho_g'], s['sigma'],
-                             s['diam_ft'], s['lambda_l'], s['p_avg'])
+    hl = _gray_liquid_holdup(s['v_sl'], s['v_sg'], s['rho_l'], s['rho_g'],
+                             s['sigma'], s['diam_ft'], s['lambda_l'])
     rho_s = s['rho_l'] * hl + s['rho_g'] * (1.0 - hl)
 
     eps_eff = _gray_effective_roughness(s['rough_ft'], s['sigma'], s['rho_ns'],
-                                        s['v_m'], s['lambda_l'])
+                                        s['v_sl'], s['v_sg'])
     eps_d = eps_eff / s['diam_ft']
 
     mu_ns = s['mu_l'] * s['lambda_l'] + s['mu_g'] * (1.0 - s['lambda_l'])
@@ -1480,19 +1507,22 @@ def _bb_flow_pattern(froude, lambda_l):
     l2 = _BB_L2_A * lambda_l ** _BB_L2_B
     l3 = _BB_L3_A * lambda_l ** _BB_L3_B
     l4 = _BB_L4_A * lambda_l ** _BB_L4_B
-    if lambda_l < 0.01 and froude < l1:
-        return _BB_SEGREGATED, 0.0
-    if lambda_l >= 0.01 and froude < l2:
+    # Revised Beggs & Brill flow pattern map (Brill and Beggs, Two-Phase Flow
+    # in Pipes, 1991 edition):
+    #   Segregated:   (lambda_l <  0.01 and Fr < L1) or (lambda_l >= 0.01 and Fr < L2)
+    #   Transition:    lambda_l >= 0.01 and L2 <= Fr <= L3
+    #   Intermittent: (0.01 <= lambda_l < 0.4 and L3 < Fr <= L1)
+    #                 or (lambda_l >= 0.4 and L3 < Fr <= L4)
+    #   Distributed:  (lambda_l < 0.4 and Fr >= L1) or (lambda_l >= 0.4 and Fr > L4)
+    if (lambda_l < 0.01 and froude < l1) or (lambda_l >= 0.01 and froude < l2):
         return _BB_SEGREGATED, 0.0
     if lambda_l >= 0.01 and l2 <= froude <= l3:
         a = (l3 - froude) / (l3 - l2) if l3 > l2 else 0.5
         return _BB_TRANSITION, _clamp(a, 0.0, 1.0)
-    if ((lambda_l >= 0.01 and froude > l3 and froude < l1) or
-            (lambda_l < 0.01 and froude >= l1)):
+    if ((0.01 <= lambda_l < 0.4 and l3 < froude <= l1) or
+            (lambda_l >= 0.4 and l3 < froude <= l4)):
         return _BB_INTERMITTENT, 0.0
-    if lambda_l < 0.4 and froude >= l1:
-        return _BB_DISTRIBUTED, 0.0
-    if lambda_l >= 0.4 and froude > l4:
+    if (lambda_l < 0.4 and froude >= l1) or (lambda_l >= 0.4 and froude > l4):
         return _BB_DISTRIBUTED, 0.0
     return _BB_INTERMITTENT, 0.0
 
@@ -1569,13 +1599,15 @@ def _bb_gradient_gas(s):
     else:
         hl0 = _bb_horizontal_holdup(s['lambda_l'], froude, pattern)
 
-    if pattern in (_BB_SEGREGATED, _BB_INTERMITTENT, _BB_TRANSITION):
-        hl0 *= _BB_PAYNE
-        hl0 = max(hl0, s['lambda_l'])
+    # Payne et al. (1979), JPT 31(9): uphill liquid holdup correction factor
+    # 0.924, applied to all flow patterns (holdup floored at no-slip lambda_l)
+    hl0 *= _BB_PAYNE
+    hl0 = max(hl0, s['lambda_l'])
 
-    sigma_lbf_ft = s['sigma'] * _DYNCM_TO_LBFFT
-    n_lv = (_DG_VEL * s['v_sl'] * (s['rho_l'] / sigma_lbf_ft) ** 0.25
-            if sigma_lbf_ft > 0 else 0.0)
+    # Liquid velocity number NLV = 1.938 * vsl * (rho_l/sigma)^0.25 with sigma
+    # in dyne/cm (Beggs and Brill 1973; same form and units as Hagedorn-Brown)
+    n_lv = (_DG_VEL * s['v_sl'] * (s['rho_l'] / s['sigma']) ** 0.25
+            if s['sigma'] > 0 else 0.0)
 
     if pattern == _BB_TRANSITION:
         hl_seg = _bb_inclination_correction(
@@ -1693,7 +1725,8 @@ def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
             sgsp: Separator gas specific gravity. Defaults to 0.65
             metric: If True, inputs/outputs in Eclipse METRIC units. Default False.
 
-        gas_pvt: GasPVT object (unused by VLP methods directly, reserved for future use)
+        gas_pvt: GasPVT object. If provided for gas wells and gsg is left at its
+            default, the gas specific gravity is taken from gas_pvt.sg
         oil_pvt: OilPVT object. If provided for oil wells, extracts api, sgsp, pb, rsb from it
         return_profile: If True, returns a NodalResult with per-segment-boundary arrays
             ``md`` (cumulative MD), ``tvd`` (cumulative TVD), ``p`` (pressure at each
@@ -1722,7 +1755,20 @@ def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
 
     validate_pe_inputs(p=thp)
     validate_choice(well_type, ('gas', 'oil'), 'well_type')
+    _validate_rates(qg_mmscfd=qg_mmscfd, qt_stbpd=qt_stbpd, qw_bwpd=qw_bwpd)
     vlpmethod = validate_methods(["vlpmethod"], [vlpmethod])
+
+    if well_type == 'gas' and qg_mmscfd < 0.001 and (qw_bwpd > 0 or cgr > 0):
+        warnings.warn(
+            f"Gas rate {qg_mmscfd:.6f} MMscf/d is below the 0.001 MMscf/d "
+            "threshold: VLP falls back to a static gas column, which ignores "
+            "liquid loading from the specified water and/or condensate.",
+            RuntimeWarning, stacklevel=2
+        )
+
+    # Take gas SG from GasPVT when the caller left gsg at its default
+    if gas_pvt is not None and well_type == 'gas' and gsg == 0.65:
+        gsg = gas_pvt.sg
 
     # Extract oil PVT parameters if provided (already in oilfield units from OilPVT)
     vis_frac = 1.0
@@ -1813,29 +1859,31 @@ def fthp(bhp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
          qt_stbpd: float = 0, gor: float = 0, wc: float = 0,
          wsg: float = 1.07, injection: bool = False,
          gsg: float = 0.65, pb: float = 0, rsb: float = 0, sgsp: float = 0.65,
-         metric: bool = False, thp_min: float = 14.7, thp_max: float = 20000.0,
-         tol: float = 1e-3) -> float:
+         metric: bool = False, thp_min: Optional[float] = None,
+         thp_max: float = 20000.0, tol: float = 1e-3) -> float:
     """ Solves for tubing head pressure (psia | barsa) that produces the specified BHP
         under the given VLP correlation. Inverse of fbhp.
 
         bhp: Target flowing bottom hole pressure (psia | barsa)
         completion, vlpmethod, well_type, gas/oil flow parameters: same as fbhp()
-        thp_min: Lower bracket for THP search (psia). Default atmospheric
+        thp_min: Lower bracket for THP search (psia | barsa). Defaults to
+            atmospheric (14.7 psia) when not supplied
         thp_max: Upper bracket for THP search (psia). Default 20,000 psi
         tol: Absolute convergence tolerance on THP (psia). Default 1e-3
         metric: If True, bhp and return are in barsa. Default False.
     """
     if metric:
         bhp_oilfield = bhp * BAR_TO_PSI
-        thp_min_oilfield = thp_min * BAR_TO_PSI if thp_min != 14.7 else thp_min
+        thp_min_oilfield = 14.7 if thp_min is None else thp_min * BAR_TO_PSI
         thp_max_oilfield = thp_max * BAR_TO_PSI if thp_max != 20000.0 else thp_max
     else:
         bhp_oilfield = bhp
-        thp_min_oilfield = thp_min
+        thp_min_oilfield = 14.7 if thp_min is None else thp_min
         thp_max_oilfield = thp_max
 
     validate_pe_inputs(p=bhp_oilfield)
     validate_choice(well_type, ('gas', 'oil'), 'well_type')
+    _validate_rates(qg_mmscfd=qg_mmscfd, qt_stbpd=qt_stbpd, qw_bwpd=qw_bwpd)
     vlpmethod = validate_methods(["vlpmethod"], [vlpmethod])
 
     def _err(_args, thp_trial):
@@ -1913,6 +1961,12 @@ def outflow_curve(thp: float, completion: 'Completion', vlpmethod: str = 'WG',
                 pb = pb * BAR_TO_PSI
             if rsb > 0:
                 rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
+
+    _validate_rates(qw_bwpd=qw_bwpd)
+
+    # Take gas SG from GasPVT when the caller left gsg at its default
+    if gas_pvt is not None and well_type == 'gas' and gsg == 0.65:
+        gsg = gas_pvt.sg
 
     if oil_pvt is not None and well_type == 'oil':
         api = oil_pvt.api
@@ -2124,8 +2178,14 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
             if rsb > 0:
                 rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
 
+    _validate_rates(qw_bwpd=qw_bwpd)
+
     # Reservoir stores oilfield units internally (converted in constructor)
     pr = reservoir.pr
+
+    # Take gas SG from GasPVT when the caller left gsg at its default
+    if gas_pvt is not None and well_type == 'gas' and gsg == 0.65:
+        gsg = gas_pvt.sg
 
     if oil_pvt is not None and well_type == 'oil':
         api = oil_pvt.api

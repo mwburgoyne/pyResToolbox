@@ -484,6 +484,11 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
     Wp_arr = np.zeros(n) if Wp is None else np.asarray(Wp, dtype=float)
     Wi_arr = np.zeros(n) if Wi is None else np.asarray(Wi, dtype=float)
     Gi_arr = np.zeros(n) if Gi is None else np.asarray(Gi, dtype=float)
+    if metric and Gi is not None:
+        # Internal Bg is rb/scf (rm3/sm3 divided by CUFTperBBL), so the Gi*Bg
+        # term needs Gi scaled by the same factor to recover a consistent
+        # reservoir volume. SM3_PER_SM3_TO_SCF_PER_STB == CUFTperBBL numerically.
+        Gi_arr = Gi_arr * SM3_PER_SM3_TO_SCF_PER_STB
     # Aquifer influx is already a reservoir volume (rb | rm3) matching F — no
     # unit conversion is needed in either metric or oilfield mode.
     We_arr = np.zeros(n) if We is None else np.asarray(We, dtype=float)

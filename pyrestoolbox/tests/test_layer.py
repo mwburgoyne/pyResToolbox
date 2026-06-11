@@ -91,6 +91,21 @@ def test_lorenz_flow_frac_roundtrip():
         f"Flow frac roundtrip: L={L_input} → kh={kh_frac} → L={L_back}"
 
 
+def test_lorenz_2_layers_grid_count_and_mean():
+    """Regression: layer count and mean permeability honoured for all nlayers.
+
+    The old np.arange grid included a spurious endpoint > 1 for many nlayers
+    (e.g. nlayers=6 returned 7 layers with mean k of 86.1 instead of 100).
+    """
+    k_avg = 100.0
+    for nlayers in range(2, 51):
+        k = layer.lorenz_2_layers(lorenz=0.6, k_avg=k_avg, nlayers=nlayers)
+        assert len(k) == nlayers, \
+            f"nlayers={nlayers}: expected {nlayers} layers, got {len(k)}"
+        assert abs(np.mean(k) - k_avg) < 1e-9, \
+            f"nlayers={nlayers}: mean k {np.mean(k)} != {k_avg}"
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("LAYER MODULE VALIDATION TESTS")

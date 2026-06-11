@@ -24,7 +24,7 @@ const A_LBC: [f64; 5] = [0.1023, 0.023364, 0.058533, -0.0392852, 0.00926279];
 /// Returns viscosity in cP.
 pub fn lge_viscosity(p_psia: f64, t_degr: f64, sg: f64, zee: f64) -> f64 {
     let m = MW_AIR * sg;
-    let rho = m * p_psia / (t_degr * zee * R * 62.37);
+    let rho = m * p_psia / (t_degr * zee * R * 62.367);
     let b = 3.448 + (986.4 / t_degr) + (0.01009 * m);
     let c = 2.447 - (0.2224 * b);
     let a = (9.379 + (0.01607 * m)) * t_degr.powf(1.5) / (209.2 + (19.26 * m) + t_degr);
@@ -193,7 +193,7 @@ pub fn gas_ug_lge_batch(
     let a = (9.379 + (0.01607 * m)) * t_degr.powf(1.5) / (209.2 + (19.26 * m) + t_degr);
 
     let result: Vec<f64> = pressures.iter().zip(z_factors.iter()).map(|(&p, &z)| {
-        let rho = m * p / (t_degr * z * R * 62.37);
+        let rho = m * p / (t_degr * z * R * 62.367);
         a * 0.0001 * (b * rho.powf(c)).exp()
     }).collect();
 

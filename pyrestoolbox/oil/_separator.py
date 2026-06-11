@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from pyrestoolbox.constants import BAR_TO_PSI, degc_to_degf
+from pyrestoolbox.constants import BAR_TO_PSI, SCF_PER_STB_TO_SM3_PER_SM3, degc_to_degf
 from pyrestoolbox.shared_fns import validate_pe_inputs
 from ._constants import (
     _SGEVOL_THRESHOLD, _SGEVOL_HIGH, _SGEVOL_LOW,
@@ -87,7 +87,9 @@ def oil_rs_st(psp: float, degf_sp: float, api: float, metric: bool = False) -> f
         Rsb = Rsp + Rst (Solution GOR at bubble point = Separator GOR + Stock Tank GOR).
         In absence of separator properties, a simple linear relationship with Rsp could be used instead;
           rs_st = 0.1618 * Separator GOR (Adapted from Eq 3-4 in Valko McCain 2003 paper)
-        Correlation reproduced from Valko McCain 2003 paper Eq 3-2
+        Correlation from Valko and McCain (2003), J. Pet. Sci. Eng. 37, 153-169, Eq 3-2 (p. 165):
+          ln(Rst) = 3.955 + 0.83 Z - 0.024 Z^2 + 0.075 Z^3
+        Separator pressure basis is psia per the paper's nomenclature (p. 168).
 
         psp: Separator pressure (psia | barsa)
         degf_sp: Separator temperature (deg f | deg C)
@@ -104,4 +106,7 @@ def oil_rs_st(psp: float, degf_sp: float, api: float, metric: bool = False) -> f
     Zn = [sum([_RS_ST_C[i][n] * var[n] ** i for i in range(3)]) for n in range(3)]
     Z = sum(Zn)
     a, b, c, d = _RS_ST_POLY
-    return max(0, a + b * Z + c * Z ** 2 + d * Z ** 3)
+    rs_st = np.exp(a + b * Z + c * Z ** 2 + d * Z ** 3)
+    if metric:
+        return rs_st * SCF_PER_STB_TO_SM3_PER_SM3
+    return rs_st

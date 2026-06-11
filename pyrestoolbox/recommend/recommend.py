@@ -142,7 +142,7 @@ def recommend_gas_methods(sg: float = 0.65, co2: float = 0, h2s: float = 0,
             category='zmethod',
             recommended='DAK',
             rationale='Clean gas. DAK (Dranchuk & Abou-Kassem) is the standard default.',
-            alternatives=['HY', 'WYW', 'BNS'],
+            alternatives=['HY', 'BNS'],
         )
         recs['cmethod'] = MethodRecommendation(
             category='cmethod',

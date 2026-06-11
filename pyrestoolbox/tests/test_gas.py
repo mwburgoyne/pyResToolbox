@@ -49,14 +49,6 @@ def test_gas_z_hy():
     # HY and DAK should agree within ~3% for typical conditions
     assert abs(z - z_dak) / z_dak < 0.03, f"HY={z} vs DAK={z_dak}, diff > 3%"
 
-def test_gas_z_wyw():
-    """Wang-Ye-Wu Z-factor"""
-    z = gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='WYW', cmethod='PMC')
-    z_dak = gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='DAK', cmethod='PMC')
-    assert isinstance(z, float)
-    assert 0.5 < z < 1.2
-    assert abs(z - z_dak) / z_dak < 0.05, f"WYW={z} vs DAK={z_dak}, diff > 5%"
-
 def test_gas_z_bns():
     """BNS (Peng-Robinson EOS) Z-factor"""
     z = gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='BNS', cmethod='BNS')
@@ -220,19 +212,18 @@ def test_gas_fws_sg():
 
 # Frozen baselines captured 2026-02-27
 _FROZEN_BASELINES = {
-    'z_dak_2000_075_200': 0.8682651934424434,
-    'z_hy_2000_075_200': 0.8677386022105378,
-    'z_wyw_2000_075_200': 0.8570731189820472,
+    'z_dak_2000_075_200': 0.8682653947215557,
+    'z_hy_2000_075_200': 0.8677490928985828,
     'z_bns_2000_075_200': 0.8457226741039529,
-    'ug_dak_2000_075_200': 0.017374276181391906,
+    'ug_dak_2000_075_200': 0.017374605969889337,
     'bg_dak_2000_075_200': 0.008098799120908043,
-    'cg_dak_2000_075_200': 0.0005200298285282161,
+    'cg_dak_2000_075_200': 0.0005200340973678698,
     'den_dak_2000_075_200': 7.069636415667095,
     'tc_pmc_075': (385.66677319794064, 653.255423805908),
     'tc_sut_075': (389.7, 656.525),
-    'dmp_1000_2000_hy_sut': 213690308.9907268,
-    'dmp_0_4000_dak': 919822133.7011306,
-    'qg_radial': 2078.9101970773477,
+    'dmp_1000_2000_hy_sut': 213687528.0846597,
+    'dmp_0_4000_dak': 919798712.8458722,
+    'qg_radial': 2078.892401988999,
 }
 
 def test_regression_z_dak():
@@ -244,11 +235,6 @@ def test_regression_z_hy():
     z = gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='HY', cmethod='PMC')
     expected = _FROZEN_BASELINES['z_hy_2000_075_200']
     assert abs(z - expected) / expected < 1e-8, f"HY Z-factor changed: {z} vs frozen {expected}"
-
-def test_regression_z_wyw():
-    z = gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='WYW', cmethod='PMC')
-    expected = _FROZEN_BASELINES['z_wyw_2000_075_200']
-    assert abs(z - expected) / expected < 1e-8, f"WYW Z-factor changed: {z} vs frozen {expected}"
 
 def test_regression_ug():
     ug = gas.gas_ug(p=2000, sg=0.75, degf=200)
@@ -451,11 +437,11 @@ def test_gas_rate_linear_with_pvt():
 
 # Frozen regression baselines captured 2026-03-05
 _HYDRATE_BASELINES = {
-    'motiee_hft_1000_065': 96.20360674625366,     # Motiee HFT at 1000 psia, sg=0.65
-    'motiee_hfp_60_065': 149.60397973632814,       # Motiee HFP at 60 degF, sg=0.65
+    'motiee_hft_1000_065': 60.151725150000026,     # Motiee HFT at 1000 psia, sg=0.65
+    'motiee_hfp_60_065': 987.9770436401366,        # Motiee HFP at 60 degF, sg=0.65
     'towler_hft_1000_065': 62.918902535978695,      # Towler HFT at 1000 psia, sg=0.65
     'meoh_depression_25wt': 17.958375,              # Østergaard MEOH 25wt% depression (degF)
-    'meoh_inhibited_hft': 91.02848313045367,        # Inhibited HFT at 2000 psia, sg=0.7, MEOH 25wt%
+    'meoh_inhibited_hft': 53.15320794530875,        # Inhibited HFT at 2000 psia, sg=0.7, MEOH 25wt%
 }
 
 def test_hydrate_frozen_baselines():
@@ -606,9 +592,9 @@ _HYDRATE_NEW_BASELINES = {
     'sw_wc_op_2000_80_070_co2': 0.07027556282207788,     # SoreideWhitson vaporized at operating
     'wc_res_3000_200': 0.821279572319976,                 # Vaporized at reservoir P=3000,T=200
     'condensed_3000_200_to_1000_60': 0.7699716237595706,  # Condensed between res→op
-    'meg_mass_rate_res_to_op': 576.8222533381149,         # MEG injection lb/MMscf
-    'meg_vol_rate_res_to_op': 62.26896381181326,          # MEG injection gal/MMscf
-    'meoh_mass_rate_res_3000_200': 91.91442238644271,     # MEOH capped injection lb/MMscf
+    'meg_mass_rate_res_to_op': 0.9013640928083764,        # MEG injection lb/MMscf
+    'meg_vol_rate_res_to_op': 0.0973038189000881,         # MEG injection gal/MMscf
+    'meoh_mass_rate_res_3000_200': 49.459378804064784,    # MEOH injection lb/MMscf
 }
 
 def test_hydrate_water_balance_no_reservoir():
@@ -664,7 +650,7 @@ def test_hydrate_water_balance_frozen_baselines():
 
 def test_hydrate_meoh_capping():
     """MEOH should cap at 25wt% for high-subcooling scenario"""
-    r = gas.gas_hydrate(p=2000, degf=80, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH', inhibitor_wt_pct=25)
+    r = gas.gas_hydrate(p=2000, degf=40, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH', inhibitor_wt_pct=25)
     assert r.required_inhibitor_wt_pct == 25.0, \
         f"MEOH required should be capped at 25.0, got {r.required_inhibitor_wt_pct}"
     assert r.max_inhibitor_wt_pct == 25.0, f"Max should be 25.0, got {r.max_inhibitor_wt_pct}"
@@ -718,9 +704,9 @@ def test_hydrate_injection_rate_frozen_baselines():
 
 def test_hydrate_injection_rate_increases_with_additional_water():
     """Injection rate should increase with additional_water (free water)"""
-    r0 = gas.gas_hydrate(p=2000, degf=80, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH',
+    r0 = gas.gas_hydrate(p=2000, degf=60, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH',
                           p_res=3000, degf_res=200)
-    r1 = gas.gas_hydrate(p=2000, degf=80, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH',
+    r1 = gas.gas_hydrate(p=2000, degf=60, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH',
                           p_res=3000, degf_res=200, additional_water=1.0)
     assert r1.inhibitor_mass_rate > r0.inhibitor_mass_rate, \
         "Mass rate should increase with additional_water"
@@ -865,7 +851,6 @@ def test_bns_coupling_non_bns_not_coupled():
         warnings.filterwarnings("default", message=".*outside calibration range.*")
         gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='DAK', cmethod='SUT')
         gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='HY', cmethod='PMC')
-        gas.gas_z(p=2000, sg=0.75, degf=200, zmethod='WYW', cmethod='PMC')
 
 def test_bns_user_tc_pc_overrides_hc_only():
     """For BNS, user tc/pc override only the hydrocarbon pseudo-component Tc/Pc."""

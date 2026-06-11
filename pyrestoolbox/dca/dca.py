@@ -788,6 +788,24 @@ def fit_decline(t: ArrayLike, q: ArrayLike, method: str = 'best',
                 results.append(result)
         if not results:
             raise RuntimeError("All decline fitting methods failed")
+        # The Duong fitter drops t <= 0 points, so its stored r_squared is
+        # computed on a different subset to the Arps fitters. Compare all
+        # methods on the common t > 0 subset so 'best' is apples-to-apples.
+        # Fitted parameters and stored r_squared values are unchanged.
+        if np.any(t <= 0):
+            t_c = t[t > 0]
+            q_c = q[t > 0]
+
+            def _common_r2(r):
+                if r.method == 'duong':
+                    q_pred = np.asarray(duong_rate(r.qi, r.a, r.m, t_c), dtype=float)
+                else:
+                    q_pred = np.asarray(arps_rate(r.qi, r.di, r.b, t_c), dtype=float)
+                ss_res = np.sum((q_c - q_pred) ** 2)
+                ss_tot = np.sum((q_c - np.mean(q_c)) ** 2)
+                return 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+
+            return max(results, key=_common_r2)
         return max(results, key=lambda r: r.r_squared)
     else:
         if method not in fitters:
@@ -1021,7 +1039,12 @@ def forecast(result: 'DeclineResult', t_end: float, dt: float = 1.0,
             q = q[:last_idx]
             q_capacity = q_capacity[:last_idx]
 
-    Qcum = np.cumsum(q * dt)
+    # Analytic cumulative (right-rectangle cumsum biases Qcum/EUR low).
+    # Uptime scales cumulative exactly as it scales rate.
+    if result.method == 'duong':
+        Qcum = np.asarray(duong_cum(result.qi, result.a, result.m, t), dtype=float) * uptime
+    else:
+        Qcum = np.asarray(arps_cum(result.qi, result.di, result.b, t), dtype=float) * uptime
 
     # Secondary phase ratios
     secondary = None

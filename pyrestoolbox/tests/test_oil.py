@@ -160,6 +160,52 @@ def test_oil_rate_linear():
     q_val = float(q) if isinstance(q, np.ndarray) else q
     assert q_val > 0
 
+def test_oil_rate_vogel_scalar_array_consistent():
+    """Scalar and array pwf give identical Vogel rates (undersaturated, pwf > pb)"""
+    kwargs = dict(k=50, h=50, pr=4000, r_w=0.35, r_ext=1000, uo=0.6, bo=1.3,
+                  vogel=True, pb=2000)
+    q_scalar = oil.oil_rate_radial(pwf=3000, **kwargs)
+    q_array = oil.oil_rate_radial(pwf=np.array([3000.0, 2500.0]), **kwargs)
+    assert abs(float(q_array[0]) - float(q_scalar)) < 1e-9, \
+        f"Scalar path ({q_scalar}) diverges from array path ({q_array[0]})"
+
+def test_oil_rate_vogel_saturated_zero_at_pr():
+    """Saturated reservoir (pr < pb): rate is zero at pwf = pr"""
+    for fn, geo in (
+        (oil.oil_rate_radial, dict(r_w=0.35, r_ext=1000)),
+        (oil.oil_rate_linear, dict(area=10000, length=5000)),
+    ):
+        q = fn(k=50, h=50, pr=2000, pwf=2000, uo=0.6, bo=1.3, vogel=True, pb=2500, **geo) \
+            if fn is oil.oil_rate_radial else \
+            fn(k=50, pr=2000, pwf=2000, uo=0.6, bo=1.3, vogel=True, pb=2500, **geo)
+        assert abs(float(q)) < 1e-9, f"{fn.__name__}: q at pwf = pr should be 0, got {q}"
+
+def test_oil_rate_vogel_positive_monotone():
+    """Vogel rates positive and monotone decreasing in pwf, saturated and undersaturated"""
+    for pr, pb in ((4000, 2000), (2000, 2500)):
+        pwf = np.linspace(pr - 1, 100, 20)
+        q = oil.oil_rate_radial(k=50, h=50, pr=pr, pwf=pwf, r_w=0.35, r_ext=1000,
+                                uo=0.6, bo=1.3, vogel=True, pb=pb)
+        assert np.all(q > 0), f"pr={pr}, pb={pb}: non-positive rates"
+        assert np.all(np.diff(q) > 0), f"pr={pr}, pb={pb}: rate not increasing as pwf falls"
+
+def test_oil_rs_stan_continuity_at_pb():
+    """STAN Rs honours user rsb: continuous at Pb"""
+    rs_at_pb = oil.oil_rs(api=38, degf=180, sg_sp=0.75, p=2500, pb=2500, rsb=500,
+                          rsmethod='STAN')
+    rs_below = oil.oil_rs(api=38, degf=180, sg_sp=0.75, p=2499.9, pb=2500, rsb=500,
+                          rsmethod='STAN')
+    assert abs(rs_at_pb - 500) < 1e-6, f"Rs(pb) should equal rsb: {rs_at_pb}"
+    assert abs(rs_below - 500) < 0.1, f"Rs just below pb should be near rsb: {rs_below}"
+
+def test_oil_deno_low_temperature_real():
+    """oil_deno below 60 degF returns a real float (no complex leakage)"""
+    deno = oil.oil_deno(p=3000, degf=50, rs=500, rsb=500, sg_g=0.75, sg_sp=0.75,
+                        pb=2500, api=38)
+    assert isinstance(deno, (float, np.floating)), f"Expected real float, got {type(deno)}"
+    assert not isinstance(deno, complex) and not np.iscomplexobj(deno)
+    assert deno > 0
+
 def test_oil_twu_props():
     """Twu critical property correlations"""
     sg, tb, tc, pc, vc = oil.oil_twu_props(mw=200, ja=0.2)

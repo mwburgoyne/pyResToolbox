@@ -162,7 +162,7 @@ def test_sw_rejects_both_wt_and_ppm():
 _FROZEN_BASELINES = {
     'bw_3000_200_fresh': 1.027589195773527,
     'lden_3000_200_fresh': 0.972276768415092,
-    'visw_3000_200_fresh': 0.3083544960904146,
+    'visw_3000_200_fresh': 0.30791821315761636,
     'cw_3000_200_fresh': 3.0887176266534516e-06,
     'co2_xco2_200_80': 0.02036714644979853,
     'co2_rs_200_80': 26.141605639385897,
@@ -330,6 +330,84 @@ def test_garcia_density_no_singularity_at_xco2_one():
 
     # At xCO2=1 limit equals MwG/vPhi (pure-CO2 partial molar density)
     assert abs(new_form(1.0) - MwG / vPhi) < 1e-10
+
+
+# =============================================================================
+# Salinity-method routing regression tests (item 1)
+# =============================================================================
+from pyrestoolbox.brine._lib_vle_engine import (
+    calc_gas_brine_equilibrium as _cge, SWMultiComponentFlash as _SWFlash,
+)
+
+
+def _xch4_flash(framework, salinity_method, wt):
+    x, _ = _cge(salinity_wt_pct=wt, temperature_F=200, pressure_psia=3000,
+                y_CH4=1.0, method='flash', salinity_method=salinity_method,
+                framework=framework)
+    return x['CH4']
+
+
+def test_sw_sechenov_auto_alias_equal_gamma_phi():
+    """sechenov/auto must normalise to gamma_phi (else they silently skip salting)."""
+    import warnings
+    def run(sm):
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            m = brine.SoreideWhitson(pres=3000, temp=200, ppm=200000, y_CO2=0,
+                                     sg=0.554, metric=False, framework='proposed',
+                                     salinity_method=sm)
+        return m.salinity_method, m.x.get('CH4', 0.0)
+    base_norm, base_x = run('gamma_phi')
+    for sm in ('sechenov', 'auto'):
+        norm, x = run(sm)
+        assert norm == 'gamma_phi', f"{sm} should normalise to gamma_phi, got {norm}"
+        assert abs(x - base_x) < 1e-15, f"{sm} x_CH4 {x} != gamma_phi {base_x}"
+
+
+def test_engine_rejects_unimplemented_salinity_method():
+    """calc_equilibrium must raise on a string it does not implement."""
+    import pytest
+    flash = _SWFlash(['H2O', 'CH4'])
+    with pytest.raises(ValueError, match='salinity_method'):
+        flash.calc_equilibrium(373.15, 1e7, np.array([0.95, 0.05]),
+                               salinity_method='auto')
+
+
+def test_sw_original_gamma_phi_matches_embedded():
+    """sw_original + gamma_phi must equal embedded-only (no double salting-out).
+
+    Embedded-salinity CH4 kij already carries the salt effect; the Sechenov
+    gamma must be skipped. Salting ratio at 20 wt% NaCl is ~0.24, not ~0.08.
+    """
+    x_fresh = _xch4_flash('sw_original', 'gamma_phi', 0.0)
+    x_gp = _xch4_flash('sw_original', 'gamma_phi', 20.0)
+    x_emb = _xch4_flash('sw_original', 'embedded', 20.0)
+    assert abs(x_gp - x_emb) < 1e-12, f"gamma_phi {x_gp} != embedded {x_emb}"
+    ratio = x_gp / x_fresh
+    assert 0.20 < ratio < 0.30, f"salting ratio {ratio} not ~0.24 (double-counted?)"
+
+
+def test_dropin_embedded_applies_delta_kij():
+    """dropin + embedded must reduce CH4 solubility with salinity (delta-kij wired)."""
+    x_fresh = _xch4_flash('dropin', 'embedded', 0.0)
+    x_sal = _xch4_flash('dropin', 'embedded', 20.0)
+    assert x_sal < x_fresh, f"dropin embedded: 20wt% {x_sal} not < fresh {x_fresh}"
+
+
+# =============================================================================
+# Spycher-Pruess 99-109 C blend continuity (item 2)
+# =============================================================================
+
+def test_spycher_blend_continuity():
+    """xCO2 must be continuous across the 99 and 109 degC blend boundaries."""
+    def xco2(degC):
+        return brine.CO2_Brine_Mixture(pres=150, temp=degC, ppm=10000,
+                                       metric=True).x[0]
+    for lo, hi in [(98.9, 99.1), (108.9, 109.1)]:
+        a, b = xco2(lo), xco2(hi)
+        jump = abs(a - b) / max(abs(a), 1e-30)
+        assert jump < 3e-3, f"xCO2 jump {jump:.4%} across {lo}->{hi} degC"
+
 
 
 if __name__ == '__main__':

@@ -83,6 +83,58 @@ def test_kr_monotonic():
         assert krw[i + 1] >= krw[i] - 1e-10, f"Krw not monotonic at index {i}"
         assert kro[i + 1] <= kro[i] + 1e-10, f"Kro not monotonic at index {i}"
 
+def test_rel_perm_row_count_contract():
+    """Regression: the returned table must have exactly `rows` rows for all
+    endpoint configurations. The old per-table ndiv accounting returned
+    rows+1 for SWOF with swcr==swc and sorw>0, and for SGWFN with sgcr>0."""
+    for rows in (6, 10, 20, 37):
+        for kwargs in (
+            dict(krtable='SWOF', swc=0.12, swcr=0.12, sorw=0.0),
+            dict(krtable='SWOF', swc=0.12, swcr=0.12, sorw=0.23),
+            dict(krtable='SWOF', swc=0.12, swcr=0.17, sorw=0.0),
+            dict(krtable='SWOF', swc=0.12, swcr=0.17, sorw=0.23),
+            dict(krtable='SGOF', swc=0.12, sorg=0.0, sgcr=0.0),
+            dict(krtable='SGOF', swc=0.12, sorg=0.11, sgcr=0.0),
+            dict(krtable='SGOF', swc=0.12, sorg=0.11, sgcr=0.06),
+            dict(krtable='SGWFN', swc=0.12, sgcr=0.0),
+            dict(krtable='SGWFN', swc=0.12, sgcr=0.06),
+        ):
+            df = simtools.rel_perm_table(rows=rows, krfamily='COR',
+                                         no=2, nw=3, ng=2, **kwargs)
+            assert len(df) == rows, \
+                f"{kwargs} rows={rows}: got {len(df)} rows"
+
+
+def test_sgof_honours_sgcr():
+    """Regression: SGOF previously ignored sgcr. The gas curve must now be
+    normalised over [sgcr, 1-swc-sorg] with an anchor row at sgcr (krg=0),
+    mirroring SGWFN."""
+    sgcr = 0.08
+    df = simtools.rel_perm_table(rows=20, krtable='SGOF', krfamily='COR',
+                                 swc=0.2, sorg=0.1, sgcr=sgcr, no=2, ng=2)
+    sg = df['Sg'].values
+    krg = df['Krgo'].values
+    # Anchor row exactly at sgcr
+    assert np.any(np.isclose(sg, sgcr)), "No anchor row at sgcr"
+    # Gas immobile at and below sgcr
+    assert np.all(krg[sg <= sgcr + 1e-12] == 0), "krg must be 0 for Sg <= sgcr"
+    # Gas mobile above sgcr
+    assert np.all(krg[sg > sgcr + 1e-9] > 0), "krg must be > 0 for Sg > sgcr"
+    # Endpoint krg at Sg = 1-swc-sorg equals krgmax (Corey normalised to 1)
+    assert abs(krg[-1] - 1.0) < 1e-9
+
+
+def test_sgof_sgcr_matches_sgwfn_gas_curve():
+    """SGOF and SGWFN gas curves use the same normalisation convention when
+    the mobile gas span matches (sorg=0 makes both spans [sgcr, 1-swc])."""
+    df_sgof = simtools.rel_perm_table(rows=20, krtable='SGOF', krfamily='COR',
+                                      swc=0.2, sorg=0.0, sgcr=0.05, no=2, ng=2)
+    df_sgwfn = simtools.rel_perm_table(rows=20, krtable='SGWFN', krfamily='COR',
+                                       swc=0.2, sgcr=0.05, nw=2, ng=2)
+    np.testing.assert_allclose(df_sgof['Sg'].values, df_sgwfn['Sg'].values)
+    np.testing.assert_allclose(df_sgof['Krgo'].values, df_sgwfn['Krgw'].values)
+
+
 # =============================================================================
 # LET and Corey functions directly
 # =============================================================================
@@ -293,10 +345,14 @@ def test_vfpinj_gas():
     """Generate a gas injection VFPINJ table"""
     from pyrestoolbox.nodal import Completion
     comp = Completion(tid=2.441, length=8000, tht=100, bht=250)
+    # Top rate reduced 10000 -> 8000 Mscf/d (2026-06-11): with the corrected
+    # gas Z-factor/viscosity numerics, 10000 Mscf/d injection at 1000 psia THP
+    # through 8000 ft of 2.441 in tubing legitimately drives the pressure
+    # below atmospheric (physically unsustainable), so that point now fails.
     result = simtools.make_vfpinj(
         table_num=1, completion=comp, flo_type='GAS',
         vlpmethod='HB',
-        flo_rates=[1000, 5000, 10000],
+        flo_rates=[1000, 5000, 8000],
         thp_values=[1000, 2000],
         gsg=0.65)
     assert result['bhp'].shape == (2, 3)

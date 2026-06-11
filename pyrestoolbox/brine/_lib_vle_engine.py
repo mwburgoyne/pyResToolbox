@@ -62,7 +62,7 @@ if _RUST_AVAILABLE:
 R_GAS = 8.314462  # J/(mol·K)
 OMEGA_A = 0.45724
 OMEGA_B = 0.07780
-MW_NACL = 58.44
+MW_NACL = 58.4428  # NaCl molar weight (matches brine.MWSAL)
 MW_H2O = 18.015
 
 # H2 critical temperature for BIP correlations (manuscript value, NIST)
@@ -358,7 +358,7 @@ def kij_aq_h2(T_K: float, salinity_molal: float = 0.0) -> float:
 # Gases whose S&W original kij_AQ correlations have EMBEDDED salinity (csw terms).
 # Used only in 'sw_original' framework mode.
 _SW_GASES_WITH_EMBEDDED_SALINITY = {
-    'C2H6', 'C3H8', 'iC4H10', 'nC4H10',
+    'CH4', 'C2H6', 'C3H8', 'iC4H10', 'nC4H10',
     'iC5H12', 'nC5H12', 'nC6H14', 'nC7H16', 'nC8H18', 'nC10H22',
     'CO2', 'N2',
 }
@@ -529,9 +529,9 @@ EMBEDDED_SALINITY_PARAMS = {
     'nC4H10': {'Tc': 425.20, 'a0': 0.0488, 'a1': -0.1072, 'a2': 0.0836},
 }
 
-# Drop-in embedded salinity BIP parameters (Track 2, S&W alpha)
-# Placeholder — will be populated after running 07-Fit_Embedded_Salinity_All_Gases.py
-# with framework='dropin'. These are fitted with brine VLE using alpha_water_soreide(Tr, m).
+# Drop-in embedded salinity BIP parameters (Track 2, S&W alpha).
+# Fitted with brine VLE using alpha_water_soreide(Tr, m). C3H8 and nC4H10
+# reuse the proposed-framework values (not separately refitted).
 EMBEDDED_SALINITY_PARAMS_DROPIN: Dict[str, Dict] = {
     'CO2':  {'Tc': 304.20, 'a0': 0.0409, 'a1': -0.0807, 'a2': 0.0526,
              'b0': 0.0079, 'b1': -0.0085},  # Quadratic-in-m (5 params)
@@ -751,27 +751,6 @@ def get_sechenov_ks(gas: str, T_K: float, salinity_molal: float = 1.0,
     if gas == 'N2' and framework == 'proposed':
         ks += 0.02
     return ks
-
-
-def salting_out_factor(T_C: float, Tb_K: float, salinity_molal: float) -> float:
-    """
-    Calculate salting-out factor from Sechenov coefficient.
-
-    S&W Eq. 2: log10(x_fresh/x_brine) = ks * m
-    Therefore: x_brine/x_fresh = 10^(-ks * m)
-
-    Args:
-        T_C: Temperature in Celsius
-        Tb_K: Normal boiling point of gas in Kelvin
-        salinity_molal: Salt concentration in mol/kg water
-
-    Returns:
-        Salting-out factor: x_brine/x_fresh (< 1 means reduced solubility)
-    """
-    if salinity_molal <= 0:
-        return 1.0
-    ks = sw_equation_8_ks(T_C, Tb_K)
-    return 10**(-ks * salinity_molal)
 
 
 # =============================================================================
@@ -1279,27 +1258,6 @@ def ppm_to_molality(ppm_NaCl: float) -> float:
     return wt_pct_to_molality(wt_pct)
 
 
-def molality_to_ppm(molality: float) -> float:
-    """
-    Convert molality to ppm (mg/kg solution) NaCl.
-
-    Args:
-        molality: mol NaCl / kg water
-
-    Returns:
-        ppm NaCl (mg NaCl per kg solution)
-    """
-    if molality <= 0:
-        return 0.0
-    wt_pct = molality_to_wt_pct(molality)
-    return wt_pct * 10000.0
-
-
-def kelvin_to_fahrenheit(T_K: float) -> float:
-    """Convert Kelvin to Fahrenheit."""
-    return (T_K - 273.15) * 9/5 + 32
-
-
 def pascal_to_psia(P_Pa: float) -> float:
     """Convert Pascal to psia."""
     return P_Pa / 6894.757
@@ -1308,77 +1266,6 @@ def pascal_to_psia(P_Pa: float) -> float:
 # =============================================================================
 # Flexible Unit Input Helpers
 # =============================================================================
-def parse_temperature(value: float, unit: str) -> float:
-    """
-    Convert temperature to Kelvin.
-
-    Args:
-        value: Temperature value
-        unit: Unit string ('K', 'C', 'F', 'degC', 'degF', 'celsius', 'fahrenheit', 'kelvin')
-
-    Returns:
-        Temperature in Kelvin
-    """
-    unit_lower = unit.lower().strip()
-    if unit_lower in ('k', 'kelvin'):
-        return value
-    elif unit_lower in ('c', 'degc', 'celsius', '°c'):
-        return celsius_to_kelvin(value)
-    elif unit_lower in ('f', 'degf', 'fahrenheit', '°f'):
-        return fahrenheit_to_kelvin(value)
-    else:
-        raise ValueError(f"Unknown temperature unit: {unit}. Use 'K', 'C', or 'F'")
-
-
-def parse_pressure(value: float, unit: str) -> float:
-    """
-    Convert pressure to Pascal.
-
-    Args:
-        value: Pressure value
-        unit: Unit string ('Pa', 'bar', 'bara', 'psia', 'psi', 'MPa', 'kPa')
-
-    Returns:
-        Pressure in Pascal
-    """
-    unit_lower = unit.lower().strip()
-    if unit_lower in ('pa', 'pascal'):
-        return value
-    elif unit_lower in ('bar', 'bara'):
-        return bar_to_pascal(value)
-    elif unit_lower in ('psia', 'psi'):
-        return psia_to_pascal(value)
-    elif unit_lower == 'mpa':
-        return value * 1e6
-    elif unit_lower == 'kpa':
-        return value * 1e3
-    else:
-        raise ValueError(f"Unknown pressure unit: {unit}. Use 'bar', 'psia', 'Pa', 'MPa', or 'kPa'")
-
-
-def parse_salinity(value: float, unit: str) -> float:
-    """
-    Convert salinity to molality.
-
-    Args:
-        value: Salinity value
-        unit: Unit string ('molal', 'mol/kg', 'ppm', 'wt%', 'wtpct', 'mg/L', 'g/L')
-
-    Returns:
-        Salinity in molality (mol NaCl / kg water)
-    """
-    unit_lower = unit.lower().strip()
-    if unit_lower in ('molal', 'mol/kg', 'm'):
-        return value
-    elif unit_lower in ('ppm', 'mg/kg', 'mg/l'):
-        return ppm_to_molality(value)
-    elif unit_lower in ('wt%', 'wtpct', 'wt pct', 'weight%', 'percent'):
-        return wt_pct_to_molality(value)
-    elif unit_lower in ('g/l', 'g/kg'):
-        # g/L ≈ g/kg for dilute solutions ≈ 1000 ppm
-        return ppm_to_molality(value * 1000)
-    else:
-        raise ValueError(f"Unknown salinity unit: {unit}. Use 'molal', 'ppm', or 'wt%'")
 
 
 # =============================================================================
@@ -1775,17 +1662,17 @@ def get_gas_gas_bip(gas_a: str, gas_b: str) -> float:
 # Fitting: robust Huber loss (f_scale=0.5) with 10 random restarts.
 
 _SW_KVALUE_PARAMS = {
-    # Light gases: Cross form [a, b, c, d, e, f], MARE on K
+    # Light gases: Cross form [a, b, c, d, e, f]
     # Fitted using proposed Paper 2 freshwater kij_AQ forms (Feb 2026)
-    'H2':     ([6.4295, 25.5844, -0.5985, -50.0000, -0.0007, -3.2598], 11.7),
-    'CO2':    ([-5.9974, 26.3804, -0.9380, -16.3941, 0.0607, 0.3688], 13.7),
-    'N2':     ([1.4998, 36.4929, -0.6419, -50.0000, 0.0110, -0.6328], 8.4),
-    'H2S':    ([-1.0549, 7.7334, -1.3646, -3.4035, 0.0850, 0.8651], 18.8),
-    'CH4':    ([-2.7107, 36.5276, -0.7040, -33.2023, 0.0312, -0.1419], 8.5),
-    'C2H6':   ([-9.8804, 40.0208, -0.9108, -22.8267, 0.0756, 0.4366], 10.4),
-    'C3H8':   ([-9.8805, 33.3750, -1.0803, -15.1332, 0.0836, 0.6959], 12.8),
-    'iC4H10': ([-8.8362, 29.1657, -1.0755, -11.0413, 0.0685, 0.7280], 17.9),
-    'nC4H10': ([-8.4159, 27.0161, -1.0886, -10.2525, 0.0613, 0.7515], 21.6),
+    'H2':     [6.4295, 25.5844, -0.5985, -50.0000, -0.0007, -3.2598],
+    'CO2':    [-5.9974, 26.3804, -0.9380, -16.3941, 0.0607, 0.3688],
+    'N2':     [1.4998, 36.4929, -0.6419, -50.0000, 0.0110, -0.6328],
+    'H2S':    [-1.0549, 7.7334, -1.3646, -3.4035, 0.0850, 0.8651],
+    'CH4':    [-2.7107, 36.5276, -0.7040, -33.2023, 0.0312, -0.1419],
+    'C2H6':   [-9.8804, 40.0208, -0.9108, -22.8267, 0.0756, 0.4366],
+    'C3H8':   [-9.8805, 33.3750, -1.0803, -15.1332, 0.0836, 0.6959],
+    'iC4H10': [-8.8362, 29.1657, -1.0755, -11.0413, 0.0685, 0.7280],
+    'nC4H10': [-8.4159, 27.0161, -1.0886, -10.2525, 0.0613, 0.7515],
 }
 
 _SW_KVALUE_HEAVY = {
@@ -1834,7 +1721,7 @@ def _sw_kvalue_init(names: list, Tc: np.ndarray, Pc: np.ndarray,
 
         elif name in _SW_KVALUE_PARAMS:
             # Light gas: Cross form
-            p, _ = _SW_KVALUE_PARAMS[name]
+            p = _SW_KVALUE_PARAMS[name]
             Tr_inv = Tc[i] / T
             lnPr = np.log(P / Pc[i])
             K[i] = np.exp(p[0] + p[1]*Tr_inv + p[2]*lnPr
@@ -1872,7 +1759,7 @@ class SWMultiComponentFlash:
     """
 
     def __init__(self, component_names: List[str], salinity_molal: float = 0.0,
-                 framework: str = 'proposed'):
+                 framework: str = 'proposed', salinity_method: str = 'gamma_phi'):
         if 'H2O' not in component_names:
             raise ValueError("H2O must be in component list")
         if framework not in ('proposed', 'sw_original', 'dropin'):
@@ -1882,6 +1769,7 @@ class SWMultiComponentFlash:
         self.nc = len(self.names)
         self.salinity = salinity_molal
         self.framework = framework
+        self.salinity_method = salinity_method
         self.iw = self.names.index('H2O')
         self.Tc = np.array([COMPONENTS[n].Tc for n in self.names])
         self.Pc = np.array([COMPONENTS[n].Pc for n in self.names])
@@ -1932,6 +1820,16 @@ class SWMultiComponentFlash:
                     if mode == 'AQ':
                         val = get_kij_aq(gas, T_K, self.salinity,
                                          framework=self.framework)
+                        # dropin framework keeps kij_AQ freshwater-only; the
+                        # 'embedded' salinity_method adds the fitted delta_kij
+                        # here (sw_original already embeds salinity via get_kij_aq).
+                        if (self.salinity_method == 'embedded'
+                                and self.framework == 'dropin'
+                                and self.salinity > 0
+                                and gas in EMBEDDED_SALINITY_PARAMS_DROPIN):
+                            val += calc_embedded_delta_kij(
+                                gas, T_K, self.salinity,
+                                params=EMBEDDED_SALINITY_PARAMS_DROPIN[gas])
                     else:
                         val = get_kij_na(gas, T_K)
                 else:
@@ -1942,36 +1840,6 @@ class SWMultiComponentFlash:
         self._kij_cache[cache_key] = kij.copy()
         return kij
 
-    def calc_fugacity_coefficients(self, T_K: float, P_Pa: float, comp: np.ndarray,
-                                    kij_matrix: np.ndarray, phase: str = 'liquid') -> np.ndarray:
-        """Calculate fugacity coefficients for all components."""
-        ai, bi = self._calc_ai_bi(T_K)
-        RT = R_GAS * T_K
-        Ai = ai * P_Pa / RT**2
-        Bi = bi * P_Pa / RT
-
-        # Vectorized mixing rule (replaces O(nc^2) Python loop)
-        sqrt_Ai = np.sqrt(Ai)
-        Aij = np.outer(sqrt_Ai, sqrt_Ai) * (1.0 - kij_matrix)
-
-        A_mix = np.einsum('i,j,ij', comp, comp, Aij)
-        B_mix = np.dot(comp, Bi)
-
-        if B_mix < 1e-15 or A_mix < 1e-15:
-            return np.ones(self.nc)
-
-        roots = solve_cubic_eos(A_mix, B_mix)
-        Z = roots[0] if phase == 'liquid' else roots[-1]
-
-        # Vectorized fugacity coefficient calculation
-        sum_xA = Aij @ comp  # matrix-vector product replaces per-component loop
-        Bi_over_B = Bi / B_mix
-        sum_xA_over_A = sum_xA / A_mix
-
-        phi = np.zeros(self.nc)
-        for i in range(self.nc):
-            phi[i] = calc_fugacity_coeff(Z, A_mix, B_mix, Bi_over_B[i], sum_xA_over_A[i])
-        return phi
 
     def _calc_fugacity_fast(self, comp: np.ndarray, Ai: np.ndarray, Bi: np.ndarray,
                             sqrt_Ai: np.ndarray, onemk: np.ndarray,
@@ -2045,10 +1913,13 @@ class SWMultiComponentFlash:
         γ_i = 10^(ks_i × m) for gases
         γ_H2O = 1.0
 
-        Uses get_sechenov_ks() for gas-specific ks routing:
-        - CO2: Duan & Sun 2003 Pitzer model
-        - H2S: Akinfiev et al. 2016 Pitzer model
+        Uses get_sechenov_ks() for gas-specific ks routing (proposed framework):
+        - CO2: Dubessy et al. 2005 extended Sechenov (+ constant offset)
+        - H2S: Akinfiev et al. 2016 Pitzer model (+ constant offset)
         - All others (HCs, N2, H2): S&W Equation 8 with Tb
+
+        In 'sw_original', gases whose kij_AQ already embeds salinity
+        (HC/CO2/N2) are skipped here to avoid double-counting salting-out.
 
         Args:
             T_K: Temperature in Kelvin
@@ -2068,6 +1939,11 @@ class SWMultiComponentFlash:
 
         for i in range(self.nc):
             if self.names[i] != 'H2O':
+                # sw_original embeds salinity directly in kij_AQ for these gases;
+                # applying a Sechenov gamma as well would double-count salting-out.
+                if (self.framework == 'sw_original'
+                        and self.names[i] in _SW_GASES_WITH_EMBEDDED_SALINITY):
+                    continue
                 if ks_override and self.names[i] in ks_override:
                     ks = ks_override[self.names[i]]
                 else:
@@ -2103,9 +1979,9 @@ class SWMultiComponentFlash:
         # Rust acceleration path — gamma is always passed explicitly.
         # The Rust entry point trusts the caller-supplied gamma and never
         # substitutes its own S&W Eq 8 ks fallback. framework='proposed'
-        # specialised ks models (Dubessy CO2, Akinfiev H2S, Li HC,
-        # Mao-Duan N2, Duan-Sun CO2) are applied in self.calc_gamma()
-        # on the Python side.
+        # specialised ks models (Dubessy CO2, Akinfiev H2S, S&W Eq 8 with
+        # a small N2 offset for the remaining gases) are applied in
+        # self.calc_gamma() on the Python side.
         #
         # Restricted to framework='proposed': the Rust flash hardcodes the
         # MC-3 water alpha and the proposed-framework kij_AQ. The 'dropin'
@@ -2184,50 +2060,6 @@ class SWMultiComponentFlash:
         y = y / np.sum(y)
         return V, x, y, converged
 
-    def check_vlle(self, T_K: float, P_Pa: float, x_ref: np.ndarray,
-                    kij_matrix: np.ndarray) -> bool:
-        """
-        TPD-based VLLE screening (opt-in diagnostic).
-
-        Tests pure-component trial compositions against a reference liquid phase.
-        If any TPD < -0.01, flags potential additional liquid phase.
-
-        Non-invasive: does not modify any computed values.
-
-        Args:
-            T_K: Temperature in Kelvin
-            P_Pa: Pressure in Pascal
-            x_ref: Reference liquid phase composition (from converged flash)
-            kij_matrix: BIP matrix used for the flash
-
-        Returns:
-            True if VLLE is suspected, False otherwise
-        """
-        ai, bi = self._calc_ai_bi(T_K)
-        RT = R_GAS * T_K
-        Ai = ai * P_Pa / RT**2
-        Bi = bi * P_Pa / RT
-        sqrt_Ai = np.sqrt(Ai)
-        onemk = 1.0 - kij_matrix
-
-        phi_ref = self._calc_fugacity_fast(x_ref, Ai, Bi, sqrt_Ai, onemk, 'liquid')
-        ln_x_ref = np.log(np.clip(x_ref, 1e-30, None))
-        ln_phi_ref = np.log(np.clip(phi_ref, 1e-30, None))
-
-        nc = len(x_ref)
-        for k in range(nc):
-            w = np.full(nc, 1e-10)
-            w[k] = 1.0
-            w = w / np.sum(w)
-
-            phi_trial = self._calc_fugacity_fast(w, Ai, Bi, sqrt_Ai, onemk, 'liquid')
-            ln_phi_trial = np.log(np.clip(phi_trial, 1e-30, None))
-
-            tpd_k = (np.log(w[k]) + ln_phi_trial[k]) - (ln_x_ref[k] + ln_phi_ref[k])
-            if tpd_k < -0.01:
-                return True
-
-        return False
 
     def calc_equilibrium(self, T_K: float, P_Pa: float, z: np.ndarray,
                          salinity_method: str = 'gamma_phi',
@@ -2269,6 +2101,13 @@ class SWMultiComponentFlash:
             'component_names': Component name list
         """
         z = np.asarray(z, dtype=float) / np.sum(z)
+
+        if salinity_method not in ('gamma_phi', 'explicit', 'embedded'):
+            raise ValueError(
+                f"Unsupported salinity_method: {salinity_method!r}. "
+                "calc_equilibrium implements 'gamma_phi', 'explicit', or "
+                "'embedded'. Aliases ('sechenov', 'auto') are normalised to "
+                "'gamma_phi' by SoreideWhitson before reaching this engine.")
 
         # Handle backward compatibility
         if salinity_for_sechenov > 0 and salinity_method == 'gamma_phi':
@@ -2463,18 +2302,12 @@ def calc_gas_brine_equilibrium(
         # Create flash calculator
         # For gamma_phi and explicit: use freshwater flash (salinity=0)
         # For embedded: use salinity in kij correlations directly
-        if salinity_method == 'embedded':
-            flash = SWMultiComponentFlash(comp_names,
-                                           salinity_molal=salinity_molal,
-                                           framework=framework)
-            result = flash.calc_equilibrium(T_K, P_Pa, z,
-                                             salinity_method='embedded')
-        else:
-            flash = SWMultiComponentFlash(comp_names,
-                                           salinity_molal=salinity_molal,
-                                           framework=framework)
-            result = flash.calc_equilibrium(T_K, P_Pa, z,
-                                             salinity_method=salinity_method)
+        flash = SWMultiComponentFlash(comp_names,
+                                       salinity_molal=salinity_molal,
+                                       framework=framework,
+                                       salinity_method=salinity_method)
+        result = flash.calc_equilibrium(T_K, P_Pa, z,
+                                         salinity_method=salinity_method)
 
         x_gas = {}
         for i, name in enumerate(comp_names):
@@ -2521,219 +2354,8 @@ def calc_gas_brine_equilibrium(
 BinaryVLE = SWBinaryVLE
 
 # Convenience factory for H2-water VLE (matches existing generate_figures.py usage)
-class H2WaterVLE(SWBinaryVLE):
-    """
-    H2-Water VLE calculator. Convenience wrapper for SWBinaryVLE('H2', ...).
-
-    Provides backward compatibility with existing code in generate_figures.py
-    and fit_aqueous_bip.py.
-    """
-    def __init__(self, salinity: float = 0.0):
-        """
-        Initialize H2-Water VLE calculator.
-
-        Args:
-            salinity: Salt concentration in mol/kg water (default: 0 = fresh water)
-        """
-        super().__init__('H2', salinity)
 
 
 # Correlation aliases for backward compatibility
-def kij_aq_rational(T_K: float) -> float:
-    """Rational form kij_AQ for H2 (alias for kij_aq_h2)."""
-    return kij_aq_h2(T_K, 0.0)
 
 
-def kij_aq_linear(T_K: float) -> float:
-    """Linear correlation for comparison."""
-    Tr = T_K / BIP_TC_H2  # Use BIP_TC_H2 for correlation consistency
-    return -3.05 + 0.226 * Tr
-
-
-def kij_na_constant() -> float:
-    """Constant non-aqueous phase BIP for H2."""
-    return 0.468
-
-
-def kij_aq_chabab_2023(T_K: float, m: float = 0.0) -> float:
-    """
-    Chabab et al. 2023 original correlation with integrated salinity effects.
-
-    kij = (D0*(1 + alpha0*m) + D1*Tr*(1 + alpha1*m) + D2*exp(D3*Tr))
-    """
-    Tr = T_K / BIP_TC_H2  # Use BIP_TC_H2 for correlation consistency
-    D0, D1, D2, D3 = -2.11917, 0.14888, -13.01835, -0.43946
-    alpha0, alpha1 = -0.0226, -0.0045
-    return (D0 * (1 + alpha0 * m) + D1 * Tr * (1 + alpha1 * m) + D2 * np.exp(D3 * Tr))
-
-
-def kij_na_chabab_2023(T_K: float) -> float:
-    """Chabab et al. 2023 non-aqueous BIP."""
-    Tr = T_K / BIP_TC_H2  # Use BIP_TC_H2 for correlation consistency
-    return 0.01993 + 0.042834 * Tr
-
-
-def kij_aq_lopez_lazaro_2019(T_K: float, csw: float = 0.0) -> float:
-    """
-    Lopez-Lazaro et al. 2019 correlation (Equation 17, Table 6).
-
-    NOTE: Uses exp(-A3*Tr) to avoid non-physical values.
-    """
-    Tr = T_K / BIP_TC_H2  # Use BIP_TC_H2 for correlation consistency
-    A0, A1, A2, A3 = -2.513, 0.181, 12.723, 0.499
-    a0, a1, b0, b1 = 6.8e-4, 0.038, 0.443, 0.799
-    if csw > 0:
-        return A0 * (1 + a0 * csw**b0) + A1 * Tr * (1 + a1 * csw**b1) + A2 * np.exp(-A3 * Tr)
-    else:
-        return A0 + A1 * Tr + A2 * np.exp(-A3 * Tr)
-
-
-def kij_na_lopez_lazaro_2019(T_K: float) -> float:
-    """Lopez-Lazaro et al. 2019 non-aqueous BIP."""
-    Tr = T_K / BIP_TC_H2  # Use BIP_TC_H2 for correlation consistency
-    return 2.500 - 0.179 * Tr
-
-
-def sechenov_TO(T_K: float, log10_basis: bool = True) -> float:
-    """
-    Torin-Ollarves & Trusler 2021 Sechenov coefficient (Eq. 22).
-
-    CRITICAL: Original T-O correlation uses NATURAL LOG basis.
-    If log10_basis=True (default), convert to log10 basis by dividing by 2.303.
-    """
-    theta = T_K / 273.15 - 1.0
-    d0 = 0.2898
-    d1 = -1.4330
-    d2 = 3.9584
-    d3 = -3.1666
-    ks_ln = d0 + d1*theta + d2*theta**2 + d3*theta**3
-
-    if log10_basis:
-        return ks_ln / 2.303
-    else:
-        return ks_ln
-
-
-# =============================================================================
-# Test / Demo
-# =============================================================================
-if __name__ == "__main__":
-    print("=" * 70)
-    print("Soreide-Whitson Unified VLE Engine")
-    print("=" * 70)
-    print("\nUsing DECOUPLED approach per S&W methodology:")
-    print("  - Gas solubility: kij_AQ for both phases")
-    print("  - Water content:  kij_NA for both phases")
-
-    # Verify H2 kij_AQ at T=373K
-    print("\n" + "=" * 70)
-    print("H2 kij_AQ VERIFICATION")
-    print("=" * 70)
-    T_K = 373.15
-    Tr = T_K / BIP_TC_H2  # Use BIP_TC_H2 for kij correlation (33.145 K)
-    kij = kij_aq_h2(T_K, 0.0)
-    print(f"  T = 373.15 K, Tr = {Tr:.2f} (using BIP_TC_H2 = {BIP_TC_H2} K)")
-    print(f"  kij_AQ = ({-14.59} + {Tr:.2f}) / ({2.184} + {0.365}*{Tr:.2f})")
-    print(f"         = {-14.59 + Tr:.4f} / {2.184 + 0.365*Tr:.4f}")
-    print(f"         = {kij:.4f}")
-
-    # Validation tests
-    print("\n" + "=" * 70)
-    print("VALIDATION AGAINST EXPERIMENTAL DATA")
-    print("=" * 70)
-
-    tests = [
-        ('H2', 50, 101.3, 0.001188, 'Wiebe & Gaddy 1934'),
-        ('H2', 100, 101.3, 0.001288, 'Wiebe & Gaddy 1934'),
-        ('CO2', 50, 100, 0.0163, 'Wiebe & Gaddy 1940'),
-        ('CH4', 71, 69, 0.00100, 'Culberson & McKetta'),
-        ('N2', 25, 100, 0.00115, 'Wiebe et al. 1933'),
-    ]
-
-    print(f"\n{'Gas':<6} {'T(C)':<8} {'P(bar)':<8} {'x_calc':<10} {'x_exp':<10} {'Error%':<10}")
-    print("-" * 60)
-
-    for gas, T_C, P_bar, x_exp, source in tests:
-        T_K = 273.15 + T_C
-        P_Pa = P_bar * 1e5
-
-        vle = SWBinaryVLE(gas, salinity_molal=0.0)
-        x_calc = vle.calc_gas_solubility(T_K, P_Pa)
-        error = (x_calc - x_exp) / x_exp * 100
-
-        print(f"{gas:<6} {T_C:<8.0f} {P_bar:<8.0f} {x_calc:<10.6f} {x_exp:<10.6f} {error:+8.1f}%")
-
-    # Sechenov verification
-    print("\n" + "=" * 70)
-    print("SECHENOV COEFFICIENT (S&W Eq. 8)")
-    print("=" * 70)
-    print(f"\n{'T(C)':<10} {'ks (H2)':<12} {'ks (CH4)':<12} {'ks (N2)':<12}")
-    print("-" * 50)
-    for T_C in [25, 50, 75, 100, 125, 150]:
-        ks_h2 = sw_equation_8_ks(T_C, COMPONENTS['H2'].Tb)
-        ks_ch4 = sw_equation_8_ks(T_C, COMPONENTS['CH4'].Tb)
-        ks_n2 = sw_equation_8_ks(T_C, COMPONENTS['N2'].Tb)
-        print(f"{T_C:<10} {ks_h2:<12.4f} {ks_ch4:<12.4f} {ks_n2:<12.4f}")
-
-    # Multi-component example
-    print("\n" + "=" * 70)
-    print("MULTI-COMPONENT EXAMPLE")
-    print("=" * 70)
-    print("\nNatural gas (85% CH4, 10% CO2, 5% N2) in fresh water at 200F, 3000 psia:")
-
-    x_gas, water = calc_gas_brine_equilibrium(
-        salinity_wt_pct=0.0,
-        temperature_F=200,
-        pressure_psia=3000,
-        y_CH4=0.85,
-        y_CO2=0.10,
-        y_N2=0.05
-    )
-
-    for gas, x in x_gas.items():
-        print(f"  Dissolved {gas}: {x:.6f} mol/mol")
-    print(f"  Water in gas: {water['y_H2O']:.6f} mol/mol")
-    print(f"               {water['stb_mmscf']:.3f} stb/mmscf")
-    print(f"               {water['lb_mmscf']:.1f} lb/mmscf")
-
-    # Gamma-phi flash example
-    print("\n" + "=" * 70)
-    print("GAMMA-PHI FLASH EXAMPLE (H2 in brine)")
-    print("=" * 70)
-    print("\n100% H2 in 1.5 molal brine at 50°C, 100 bar:")
-
-    flash = SWMultiComponentFlash(['H2O', 'H2'], salinity_molal=1.5)
-    result = flash.calc_equilibrium(323.15, 100e5,
-                                     np.array([0.95, 0.05]),
-                                     salinity_method='gamma_phi')
-    gamma = result.get('gamma', np.ones(2))
-    print(f"  γ_H2O = {gamma[0]:.4f}")
-    print(f"  γ_H2  = {gamma[1]:.4f}")
-    print(f"  x_H2 (brine, gamma-phi) = {result['x_aq'][1]:.6f}")
-    print(f"  Converged: {'✓' if result['converged_aq'] else '✗'}")
-
-    # Compare gamma-phi vs explicit Sechenov
-    result_expl = flash.calc_equilibrium(323.15, 100e5,
-                                          np.array([0.95, 0.05]),
-                                          salinity_method='explicit')
-    x_expl = result_expl.get('x_aq_brine', result_expl['x_aq'])
-    diff = abs(result['x_aq'][1] - x_expl[1]) / result['x_aq'][1] * 100
-    print(f"  x_H2 (brine, explicit)  = {x_expl[1]:.6f}")
-    print(f"  Difference: {diff:.2f}% (expected <0.3% for dilute H2)")
-
-    # Robust RR solver verification
-    print("\n" + "=" * 70)
-    print("ROBUST RR SOLVER (Nielsen & Lia 2022)")
-    print("=" * 70)
-    z_test = np.array([0.90, 0.05, 0.03, 0.02])
-    K_test = np.array([0.001, 50.0, 80.0, 120.0])
-    V_rr, x_rr, y_rr = solve_rachford_rice(z_test, K_test)
-    print(f"\n  z = {z_test}")
-    print(f"  K = {K_test}")
-    print(f"  V = {V_rr:.6f}")
-    print(f"  x = {x_rr}")
-    print(f"  y = {y_rr}")
-    print(f"  Mass balance: Σ(z-Vy-(1-V)x) = {np.max(np.abs(z_test - V_rr*y_rr - (1-V_rr)*x_rr)):.2e}")
-
-    print("\n" + "=" * 70)
-    print("Done.")

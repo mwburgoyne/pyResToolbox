@@ -24,7 +24,7 @@ Gas PVT and flow rate calculations.
 
 Functions
 ---------
-gas_z           Z-factor (DAK, HY, WYW, or BNS methods)
+gas_z           Z-factor (DAK, HY, or BNS methods)
 gas_ug          Gas viscosity (cP)
 gas_bg          Gas formation volume factor (rcf/scf)
 gas_cg          Gas compressibility (1/psi)
@@ -158,7 +158,16 @@ _LBC_POLY = np.array([0.1023, 0.023364, 0.058533, -0.0392852, 0.00926279])
 _LBC_OFFSET = 1e-4
 
 # --- Darcy gas flow equation ---
-_DARCY_GAS_CONST = 1422  # Field-unit conversion factor for gas pseudopressure flow
+_DARCY_GAS_CONST = 1422  # Field-unit conversion factor for radial gas pseudopressure flow
+# Linear-flow constant: the radial pseudopressure solution
+# q = k*h*dmp / (1422*T*(ln(re/rw) - 0.75 + S)) embeds the 2*pi of radial
+# geometry inside the 1422 factor (1422 = 50300*psc/(pi*tsc) in field units).
+# The linear steady-state pseudopressure solution q = k*A*dmp / (C*T*L) has
+# no such geometric factor, so the equivalent field-unit constant is
+# C = 2*pi*1422 ~ 8934. See e.g. Lee, J. 'Well Testing' (SPE Textbook
+# Series Vol. 1) for the radial form; the linear form follows by integrating
+# Darcy's law in one dimension with the same unit conversions.
+_DARCY_GAS_CONST_LINEAR = 2 * np.pi * _DARCY_GAS_CONST  # ~8934.07
 
 # --- Danesh water content correlation ---
 # 'PVT and Phase Behaviour Of Petroleum Reservoir Fluids', Danesh
@@ -281,6 +290,8 @@ def _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s)
     Handles scalar and array inputs for pr and pwf.
     Returns (direction, delta_mp) where direction encodes flow sign.
     """
+    if pr.size > 1 and pwf.size > 1:
+        raise ValueError("Only one of pr/pwf may be an array; the other must be a scalar")
     direction = 1
     if pr.size + pwf.size == 2:  # Single set of pressures
         if pr < pwf:
@@ -351,7 +362,6 @@ def gas_rate_radial(
         zmethod: Method for calculating Z-Factor
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
-                 'WYW' Wang, Ye & Wu (2021)
                  'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
                  defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
         cmethod: Method for calculating critical properties
@@ -436,7 +446,6 @@ def gas_rate_linear(
         zmethod: Method for calculating Z-Factor
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
-                 'WYW' Wang, Ye & Wu (2021)
                  'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
                  defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
         cmethod: Method for calculting critical properties
@@ -509,7 +518,7 @@ def darcy_gas(
             return (np.sqrt(4 * a * b * D + (b * b * c * c)) - (b * c)) / (2 * b * D)
     else:
         a = k * h * l1 * delta_mp
-        b = _DARCY_GAS_CONST * tr
+        b = _DARCY_GAS_CONST_LINEAR * tr
         c = l2
     # Else, ignore non-Darcy skin
     return a / (b * c)
@@ -568,17 +577,11 @@ def gas_tc_pc(
         pci = _PMC_PCI
         j = alpha[0] + (alpha[4] * sg) + (alpha[5] * sg * sg)  # 2.5
         k = beta[0] + (beta[4] * sg) + (beta[5] * sg * sg)  # 2.6
-        jt = j
-        kt = k
-        jt += sum([(alpha[i] * y[i] * tci[i] / pci[i]) for i in range(1, 4)])
-        kt += sum(
-            (beta[i] * y[i] * tci[i] / np.sqrt(pci[i])) for i in range(1, 4)
-        )
-        tpc = kt * kt / jt  # 2.4
         j += sum([alpha[i] * y[i] * tci[i] / pci[i] for i in range(1, 4)])
         k += sum(
             [beta[i] * y[i] * tci[i] / np.sqrt(pci[i]) for i in range(1, 4)]
         )
+        tpc = k * k / j  # 2.4
         ppc = (k * k / j) / j
 
     elif (cmethod.name == "SUT"):  # Sutton equations with Wichert & Aziz corrections
@@ -728,59 +731,39 @@ def _cardano_cubic(c2, c1, c0, flag=0):
         return max(Zs)
     return Zs
 
-def _halley_cubic_vec(c2, c1, c0, A=None, B=None, max_iter=50, tol=1e-12):
+def _halley_cubic_vec(c2, c1, c0, A, B, max_iter=50, tol=1e-12):
     """Vectorized Halley solver: solve Z^3+c2*Z^2+c1*Z+c0=0 for max root (vapor Z).
     c2, c1, c0 are 1D arrays of length N. Returns 1D array of Z values.
-    When A and B are provided, solves in Z* = Z - B space (per Aaron Zick's
-    reformulation) where all physical roots lie in (0, 1], giving more
-    robust convergence. Falls back to _cardano_cubic for any bad elements."""
+    Solves in Z* = Z - B space (per Aaron Zick's reformulation) where all
+    physical roots lie in (0, 1], giving more robust convergence.
+    Falls back to _cardano_cubic for any bad elements."""
 
-    if A is not None and B is not None:
-        # Z* = Z - B reformulation: Z*³ + d2·Z*² + d1·Z* + d0 = 0
-        # f*(0) = -2B² < 0, f*(1) = A >= 0, so largest root in (0, 1]
-        d2 = 4.0 * B - 1.0
-        d1 = A + 2.0 * B * (B - 2.0)
-        d0 = -2.0 * B * B
+    # Z* = Z - B reformulation: Z*³ + d2·Z*² + d1·Z* + d0 = 0
+    # f*(0) = -2B² < 0, f*(1) = A >= 0, so largest root in (0, 1]
+    d2 = 4.0 * B - 1.0
+    d1 = A + 2.0 * B * (B - 2.0)
+    d0 = -2.0 * B * B
 
-        # Start at Z* = 1 (above largest root since f*(1) = A >= 0)
-        Zs = np.ones_like(c2)
+    # Start at Z* = 1 (above largest root since f*(1) = A >= 0)
+    Zs = np.ones_like(c2)
 
-        for _ in range(max_iter):
-            f = Zs**3 + d2 * Zs**2 + d1 * Zs + d0
-            fp = 3.0 * Zs**2 + 2.0 * d2 * Zs + d1
-            fpp = 6.0 * Zs + 2.0 * d2
-            safe_fp = np.where(np.abs(fp) < 1e-30, 1e-30, fp)
-            dZ = f / safe_fp
-            denom = safe_fp - 0.5 * dZ * fpp
-            denom = np.where(np.abs(denom) < 1e-30, 1e-30, denom)
-            dZ = f / denom
-            Zs -= dZ
-            if np.max(np.abs(dZ)) < tol:
-                break
-
-        # Convert Z* -> Z; fallback to Cardano in Z space for bad elements
-        Z = Zs + B
+    for _ in range(max_iter):
         f = Zs**3 + d2 * Zs**2 + d1 * Zs + d0
-        bad = (np.abs(f) > 1e-6) | (Zs <= 0.0)
-    else:
-        # Legacy path: solve directly in Z space with Cauchy upper bound
-        Z = 1.0 + np.maximum(np.abs(c2), np.maximum(np.abs(c1), np.abs(c0)))
+        fp = 3.0 * Zs**2 + 2.0 * d2 * Zs + d1
+        fpp = 6.0 * Zs + 2.0 * d2
+        safe_fp = np.where(np.abs(fp) < 1e-30, 1e-30, fp)
+        dZ = f / safe_fp
+        denom = safe_fp - 0.5 * dZ * fpp
+        denom = np.where(np.abs(denom) < 1e-30, 1e-30, denom)
+        dZ = f / denom
+        Zs -= dZ
+        if np.max(np.abs(dZ)) < tol:
+            break
 
-        for _ in range(max_iter):
-            f = Z**3 + c2 * Z**2 + c1 * Z + c0
-            fp = 3.0 * Z**2 + 2.0 * c2 * Z + c1
-            fpp = 6.0 * Z + 2.0 * c2
-            safe_fp = np.where(np.abs(fp) < 1e-30, 1e-30, fp)
-            dZ = f / safe_fp
-            denom = safe_fp - 0.5 * dZ * fpp
-            denom = np.where(np.abs(denom) < 1e-30, 1e-30, denom)
-            dZ = f / denom
-            Z -= dZ
-            if np.max(np.abs(dZ)) < tol:
-                break
-
-        f = Z**3 + c2 * Z**2 + c1 * Z + c0
-        bad = (np.abs(f) > 1e-6) | (Z < 0.0)
+    # Convert Z* -> Z; fallback to Cardano in Z space for bad elements
+    Z = Zs + B
+    f = Zs**3 + d2 * Zs**2 + d1 * Zs + d0
+    bad = (np.abs(f) > 1e-6) | (Zs <= 0.0)
 
     if np.any(bad):
         bad_idx = np.where(bad)[0]
@@ -811,7 +794,6 @@ def gas_z(
         zmethod: Method for calculating Z-Factor
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
-                 'WYW' Wang, Ye & Wu (2021)
                  'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
                  defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
         cmethod: Method for calculting critical properties
@@ -832,7 +814,6 @@ def gas_z(
 
     tolerance = 1e-6
     p, is_list = convert_to_numpy(p)
-    user_tc_pc = tc > 0 and pc > 0
 
     zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
 
@@ -852,11 +833,6 @@ def gas_z(
             warnings.warn(f"HY Z-factor: Tr={tr:.3f} outside calibration range [1.15, 3.0]", stacklevel=2)
         if np.any(pprs > 24):
             warnings.warn(f"HY Z-factor: Ppr outside calibration range [0, 24]", stacklevel=2)
-    elif zname == 'WYW':
-        if tr < 1.0 or tr > 3.0:
-            warnings.warn(f"WYW Z-factor: Tr={tr:.3f} outside calibration range [1.0, 3.0]", stacklevel=2)
-        if np.any(pprs < 0.01) or np.any(pprs > 30):
-            warnings.warn(f"WYW Z-factor: Ppr outside calibration range [0.01, 30]", stacklevel=2)
 
     def zdak(pprs, tr):
         # DAK from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
@@ -872,26 +848,35 @@ def gas_z(
         rhor = _DAK_LEADING * pprs / tr  # Initial guess (array)
         rhor = np.maximum(rhor, 1e-10)
 
+        converged = False
         for _ in range(100):
             r2 = rhor ** 2
             r5 = rhor ** 5
             exp_term = np.exp(-A11 * r2)
             f_val = (R1 * rhor - R2 / rhor + R3 * r2 - R4 * r5 +
                      R5 * r2 * (1 + A11 * r2) * exp_term + 1)
+            # d/drhor of R5*rhor^2*(1+A11*rhor^2)*exp(-A11*rhor^2)
+            # = 2*R5*rhor*exp(-A11*rhor^2) * (1 + A11*rhor^2 - (A11*rhor^2)^2)
             fp_val = (R1 + R2 / r2 + 2 * R3 * rhor - 5 * R4 * rhor**4 +
                       2 * R5 * rhor * exp_term *
-                      ((1 + 2 * A11 * rhor**3) - A11 * r2 * (1 + A11 * r2)))
+                      (1 + A11 * r2 - (A11 * r2) ** 2))
             fp_val = np.where(np.abs(fp_val) < 1e-30, 1e-30, fp_val)
             # Converge on both function value and step size (matching original scalar logic)
             if np.all(np.abs(f_val) < tolerance):
+                converged = True
                 break
             step = f_val / fp_val
             rhor_new = rhor - step
             rhor_new = np.maximum(rhor_new, 1e-10)
             if np.all(np.abs(rhor - rhor_new) < tolerance):
                 rhor = rhor_new
+                converged = True
                 break
             rhor = rhor_new
+
+        if not converged:
+            warnings.warn("DAK Z-factor: Newton-Raphson did not converge within 100 iterations; "
+                          "result may be inaccurate", stacklevel=2)
 
         zout = _DAK_LEADING * pprs / (rhor * tr)
         return process_output(zout, is_list)
@@ -907,28 +892,29 @@ def gas_z(
         c = tpr_inv * (_c0 + _c1 * tpr_inv + _c2 * t2)
         D = _d0 + _d1 * tpr_inv
 
-        # Initial guess from WYW
-        z_init = z_wyw(pprs, tr)
-        z_init = np.atleast_1d(z_init).astype(float)
-        yi = np.maximum(a * pprs / z_init, 1e-10)
-        # Match original scalar: y starts at 0.01, yi starts at WYW guess
-        y = np.full_like(yi, 0.01)
+        # Initial guess for reduced density y from explicit WYW evaluation
+        z_init = np.atleast_1d(_z_wyw_guess(pprs, tr)).astype(float)
+        y = np.maximum(a * pprs / z_init, 1e-10)
 
+        converged = False
         for _ in range(100):
-            # Convergence check at top of loop (original while-loop semantics)
-            rel_err = np.abs(y - yi) / np.maximum(np.abs(y), 1e-10)
-            if np.all(rel_err <= 0.0005):
-                break
-            # Newton-Raphson step on yi
-            yi_safe = np.clip(yi, 1e-10, 0.99)
-            omy3 = (1 - yi_safe) ** 3
-            omy4 = (1 - yi_safe) ** 4
-            f_val = ((yi_safe + yi_safe**2 + yi_safe**3 - yi_safe**4) / omy3) - a * pprs - b * yi_safe**2 + c * yi_safe**D
-            df_val = ((1 + 4*yi_safe + 4*yi_safe**2 - 4*yi_safe**3 + yi_safe**4) / omy4) - 2*b*yi_safe + c*D * yi_safe**(D-1)
+            # Newton-Raphson step on y, then compare successive iterates
+            y_safe = np.clip(y, 1e-10, 0.99)
+            omy3 = (1 - y_safe) ** 3
+            omy4 = (1 - y_safe) ** 4
+            f_val = ((y_safe + y_safe**2 + y_safe**3 - y_safe**4) / omy3) - a * pprs - b * y_safe**2 + c * y_safe**D
+            df_val = ((1 + 4*y_safe + 4*y_safe**2 - 4*y_safe**3 + y_safe**4) / omy4) - 2*b*y_safe + c*D * y_safe**(D-1)
             df_val = np.where(np.abs(df_val) < 1e-30, 1e-30, df_val)
-            y = yi_safe - f_val / df_val
-            y = np.maximum(y, 1e-10)
-            yi = y
+            y_new = np.maximum(y_safe - f_val / df_val, 1e-10)
+            rel_err = np.abs(y_new - y) / np.maximum(np.abs(y_new), 1e-10)
+            y = y_new
+            if np.all(rel_err <= 0.0005):
+                converged = True
+                break
+
+        if not converged:
+            warnings.warn("HY Z-factor: Newton-Raphson did not converge within 100 iterations; "
+                          "result may be inaccurate", stacklevel=2)
 
         y = np.maximum(y, 1e-30)
         zout = a * pprs / y
@@ -937,12 +923,14 @@ def gas_z(
     # Wang, Ye & Wu, 2021, 0.2 < Ppr < 30, 1.05 < tpr < 3.0
     # "An accurate correlation for calculating natural gas compressibility factors under a wide range of pressure conditions"
     # https://doi.org/10.1016/j.egyr.2021.11.029
-    def z_wyw(pprs, tr):
+    # Private helper: used only as the initial guess for the HY solver.
+    # No longer exposed as a public Z-factor method (removed owing to
+    # incorrect behaviour at low Ppr).
+    def _z_wyw_guess(pprs, tr):
         a = _WYW_A
         numerators = a[1] + a[2] * (1 + a[3] * tr + a[4] * tr ** 2 + a[5] * tr ** 3 + a[6] * tr ** 4) * pprs + a[7] * pprs ** 2 + a[8] * pprs ** 3 + a[9] * pprs ** 4
         denominators = a[10] + a[11] * (1 + a[12] * tr + a[13] * tr ** 2 + a[14] * tr ** 3 + a[15] * tr ** 4 + a[16] * tr ** 5) * pprs + a[17] * pprs ** 2 + a[18] * pprs ** 3 + a[19] * pprs ** 4 + a[20] * pprs ** 5
-        zout = numerators/denominators
-        return process_output(zout, is_list)
+        return numerators / denominators
 
     mws, tcs, pcs = _BNS_MWS.copy(), _BNS_TCS.copy(), _BNS_PCS.copy()
     ACF, VSHIFT = _BNS_ACF, _BNS_VSHIFT
@@ -1027,40 +1015,34 @@ def gas_z(
 
         return process_output(zout, is_list)
         
-    zfuncs = {"DAK": zdak, "HY": z_hy, "WYW": z_wyw, "BNS": z_bur}
+    zfuncs = {"DAK": zdak, "HY": z_hy, "BNS": z_bur}
 
     # Rust acceleration dispatch (batch — single FFI call for all pressures).
-    # User tc/pc is forwarded to each Rust batch path; for BNS it overrides only
-    # the HC pseudo-component (inert Tc/Pc stay at BNS internal constants).
-    tc_arg = float(tc) if user_tc_pc else 0.0
-    pc_arg = float(pc) if user_tc_pc else 0.0
+    # The effective tc/pc (computed once via gas_tc_pc above, honouring any
+    # single-sided user override) are forwarded unconditionally as
+    # tc_user/pc_user. For BNS they override only the HC pseudo-component
+    # (inert Tc/Pc stay at BNS internal constants).
     if RUST_AVAILABLE:
         if zmethod.name in ('BNS', 'BUR'):
             zout = np.array(_rust_module.bns_zfactor_batch(
                 p.tolist(), float(degf), float(sg),
                 float(co2), float(h2s), float(n2), float(h2),
-                tc_arg, pc_arg,
+                float(tc), float(pc),
             ))
             return process_output(zout, is_list)
         elif zmethod.name == 'DAK':
-            if cmethod.name == 'SUT':
-                zout = np.array(_rust_module.dak_zfactor_batch(
-                    p.tolist(), float(degf), float(sg),
-                    float(co2), float(h2s), float(n2),
-                    tc_arg, pc_arg,
-                ))
-            else:
-                zout = np.array([_rust_module.dak_zfactor(float(pr_i), float(tr)) for pr_i in pprs])
+            zout = np.array(_rust_module.dak_zfactor_batch(
+                p.tolist(), float(degf), float(sg),
+                float(co2), float(h2s), float(n2),
+                float(tc), float(pc),
+            ))
             return process_output(zout, is_list)
         elif zmethod.name == 'HY':
-            if cmethod.name == 'SUT':
-                zout = np.array(_rust_module.hy_zfactor_batch(
-                    p.tolist(), float(degf), float(sg),
-                    float(co2), float(h2s), float(n2),
-                    tc_arg, pc_arg,
-                ))
-            else:
-                zout = np.array([_rust_module.hall_yarborough_zfactor(float(pr_i), float(tr)) for pr_i in pprs])
+            zout = np.array(_rust_module.hy_zfactor_batch(
+                p.tolist(), float(degf), float(sg),
+                float(co2), float(h2s), float(n2),
+                float(tc), float(pc),
+            ))
             return process_output(zout, is_list)
 
     if zmethod.name in ('BNS', 'BUR'):
@@ -1094,7 +1076,6 @@ def gas_ug(
           zmethod: Method for calculating Z-Factor
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                    'HY' Hall & Yarborough (1973)
-                   'WYW' Wang, Ye & Wu (2021)
                    'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
                     defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
           cmethod: Method for calculting critical properties
@@ -1122,21 +1103,21 @@ def gas_ug(
     zee_provided = not (isinstance(zee, (int, float, bool)) and not zee)
     p, is_list = convert_to_numpy(p)
     zee, _ = convert_to_numpy(zee)
-    user_tc_pc = isinstance(tc, (int, float)) and isinstance(pc, (int, float)) and tc > 0 and pc > 0
 
     zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
+    # Effective tc/pc resolved once via gas_tc_pc (honours single-sided user
+    # overrides); forwarded to gas_z and the Rust batch viscosity paths.
+    tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc)
 
     t = degf + degF2R
     m = MW_AIR * sg
 
     if not zee_provided or not check_2_inputs(zee, p): # Need to calculate Z-Factors if not same length / type as p
          zee = gas_z(p, sg, degf, zmethod, cmethod, co2, h2s, n2, h2, tc, pc)
-    
-    rho = m * p / (t * zee * R * WDEN)
 
     # Rust-accelerated viscosity (batch — single FFI call for all pressures).
-    # For BNS, user tc/pc is forwarded as HC-only override (inert Tc/Pc stay
-    # at BNS internal constants).
+    # For BNS, the effective tc/pc is forwarded as HC-only override (inert
+    # Tc/Pc stay at BNS internal constants).
     if RUST_AVAILABLE:
         if zmethod.name not in ('BNS', 'BUR'):
             ug_list = np.array(_rust_module.gas_ug_lge_batch(
@@ -1144,11 +1125,9 @@ def gas_ug(
             ))
             ug = process_output(ug_list, is_list)
         else:
-            tc_arg = float(tc) if user_tc_pc else 0.0
-            pc_arg = float(pc) if user_tc_pc else 0.0
             ug_list = np.array(_rust_module.gas_ug_lbc_batch(
                 p.tolist(), zee.tolist(), sg, degf, co2, h2s, n2, h2,
-                tc_arg, pc_arg,
+                float(tc), float(pc),
             ))
             ug = process_output(ug_list, is_list)
         if ugz:
@@ -1157,6 +1136,7 @@ def gas_ug(
             return process_output(ug, is_list)
 
     if zmethod.name not in ('BNS', 'BUR'):
+        rho = m * p / (t * zee * R * WDEN)
         b = _LGE[0] + (_LGE[1] / t) + (_LGE[2] * m)  # 2.16
         c = _LGE[3] - (_LGE[4] * b)  # 2.17
         a = ((_LGE[5] + (_LGE[6] * m)) * np.power(t, 1.5) / (_LGE[7] + (_LGE[8] * m) + t))  # 2.15
@@ -1180,11 +1160,9 @@ def gas_ug(
         hc_gas_mw = sg_hc * MW_AIR
 
         mws_lbc[-1] = hc_gas_mw
-        # User-supplied tc/pc override only the hydrocarbon pseudo-component Tc/Pc;
-        # gas_tc_pc returns user values directly when both are >0, else BNS correlation.
-        tcs_lbc[-1], pcs_lbc[-1] = gas_tc_pc(hc_gas_mw / MW_AIR, cmethod='BNS',
-                                             tc=tc if user_tc_pc else 0,
-                                             pc=pc if user_tc_pc else 0)
+        # Effective HC pseudo-component Tc/Pc resolved once at entry (user
+        # overrides, including single-sided, already applied by gas_tc_pc).
+        tcs_lbc[-1], pcs_lbc[-1] = tc, pc
         VCVIS_lbc[-1] = _BNS_VCVIS_HC[0] * (hc_gas_mw - _BNS_CH4_MW) + _BNS_VCVIS_HC[1]
 
         # Vectorized Stiel-Thodos
@@ -1205,9 +1183,8 @@ def gas_ug(
         rhoc = 1.0 / np.sum(VCVIS_lbc * zi)
         eta_mix = np.abs(np.sum(zi * Tc_K))**(1.0/6.0) / (np.abs(np.sum(zi * mws_lbc))**0.5 * np.abs(np.sum(zi * Pc_atm))**(2.0/3.0))
 
-        # Vectorized over pressures
-        zee_arr, _ = convert_to_numpy(zee)
-        rhor = p / (zee_arr * R * degR * rhoc)
+        # Vectorized over pressures (zee already converted to numpy above)
+        rhor = p / (zee * R * degR * rhoc)
         lhs = a_lbc[0] + rhor * (a_lbc[1] + rhor * (a_lbc[2] + rhor * (a_lbc[3] + rhor * a_lbc[4])))
         ug = process_output((lhs**4 - _LBC_OFFSET) / eta_mix + u0_val, is_list)
     if ugz:
@@ -1245,7 +1222,6 @@ def gas_cg(
         zmethod: Method for calculating Z-Factor
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                    'HY' Hall & Yarborough (1973)
-                   'WYW' Wang, Ye & Wu (2021)
                    'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
                     defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
         cmethod: Method for calculating Tc and Pc
@@ -1261,9 +1237,7 @@ def gas_cg(
     p, is_list = convert_to_numpy(p)
     tc, pc = gas_tc_pc(sg=sg, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc, cmethod=cmethod)
 
-    pr = p / pc
     degR = (degf + degF2R)
-    tr = degR / tc
     dp = np.maximum(p * 1e-4, 0.01)  # Relative step, floor at 0.01 psi
     p_both = np.concatenate([p, p + dp])
     zee_both = gas_z(p=p_both, sg=sg, degf=degf, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2=h2, tc=tc, pc=pc)
@@ -1300,7 +1274,6 @@ def gas_bg(
         zmethod: Method for calculating Z-Factor
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
-                 'WYW' Wang, Ye & Wu (2021)
                  'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
                  defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
         cmethod: Method for calculting critical properties
@@ -1349,7 +1322,6 @@ def gas_den(
           zmethod: Method for calculating Z-Factor
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                    'HY' Hall & Yarborough (1973)
-                   'WYW' Wang, Ye & Wu (2021)
                    'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
                    defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
           cmethod: Method for calculting critical properties
@@ -1412,7 +1384,6 @@ def gas_ponz2p(
         zmethod: Method for calculating Z-Factor
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
-                 'WYW' Wang, Ye & Wu (2021)
                  'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
                  defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
         cmethod: Method for calculting critical properties
@@ -1438,6 +1409,9 @@ def gas_ponz2p(
             pc = pc * BAR_TO_PSI
 
     zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
+    # Effective tc/pc resolved once via gas_tc_pc (honours single-sided user
+    # overrides); forwarded to the Rust path and the Python fallback alike.
+    tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc)
 
     poverz, is_list = convert_to_numpy(poverz)
 
@@ -1449,16 +1423,16 @@ def gas_ponz2p(
         )
 
     # Try Rust-accelerated batch solver for supported method combinations.
-    # User tc/pc is honored by the Rust path: mixture override for DAK/HY+SUT,
-    # HC-only override for BNS.
+    # Effective tc/pc is honoured by the Rust path: mixture override for
+    # DAK/HY+SUT, HC-only override for BNS.
     zname = zmethod.name
     cname = cmethod.name
-    if cname in ('SUT', 'BNS'):
+    if RUST_AVAILABLE and cname in ('SUT', 'BNS'):
         try:
             p_list = _rust_module.gas_ponz2p_rust(
                 [float(v) for v in poverz], degf, sg,
                 zname, cname,
-                co2, h2s, n2, h2, tc, pc, rtol,
+                co2, h2s, n2, h2, float(tc), float(pc), rtol,
             )
             result = process_output(np.array(p_list), is_list)
             if metric:
@@ -1515,7 +1489,6 @@ def gas_grad2sg(
         zmethod: Method for calculating Z-Factor
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
-                 'WYW' Wang, Ye & Wu (2021)
                  'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
                  defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
         cmethod: Method for calculting critical properties
@@ -1584,7 +1557,6 @@ def gas_dmp(
         zmethod: Method for calculating Z-Factor
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                    'HY' Hall & Yarborough (1973)
-                   'WYW' Wang, Ye & Wu (2021)
                    'BNS' Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen and Stanko (2025), SPE-229932-MS
                    defaults to 'DAK' if not specified, or to 'BNS' if h2 mole fraction is specified
         cmethod: Method for calculting critical properties
@@ -1616,10 +1588,13 @@ def gas_dmp(
         return 0
 
     zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
+    # Effective tc/pc resolved once via gas_tc_pc (honours single-sided user
+    # overrides); forwarded to the Rust path and the Python fallback alike.
+    tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc)
 
     # Rust-accelerated pseudopressure (entire integration in Rust — no Python round-trips).
-    # User tc/pc is honored by the Rust path: mixture override for DAK/HY+SUT,
-    # HC-only override for BNS.
+    # Effective tc/pc is honoured by the Rust path: mixture override for
+    # DAK/HY+SUT, HC-only override for BNS.
     if RUST_AVAILABLE:
         zname = zmethod.name
         cname = cmethod.name
@@ -1628,7 +1603,7 @@ def gas_dmp(
                 result = _rust_module.gas_dmp_rust(
                     float(p1), float(p2), degf, sg,
                     zname, cname,
-                    co2, h2s, n2, h2, tc, pc,
+                    co2, h2s, n2, h2, float(tc), float(pc),
                 )
                 if metric:
                     return result * PSI2CP_TO_BAR2CP
@@ -1832,9 +1807,10 @@ def gas_partial_penetration_skin(htot: float, htop: float, hbot: float,
         hbot: Distance from formation top to bottom of perforated interval.
         rw: Wellbore radius.
         kh_kv: Horizontal-to-vertical permeability anisotropy ratio (k_h/k_v).
-               Defaults to 10.0. Set to 0 to treat vertical permeability as
-               negligible (returns S_p = 0, i.e. reservoir behaves as the
-               product k*h_perf and no partial-penetration penalty exists).
+               Defaults to 10.0. Set to 0 to treat vertical communication as
+               perfect: kh/kv = 0 implies kv -> infinity, so flow equalises
+               vertically across the full interval and no partial-penetration
+               penalty exists (returns S_p = 0).
     """
     from scipy.special import k0 as _k0
     if htot <= 0 or rw <= 0:
@@ -1845,7 +1821,7 @@ def gas_partial_penetration_skin(htot: float, htop: float, hbot: float,
     if kh_kv < 0:
         raise ValueError(f"kh_kv must be >= 0, got {kh_kv}")
     if kh_kv == 0:
-        return 0.0  # No vertical permeability => no partial-penetration penalty
+        return 0.0  # kh/kv = 0 => kv infinite (perfect vertical communication) => no penalty
 
     htD = htop / htot
     hbD = hbot / htot

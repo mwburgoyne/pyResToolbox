@@ -61,7 +61,7 @@ _BR_B_EXP = -0.338        # Live oil B exponent
 _BR_B_OFFSET = 150.0      # Live oil B Rs offset
 
 # Petrosky-Farshad (1993) undersaturated viscosity — Eq 3.24
-_PF_POLY = (-1.0146, 1.3322, -0.4876, -1.15036)  # ln(uob) polynomial coeffs
+_PF_POLY = (-1.0146, 1.3322, -0.4876, -1.15036)  # log10(uob) polynomial coeffs
 _PF_P_COEFF = 1.3449e-3   # Pressure coefficient
 
 # Standing-Witte-McCain-Hill (1995) density — Eqs 3.17-3.19
@@ -134,10 +134,10 @@ _SG_ST_C = [
 ]
 _SG_ST_POLY = (1.219, 0.198, 0.0845, 0.03, 0.003)  # sg_st = a + bZ + cZ^2 + dZ^3 + eZ^4
 
-# Valko-McCain (2003) stock-tank Rs — Eq 3-2
+# Valko-McCain (2003) stock-tank Rs - Eq 3-2
 _RS_ST_C = [
     [-8.005, 1.224, -1.587],
     [2.7, -0.5, 0.0441],
     [-0.161, 0, -2.29e-5],
 ]
-_RS_ST_POLY = (3.955, 0.83, -0.024, 0.075)  # rs_st = a + bZ + cZ^2 + dZ^3
+_RS_ST_POLY = (3.955, 0.83, -0.024, 0.075)  # ln(rs_st) = a + bZ + cZ^2 + dZ^3

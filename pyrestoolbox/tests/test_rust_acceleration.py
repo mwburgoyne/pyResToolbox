@@ -32,36 +32,21 @@ RTOL_LOOSE = 1e-3
 
 @contextlib.contextmanager
 def force_python():
-    """Context manager that disables Rust in all modules, then restores."""
-    import pyrestoolbox._accelerator as acc
-    import pyrestoolbox.gas.gas as gas_mod
-    import pyrestoolbox.oil._density as oil_mod
-    import pyrestoolbox.brine.brine as brine_mod
-    import pyrestoolbox.nodal.nodal as nodal_mod
-    import pyrestoolbox.dca.dca as dca_mod
-    import pyrestoolbox.matbal.matbal as matbal_mod
+    """Context manager that disables Rust in all modules, then restores.
 
-    modules = [
-        (acc, 'RUST_AVAILABLE'),
-        (gas_mod, 'RUST_AVAILABLE'),
-        (oil_mod, '_RUST_AVAILABLE'),
-        (brine_mod, '_RUST_AVAILABLE'),
-        (nodal_mod, '_RUST_AVAILABLE'),
-        (dca_mod, '_RUST_AVAILABLE'),
-        (matbal_mod, '_RUST_AVAILABLE'),
-    ]
+    Iterates the central registry in _accelerator so new module-level
+    Rust-flag snapshots are picked up automatically.
+    """
+    import importlib
+    from pyrestoolbox._accelerator import RUST_FLAG_REGISTRY
 
-    try:
-        import pyrestoolbox.brine._lib_vle_engine as vle_mod
-        modules.append((vle_mod, '_RUST_AVAILABLE'))
-    except ImportError:
-        pass
-
-    try:
-        import pyrestoolbox.simtools.simtools as simtools_mod
-        modules.append((simtools_mod, 'RUST_AVAILABLE'))
-    except ImportError:
-        pass
+    modules = []
+    for module_path, attr in RUST_FLAG_REGISTRY:
+        try:
+            mod = importlib.import_module(module_path)
+        except ImportError:
+            continue
+        modules.append((mod, attr))
 
     saved = [(mod, attr, getattr(mod, attr)) for mod, attr in modules]
 
@@ -92,6 +77,173 @@ class TestAcceleratorStatus:
         env_val = os.environ.get("PYRESTOOLBOX_NO_RUST", "").strip()
         expected = env_val in ("1", "true", "yes")
         assert get_status()['forced_python'] == expected
+
+
+# =============================================================================
+# rust_accelerated decorator behaviour (pure Python, no Rust needed)
+# =============================================================================
+
+class _CountingFakeNative:
+    """Fake _native module whose attribute misses are counted."""
+
+    def __init__(self):
+        object.__setattr__(self, 'lookup_count', 0)
+
+    def __getattr__(self, name):
+        self.lookup_count += 1  # lookup_count is in __dict__, no recursion
+        raise AttributeError(name)
+
+
+@contextlib.contextmanager
+def _fake_rust(fake_module):
+    """Temporarily install a fake Rust module into the accelerator."""
+    import pyrestoolbox._accelerator as acc
+    saved_avail, saved_mod = acc.RUST_AVAILABLE, acc._rust_module
+    acc.RUST_AVAILABLE = True
+    acc._rust_module = fake_module
+    try:
+        yield acc
+    finally:
+        acc.RUST_AVAILABLE = saved_avail
+        acc._rust_module = saved_mod
+
+
+class TestRustAcceleratedDecorator:
+
+    def test_missing_rust_fn_falls_back_and_caches(self):
+        """Nonexistent Rust fn: Python fallback works, lookup happens once."""
+        fake = _CountingFakeNative()
+        with _fake_rust(fake) as acc:
+            @acc.rust_accelerated('does_not_exist_rust')
+            def doubler(x):
+                return x * 2
+
+            assert doubler(3) == 6
+            assert doubler(4) == 8
+            assert fake.lookup_count == 1, "missing fn lookup not cached"
+
+    def test_exception_inside_rust_fn_propagates(self):
+        """Errors raised during Rust execution must not be masked by fallback."""
+        class FakeNative:
+            @staticmethod
+            def boom_rust(x):
+                raise RuntimeError("rust blew up")
+
+        with _fake_rust(FakeNative()) as acc:
+            @acc.rust_accelerated('boom_rust')
+            def quiet(x):
+                return x
+
+            with pytest.raises(RuntimeError, match="rust blew up"):
+                quiet(1)
+
+    def test_attributeerror_inside_rust_fn_propagates(self):
+        """Regression: AttributeError raised inside the Rust call used to be
+        swallowed and silently rerouted to the Python fallback."""
+        class FakeNative:
+            @staticmethod
+            def attr_err_rust(x):
+                raise AttributeError("inner attribute failure")
+
+        with _fake_rust(FakeNative()) as acc:
+            @acc.rust_accelerated('attr_err_rust')
+            def quiet(x):
+                return x
+
+            with pytest.raises(AttributeError, match="inner attribute failure"):
+                quiet(1)
+
+    def test_existing_rust_fn_is_used(self):
+        class FakeNative:
+            @staticmethod
+            def triple_rust(x):
+                return x * 3
+
+        with _fake_rust(FakeNative()) as acc:
+            @acc.rust_accelerated('triple_rust')
+            def triple(x):
+                return -1  # Python fallback should not run
+
+            assert triple(2) == 6
+
+
+# =============================================================================
+# Rust-flag registry completeness
+# =============================================================================
+
+class TestRustFlagRegistry:
+
+    def test_registry_covers_all_module_snapshots(self):
+        """Every module-level RUST_AVAILABLE/_RUST_AVAILABLE snapshot in the
+        package source must appear in RUST_FLAG_REGISTRY."""
+        import re
+        from pathlib import Path
+        import pyrestoolbox
+        from pyrestoolbox._accelerator import RUST_FLAG_REGISTRY
+
+        registered = set(RUST_FLAG_REGISTRY)
+        pkg_root = Path(pyrestoolbox.__file__).parent
+
+        found = set()
+        import_re = re.compile(
+            r'^from pyrestoolbox\._accelerator import (.+)$', re.M)
+        define_re = re.compile(r'^(_?RUST_AVAILABLE)\s*[:=]', re.M)
+
+        for py in pkg_root.rglob('*.py'):
+            rel = py.relative_to(pkg_root)
+            if rel.parts[0] == 'tests':
+                continue
+            module_path = 'pyrestoolbox.' + '.'.join(rel.with_suffix('').parts)
+            text = py.read_text(encoding='utf-8', errors='replace')
+            for match in import_re.finditer(text):
+                for item in match.group(1).split(','):
+                    item = item.strip()
+                    if not item.startswith('RUST_AVAILABLE'):
+                        continue
+                    parts = item.split(' as ')
+                    bound = parts[1].strip() if len(parts) == 2 else parts[0].strip()
+                    found.add((module_path, bound))
+            for match in define_re.finditer(text):
+                found.add((module_path, match.group(1)))
+
+        missing = found - registered
+        assert not missing, (
+            f"Rust-flag snapshots missing from RUST_FLAG_REGISTRY: {sorted(missing)}"
+        )
+
+    def test_registry_entries_resolve(self):
+        """Each registry entry must import and expose the named attribute."""
+        import importlib
+        from pyrestoolbox._accelerator import RUST_FLAG_REGISTRY
+        for module_path, attr in RUST_FLAG_REGISTRY:
+            mod = importlib.import_module(module_path)
+            assert isinstance(getattr(mod, attr), bool), (
+                f"{module_path}.{attr} is not a bool flag"
+            )
+
+
+# =============================================================================
+# Version metadata
+# =============================================================================
+
+class TestVersionMetadata:
+
+    def test_package_version_resolves(self):
+        import re
+        import pyrestoolbox
+        v = pyrestoolbox.__version__
+        assert isinstance(v, str)
+        assert re.match(r'\d+\.\d+', v), f"unexpected version string: {v!r}"
+
+    def test_unknown_attribute_raises(self):
+        import pyrestoolbox
+        with pytest.raises(AttributeError):
+            pyrestoolbox.no_such_attribute_xyz
+
+    @rust_required
+    def test_rust_version_reported(self):
+        status = get_status()
+        assert 'rust_version' in status
 
 
 # =============================================================================

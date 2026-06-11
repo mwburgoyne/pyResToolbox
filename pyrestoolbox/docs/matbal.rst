@@ -128,11 +128,11 @@ P/Z Example:
     ...     degf=200, sg=0.65
     ... )
     >>> r.ogip
-    87.602774253829
+    87.60264634235111
     >>> r.z_initial
-    0.9163208839373836
+    0.9163202021564056
     >>> r.r_squared
-    0.9734794008096929
+    0.9734793606102145
 
 Cole Plot Example (volumetric diagnostic):
 
@@ -147,9 +147,9 @@ Cole Plot Example (volumetric diagnostic):
     >>> r.method
     'pz'
     >>> r.cole_F_over_Et[1]
-    53.34214259832056
+    53.342120020574896
     >>> r.cole_F_over_Et[2]
-    62.64134359331348
+    62.641251784427226
 
 Havlena-Odeh Example (with aquifer influx):
 
@@ -165,7 +165,7 @@ Havlena-Odeh Example (with aquifer influx):
     >>> r.method
     'havlena_odeh'
     >>> r.ogip
-    67036445117.070206
+    67036355572.60765
 
 Tabulated PVT Example (Z-factor table):
 
@@ -181,9 +181,9 @@ Tabulated PVT Example (Z-factor table):
     ...     pvt_table={'p': p_table, 'Z': Z_table}
     ... )
     >>> r.ogip
-    87.602774253829
+    87.60264634235111
     >>> r.z_initial
-    0.9163208839373836
+    0.9163202021564056
 
 
 pyrestoolbox.matbal.oil_matbal
@@ -329,9 +329,9 @@ Examples:
     ...     pb=3500, rsb=500, cf=3e-6, sw_i=0.2, cw=3e-6
     ... )
     >>> r.ooip
-    82793519.84914012
+    82793518.1467637
     >>> r.drive_indices['DDI'][1]
-    0.7108509458427899
+    0.7108509527793809
 
 Water-drive Example (aquifer influx ``We``):
 
@@ -345,7 +345,7 @@ Water-drive Example (aquifer influx ``We``):
     ...     We=[0, 3e5, 1.2e6, 3.0e6]
     ... )
     >>> r.ooip
-    58621028.243056096
+    58621027.15996399
     >>> r.drive_indices['WDI'][-1]
     0.4055063920332815
 
@@ -366,7 +366,7 @@ Regression Example (optimizing m and cf):
     >>> r.regressed['cf']
     5e-05
     >>> r.ooip
-    1468306.5302524716
+    1468312.3564986854
 
 Tabulated PVT Example:
 
@@ -386,7 +386,7 @@ Tabulated PVT Example:
     ...     pvt_table={'p': p_table, 'Rs': Rs_t, 'Bo': Bo_t, 'Bg': Bg_t}
     ... )
     >>> r.ooip
-    82793519.84914012
+    82793518.1467637
 
 
 .. note:: **Compressibility Guidance**

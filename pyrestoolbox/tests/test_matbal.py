@@ -232,9 +232,11 @@ def test_gas_matbal_backward_compat():
     Gp = [0, 5, 12, 22, 35]
     result = matbal.gas_matbal(p, Gp, degf=200, sg=0.65)
     # These should match the documented values from matbal.rst
-    assert abs(result.ogip - 87.602774253829) / 87.602774253829 < 1e-6
-    assert abs(result.z_initial - 0.9163208839373836) / 0.9163208839373836 < 1e-6
-    assert abs(result.r_squared - 0.9734794008096929) / 0.9734794008096929 < 1e-6
+    # Baseline updated 2026-06-11: gas_z DAK Newton derivative fix shifted
+    # Z-factors at the ppm level (ogip was 87.602774253829)
+    assert abs(result.ogip - 87.60264634235111) / 87.60264634235111 < 1e-6
+    assert abs(result.z_initial - 0.9163202021564056) / 0.9163202021564056 < 1e-6
+    assert abs(result.r_squared - 0.9734793606102145) / 0.9734793606102145 < 1e-6
 
 
 # ======================== oil_matbal tests ========================
@@ -730,7 +732,8 @@ def test_gas_matbal_pvt_backward_compat():
         Gp=[0, 5, 12, 22, 35],
         degf=200, sg=0.65
     )
-    assert abs(result.ogip - 87.602774253829) / 87.602774253829 < 1e-6
+    # Baseline updated 2026-06-11 for gas_z DAK Newton derivative fix
+    assert abs(result.ogip - 87.60264634235111) / 87.60264634235111 < 1e-6
 
 
 # ======================== RANSAC outlier robustness tests ========================
@@ -759,7 +762,8 @@ def test_gas_matbal_pz_clean_matches_ols():
         degf=200, sg=0.65
     )
     # Same frozen baseline as test_gas_matbal_backward_compat
-    assert abs(result.ogip - 87.602774253829) / 87.602774253829 < 1e-6
+    # (updated 2026-06-11 for gas_z DAK Newton derivative fix)
+    assert abs(result.ogip - 87.60264634235111) / 87.60264634235111 < 1e-6
 
 
 # ======================== oil_matbal metric cw/cf tests ========================
@@ -826,3 +830,43 @@ def test_oil_matbal_metric_efw_nonzero():
 
     # After pressure depletion, Efw should be nonzero at later steps
     assert r.Efw[-1] > 0, f"Efw should be positive at last step, got {r.Efw[-1]}"
+
+
+def test_oil_matbal_metric_gi_roundtrip():
+    """Regression: metric Gi (sm3) was multiplied by internal Bg (rb/scf)
+    without unit scaling, understating gas injection by 5.6146x.
+    The same physical gas-injection scenario in field and metric units
+    must recover the same OOIP."""
+    from pyrestoolbox.constants import (PSI_TO_BAR, BAR_TO_PSI, STB_TO_SM3,
+                                        MSCF_TO_SM3, degf_to_degc,
+                                        SCF_PER_STB_TO_SM3_PER_SM3)
+
+    # Oilfield units: depletion below Pb with gas reinjection
+    p_field = [4000, 3500, 3000, 2500]
+    Np_field = [0, 1e6, 3e6, 6e6]          # stb
+    Gi_field = [0, 2e8, 8e8, 2e9]          # scf
+    degf = 220
+    api = 35
+    sg_sp = 0.75
+    pb = 3500
+    rsb = 500
+
+    r_field = matbal.oil_matbal(
+        p=p_field, Np=Np_field, Gi=Gi_field, degf=degf, api=api,
+        sg_sp=sg_sp, pb=pb, rsb=rsb, cf=3e-6, cw=3e-6, sw_i=0.2
+    )
+
+    # Identical physical scenario in metric units
+    p_metric = [pi * PSI_TO_BAR for pi in p_field]
+    Np_metric = [n * STB_TO_SM3 for n in Np_field]            # stb -> sm3
+    Gi_metric = [g * MSCF_TO_SM3 / 1000.0 for g in Gi_field]  # scf -> sm3
+    r_metric = matbal.oil_matbal(
+        p=p_metric, Np=Np_metric, Gi=Gi_metric, degf=degf_to_degc(degf),
+        api=api, sg_sp=sg_sp, pb=pb * PSI_TO_BAR,
+        rsb=rsb * SCF_PER_STB_TO_SM3_PER_SM3,
+        cf=3e-6 * BAR_TO_PSI, cw=3e-6 * BAR_TO_PSI, sw_i=0.2, metric=True
+    )
+
+    ooip_metric_as_stb = r_metric.ooip / STB_TO_SM3
+    assert abs(ooip_metric_as_stb - r_field.ooip) / abs(r_field.ooip) < 1e-3, \
+        f"Metric OOIP ({ooip_metric_as_stb} stb-equiv) vs Field OOIP ({r_field.ooip} stb)"

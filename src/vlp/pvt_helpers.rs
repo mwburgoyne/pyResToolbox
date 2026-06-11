@@ -1,11 +1,12 @@
 /// Simplified PVT helpers for VLP segment loops.
 /// Direct port of nodal.py lines 430-582.
 
-const MW_AIR: f64 = 28.97;
+use super::constants::{MW_AIR, R_GAS};
+
 const LN10: f64 = std::f64::consts::LN_10;
 
 #[inline]
-fn log10_safe(x: f64) -> f64 {
+pub fn log10_safe(x: f64) -> f64 {
     if x <= 0.0 { -30.0 } else { x.ln() / LN10 }
 }
 
@@ -72,7 +73,7 @@ pub fn z_factor(_sg: f64, temp_f: f64, press_psia: f64, tc: f64, pc: f64) -> f64
 pub fn gas_viscosity(sg: f64, temp_f: f64, press_psia: f64, z: f64, _tc: f64, _pc: f64) -> f64 {
     let temp_r = temp_f + 459.67;
     let mw = MW_AIR * sg;
-    let rho_gcc = (MW_AIR * sg * press_psia / (z * 10.732 * temp_r)) / 62.428;
+    let rho_gcc = (MW_AIR * sg * press_psia / (z * R_GAS * temp_r)) / 62.428;
 
     let k_val = (9.4 + 0.02 * mw) * temp_r.powf(1.5) / (209.0 + 19.0 * mw + temp_r);
     let x_val = 3.5 + 986.0 / temp_r + 0.01 * mw;
@@ -82,13 +83,6 @@ pub fn gas_viscosity(sg: f64, temp_f: f64, press_psia: f64, z: f64, _tc: f64, _p
         exp_arg = 500.0;
     }
     (1e-4 * k_val * exp_arg.exp()).max(1e-6)
-}
-
-/// Gas density in lb/ft^3.
-#[inline]
-#[allow(dead_code)]
-pub fn gas_density(sg: f64, temp_f: f64, press_psia: f64, z: f64) -> f64 {
-    MW_AIR * sg * press_psia / (z * 10.732 * (temp_f + 459.67))
 }
 
 /// Simplified water viscosity (cP).
