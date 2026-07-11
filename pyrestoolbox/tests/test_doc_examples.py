@@ -1154,6 +1154,95 @@ def test_doc_dca_arps_cum_har():
     result = dca.arps_cum(qi=1000, di=0.1, b=1.0, t=10)
     assert abs(result - 6931.471805599453) / 6931.471805599453 < RTOL
 
+def test_doc_dca_arps_rate_super_hyp():
+    """dca.rst: arps_rate super-hyperbolic (b > 1)"""
+    result = dca.arps_rate(qi=1000, di=0.005, b=2.0, t=100)
+    assert abs(result - 707.1067811865474) / 707.1067811865474 < RTOL
+
+def test_doc_dca_mh_rate_hyperbolic_segment():
+    """dca.rst: mh_rate before the switch (default b=2)"""
+    result = dca.mh_rate(qi=1000, di=0.005, t=100, dterm=0.0005)
+    assert abs(result - 707.1067811865474) / 707.1067811865474 < RTOL
+
+def test_doc_dca_mh_rate_exponential_segment():
+    """dca.rst: mh_rate after the switch"""
+    result = dca.mh_rate(qi=1000, di=0.005, t=2000, dterm=0.0005)
+    assert abs(result - 182.44754964045953) / 182.44754964045953 < RTOL
+
+def test_doc_dca_mh_rate_array():
+    """dca.rst: mh_rate array input"""
+    result = dca.mh_rate(qi=1000, di=0.005, t=[100, 900, 2000], dterm=0.0005)
+    expected = np.array([707.10678119, 316.22776602, 182.44754964])
+    np.testing.assert_allclose(result, expected, rtol=RTOL)
+
+def test_doc_dca_mh_cum():
+    """dca.rst: mh_cum"""
+    result = dca.mh_cum(qi=1000, di=0.005, t=2000, dterm=0.0005)
+    assert abs(result - 700015.9647864327) / 700015.9647864327 < RTOL
+
+def test_doc_dca_mh_eur():
+    """dca.rst: mh_eur"""
+    result = dca.mh_eur(qi=1000, di=0.005, q_min=5.0, dterm=0.0005)
+    assert abs(result - 1054911.0640673516) / 1054911.0640673516 < RTOL
+
+def test_doc_dca_fit_decline_mh():
+    """dca.rst: fit_decline modified hyperbolic"""
+    t = np.arange(15, 2900, 30.0)
+    q = dca.mh_rate(1200, 0.008, t, b=1.6, dterm=0.0006)
+    result = dca.fit_decline(t, q, method='mh')
+    assert result.method == 'mh'
+    assert abs(result.qi - 1200.0) / 1200.0 < 0.01
+    assert abs(result.di - 0.008) / 0.008 < 0.01
+    assert abs(result.b - 1.6) / 1.6 < 0.01
+    assert abs(result.dterm - 0.0006) / 0.0006 < 0.01
+    assert result.r_squared > 0.9999
+
+def test_doc_dca_hyp2_rate_first_segment():
+    """dca.rst: hyp2_rate before the transition (defaults b1=2, b2=0.5)"""
+    result = dca.hyp2_rate(qi=1000, di=0.005, t=100, telf=730)
+    assert abs(result - 707.1067811865474) / 707.1067811865474 < RTOL
+
+def test_doc_dca_hyp2_rate_second_segment():
+    """dca.rst: hyp2_rate after the transition"""
+    result = dca.hyp2_rate(qi=1000, di=0.005, t=2000, telf=730)
+    assert abs(result - 181.59828808766977) / 181.59828808766977 < RTOL
+
+def test_doc_dca_hyp2_rate_array():
+    """dca.rst: hyp2_rate array input"""
+    result = dca.hyp2_rate(qi=1000, di=0.005, t=[100, 730, 2000], telf=730)
+    expected = np.array([707.10678119, 347.10506725, 181.59828809])
+    np.testing.assert_allclose(result, expected, rtol=RTOL)
+
+def test_doc_dca_hyp2_cum():
+    """dca.rst: hyp2_cum"""
+    result = dca.hyp2_cum(qi=1000, di=0.005, t=2000, telf=730)
+    assert abs(result - 695047.0925841478) / 695047.0925841478 < RTOL
+
+def test_doc_dca_hyp2_eur():
+    """dca.rst: hyp2_eur"""
+    result = dca.hyp2_eur(qi=1000, di=0.005, q_min=10.0, telf=730)
+    assert abs(result - 1332983.3654469885) / 1332983.3654469885 < RTOL
+
+def test_doc_dca_hyp2_from_eur():
+    """dca.rst: hyp2_from_eur telf mode"""
+    r = dca.hyp2_from_eur(1.5e6, 1500.0, 100.0, telf=730)
+    assert abs(r.di - 0.00520362) / 0.00520362 < 1e-4
+    eur_check = dca.hyp2_eur(r.qi, r.di, 100.0, r.telf, r.b, r.b2)
+    assert abs(eur_check - 1.5e6) / 1.5e6 < 1e-9
+
+def test_doc_dca_fit_decline_hyp2():
+    """dca.rst: fit_decline two-segment hyperbolic"""
+    t = np.arange(15, 2900, 30.0)
+    q = dca.hyp2_rate(1500.0, 0.0052, t, 730.0, b1=1.8, b2=0.5)
+    result = dca.fit_decline(t, q, method='hyp2')
+    assert result.method == 'hyp2'
+    assert abs(result.qi - 1500.0) / 1500.0 < 0.01
+    assert abs(result.di - 0.0052) / 0.0052 < 0.01
+    assert abs(result.b - 1.8) / 1.8 < 0.02
+    assert abs(result.b2 - 0.5) / 0.5 < 0.02
+    assert abs(result.telf - 730.0) / 730.0 < 0.02
+    assert result.r_squared > 0.9999
+
 def test_doc_dca_duong_rate_t1():
     """dca.rst: duong_rate at t=1"""
     result = dca.duong_rate(qi=500, a=1.5, m=1.2, t=1.0)

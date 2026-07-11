@@ -252,7 +252,27 @@ class TestDCAErrors:
     def test_arps_rate_b_out_of_range(self):
         from pyrestoolbox.dca import dca
         with pytest.raises(ValueError, match="b"):
-            dca.arps_rate(qi=1000, di=0.1, b=1.5, t=np.array([1, 2, 3]))
+            dca.arps_rate(qi=1000, di=0.1, b=-0.5, t=np.array([1, 2, 3]))
+
+    def test_mh_rate_dterm_exceeds_di(self):
+        from pyrestoolbox.dca import dca
+        with pytest.raises(ValueError, match="dterm"):
+            dca.mh_rate(qi=1000, di=0.005, t=100.0, b=2.0, dterm=0.006)
+
+    def test_mh_eur_unbounded_raises(self):
+        from pyrestoolbox.dca import dca
+        with pytest.raises(ValueError, match="unbounded"):
+            dca.mh_eur(qi=1000, di=0.005, q_min=0.0, b=2.0, dterm=0.0)
+
+    def test_hyp2_b2_exceeds_b1(self):
+        from pyrestoolbox.dca import dca
+        with pytest.raises(ValueError, match="b2"):
+            dca.hyp2_rate(qi=1000, di=0.005, t=100.0, telf=500.0, b1=0.5, b2=2.0)
+
+    def test_hyp2_from_eur_conflicting_specs(self):
+        from pyrestoolbox.dca import dca
+        with pytest.raises(ValueError, match="exactly one"):
+            dca.hyp2_from_eur(1e6, 1000.0, 100.0, telf=500.0, eur_frac=0.3)
 
     def test_arps_cum_negative_qi(self):
         from pyrestoolbox.dca import dca
