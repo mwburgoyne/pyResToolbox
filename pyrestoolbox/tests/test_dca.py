@@ -48,10 +48,17 @@ def test_arps_rate_bad_di():
 
 def test_arps_rate_bad_b():
     try:
-        dca.arps_rate(1000, 0.1, 1.5, 10)
+        dca.arps_rate(1000, 0.1, -0.5, 10)
         assert False, "Should raise ValueError"
     except ValueError:
         pass
+
+
+def test_arps_rate_super_hyperbolic():
+    """b > 1 (transient flow) is permitted: q = qi / (1 + b*di*t)^(1/b)"""
+    q = dca.arps_rate(1000, 0.1, 2.0, 10)
+    expected = 1000 / (1.0 + 2.0 * 0.1 * 10) ** 0.5
+    assert abs(q - expected) < 0.01
 
 
 # ======================== arps_cum tests ========================
@@ -144,6 +151,302 @@ def test_eur_bad_qmin():
         assert False, "Should raise ValueError"
     except ValueError:
         pass
+
+
+def test_eur_super_hyperbolic_finite():
+    """EUR with b > 1 is finite for q_min > 0."""
+    e = dca.eur(1000, 0.005, 2.0, 10)
+    t_end = ((1000 / 10) ** 2.0 - 1.0) / (2.0 * 0.005)
+    assert abs(e - dca.arps_cum(1000, 0.005, 2.0, t_end)) < 1e-6
+
+
+# ======================== modified hyperbolic tests ========================
+
+# Shared MH reference case: qi=1000, di=0.005/day nominal, b=2, dterm=0.0005/day
+# Switch when D(t) = dterm: t_sw = (1/dterm - 1/di)/b = 900 days
+_MH_CASE = dict(qi=1000.0, di=0.005, b=2.0, dterm=0.0005)
+_MH_T_SW = 900.0
+
+
+def test_mh_rate_matches_arps_before_switch():
+    c = _MH_CASE
+    t = 400.0
+    q = dca.mh_rate(c['qi'], c['di'], t, b=c['b'], dterm=c['dterm'])
+    assert abs(q - dca.arps_rate(c['qi'], c['di'], c['b'], t)) < 1e-9
+
+
+def test_mh_rate_exponential_after_switch():
+    c = _MH_CASE
+    q_sw = dca.arps_rate(c['qi'], c['di'], c['b'], _MH_T_SW)
+    t = 2000.0
+    q = dca.mh_rate(c['qi'], c['di'], t, b=c['b'], dterm=c['dterm'])
+    expected = q_sw * np.exp(-c['dterm'] * (t - _MH_T_SW))
+    assert abs(q - expected) < 1e-9
+
+
+def test_mh_rate_continuous_at_switch():
+    c = _MH_CASE
+    q_lo = dca.mh_rate(c['qi'], c['di'], _MH_T_SW - 1e-6, b=c['b'], dterm=c['dterm'])
+    q_hi = dca.mh_rate(c['qi'], c['di'], _MH_T_SW + 1e-6, b=c['b'], dterm=c['dterm'])
+    assert abs(q_lo - q_hi) < 1e-5
+
+
+def test_mh_rate_default_b_is_two():
+    c = _MH_CASE
+    q = dca.mh_rate(c['qi'], c['di'], 400.0, dterm=c['dterm'])
+    assert abs(q - dca.mh_rate(c['qi'], c['di'], 400.0, b=2.0, dterm=c['dterm'])) < 1e-12
+
+
+def test_mh_rate_no_dterm_is_single_segment():
+    c = _MH_CASE
+    q = dca.mh_rate(c['qi'], c['di'], 5000.0, b=c['b'])
+    assert abs(q - dca.arps_rate(c['qi'], c['di'], c['b'], 5000.0)) < 1e-9
+
+
+def test_mh_rate_vectorized():
+    c = _MH_CASE
+    q = dca.mh_rate(c['qi'], c['di'], [100.0, _MH_T_SW, 5000.0], b=c['b'], dterm=c['dterm'])
+    assert isinstance(q, np.ndarray)
+    assert len(q) == 3
+    assert np.all(np.diff(q) < 0)
+
+
+def test_mh_cum_matches_numeric_integral():
+    c = _MH_CASE
+    t_end = 3.0 * _MH_T_SW
+    t = np.linspace(1e-9, t_end, 200001)
+    q = dca.mh_rate(c['qi'], c['di'], t, b=c['b'], dterm=c['dterm'])
+    numeric = np.trapezoid(q, t)
+    analytic = dca.mh_cum(c['qi'], c['di'], t_end, b=c['b'], dterm=c['dterm'])
+    assert abs(numeric / analytic - 1.0) < 1e-6
+
+
+def test_mh_cum_continuous_at_switch():
+    c = _MH_CASE
+    n_lo = dca.mh_cum(c['qi'], c['di'], _MH_T_SW - 1e-6, b=c['b'], dterm=c['dterm'])
+    n_hi = dca.mh_cum(c['qi'], c['di'], _MH_T_SW + 1e-6, b=c['b'], dterm=c['dterm'])
+    assert abs(n_lo - n_hi) < 1e-2
+
+
+def test_mh_eur_exponential_segment():
+    """q_min below the switch rate: EUR = N_sw + (q_sw - q_min)/dterm."""
+    c = _MH_CASE
+    q_sw = dca.arps_rate(c['qi'], c['di'], c['b'], _MH_T_SW)
+    n_sw = dca.arps_cum(c['qi'], c['di'], c['b'], _MH_T_SW)
+    e = dca.mh_eur(c['qi'], c['di'], 5.0, b=c['b'], dterm=c['dterm'])
+    assert abs(e - (n_sw + (q_sw - 5.0) / c['dterm'])) < 1e-6
+
+
+def test_mh_eur_hyperbolic_segment():
+    """q_min above the switch rate: identical to single-segment eur()."""
+    c = _MH_CASE
+    e = dca.mh_eur(c['qi'], c['di'], 600.0, b=c['b'], dterm=c['dterm'])
+    assert abs(e - dca.eur(c['qi'], c['di'], c['b'], 600.0)) < 1e-9
+
+
+def test_mh_bad_dterm():
+    try:
+        dca.mh_rate(1000, 0.005, 100.0, b=2.0, dterm=0.006)  # dterm >= di
+        assert False, "Should raise ValueError"
+    except ValueError:
+        pass
+
+
+def test_fit_mh_recovers_parameters():
+    """Noiseless MH data: fit recovers qi, di, b, dterm."""
+    t = np.arange(15, 2900, 30.0)
+    q = dca.mh_rate(1200, 0.008, t, b=1.6, dterm=0.0006)
+    result = dca.fit_decline(t, q, method='mh')
+    assert result.method == 'mh'
+    assert abs(result.qi - 1200) < 1.0
+    assert abs(result.di - 0.008) < 1e-4
+    assert abs(result.b - 1.6) < 0.01
+    assert abs(result.dterm - 0.0006) < 1e-5
+    assert result.r_squared > 0.9999
+
+
+def test_fit_best_excludes_mh():
+    """'best' never returns the mh model (explicit opt-in only)."""
+    t = np.arange(15, 2900, 30.0)
+    q = dca.mh_rate(1200, 0.008, t, b=1.6, dterm=0.0006)
+    result = dca.fit_decline(t, q, method='best')
+    assert result.method != 'mh'
+
+
+def test_forecast_mh():
+    """forecast() dispatches on method='mh' with analytic cumulative."""
+    c = _MH_CASE
+    res = dca.DeclineResult(method='mh', qi=c['qi'], di=c['di'], b=c['b'], dterm=c['dterm'])
+    fc = dca.forecast(res, t_end=3000, dt=10)
+    assert abs(fc.q[-1] - dca.mh_rate(c['qi'], c['di'], fc.t[-1], b=c['b'], dterm=c['dterm'])) < 1e-9
+    assert abs(fc.eur - dca.mh_cum(c['qi'], c['di'], fc.t[-1], b=c['b'], dterm=c['dterm'])) < 1e-6
+    assert np.all(np.diff(fc.Qcum) > 0)
+
+
+# ======================== two-segment hyperbolic (hyp2) tests ========================
+
+# Reference case from 'Simple DCA Generator-2Stage v3.xlsm' (Time Specified
+# sheet): EUR 1.5 BCF, qi 1500 mscf/d, qa 100 mscf/d, t2 24 months, b1=2,
+# b2=0.5. Workbook times are months * 30.4 days/month; declines nominal /day.
+_H2 = dict(qi=1500.0, di=0.005201588333851846, b1=2.0, b2=0.5, telf=24 * 30.4)
+
+
+def test_hyp2_rate_matches_arps_before_switch():
+    c = _H2
+    q = dca.hyp2_rate(c['qi'], c['di'], 300.0, c['telf'], b1=c['b1'], b2=c['b2'])
+    assert abs(q - dca.arps_rate(c['qi'], c['di'], c['b1'], 300.0)) < 1e-9
+
+
+def test_hyp2_rate_continuous_at_switch():
+    c = _H2
+    q_lo = dca.hyp2_rate(c['qi'], c['di'], c['telf'] - 1e-6, c['telf'], b1=c['b1'], b2=c['b2'])
+    q_hi = dca.hyp2_rate(c['qi'], c['di'], c['telf'] + 1e-6, c['telf'], b1=c['b1'], b2=c['b2'])
+    assert abs(q_lo - q_hi) < 1e-5
+
+
+def test_hyp2_slope_continuous_at_switch():
+    """Nominal decline (log-slope) is identical either side of telf."""
+    c = _H2
+    h, eps = 1e-4, 1e-6
+
+    def logq(t):
+        return np.log(dca.hyp2_rate(c['qi'], c['di'], t, c['telf'], b1=c['b1'], b2=c['b2']))
+
+    D_lo = -(logq(c['telf'] - eps) - logq(c['telf'] - eps - h)) / h
+    D_hi = -(logq(c['telf'] + eps + h) - logq(c['telf'] + eps)) / h
+    assert abs(D_lo - D_hi) / D_lo < 1e-4
+
+
+def test_hyp2_second_segment_form():
+    """Beyond telf the curve is hyperbolic b2 anchored at (q_sw, D_sw)."""
+    c = _H2
+    q_sw = dca.arps_rate(c['qi'], c['di'], c['b1'], c['telf'])
+    D_sw = c['di'] / (1.0 + c['b1'] * c['di'] * c['telf'])
+    t = 2500.0
+    q = dca.hyp2_rate(c['qi'], c['di'], t, c['telf'], b1=c['b1'], b2=c['b2'])
+    expected = dca.arps_rate(q_sw, D_sw, c['b2'], t - c['telf'])
+    assert abs(q - expected) < 1e-9
+    # Workbook q2i cross-check (Time Specified sheet D9)
+    assert abs(q_sw - 511.78869771853385) / 511.78869771853385 < 1e-9
+
+
+def test_hyp2_cum_matches_numeric_integral():
+    c = _H2
+    t_end = 3.0 * c['telf']
+    t = np.linspace(1e-9, t_end, 200001)
+    q = dca.hyp2_rate(c['qi'], c['di'], t, c['telf'], b1=c['b1'], b2=c['b2'])
+    numeric = np.trapezoid(q, t)
+    analytic = dca.hyp2_cum(c['qi'], c['di'], t_end, c['telf'], b1=c['b1'], b2=c['b2'])
+    assert abs(numeric / analytic - 1.0) < 1e-6
+
+
+def test_hyp2_eur_both_segments():
+    c = _H2
+    # Abandonment in first segment: identical to single-segment eur
+    e1 = dca.hyp2_eur(c['qi'], c['di'], 800.0, c['telf'], b1=c['b1'], b2=c['b2'])
+    assert abs(e1 - dca.eur(c['qi'], c['di'], c['b1'], 800.0)) < 1e-9
+    # Abandonment in second segment: workbook target EUR (1.5 BCF = 1.5e6 mscf)
+    e2 = dca.hyp2_eur(c['qi'], c['di'], 100.0, c['telf'], b1=c['b1'], b2=c['b2'])
+    assert abs(e2 - 1.5e6) / 1.5e6 < 1e-5
+
+
+def test_hyp2_dterm_tail():
+    """Optional terminal decline applies to the second segment (mh form)."""
+    c = _H2
+    dterm = 1e-4
+    D_sw = c['di'] / (1.0 + c['b1'] * c['di'] * c['telf'])
+    q_sw = dca.arps_rate(c['qi'], c['di'], c['b1'], c['telf'])
+    t = 8000.0
+    q = dca.hyp2_rate(c['qi'], c['di'], t, c['telf'], b1=c['b1'], b2=c['b2'], dterm=dterm)
+    expected = dca.mh_rate(q_sw, D_sw, t - c['telf'], b=c['b2'], dterm=dterm)
+    assert abs(q - expected) < 1e-9
+
+
+def test_hyp2_b2_exceeds_b1_raises():
+    try:
+        dca.hyp2_rate(1000, 0.005, 100.0, 500.0, b1=0.5, b2=2.0)
+        assert False, "Should raise ValueError"
+    except ValueError:
+        pass
+
+
+def test_hyp2_from_eur_telf_mode():
+    """Workbook 'Time Specified' sheet regression."""
+    r = dca.hyp2_from_eur(1.5e6, 1500.0, 100.0, b1=2.0, b2=0.5, telf=24 * 30.4)
+    assert r.method == 'hyp2'
+    assert abs(r.di - 0.005201588333851846) / 0.005201588333851846 < 1e-4
+    assert abs(dca.hyp2_eur(r.qi, r.di, 100.0, r.telf, r.b, r.b2) - 1.5e6) / 1.5e6 < 1e-9
+
+
+def test_hyp2_from_eur_d_sw_mode():
+    """Workbook 'Switch Decline Specified' sheet. The VBA freezes t2 from its
+    initial guess (delivering 8.811 BCF vs the 8.8 target when evaluated
+    self-consistently); the brentq port refreshes t2, so di differs from the
+    workbook cache by ~0.24% and the EUR round-trip is exact."""
+    r = dca.hyp2_from_eur(8.8e6, 10130.0, 100.0, b1=2.0, b2=0.5, d_sw=0.1 / 365.0)
+    assert r.method == 'hyp2'
+    assert abs(r.di - 0.025095477342955762) / 0.025095477342955762 < 5e-3
+    # Switch is exactly at D = d_sw and the EUR round-trip is exact
+    assert abs(r.di / (1.0 + r.b * r.di * r.telf) - 0.1 / 365.0) / (0.1 / 365.0) < 1e-9
+    assert abs(dca.hyp2_eur(r.qi, r.di, 100.0, r.telf, r.b, r.b2) - 8.8e6) / 8.8e6 < 1e-9
+
+
+def test_hyp2_from_eur_eur_frac_mode():
+    """Workbook 'EUR Fraction Specified' sheet regression."""
+    r = dca.hyp2_from_eur(8.8e6, 10130.0, 100.0, b1=2.0, b2=0.5, eur_frac=0.3)
+    assert abs(r.di - 0.009009606094717059) / 0.009009606094717059 < 1e-4
+    assert abs(r.telf / 30.4 - 18.63724102605943) / 18.63724102605943 < 1e-4
+    assert abs(dca.hyp2_eur(r.qi, r.di, 100.0, r.telf, r.b, r.b2) - 8.8e6) / 8.8e6 < 1e-6
+
+
+def test_hyp2_from_eur_rate_frac_mode():
+    """Workbook 'Rate Fraction Specified' sheet regression (direct 1/di scaling)."""
+    r = dca.hyp2_from_eur(8.8e6, 10130.0, 100.0, b1=2.0, b2=0.5, rate_frac=0.25)
+    assert abs(r.di - 0.010832538161681804) / 0.010832538161681804 < 1e-9
+    assert abs(dca.arps_rate(r.qi, r.di, r.b, r.telf) - 2532.5) / 2532.5 < 1e-9
+
+
+def test_hyp2_from_eur_spec_validation():
+    for kwargs in [dict(), dict(telf=100.0, d_sw=0.001), dict(rate_frac=0.001)]:
+        try:
+            dca.hyp2_from_eur(1e6, 1000.0, 100.0, **kwargs)
+            assert False, f"Should raise ValueError for {kwargs}"
+        except ValueError:
+            pass
+
+
+def test_fit_hyp2_recovers_parameters():
+    """Noiseless hyp2 data: fit recovers qi, di, b1, b2, telf."""
+    t = np.arange(15, 2900, 30.0)
+    q = dca.hyp2_rate(1500.0, 0.0052, t, 730.0, b1=1.8, b2=0.5)
+    result = dca.fit_decline(t, q, method='hyp2')
+    assert result.method == 'hyp2'
+    assert abs(result.qi - 1500.0) / 1500.0 < 0.01
+    assert abs(result.di - 0.0052) / 0.0052 < 0.01
+    assert abs(result.b - 1.8) / 1.8 < 0.02
+    assert abs(result.b2 - 0.5) / 0.5 < 0.02
+    assert abs(result.telf - 730.0) / 730.0 < 0.02
+    assert result.r_squared > 0.9999
+
+
+def test_fit_best_excludes_hyp2():
+    t = np.arange(15, 2900, 30.0)
+    q = dca.hyp2_rate(1500.0, 0.0052, t, 730.0, b1=1.8, b2=0.5)
+    result = dca.fit_decline(t, q, method='best')
+    assert result.method not in ('hyp2', 'mh')
+
+
+def test_forecast_hyp2():
+    """forecast() dispatches on method='hyp2' with analytic cumulative."""
+    c = _H2
+    res = dca.DeclineResult(method='hyp2', qi=c['qi'], di=c['di'], b=c['b1'],
+                            b2=c['b2'], telf=c['telf'])
+    fc = dca.forecast(res, t_end=4000, dt=10)
+    assert abs(fc.q[-1] - dca.hyp2_rate(c['qi'], c['di'], fc.t[-1], c['telf'],
+                                        b1=c['b1'], b2=c['b2'])) < 1e-9
+    assert abs(fc.eur - dca.hyp2_cum(c['qi'], c['di'], fc.t[-1], c['telf'],
+                                     b1=c['b1'], b2=c['b2'])) < 1e-6
+    assert np.all(np.diff(fc.Qcum) > 0)
 
 
 # ======================== fit_decline tests ========================
