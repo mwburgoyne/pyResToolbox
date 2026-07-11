@@ -1,3 +1,17 @@
+Changelist in 3.7.0:
+
+- **Two-segment decline models for unconventional wells** in the ``dca`` module. Both are continuous in rate and nominal decline (log-slope) at the transition, ship with full RST documentation and doc-example tests, and are unit-agnostic like the rest of the module:
+
+  - **Modified hyperbolic** (``mh_rate``, ``mh_cum``, ``mh_eur``): hyperbolic decline with b-factor ``b`` (default 2.0, transient flow) until the nominal decline falls to a terminal decline ``dterm``, exponential thereafter (Robertson 1988, SPE-18731-MS). Analytic piecewise cumulative and EUR.
+  - **Two-segment hyperbolic** (``hyp2_rate``, ``hyp2_cum``, ``hyp2_eur``): first-segment ``b1`` (default 2.0) to a specified transition time ``telf``, then a second hyperbolic segment ``b2`` (default 0.5) anchored so rate and slope match the first segment at ``telf`` - the sharp-transition form of the transient hyperbolic model (Fulford and Blasingame 2013, SPE-167242-MS). An optional ``dterm`` gives the second segment an exponential tail.
+  - **EUR-constrained type-curve generator** (``hyp2_from_eur``): solves the initial nominal decline so a two-segment hyperbolic delivers a target EUR at a given abandonment rate, with the transition specified by exactly one of fixed time, switch decline rate, EUR fraction or rate fraction. Ports the Burgoyne (2016-2018) two-stage generator logic, with the original bisection replaced by a bracketed brentq root find. Three modes reproduce the reference workbook within its own convergence tolerance; the switch-decline mode differs by about 0.2% because the workbook's VBA froze the transition time at its initial guess (delivering 8.811 BCF against an 8.8 BCF target in the reference case), whereas the port keeps the transition self-consistent and returns the target EUR exactly.
+
+- **Arps b-factors above 1 are now accepted** by ``arps_rate``, ``arps_cum`` and ``eur`` (super-hyperbolic/transient flow; previously raised ``ValueError``). EUR remains finite for any positive economic limit; cumulative is unbounded in time unless paired with a terminal decline.
+
+- **Fitting and forecasting support**: ``fit_decline`` gains explicit ``method='mh'`` and ``method='hyp2'`` fits via bounded curve_fit (excluded from ``'best'`` so existing model selections are unchanged - their extra parameters would otherwise dominate the R-squared comparison). ``DeclineResult`` gains ``dterm``, ``b2`` and ``telf`` fields, and ``forecast()`` dispatches both new models with analytic cumulatives.
+
+- **CI**: GitHub Actions runtimes moved to Node 24 (checkout v5, setup-python v6, upload-artifact v6, download-artifact v7, action-gh-release v3).
+
 Changelist in 3.6.0:
 
 - **Correctness release.** A full literature-verified review of every calculation module found and fixed a set of long-standing correlation bugs. Several outputs change materially - notably Motiee hydrate temperatures, Gray and Beggs-Brill VLP pressures, linear gas rates, stock-tank GOR and undersaturated oil viscosity. Each fix below was confirmed against the original paper (or two independent secondary sources) before the change was made. All frozen regression baselines and documentation examples were re-pinned to the corrected values.

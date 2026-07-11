@@ -20,9 +20,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-14, windows-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -84,7 +84,7 @@ jobs:
           # ilt-inversion may not have matching wheels on PyPI yet).
           CIBW_TEST_SKIP: "*-manylinux* *-macosx* cp38-* cp39-*"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: wheels-${{ matrix.os }}
           path: ./wheelhouse/*.whl
@@ -95,9 +95,9 @@ jobs:
     runs-on: macos-13
     if: false  # Enable when macos-13 runners are available, or use cross-compilation
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -114,7 +114,7 @@ jobs:
             python -c "from pyrestoolbox._accelerator import get_status; s = get_status(); print(s); assert s['rust_available'], f'Rust not loaded: {s}'"
           CIBW_TEST_REQUIRES: "numpy"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: wheels-macos-x86
           path: ./wheelhouse/*.whl
@@ -124,9 +124,9 @@ jobs:
     name: Build pure-Python wheel
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -136,7 +136,7 @@ jobs:
       - name: Build pure-Python wheel
         run: python build_pure_python.py
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: wheels-pure-python
           path: ./dist/*.whl
@@ -146,9 +146,9 @@ jobs:
     name: Build source distribution
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -161,7 +161,7 @@ jobs:
       - name: Build sdist
         run: maturin sdist --out dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: sdist
           path: ./dist/*.tar.gz
@@ -179,7 +179,7 @@ jobs:
       id-token: write   # trusted publishing
       contents: write   # create the GitHub Release
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           path: dist
           merge-multiple: true
@@ -190,7 +190,7 @@ jobs:
           packages-dir: dist/
 
       # ── Create a notes-only GitHub Release (no binaries; PyPI is canonical) ──
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Extract release notes from changelist
         run: |
@@ -218,7 +218,7 @@ jobs:
           PY
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: ${{ github.ref_name }}
           body_path: release_notes.md
