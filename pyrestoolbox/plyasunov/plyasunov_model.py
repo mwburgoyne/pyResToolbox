@@ -117,11 +117,14 @@ def B12(gas, T):
     Cross second virial coefficient B12 for gas-water interaction.
 
     Parameters:
-        gas: gas name string (case-insensitive)
+        gas: gas name string (case-insensitive).
+             Supported: H2, N2, CH4, CO2, C2H6, C3H8, NC4H10 (aliases N-C4H10, NC4), H2S
         T: temperature in K
 
     Returns:
         B12 in cm3/mol
+
+    Raises ValueError for an unknown gas.
     """
     gas = gas.upper()
     if gas == 'H2':
@@ -357,7 +360,11 @@ def V_phi(gas, T, P):
 
 
 def gas_mw(gas):
-    """Return molecular weight of gas in g/mol."""
+    """Return molecular weight of gas in g/mol.
+
+    gas is case-insensitive. Supported: H2, N2, CH4, CO2, C2H6, C3H8,
+    NC4H10 (aliases N-C4H10, NC4), H2S. Raises ValueError for an unknown gas.
+    """
     gas = gas.upper()
     if gas not in MW_GAS:
         raise ValueError(f"Unknown gas: {gas}")

@@ -134,13 +134,6 @@ _DAK_LEADING = 0.27  # Leading coefficient in DAK reduced density equation
 # --- Hall & Yarborough (1973) ---
 _HY_COEFFS = (0.06125, -1.2, 14.76, -9.76, 4.58, 90.7, -242.2, 42.4, 2.18, 2.82)
 
-# --- Wang, Ye & Wu (2021) ---
-# doi:10.1016/j.egyr.2021.11.029
-_WYW_A = np.array([0, 256.41675, 7.18202, -178.5725, 182.98704, -40.74427,
-                    2.24427, 47.44825, 5.2852, -0.14914, 271.50446, 16.2694,
-                    -121.51728, 167.71477, -81.73093, 20.36191, -2.1177,
-                    124.64444, -6.74331, 0.20897, -0.00314])
-
 # --- Lee, Gonzalez & Eakin (1966) ---
 # Eqs 2.14-2.17, 'Petroleum Reservoir Fluid Property Correlations', McCain et al.
 _LGE = (3.448, 986.4, 0.01009,    # b coefficients (Eq 2.16)
@@ -507,7 +500,18 @@ def darcy_gas(
     D: float,
     radial: bool,
 ) -> np.ndarray:
-    # Returns mscf/day gas rate. k (mD), h (ft), t (deg F), l1 (r_w or width)/l2 (re or length) (ft), S(Skin), D(Day/mscf)
+    """ Returns Darcy gas rate (Mscf/day) from a pseudopressure difference.
+        Used by gas_rate_radial (radial=True) and gas_rate_linear (radial=False).
+        delta_mp: Pseudopressure difference (psi**2/cP)
+        k: Permeability (mD)
+        h: Net height (ft). Use 1 for linear flow (area carried in l1)
+        degf: Gas temperature (deg F)
+        l1: Wellbore radius r_w (ft) if radial, else flow area (ft**2)
+        l2: External radius r_ext (ft) if radial, else flow length (ft)
+        S: Skin (dimensionless). Ignored for linear flow
+        D: Non-Darcy skin coefficient (day/mscf). Ignored for linear flow
+        radial: True for radial flow geometry, False for linear
+    """
     validate_pe_inputs(degf=degf)
     tr = degf + degF2R
     if radial:
@@ -892,9 +896,8 @@ def gas_z(
         c = tpr_inv * (_c0 + _c1 * tpr_inv + _c2 * t2)
         D = _d0 + _d1 * tpr_inv
 
-        # Initial guess for reduced density y from explicit WYW evaluation
-        z_init = np.atleast_1d(_z_wyw_guess(pprs, tr)).astype(float)
-        y = np.maximum(a * pprs / z_init, 1e-10)
+        # Initial guess for reduced density y from Z = 1 (classic HY starting point)
+        y = np.maximum(a * pprs, 1e-10)
 
         converged = False
         for _ in range(100):
@@ -919,18 +922,6 @@ def gas_z(
         y = np.maximum(y, 1e-30)
         zout = a * pprs / y
         return process_output(zout, is_list)
-
-    # Wang, Ye & Wu, 2021, 0.2 < Ppr < 30, 1.05 < tpr < 3.0
-    # "An accurate correlation for calculating natural gas compressibility factors under a wide range of pressure conditions"
-    # https://doi.org/10.1016/j.egyr.2021.11.029
-    # Private helper: used only as the initial guess for the HY solver.
-    # No longer exposed as a public Z-factor method (removed owing to
-    # incorrect behaviour at low Ppr).
-    def _z_wyw_guess(pprs, tr):
-        a = _WYW_A
-        numerators = a[1] + a[2] * (1 + a[3] * tr + a[4] * tr ** 2 + a[5] * tr ** 3 + a[6] * tr ** 4) * pprs + a[7] * pprs ** 2 + a[8] * pprs ** 3 + a[9] * pprs ** 4
-        denominators = a[10] + a[11] * (1 + a[12] * tr + a[13] * tr ** 2 + a[14] * tr ** 3 + a[15] * tr ** 4 + a[16] * tr ** 5) * pprs + a[17] * pprs ** 2 + a[18] * pprs ** 3 + a[19] * pprs ** 4 + a[20] * pprs ** 5
-        return numerators / denominators
 
     mws, tcs, pcs = _BNS_MWS.copy(), _BNS_TCS.copy(), _BNS_PCS.copy()
     ACF, VSHIFT = _BNS_ACF, _BNS_VSHIFT
@@ -1210,8 +1201,7 @@ def gas_cg(
         Critical property correlation values if not explicitly specified
         If h2 > 0, will use the 'BNS' Z-Factor method
         p: Gas pressure (psia)
-        sg: Gas SG relative to air. Defaults to False if undefined
-        pwf: BHFP (psia)
+        sg: Gas SG relative to air
         degf: Gas Temperature (deg F)
         co2: Molar fraction of CO2. Defaults to zero if undefined
         h2s: Molar fraction of H2S. Defaults to zero if undefined
@@ -1228,7 +1218,7 @@ def gas_cg(
                  'SUT' for Sutton with Wichert & Aziz non-hydrocarbon corrections, or
                  'PMC' for Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'BNS' for Burgoyne, Nielsen and Stanko method (2025). If h2 > 0, then 'BNS' will be used
-                 Defaults to 'PMC
+                 Defaults to 'PMC'
           metric: If True, input/output in Eclipse METRIC units (barsa, degC, 1/barsa). Defaults to False (FIELD)
     """
     p, degf, tc, pc = _metric_to_field_pvt(p, degf, tc, pc, metric)
@@ -1284,7 +1274,7 @@ def gas_bg(
           co2: Molar fraction of CO2. Defaults to zero if undefined
           h2s: Molar fraction of H2S. Defaults to zero if undefined
           n2: Molar fraction of Nitrogen. Defaults to zero if undefined
-          h2: Molar fraction of Nitrogen. Defaults to zero if undefined
+          h2: Molar fraction of Hydrogen. Defaults to zero if undefined
           tc: Critical gas temperature (deg R | K). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
           pc: Critical gas pressure (psia | barsa). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
           metric: If True, input/output in Eclipse METRIC units (barsa, degC). Defaults to False (FIELD)
@@ -1552,7 +1542,7 @@ def gas_dmp(
         Returns integral over range between p1 to p2 (psi**2/cP)
         p1: Starting (lower) pressure (psia)
         p2: Ending (upper) pressure (psia)
-        t: Gas Temperature (deg F)
+        degf: Gas Temperature (deg F)
         sg: Specific gravity of  gas (relative to air)
         zmethod: Method for calculating Z-Factor
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.

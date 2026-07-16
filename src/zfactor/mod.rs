@@ -105,9 +105,8 @@ fn hy_core(pr: f64, tr: f64) -> f64 {
     let c = tpr_inv * (90.7 - 242.2 * tpr_inv + 42.4 * t2);
     let d_exp = 2.18 + 2.82 * tpr_inv;
 
-    // Initial guess for reduced density y from explicit WYW evaluation
-    let z_init = wyw_core(pr, tr);
-    let mut y = (a * pr / z_init).max(1e-10);
+    // Initial guess for reduced density y from Z = 1 (classic HY starting point)
+    let mut y = (a * pr).max(1e-10);
 
     for _ in 0..100 {
         // Newton-Raphson step on y, then compare successive iterates
@@ -135,36 +134,6 @@ fn hy_core(pr: f64, tr: f64) -> f64 {
 
     y = y.max(1e-30);
     a * pr / y
-}
-
-// =========================================================================
-// WYW Z-factor (Wang, Ye & Wu 2021) - explicit, no iteration
-// =========================================================================
-
-fn wyw_core(pr: f64, tr: f64) -> f64 {
-    let a: [f64; 21] = [
-        0.0, 256.41675, 7.18202, -178.5725, 182.98704, -40.74427, 2.24427,
-        47.44825, 5.2852, -0.14914, 271.50446, 16.2694, -121.51728,
-        167.71477, -81.73093, 20.36191, -2.1177, 124.64444, -6.74331,
-        0.20897, -0.00314,
-    ];
-
-    let tr2 = tr * tr;
-    let tr3 = tr2 * tr;
-    let tr4 = tr3 * tr;
-    let tr5 = tr4 * tr;
-
-    let pr2 = pr * pr;
-    let pr3 = pr2 * pr;
-    let pr4 = pr3 * pr;
-    let pr5 = pr4 * pr;
-
-    let num = a[1] + a[2] * (1.0 + a[3] * tr + a[4] * tr2 + a[5] * tr3 + a[6] * tr4) * pr
-        + a[7] * pr2 + a[8] * pr3 + a[9] * pr4;
-    let den = a[10] + a[11] * (1.0 + a[12] * tr + a[13] * tr2 + a[14] * tr3 + a[15] * tr4 + a[16] * tr5) * pr
-        + a[17] * pr2 + a[18] * pr3 + a[19] * pr4 + a[20] * pr5;
-
-    num / den
 }
 
 // =========================================================================

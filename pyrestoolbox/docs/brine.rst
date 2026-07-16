@@ -130,7 +130,7 @@ pyrestoolbox.brine.CO2_Brine_Mixture
 
 .. code-block:: python
 
-    CO2_Brine_Mixture(pres, temp, ppm = 0, metric = False) -> class
+    CO2_Brine_Mixture(pres, temp, ppm = 0, metric = False, cw_sat = False) -> class
 
 .. list-table:: Inputs
    :widths: 10 15 40

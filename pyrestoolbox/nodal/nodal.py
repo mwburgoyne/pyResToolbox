@@ -1928,7 +1928,7 @@ def outflow_curve(thp: float, completion: 'Completion', vlpmethod: str = 'WG',
 
         thp: Tubing head pressure (psia | barsa)
         completion: Completion object
-        vlpmethod: VLP method string
+        vlpmethod: VLP method - 'HB' (Hagedorn-Brown), 'WG' (Woldesemayat-Ghajar), 'GRAY', or 'BB' (Beggs & Brill)
         well_type: 'gas' or 'oil'
         rates: List of rates to evaluate (MMscf/d | sm3/d for gas, STB/d | sm3/d for oil). If None, auto-generated
         n_points: Number of rate points if rates is None. Default 20.
@@ -2146,7 +2146,7 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
         thp: Tubing head pressure (psia | barsa)
         completion: Completion object
         reservoir: Reservoir object (constructed with matching metric flag)
-        vlpmethod: VLP method string
+        vlpmethod: VLP method - 'HB' (Hagedorn-Brown), 'WG' (Woldesemayat-Ghajar), 'GRAY', or 'BB' (Beggs & Brill)
         well_type: 'gas' or 'oil'
         injection: True for injection wells — forwarded to the internal fbhp and
             outflow_curve calls. Defaults to False.

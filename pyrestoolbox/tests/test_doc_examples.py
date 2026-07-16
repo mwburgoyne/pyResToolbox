@@ -1565,6 +1565,58 @@ def test_doc_oil_bt_above_pb():
 
 
 # =============================================================================
+# Plyasunov Module Documentation Examples (docs/plyasunov.rst)
+# =============================================================================
+
+def test_doc_plyasunov_v_phi():
+    """plyasunov.rst: V_phi for CO2, CH4 and H2"""
+    import pyrestoolbox.plyasunov as plyasunov
+    assert abs(plyasunov.V_phi('CO2', 373.15, 20.0) - 37.60783904679587) / 37.60783904679587 < RTOL
+    assert abs(plyasunov.V_phi('CH4', 350.0, 10.0) - 38.77012223993382) / 38.77012223993382 < RTOL
+    assert abs(plyasunov.V_phi('H2', 298.15, 10.0) - 25.966076587141185) / 25.966076587141185 < RTOL
+
+def test_doc_plyasunov_v2_inf_alias():
+    """plyasunov.rst: V2_inf returns same value as V_phi"""
+    import pyrestoolbox.plyasunov as plyasunov
+    assert plyasunov.V2_inf('CO2', 373.15, 20.0) == plyasunov.V_phi('CO2', 373.15, 20.0)
+
+def test_doc_plyasunov_b12():
+    """plyasunov.rst: B12 for CO2 and CH4"""
+    import pyrestoolbox.plyasunov as plyasunov
+    assert abs(plyasunov.B12('CO2', 373.15) - (-98.40309129210485)) / 98.40309129210485 < RTOL
+    assert abs(plyasunov.B12('CH4', 298.15) - (-55.12819074948947)) / 55.12819074948947 < RTOL
+
+def test_doc_plyasunov_a12_inf():
+    """plyasunov.rst: A12_inf for CO2 at prescribed water density"""
+    import pyrestoolbox.plyasunov as plyasunov
+    assert abs(plyasunov.A12_inf('CO2', 373.15, 958.35) - 25.353028387016067) / 25.353028387016067 < RTOL
+
+def test_doc_plyasunov_gas_mw():
+    """plyasunov.rst: gas_mw lookup, case-insensitive, ValueError on unknown"""
+    import pyrestoolbox.plyasunov as plyasunov
+    assert plyasunov.gas_mw('CO2') == 44.0095
+    assert plyasunov.gas_mw('nc4h10') == 58.122
+    try:
+        plyasunov.gas_mw('XENON')
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+
+
+# =============================================================================
+# Runtime docs locator (docs shipped in wheel)
+# =============================================================================
+
+def test_docs_dir_locator():
+    """__init__.py: docs_dir() resolves to the shipped docs directory"""
+    import pyrestoolbox
+    d = pyrestoolbox.docs_dir()
+    assert os.path.isdir(d)
+    for fname in ('index.rst', 'gas.rst', 'oil.rst', 'examples.ipynb'):
+        assert os.path.isfile(os.path.join(d, fname)), f"missing {fname} in docs_dir()"
+
+
+# =============================================================================
 # Main runner
 # =============================================================================
 

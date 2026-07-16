@@ -909,17 +909,14 @@ class CO2_Brine_Mixture():
     #============================================================================
     
     def co2BrineSolubility(self):
-        """ Calculates CO2 saturated Brine mutual solubilities
-
-            Inputs:
-                pBar: Pressure (Bar)
-                degC: Temperature (deg C)
-                ppm: NaCL equivalent concentration in brine (wt salt per million weight of brine)
-
-            Returns Tuple of:
-                xCO2: Mole fraction CO2 in brine at pBar
-                yH2O: Mole fraction H2O in CO2 rich gas
-                rhoGas: CO2 rich gas density (gm/cm3)
+        """ Calculates CO2-brine mutual solubilities at self.pBar, self.degC
+            and self.ppm (Spycher & Pruess 2010). Takes no arguments and
+            returns None; results are stored on the instance:
+                self.x: [xCO2, xH2O] mole fractions in the brine phase
+                self.y: [yCO2, yH2O] mole fractions in the CO2-rich gas
+                self.rhoGas: CO2-rich gas density (g/cm3)
+            plus supporting state (self.GASZ, self.MwGas, self.MolarVol, ...).
+            Called by __init__; not normally invoked directly.
         """
         if _RUST_AVAILABLE:
             try:

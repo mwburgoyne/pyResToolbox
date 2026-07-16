@@ -225,7 +225,7 @@ def lorenz_2_layers(
 
         lorenz: Lorenz coefficient (0-1). If B is provided, will igonore this parameter to be more efficient. If not, will calculate B from this parameter.
         nlayers: The number of permeability layers desired (>1 needed unless a list of phi_h_fracs is supplied)
-        kavg: The average permeability of all the layers (assuming equal thickness)
+        k_avg: The average permeability (mD) of all the layers (assuming equal thickness)
         shuffle: Boolean flag to determine whether to return the permeability array in decreasing order (False), or random order (True). Default False. Will be reset to False if user defined phi_h_fracs are supplied
         lrnz_method: The method of calculation for the Lorenz coefficient
                 Must be 'EXP' or 'LANG'.

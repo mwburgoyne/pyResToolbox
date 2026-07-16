@@ -16,16 +16,25 @@ Note: Version 2.x refactors functions into different modules, requiring separate
 Usage: ``from pyrestoolbox import <module>`` then ``<module>.function(...)``.
 All inputs use oilfield units (psia, degF, ft, mD, cP) unless otherwise noted.
 
+Full documentation (one RST file per module, with worked examples, plus example
+notebooks) ships inside the installed package: ``pyrestoolbox.docs_dir()`` returns
+the directory path, and ``docs/index.rst`` there lists the contents. Unsure which
+correlation method to use? Call ``recommend.recommend_methods(...)`` first - it
+returns structured method recommendations with rationale for a given fluid
+composition, API gravity and well deviation.
+
 Modules
 -------
 - **gas** — Gas PVT (Z-factor, viscosity, Bg, Cg, density, pseudopressure) and flow rates.
-  Four Z-factor methods: DAK, HY, WYW, BNS. For high CO2/H2S/N2 or any H2, use BNS.
+  Three Z-factor methods: DAK, HY, BNS. For high CO2/H2S/N2 or any H2, use BNS.
   Includes GasPVT convenience class.
 - **oil** — Oil PVT (Pb, Rs, Bo, density, viscosity, compressibility) and flow rates.
   Black oil table generation (PVTO/PVDO/PVDG). Includes OilPVT convenience class.
 - **brine** — Brine properties with three models: methane-saturated (brine_props),
   CO2-saturated (CO2_Brine_Mixture), multicomponent gas-saturated (SoreideWhitson).
   Supports C1-C4, CO2, H2S, N2, H2 in fresh or saline water.
+- **plyasunov** — Infinite-dilution partial molar volumes of dissolved gases in
+  water (supporting module used by brine density; SI units: K, MPa, cm3/mol).
 - **nodal** — VLP/IPR nodal analysis with four multiphase correlations (HB, WG, GRAY, BB).
   Multi-segment deviated/horizontal well support. Operating point solver.
 - **layer** — Lorenz heterogeneity framework and permeability distribution generation.
@@ -52,6 +61,7 @@ submodules = [
     'matbal',
     'nodal',
     'oil',
+    'plyasunov',
     'recommend',
     'sensitivity',
     'shared_fns',
@@ -64,7 +74,18 @@ __all__ = submodules
 import importlib
 
 def __dir__():
-    return __all__
+    return __all__ + ['docs_dir']
+
+
+def docs_dir() -> str:
+    """Return the path to the documentation directory shipped inside the package.
+
+    Contains one RST file per module (gas.rst, oil.rst, ...) with worked
+    examples, example notebooks (examples.ipynb, nodal_examples.ipynb,
+    nodal_hydrate_demo.ipynb), and index.rst listing the contents.
+    """
+    from importlib.resources import files
+    return str(files('pyrestoolbox') / 'docs')
 
 
 def _get_version():

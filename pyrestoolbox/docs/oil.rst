@@ -21,7 +21,6 @@ pyResToolBox uses class objects to track calculation options through the functio
        Options are:
         + 'DAK': Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al. - Slowest, Most Accurate
         + 'HY': Hall & Yarborough (1973) - Second Fastest
-        + 'WYW': Wang, Ye & Wu (2021) - Fastest, Least Accurate
         + 'BUR'/'BNS': Fast, can handle 100% inerts and Hydrogen. Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen & Stanko (2025), `SPE-229932-MS <https://doi.org/10.2118/229932-MS>`_
    * - cmethod
      - c_method
@@ -32,7 +31,7 @@ pyResToolBox uses class objects to track calculation options through the functio
         + 'BUR': Burgoyne method (2024). If h2 > 0, or the 'BUR' method is used for Z-Factor then 'BUR' will automatically be used
    * - pbmethod
      - pb_method
-     - Method for calculating bubble point pressure of oil. Defaults to 'VELAR'. 
+     - Method for calculating bubble point pressure of oil. Defaults to 'VALMC' ('VELAR' for make_bot_og).
        Choices are:
         + 'STAN': Standing Correlation (1947)
         + 'VALMC': Valko-McCain Correlation (2003)
@@ -611,7 +610,7 @@ Either pb, rsb or both need to be specified. If one is missing, the other will b
      - The method of Bo calculation to be employed. `Calculation Methods and Class Objects`_.
    * - pbmethod
      - string or pb_method
-     - The method of Rs calculation to be employed. `Calculation Methods and Class Objects`_.
+     - The method of Pb calculation to be employed. `Calculation Methods and Class Objects`_.
    * - metric
      - bool
      - Use Eclipse METRIC units for inputs/outputs. Default False
@@ -941,7 +940,7 @@ pyrestoolbox.oil.oil_harmonize
 
 .. code-block:: python
 
-    oil_harmonize(pb=0, rsb=0, degf=0, api=0, sg_sp=0, sg_g=0, uo_target=0, p_uo=0, rsmethod='VELAR', pbmethod='VELAR', metric=False) -> tuple
+    oil_harmonize(pb=0, rsb=0, degf=0, api=0, sg_sp=0, sg_g=0, uo_target=0, p_uo=0, rsmethod='VELAR', pbmethod='VALMC', metric=False) -> tuple
 
 Resolves consistent Pb, Rsb, rsb_frac, and vis_frac from user inputs. If only one of Pb or Rsb is specified, the other is calculated using the selected correlation. If both are specified, an iterative procedure finds an ``rsb_frac`` scaling factor that allows the correlations to honor both values simultaneously. If ``uo_target`` and ``p_uo`` are specified, computes a ``vis_frac`` scaling factor to match the target viscosity.
 
@@ -987,7 +986,7 @@ Returns tuple of ``(pb, rsb, rsb_frac, vis_frac)`` where rsb_frac is 1.0 when on
      - Rs calculation method. Default 'VELAR'
    * - pbmethod
      - str or pb_method
-     - Pb calculation method. Default 'VELAR'
+     - Pb calculation method. Default 'VALMC'
    * - metric
      - bool
      - Use Eclipse METRIC units for inputs/outputs. Default False
@@ -1038,7 +1037,7 @@ pyrestoolbox.oil.make_bot_og
 
 .. code-block:: python
 
-    make_bot_og(pi, api, degf, sg_g, pmax, pb =0, rsb =0, pmin =14.7, nrows = 20, wt =0, ch4_sat =0, comethod='EXPLT', zmethod='DAK', rsmethod='VELAR', cmethod='PMC', denomethod='SWMH', bomethod='MCAIN', pbmethod='VALMC', export=False) -> tuple
+    make_bot_og(pi, api, degf, sg_g, pmax, pb =0, rsb =0, pmin =25, nrows = 20, wt =0, ch4_sat =0, comethod='EXPLT', zmethod='DAK', rsmethod='VELAR', cmethod='PMC', denomethod='SWMH', bomethod='MCAIN', pbmethod='VELAR', export=False, pvto=False, vis_frac=1.0, metric=False) -> dict
 
 Creates data required for Oil-Gas-Water black oil tables. Returns dictionary of results, with index:
  - bot: Pandas table of blackoil data (for PVTO == False), or Saturated properties to pmax (if PVTO == True)
@@ -1115,7 +1114,7 @@ If user species Pb or Rsb only, the corresponding property will be calculated. I
      - The method of Bo calculation to be employed. `Calculation Methods and Class Objects`_.
    * - pbmethod
      - string or pb_method
-     - The method of Rs calculation to be employed. `Calculation Methods and Class Objects`_.
+     - The method of Pb calculation to be employed. `Calculation Methods and Class Objects`_.
    * - export
      - bool
      - Boolean flag that controls whether to export full table to excel, and export separate PVDG, PVDO (and PVTO if requested) include files. Default is False
@@ -1720,7 +1719,7 @@ OilPVT.from_harmonize
 
 .. code-block:: python
 
-    OilPVT.from_harmonize(degf, api, sg_sp=0, sg_g=0, pb=0, rsb=0, uo_target=0, p_uo=0, rsmethod='VELAR', pbmethod='VELAR', bomethod='MCAIN', metric=False)
+    OilPVT.from_harmonize(degf, api, sg_sp=0, sg_g=0, pb=0, rsb=0, uo_target=0, p_uo=0, rsmethod='VELAR', pbmethod='VALMC', bomethod='MCAIN', metric=False)
 
 .. note::
 
