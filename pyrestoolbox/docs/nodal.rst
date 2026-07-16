@@ -401,7 +401,7 @@ pyrestoolbox.nodal.fbhp
 
 .. code-block:: python
 
-    fbhp(thp, completion, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, qg_mmscfd=0, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, qt_stbpd=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65, metric=False) -> float
+    fbhp(thp, completion, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, qg_mmscfd=0, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, qt_stbpd=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65, metric=False, return_profile=False) -> float
 
 Returns flowing bottom hole pressure (psia, or barsa if metric=True) using the specified VLP correlation. Supports both gas and oil wells. The Completion object can define vertical wells (legacy mode) or multi-segment deviated wells using WellSegment objects. The ``sin(theta)`` multiplier on hydrostatic gradient enables proper deviated and horizontal well support.
 
@@ -558,9 +558,9 @@ pyrestoolbox.nodal.fthp
 
 .. code-block:: python
 
-    fthp(bhp, completion, vlpmethod='WG', well_type='gas', ..., thp_min=14.7, thp_max=20000.0, tol=1e-3) -> float
+    fthp(bhp, completion, vlpmethod='WG', well_type='gas', ..., thp_min=None, thp_max=20000.0, tol=1e-3) -> float
 
-Inverse of ``fbhp``. Solves for the tubing head pressure that produces the target flowing bottom-hole pressure, for the given flow parameters and VLP correlation. Internally wraps ``bisect_solve`` around ``fbhp`` between ``thp_min`` and ``thp_max``.
+Inverse of ``fbhp``. Solves for the tubing head pressure that produces the target flowing bottom-hole pressure, for the given flow parameters and VLP correlation. Internally wraps ``bisect_solve`` around ``fbhp`` between ``thp_min`` and ``thp_max``. ``thp_min=None`` resolves to 14.7 psia (1.01325 barsa if metric=True).
 
 All flow / well / unit kwargs accepted by ``fbhp`` (``qg_mmscfd``, ``qt_stbpd``, ``gor``, ``wc``, ``api``, ``pb``, ``rsb``, ``metric`` ...) are accepted here identically. ``metric=True`` switches bhp inputs and the return to ``barsa``.
 
@@ -583,9 +583,9 @@ pyrestoolbox.nodal.outflow_curve
 
 .. code-block:: python
 
-    outflow_curve(thp, completion, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, rates=None, n_points=20, max_rate=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65, metric=False) -> dict
+    outflow_curve(thp, completion, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, rates=None, n_points=20, max_rate=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65, metric=False, n_rates=None) -> dict
 
-Returns VLP outflow curve as a dictionary with keys ``'rates'`` and ``'bhp'``. Evaluates ``fbhp()`` at each rate point. Rates are MMscf/d for gas wells (sm3/d if metric=True), STB/d for oil wells (sm3/d if metric=True). BHP is in psia (barsa if metric=True).
+Returns VLP outflow curve as a dictionary with keys ``'rate'`` (also aliased as ``'rates'``) and ``'bhp'``. ``n_rates`` is a deprecated alias for ``n_points`` (takes precedence if both are given). Evaluates ``fbhp()`` at each rate point. Rates are MMscf/d for gas wells (sm3/d if metric=True), STB/d for oil wells (sm3/d if metric=True). BHP is in psia (barsa if metric=True).
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -629,7 +629,7 @@ Returns VLP outflow curve as a dictionary with keys ``'rates'`` and ``'bhp'``. E
    * - Key
      - Type
      - Description
-   * - 'rates'
+   * - 'rate' (alias 'rates')
      - list
      - Rate values (MMscf/d for gas, STB/d for oil; sm3/d if metric)
    * - 'bhp'
@@ -795,6 +795,9 @@ Finds the operating point where VLP outflow curve intersects the IPR inflow curv
    * - 'ipr'
      - dict
      - IPR curve: {'pwf': [...], 'rate': [...]}
+   * - 'converged'
+     - bool
+     - True if the VLP/IPR intersection solve converged
 
 Examples:
 

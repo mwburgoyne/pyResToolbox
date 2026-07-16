@@ -209,7 +209,7 @@ pyrestoolbox.layer.lorenz_2_layers
 
 .. code-block:: python
 
-    lorenz_2_layers(lorenz, k_avg, nlayers = 1, shuffle = False, lrnz_method = 'EXP', B = -1, phi_h_fracs = []) -> np.ndarray
+    lorenz_2_layers(lorenz, k_avg, nlayers = 1, shuffle = False, lrnz_method = 'EXP', B = -1, phi_h_fracs = None) -> np.ndarray
 
 Returns np.array of permeability values honoring a specified average permeability (assuming equal thickness layers unless list of phi_h_fracs is provided), with degree of heterogeneity consistant with specified Lorenz coefficient and method
         
@@ -260,7 +260,7 @@ Examples:
 .. code-block:: python
 
     >>> layer.lorenz_2_layers(lorenz = 0.67, nlayers = 5, k_avg = 10, shuffle = True)
-    array([10.58944038,  0.29499066, 34.9323596 ,  3.21009656,  0.9731128 ])
+    array([10.58944038,  0.29499066, 34.9323596 ,  3.21009656,  0.9731128 ])  # same values every run, but shuffle=True returns them in unseeded random order - your ordering will differ
     
     >>> layer.lorenz_2_layers(lorenz = 0.67, k_avg = 10, phi_h_fracs=[0.05, 0.5])
     array([51.72990694, 14.12556056,  0.77938749]) 

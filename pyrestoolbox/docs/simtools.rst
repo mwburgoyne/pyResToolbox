@@ -88,7 +88,9 @@ pyrestoolbox.simtools.ix_extract_problem_cells
 
 .. code-block:: python
 
-    ix_extract_problem_cells(filename = '', silent = False) -> list
+    ix_extract_problem_cells(filename = '', silent = False, non_interactive = True) -> list
+
+``non_interactive=True`` (default) raises ``ValueError`` instead of prompting via ``input()`` when multiple .PRT files are found and no ``filename`` was given; pass ``non_interactive=False`` for the legacy interactive prompt.
 
 Processes Intersect PRT file to extract convergence issue information. Prints a summary of worst offenders to terminal (if silent == False), and returns a list of sorted dataframes summarising all entities in final convergence report rows in the PRT file.
 
@@ -224,7 +226,9 @@ pyrestoolbox.simtools.zip_check_sim_deck
 
 .. code-block:: python
 
-    zip_check_sim_deck(files2scrape = [], tozip = True, console_summary = True)
+    zip_check_sim_deck(files2scrape = [], tozip = True, console_summary = True, non_interactive = True)
+
+``non_interactive=True`` (default) raises ``ValueError`` instead of prompting via ``input()``; ``files2scrape`` must then be provided. Pass ``non_interactive=False`` for the legacy interactive prompts.
 
 Performs a recursive zip/check on one or more ECL/IX decks.
 Crawls through all INCLUDE files referenced in a deck, including an unlimited number of subdirectories and nested INCLUDE references,
@@ -248,7 +252,7 @@ If files2scrape list is NOT specified:
    * - files2scrape
      - list
      - A list of file names to scrape. These must be .DATA and/or .AFI files. If no (or empty) list is passed, then user will be prompted to select one or more from the files existing in the current directory
-   * - to_zip
+   * - tozip
      - bool
      - True will create a zip archive of DATA file and all associated INCLUDE files from the same directory or below. False will only return summary of whether INCLUDE files are complete.
    * - console_summary

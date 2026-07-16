@@ -1646,7 +1646,7 @@ pyrestoolbox.gas.GasPVT
 
 .. code-block:: python
 
-    GasPVT(sg=0.75, co2=0, h2s=0, n2=0, h2=0, zmethod='DAK', cmethod='PMC', metric=False)
+    GasPVT(sg=0.75, co2=0, h2s=0, n2=0, h2=0, zmethod='DAK', cmethod='PMC', tc=0, pc=0, metric=False)
 
 Stores gas composition and method choices. Pre-computes critical temperature and pressure via ``gas_tc_pc()`` so they are not recalculated per call. Automatically selects BNS zmethod/cmethod when h2 > 0. Can be passed directly to ``fbhp()`` and ``operating_point()`` for VLP calculations, and to ``gas_rate_radial()`` and ``gas_rate_linear()`` for IPR rate calculations.
 
@@ -1678,6 +1678,12 @@ Stores gas composition and method choices. Pre-computes critical temperature and
    * - cmethod
      - string or c_method
      - Method for critical property calculation. Defaults to 'PMC'
+   * - tc
+     - float
+     - Critical gas temperature (deg R | K). Overrides cmethod correlation if positive. For BNS, overrides only the hydrocarbon pseudo-component Tc. Defaults to 0
+   * - pc
+     - float
+     - Critical gas pressure (psia | barsa). Overrides cmethod correlation if positive. For BNS, overrides only the hydrocarbon pseudo-component Pc. Defaults to 0
    * - metric
      - bool
      - If True, methods accept/return Eclipse METRIC units (barsa, deg C, kg/m3, rm3/sm3). Defaults to False
