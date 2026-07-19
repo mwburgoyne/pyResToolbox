@@ -1,3 +1,7 @@
+Changelist in 3.7.1:
+
+- **Multicomponent flash feed fix in the brine module.** ``calc_gas_brine_equilibrium(method='flash')`` (used by ``SoreideWhitson`` for mixed-gas VLE) flashed a hardcoded 95% water / 5% gas feed. Preferential dissolution of the more-soluble components depleted the equilibrium vapor off the requested dry-gas composition - for a 73/27 CO2/CH4 gas at 50 MPa the dry-basis vapor CO2 slid to about 0.65, biasing dissolved CO2 roughly 10% low and dissolved CH4 high. The ``y_*`` inputs are now interpreted as the dry-basis equilibrium vapor composition: the feed starts gas-excess (50/50) and retries water-rich (0.9/0.95/0.98) near the water boiling curve, where a two-phase solution requires the feed water fraction to lie between the liquid and vapor water mole fractions; both flashes are checked for converged two-phase results. Single-gas (binary) results are unchanged (< 0.04%; the binary tie-line is feed-independent). Validated against ternary CH4+CO2+H2O VLE data (Qin 2008; Al Ghafri 2014; 37 points): dissolved-CO2 MARE improves from 26% to 16%. The ``SoreideWhitson.y`` docstring now states that it equals the input dry-gas composition, which the flash honours by construction.
+
 Changelist in 3.7.0:
 
 - **Two-segment decline models for unconventional wells** in the ``dca`` module. Both are continuous in rate and nominal decline (log-slope) at the transition, ship with full RST documentation and doc-example tests, and are unit-agnostic like the rest of the module:
