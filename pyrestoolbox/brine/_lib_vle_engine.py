@@ -2287,6 +2287,9 @@ def calc_gas_brine_equilibrium(
     - 'flash': Full multi-component Rachford-Rice flash per Curtis Whitson
       scheme. Flash 1 (kij_AQ) → aqueous phase. Flash 2 (kij_NA) →
       non-aqueous phase. More accurate for concentrated systems.
+      The y_* inputs are interpreted as the dry-basis EQUILIBRIUM VAPOR
+      composition: the feed is gas-excess (with water-rich retries near the
+      boiling curve) so the equilibrium vapor matches the requested y_*.
 
     SALINITY_METHOD (salting-out approach, used with method='flash'):
     - 'gamma_phi' (default, RECOMMENDED): Freshwater EOS + Sechenov activity
@@ -2348,11 +2351,7 @@ def calc_gas_brine_equilibrium(
     if method == 'flash':
         # Full multi-component flash (Curtis Whitson scheme)
         comp_names = ['H2O'] + list(gas_comp.keys())
-        z = np.zeros(len(comp_names))
-        z[0] = 0.95  # 95% water feed
-        gas_frac = 0.05
-        for i, (gas, y_i) in enumerate(gas_comp.items()):
-            z[i + 1] = gas_frac * y_i
+        gas_vec = np.array([gas_comp[g] for g in comp_names[1:]])
 
         # Create flash calculator
         # For gamma_phi and explicit: use freshwater flash (salinity=0)
@@ -2361,8 +2360,30 @@ def calc_gas_brine_equilibrium(
                                        salinity_molal=salinity_molal,
                                        framework=framework,
                                        salinity_method=salinity_method)
-        result = flash.calc_equilibrium(T_K, P_Pa, z,
-                                         salinity_method=salinity_method)
+
+        # The y_* inputs are the dry EQUILIBRIUM VAPOR composition. A
+        # water-dominated feed strips the more-soluble gases into the liquid,
+        # so the equilibrium vapor drifts off the requested composition (a
+        # 95/5 water/gas feed depletes dry-basis CO2 from 0.73 to ~0.65 for
+        # CH4+CO2 at 50 MPa, biasing x_CO2 ~10% low). A gas-excess feed pins
+        # the vapor at the requested composition; single-gas results are
+        # feed-independent (unique tie-line). Near the water boiling curve a
+        # two-phase solution only exists for water-rich feeds (feed water must
+        # lie between the liquid and vapor water mole fractions), so retry
+        # with increasing water fraction until both flashes are two-phase.
+        result = None
+        for w_frac in (0.5, 0.9, 0.95, 0.98):
+            z = np.concatenate(([w_frac], (1.0 - w_frac) * gas_vec))
+            result = flash.calc_equilibrium(T_K, P_Pa, z,
+                                            salinity_method=salinity_method)
+            V_aq = result.get('V_aq', np.nan)
+            V_na = result.get('V_na', np.nan)
+            if (result.get('converged_aq', False)
+                    and result.get('converged_na', False)
+                    and 1e-6 < V_aq < 1 - 1e-6
+                    and 1e-6 < V_na < 1 - 1e-6
+                    and result['x_aq'][0] > 0.5):
+                break
 
         x_gas = {}
         for i, name in enumerate(comp_names):
