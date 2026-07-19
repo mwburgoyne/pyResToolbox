@@ -1347,6 +1347,13 @@ _OST_C0 = 1.109
 _OST_C1 = -5.98e-4
 _OST_C2 = 1.0933e-6
 
+# Calabrese-form sub-plateau ramp for CH4: ln(ratio) = e1*exp(-e2*(T_K/142-1))*x,
+# fitted to the Ostermann plateau ratios via S&W x_CH4 at 2000 psia (slope
+# residuals <=3.4%), capped at the measured plateau. Replaces the previous
+# on/off application below ~2000 psi CH4 partial pressure.
+_CAL_CH4_E1 = 93.6918
+_CAL_CH4_E2 = 0.957408
+
 # HC component molecular weights for SG-based splitting
 _MW_C1 = 16.043
 _MW_C2 = 30.069
@@ -1849,8 +1856,10 @@ class SoreideWhitson:
             elif gas_upper == 'H2S':
                 vis_factor *= (1.0 + _IC_A_H2S * x_i ** _IC_B)
             elif gas_upper == 'CH4':
-                ratio = _OST_C0 + _OST_C1 * degf + _OST_C2 * degf ** 2
-                vis_factor *= max(ratio, 1.0)
+                T_K = (degf - 32.0) / 1.8 + 273.15
+                ramp = np.exp(_CAL_CH4_E1 * np.exp(-_CAL_CH4_E2 * (T_K / _CAL_T0 - 1.0)) * x_i)
+                plateau = max(_OST_C0 + _OST_C1 * degf + _OST_C2 * degf ** 2, 1.0)
+                vis_factor *= min(ramp, plateau)
             # C2H6, N2, H2, C3H8, nC4H10: no correction (factor *= 1.0)
 
         vis_gas_brine = vis_base_cP * vis_factor
