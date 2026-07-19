@@ -1418,7 +1418,9 @@ class SoreideWhitson:
         Returns object with following calculated properties:
             .x          : Dict of dissolved gas mole fractions, e.g. {'CO2': 0.024, 'CH4': 0.0015}
             .x_total    : Total dissolved gas mole fraction (sum of all x_i)
-            .y          : Dict of gas phase compositions (dry basis, normalized)
+            .y          : Dict of gas phase compositions (dry basis, normalized).
+                          Equals the input gas composition: the flash feed is
+                          chosen so the equilibrium vapor matches it.
             .y_H2O      : Water mole fraction in gas phase
             .water_content : Dict with 'y_H2O', 'stb_mmscf', 'lb_mmscf'
             .bDen       : Brine density (g/cm3) [gas-saturated, gas-free brine, freshwater]
