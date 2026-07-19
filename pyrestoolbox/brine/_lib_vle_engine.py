@@ -923,10 +923,17 @@ def solve_cubic_eos(A: float, B: float, return_info: bool = False):
     if not valid:
         roots = np.roots([1.0, c2, c1, c0])
         valid = [r.real for r in roots if abs(r.imag) < 1e-10 and r.real > B + 1e-10]
-        valid = sorted(valid) if valid else [max(B + 0.01, 0.1)]
+        # No physically valid root (all complex or <= B): return empty and let
+        # callers propagate NaN. Fabricating a root here produced finite but
+        # bogus fugacities that leaked into "converged" wrong answers.
+        valid = sorted(valid)
 
     if not return_info:
         return valid
+
+    if not valid:
+        return CubicSolution(roots=[], Z_liquid=np.nan, Z_vapor=np.nan,
+                             delta_G=None, two_roots=False, preferred_phase='none')
 
     # Build CubicSolution with Gibbs energy analysis
     Zl = valid[0]
@@ -1355,7 +1362,10 @@ class SWBinaryVLE:
         # Liquid phase
         A_liq = np.einsum('i,j,ij', x, x, Aij)
         B_liq = np.dot(x, Bi)
-        Z_liq = min(solve_cubic_eos(A_liq, B_liq))
+        roots_liq = solve_cubic_eos(A_liq, B_liq)
+        if not roots_liq:
+            return np.full(2, np.nan)
+        Z_liq = min(roots_liq)
         sum_xA = np.array([np.dot(x, Aij[i, :]) for i in range(2)])
         phi_liq = np.array([calc_fugacity_coeff(Z_liq, A_liq, B_liq,
                            Bi[i]/B_liq, sum_xA[i]/A_liq) for i in range(2)])
@@ -1363,7 +1373,10 @@ class SWBinaryVLE:
         # Vapor phase - SAME kij
         A_vap = np.einsum('i,j,ij', y, y, Aij)
         B_vap = np.dot(y, Bi)
-        Z_vap = max(solve_cubic_eos(A_vap, B_vap))
+        roots_vap = solve_cubic_eos(A_vap, B_vap)
+        if not roots_vap:
+            return np.full(2, np.nan)
+        Z_vap = max(roots_vap)
         sum_yA = np.array([np.dot(y, Aij[i, :]) for i in range(2)])
         phi_vap = np.array([calc_fugacity_coeff(Z_vap, A_vap, B_vap,
                            Bi[i]/B_vap, sum_yA[i]/A_vap) for i in range(2)])
@@ -1477,13 +1490,35 @@ class SWBinaryVLE:
             kij_na: Binary interaction parameter for non-aqueous phase
             max_iter: Maximum iterations
 
+        Runs the successive substitution twice: the adaptive-damping pass
+        (canonical, preserves released behaviour) and a fixed-damping
+        verification pass. Near the dew boundary (high T, P within a few
+        multiples of Psat) the normalised iteration has multiple fixed
+        points; when the passes disagree by more than 0.5% relative the
+        answer is path-dependent and np.nan is returned instead of an
+        arbitrary branch. Non-convergence also returns np.nan.
+
         Returns:
-            y_H2O: Water mole fraction in gas phase
+            y_H2O: Water mole fraction in gas phase (np.nan if the
+                   iteration fails to converge or is ambiguous)
         """
+        y1, conv1 = self._water_content_ss(T_K, P_Pa, kij_na, max_iter,
+                                           adaptive=True)
+        if not conv1:
+            return np.nan
+        y2, conv2 = self._water_content_ss(T_K, P_Pa, kij_na, 2 * max_iter,
+                                           adaptive=False, damp=0.4)
+        if not conv2 or abs(y2 - y1) > 5e-3 * max(abs(y1), 1e-8):
+            return np.nan
+        return y1
+
+    def _water_content_ss(self, T_K: float, P_Pa: float, kij_na: float,
+                          max_iter: int, adaptive: bool = True,
+                          damp: float = 0.3) -> Tuple[float, bool]:
+        """Damped successive substitution for water content. Returns (y_H2O, converged)."""
         x = np.array([0.999, 0.001])
         y = np.array([0.02, 0.98])
 
-        damp = 0.3
         prev_error = np.inf
         for iteration in range(max_iter):
             x = np.clip(x, 1e-14, 1.0 - 1e-14)
@@ -1492,6 +1527,8 @@ class SWBinaryVLE:
             y = y / np.sum(y)
 
             K = self._calc_K_with_kij(T_K, P_Pa, x, y, kij_na)
+            if not np.all(np.isfinite(K)):
+                return np.nan, False
 
             y_new = K * x
             y_new = np.clip(y_new, 1e-14, 1.0 - 1e-14)
@@ -1499,14 +1536,14 @@ class SWBinaryVLE:
 
             error = np.max(np.abs(y_new - y))
             if error < 1e-10:
-                return y[0]
+                return y[0], True
 
-            # Adaptive damping
-            if error < prev_error:
-                damp = min(damp * 1.15, 0.8)
-            else:
-                damp = max(damp * 0.5, 0.1)
-            prev_error = error
+            if adaptive:
+                if error < prev_error:
+                    damp = min(damp * 1.15, 0.8)
+                else:
+                    damp = max(damp * 0.5, 0.1)
+                prev_error = error
 
             y = y + damp * (y_new - y)
             y = y / np.sum(y)
@@ -1519,7 +1556,7 @@ class SWBinaryVLE:
             x = x + damp * (x_new - x)
             x = x / np.sum(x)
 
-        return y[0]
+        return y[0], False
 
     # Aliases for backward compatibility
     def calc_x_gas(self, T_K: float, P_Pa: float, kij: Optional[float] = None) -> float:
@@ -1594,6 +1631,8 @@ class SWBinaryVLE:
         B_mix = sum(x[i] * Bi[i] for i in range(2))
 
         roots = solve_cubic_eos(A_mix, B_mix)
+        if not roots:
+            return np.full(2, np.nan)
         Z = roots[0] if phase == 'liquid' else roots[-1]
 
         phi = np.zeros(2)
@@ -1869,6 +1908,8 @@ class SWMultiComponentFlash:
             return np.ones(len(comp))
 
         roots = solve_cubic_eos(A_mix, B_mix)
+        if not roots:
+            return np.full(len(comp), np.nan)
         Z = roots[0] if phase == 'liquid' else roots[-1]
 
         sum_xA = Aij @ comp
@@ -2043,6 +2084,10 @@ class SWMultiComponentFlash:
 
             phi_L = self._calc_fugacity_fast(x, Ai, Bi, sqrt_Ai, onemk, 'liquid')
             phi_V = self._calc_fugacity_fast(y, Ai, Bi, sqrt_Ai, onemk, 'vapor')
+
+            # Cubic solve failed (no valid Z root): stop rather than iterate on NaN
+            if not (np.all(np.isfinite(phi_L)) and np.all(np.isfinite(phi_V))):
+                break
 
             # Gamma-phi K-value: K_i = γ_i × φ_i^L / φ_i^V
             K_new = np.clip(gamma_eff * phi_L / (phi_V + 1e-30), 1e-10, 1e10)
