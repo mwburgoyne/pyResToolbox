@@ -474,9 +474,9 @@ Mixed gas (10% CO2, 5% H2S, SG=0.7) at 200 Bar x 80 degC and 10,000 ppm NaCl:
     >>> mix.gas_comp  # Estimated gas composition including HC split
     {'CO2': 0.1, 'H2S': 0.05, 'CH4': 0.8133, 'C2H6': 0.0351, 'C3H8': 0.0015, 'nC4H10': 0.0001}
     >>> mix.Rs_total  # Total dissolved gas (sm3/sm3)
-    6.30912473356662
+    8.5106741070893
     >>> mix.bDen
-    [0.9854845175444145, 0.9871360082710434, 0.9804911502375318]
+    [0.9855934589486185, 0.9871360082710434, 0.9804911502375318]
 
 Pure CO2 fresh water at 175 Bar x 85 degC with saturated compressibility:
 

@@ -589,7 +589,7 @@ def test_hydrate_zero_inhibitor_wt_pct():
 # Frozen regression baselines for water balance and injection (captured 2026-03-06)
 _HYDRATE_NEW_BASELINES = {
     'danesh_wc_op_1000_60_065': 0.051307948560405346,    # Danesh vaporized water at operating
-    'sw_wc_op_2000_80_070_co2': 0.07027556282207788,     # SoreideWhitson vaporized at operating
+    'sw_wc_op_2000_80_070_co2': 0.0703237061696219,   # re-pinned 2026-07-19: flash feed fix     # SoreideWhitson vaporized at operating
     'wc_res_3000_200': 0.821279572319976,                 # Vaporized at reservoir P=3000,T=200
     'condensed_3000_200_to_1000_60': 0.7699716237595706,  # Condensed between res→op
     'meg_mass_rate_res_to_op': 0.9013640928083764,        # MEG injection lb/MMscf
