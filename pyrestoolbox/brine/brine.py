@@ -442,7 +442,7 @@ BBL2CUFT = 5.614583333 # cuft in a bbl
 #CO2 Corrected Brine Density    Molar volume of dissolved CO2 estimated with Garcia (2001) equation, used with xCO2 calculated 
 #                               from Spycher & Pruess, and CO2-free brine density from Spivey et al to calculate insitu density
 #Pure Brine viscosity           Mao-Duan (2009) approach for pure brine viscosity
-#CO2 Corrected Brine Viscosity  Used approach from "Viscosity Models and Effects of Dissolved CO2", Islam-Carlson (2012)
+#CO2 Corrected Brine Viscosity  Calabrese et al. (2019) Eq. 25 T-dependent increment (supersedes Islam-Carlson 2012)
 #                               to adjust the pure brine viscosity for xCO2 calculated from Spycher & Pruess
 #===================================================================================================================
 
@@ -1123,7 +1123,7 @@ class CO2_Brine_Mixture():
             2. Brine Salt Correction:         Spivey et al. (modified)
             3. Pure Brine viscosity:          Mao-Duan (2009)
             4. CO2 Corrected Brine Density:   Garcia (2001)
-            5. CO2 Corrected Brine Viscosity: Islam-Carlson (2012)
+            5. CO2 Corrected Brine Viscosity: Calabrese et al. (2019) Eq. 25
             
             pBar: Pressure (Bar)
             degc: Temperature (deg C)
@@ -1239,10 +1239,12 @@ class CO2_Brine_Mixture():
             return MwB * (xNotCO2 + mRat * xCO2) / (vPhi * xCO2 + MwB * xNotCO2 / rhoBRnoCO2)
         
         # Correct CO2 free brine viscosity for dissolved CO2
-        # Using approach from "Viscosity Models and Effects of Dissolved CO2", Akand W. Islam and Eric S. Carlson (Jul 2012), Energy Fuels 2012, 26, 8, 5330�5336, https://doi.org/10.1021/ef3006228
+        # Calabrese, McBride-Wright, Maitland & Trusler (2019), JCED 64, 3831-3847, Eq. 25
+        # (274-449 K, to 100 MPa, salt-type and molality independent, m <= 6).
+        # Supersedes Islam-Carlson (2012), which overstates the slope 3.5x at 200 degF.
         def co2_vis_brine(cP_brine, xCO2):
             # Uses CO2 free brine viscosity (cP) and mole fraction CO2 in brine (xCO2), and returns cP
-            return cP_brine * (1 + 4.65 * xCO2**1.0134)
+            return cP_brine * np.exp(_CAL_E1 * np.exp(-_CAL_E2 * (tKel / _CAL_T0 - 1.0)) * xCO2)
     
         # Density and viscosity at specified pressure & temperature (No CO2)
         sg_brine, rhowtp = brine_denw(Mpa)                        # rhowtp is density of pure water
@@ -1326,9 +1328,17 @@ def make_pvtw_table(*args, **kwargs):
 # ============================================================================
 # Viscosity correction constants for dissolved gases
 # ============================================================================
-_IC_A_CO2 = 4.65       # Islam-Carlson (2012) CO2 coefficient
 _IC_A_H2S = 1.50       # Calibrated from Murphy & Gaines (1974)
 _IC_B = 1.0134         # Islam-Carlson exponent
+
+# Calabrese et al. (2019) Eq. 25 CO2 viscosity increment (JCED 64:3831):
+# ln(mu/mu_brine) = e1 * exp(-e2*(T_K/T0 - 1)) * x_CO2
+# 274-449 K, to 100 MPa, salt-type and molality independent (m <= 6).
+# Supersedes the T-independent Islam-Carlson form, which overstates the
+# slope 3.5x at 200 degF (adopted 2026-07-19).
+_CAL_E1 = 65.560
+_CAL_E2 = 2.468
+_CAL_T0 = 142.0        # K
 
 # Ostermann (1985) SPE 14211 CH4 plateau coefficients
 # mu_sat/mu_free = c0 + c1*T + c2*T^2  (T in degF)
@@ -1387,7 +1397,7 @@ class SoreideWhitson:
         - Water content of gas (stb/mmscf, lb/mmscf)
         - Gas solubility in water (sm3/sm3 or scf/stb) — total and per-gas
         - Gas-saturated brine density via Garcia (2001) Eq. 18 with Plyasunov V_phi
-        - Gas-saturated brine viscosity with per-gas corrections (Islam-Carlson, Ostermann, Murphy-Gaines)
+        - Gas-saturated brine viscosity with per-gas corrections (Calabrese CO2, Ostermann CH4, Murphy-Gaines H2S)
         - Brine FVF, compressibility, viscosibility
 
         Supports fresh and saline water (NaCl equivalent).
@@ -1834,7 +1844,8 @@ class SoreideWhitson:
                 continue
             gas_upper = gas_vle.upper()
             if gas_upper == 'CO2':
-                vis_factor *= (1.0 + _IC_A_CO2 * x_i ** _IC_B)
+                T_K = (degf - 32.0) / 1.8 + 273.15
+                vis_factor *= np.exp(_CAL_E1 * np.exp(-_CAL_E2 * (T_K / _CAL_T0 - 1.0)) * x_i)
             elif gas_upper == 'H2S':
                 vis_factor *= (1.0 + _IC_A_H2S * x_i ** _IC_B)
             elif gas_upper == 'CH4':
