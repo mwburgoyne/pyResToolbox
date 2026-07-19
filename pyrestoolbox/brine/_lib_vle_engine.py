@@ -1830,6 +1830,16 @@ class SWMultiComponentFlash:
                             val += calc_embedded_delta_kij(
                                 gas, T_K, self.salinity,
                                 params=EMBEDDED_SALINITY_PARAMS_DROPIN[gas])
+                        # sw_original gases without an embedded csw term (H2S,
+                        # H2) would otherwise get NO salting under 'embedded';
+                        # fall back to the proposed delta, matching the binary
+                        # path's 'embedded' routing.
+                        elif (self.salinity_method == 'embedded'
+                                and self.framework == 'sw_original'
+                                and self.salinity > 0
+                                and gas not in _SW_GASES_WITH_EMBEDDED_SALINITY
+                                and gas in EMBEDDED_SALINITY_PARAMS):
+                            val += calc_embedded_delta_kij(gas, T_K, self.salinity)
                     else:
                         val = get_kij_na(gas, T_K)
                 else:
@@ -2078,7 +2088,7 @@ class SWMultiComponentFlash:
         - 'explicit': Freshwater flash first, then post-solve Sechenov
           correction. Slight mass balance error for concentrated systems.
         - 'embedded': Use kij(csw) with embedded salinity (original S&W).
-          Only available for HC/CO2/N2. H2 falls back to gamma_phi.
+          sw_original embeds csw in kij for HC/CO2/N2; H2S and H2 use the proposed delta_kij fallback.
 
         Args:
             T_K: Temperature in Kelvin
@@ -2243,7 +2253,7 @@ def calc_gas_brine_equilibrium(
       Algebraically equivalent to gamma_phi for dilute systems.
 
     - 'embedded': Original S&W salinity in kij (Eqs 12-15). Available for
-      HC/CO2/N2. H2 falls back to gamma_phi.
+      HC/CO2/N2; H2S and H2 use the proposed delta_kij fallback.
 
     Args:
         salinity_wt_pct: Brine salinity in weight percent NaCl
