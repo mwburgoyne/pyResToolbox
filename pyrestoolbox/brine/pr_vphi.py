@@ -86,7 +86,7 @@ T_VOUCHED_MAX = 450.0       # ~350 degF; the only one of the three that is an
                             # the fitted shift stops being fitted.
 P_MAX = 100.0
 
-SUPPORTED = ('CH4', 'CO2', 'H2S', 'N2', 'H2', 'C2H6')
+SUPPORTED = ('CH4', 'CO2', 'H2S', 'N2', 'H2', 'C2H6', 'C3H8')
 
 # WATER ALPHA INSENSITIVITY, measured 2026-07-25 and worth knowing before
 # porting. The S&W framework uses `alpha_water_soreide` for the sw_original and
@@ -108,11 +108,19 @@ VSHIFT = {
     'N2':   -0.155288,
     'H2':   -0.177625,
     'C2H6': -0.073142,
+    # C3H8 added 2026-07-25. NOT fitted to a densimetric data set, because none
+    # exists for propane in water. Set from the only two direct 298 K
+    # determinations available, Moore (1982) 70.7 and Zhou & Battino (2001)
+    # 75.0 cm3/mol, which imply s = -0.074763 and -0.151164; the adopted value
+    # is their mean, giving V_phi = 72.85 at 298 K. Those two disagree by 6.1%,
+    # which is the honest uncertainty on this gas and is far wider than for any
+    # other. It replaces a fallback that sat BELOW both of them (66.99).
+    'C3H8': -0.112963,
 }
 
 # Gases whose shift rests on 298 K data alone, so their temperature behaviour is
 # the EOS's unaided prediction and is NOT calibrated. Reported, not hidden.
-UNCALIBRATED_IN_T = ('N2', 'H2', 'C2H6')
+UNCALIBRATED_IN_T = ('N2', 'H2', 'C2H6', 'C3H8')
 
 
 def _ab(species, T, m_nacl=0.0):

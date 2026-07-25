@@ -14,7 +14,10 @@ def test_vshift_values_pinned():
     """The shifts are load-bearing: refitting them requires regenerating the
     garcia_extension calibration (code/fit_pr_vshift.py) and updating both."""
     expected = {'CH4': -0.109632, 'CO2': -0.037913, 'H2S': -0.078975,
-                'N2': -0.155288, 'H2': -0.177625, 'C2H6': -0.073142}
+                'N2': -0.155288, 'H2': -0.177625, 'C2H6': -0.073142,
+                # C3H8 is not from that calibration: it is the mean of two
+                # direct 298 K determinations (see test below).
+                'C3H8': -0.112963}
     assert pr_vphi.VSHIFT == pytest.approx(expected, abs=1e-9)
 
 
@@ -78,8 +81,10 @@ def test_range_guards_raise(T, P):
 
 
 def test_unsupported_gas_raises():
+    # NC4H10 has no fitted shift and is absent from the component set.
+    # C3H8 gained a shift 2026-07-25 and is no longer unsupported.
     with pytest.raises(ValueError):
-        pr_vphi.V2_inf('C3H8', 350.0, 20.0)
+        pr_vphi.V2_inf('NC4H10', 350.0, 20.0)
 
 
 def test_water_alpha_choice_is_immaterial():
@@ -132,8 +137,10 @@ def test_vphi_route_falls_back_only_where_it_must():
     """
     from pyrestoolbox.brine import vphi_route as vr
 
-    for gas in ("C3H8", "NC4H10"):          # no fitted volume shift
-        assert vr.route_used(gas, 298.15, 20.0) == "plyasunov"
+    # NC4H10 alone has no fitted shift and is absent from the component set.
+    assert vr.route_used("NC4H10", 298.15, 20.0) == "plyasunov"
+    # C3H8 gained a shift 2026-07-25 and must no longer fall back.
+    assert vr.route_used("C3H8", 298.15, 20.0) == "pr"
     assert vr.route_used("CO2", 624.0, 30.0) == "plyasunov"    # past IF97 R1
     assert vr.route_used("CO2", 260.0, 20.0) == "plyasunov"    # below 273.15 K
     # No handover anywhere in between.
@@ -183,3 +190,22 @@ def test_sw_vphi_route_selectable_and_rejects_junk():
     assert abs(auto.bDen[0] - ply.bDen[0]) > 1e-9  # and really differs from old
     with pytest.raises(ValueError):
         brine.SoreideWhitson(**kw, vphi_route="nonsense")
+
+
+def test_c3h8_shift_sits_between_its_two_anchors():
+    """C3H8 is the weakest entry and must not drift silently.
+
+    Its shift is not fitted to a data set: no densimetry for propane in water
+    exists. It is the mean of the two direct 298 K determinations available,
+    Moore (1982) 70.7 and Zhou & Battino (2001) 75.0 cm3/mol, which disagree by
+    6.1%. That spread is the honest uncertainty on this gas.
+    """
+    from pyrestoolbox.brine import pr_vphi, vphi_route as vr
+
+    v = vr.V_phi("C3H8", 298.15, 20.0, "pr")
+    assert abs(v - 72.85) < 0.02, f"C3H8 V_phi moved to {v:.4f}"
+    assert 70.7 < v < 75.0, "must sit inside the bracket its anchors define"
+    # The superseded fallback sat below both anchors; that is the bar cleared.
+    assert vr.V_phi("C3H8", 298.15, 20.0, "plyasunov") < 70.7
+    # No temperature-resolved data at all, so it must stay declared.
+    assert "C3H8" in pr_vphi.UNCALIBRATED_IN_T
