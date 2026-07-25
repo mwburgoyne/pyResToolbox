@@ -1857,6 +1857,11 @@ class SoreideWhitson:
         rho_sc_brine_gcc = rho_sc_fw_gcc * salt_ratio_sc
 
         # ================================================================
+        # NaCl molality, for the literature-anchored salt shift on V_phi.
+        _wt = self.wt_pct
+        _m_nacl = (1000.0 * (_wt / 100.0) / (MWSAL * (1.0 - _wt / 100.0))
+                   if _wt < 100 else 0.0)
+
         # Step 3: Density correction via Garcia Eq. 18 + V_phi.
         # V_phi comes from the S&W modified-PR route with one volume shift per
         # gas, falling back to Plyasunov outside its calibration box or for
@@ -1872,7 +1877,8 @@ class SoreideWhitson:
                     continue
                 yi = x_i / self.x_total  # Fraction among dissolved gases
                 gas_ply = _VLE_TO_PLYASUNOV.get(gas_vle, gas_vle.upper())
-                vphi_eff += yi * _V_phi(gas_ply, tKel, Mpa, self.vphi_route)
+                vphi_eff += yi * _V_phi(gas_ply, tKel, Mpa, self.vphi_route,
+                                       _m_nacl)
                 mw_eff += yi * _plyasunov_gas_mw(gas_ply)
 
             # Garcia Eq. 18 in g/cm3, algebraically reformulated to remove the
@@ -1988,7 +1994,8 @@ class SoreideWhitson:
                     continue
                 yi = x_i / self.x_total
                 gas_ply = _VLE_TO_PLYASUNOV.get(gas_vle, gas_vle.upper())
-                vphi_eff_p1 += yi * _V_phi(gas_ply, tKel, Mpa_p1, self.vphi_route)
+                vphi_eff_p1 += yi * _V_phi(gas_ply, tKel, Mpa_p1, self.vphi_route,
+                                          _m_nacl)
 
             # Garcia Eq. 18 at P+1, same gas-free-brine solvent basis as Step 3.
             numerator_p1 = W + self.x_total * mw_eff
