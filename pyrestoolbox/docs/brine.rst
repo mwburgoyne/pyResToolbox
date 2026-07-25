@@ -450,11 +450,11 @@ Pure CO2 case at 5000 psia x 275 deg F and 3% NaCl brine:
     >>> from pyrestoolbox import brine
     >>> mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=1.0, metric=False)
     >>> mix.bDen  # Returns [Gas Saturated, Gas-Free Brine, Freshwater]
-    [0.973376988330695, 0.968164592979362, 0.9476497407774847]
+    [0.9731117228519672, 0.968164592979362, 0.9476497407774847]
     >>> mix.Rs  # Returns per-gas Rs dict (scf/stb)
-    {'CO2': 139.57908352590252}
+    {'CO2': 139.5790835259016}
     >>> mix.bw  # Returns [Gas Saturated, Gas-Free, Freshwater]
-    [1.096443890843725, 1.0543023174291248, 1.0542033190822462]
+    [1.096613263262556, 1.0543023174291248, 1.0542033190822462]
 
 Pure CH4 case (SG=0.554) at 5000 psia x 275 deg F and 3% NaCl brine:
 
@@ -464,7 +464,7 @@ Pure CH4 case (SG=0.554) at 5000 psia x 275 deg F and 3% NaCl brine:
     >>> mix.Rs
     {'CH4': 21.21234560600256}
     >>> mix.bDen
-    [0.9641136914617666, 0.968164592979362, 0.9476497407774847]
+    [0.9641391918061833, 0.968164592979362, 0.9476497407774847]
 
 Mixed gas (10% CO2, 5% H2S, SG=0.7) at 200 Bar x 80 degC and 10,000 ppm NaCl:
 

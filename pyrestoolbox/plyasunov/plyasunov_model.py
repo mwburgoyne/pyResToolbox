@@ -31,6 +31,7 @@ References:
 import functools
 import numpy as np
 from .water_properties import rho_w, kappa_T, TC_WATER, MW_WATER
+from .iapws_if97 import p_sat_if97
 
 # Constants
 R_CM3_MPA = 8.314462   # cm3*MPa/(mol*K)
@@ -336,6 +337,16 @@ def V2_inf(gas, T, P):
 @functools.lru_cache(maxsize=256)
 def _V2_inf_cached(gas_upper, T, P):
     """Cached implementation of V2_inf (gas name must be pre-normalized to upper)."""
+    # V2_inf is a property of a gas dissolved in LIQUID water, so reject states
+    # where the solvent is vapour. Region 1 itself extrapolates smoothly into
+    # the metastable liquid and is not bounded at the saturation line, so the
+    # check belongs here rather than in rho_w.
+    p_s = p_sat_if97(T)
+    if P < p_s:
+        raise ValueError(
+            f"Pressure {P} MPa is below the water saturation pressure "
+            f"{p_s:.4f} MPa at {T} K, so the solvent is vapour and the "
+            "infinite-dilution partial molar volume is undefined.")
     rho = rho_w(T, P)
     kt = kappa_T(T, P)
     a12 = A12_inf(gas_upper, T, rho)
