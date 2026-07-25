@@ -94,8 +94,43 @@ def _gamma_derivatives(pi, tau):
     return gp, gpp
 
 
+# IAPWS-IF97 Region 4 basic equation, Table 34 (saturation line)
+_REGION4_N = [
+    0.11670521452767e4, -0.72421316703206e6, -0.17073846940092e2,
+    0.12020824702470e5, -0.32325550322333e7, 0.14915108613530e2,
+    -0.48232657361591e4, 0.40511340542057e6, -0.23855557567849,
+    0.65017534844798e3,
+]
+
+
+def p_sat_if97(T):
+    """
+    Saturation pressure of water in MPa from IAPWS-IF97 Region 4.
+
+    Valid 273.15-647.096 K. Reproduces the IF97 Table 35 check values to
+    better than 2e-9 relative.
+    """
+    n = _REGION4_N
+    theta = T + n[8] / (T - n[9])
+    A = theta * theta + n[0] * theta + n[1]
+    B = n[2] * theta * theta + n[3] * theta + n[4]
+    C = n[5] * theta * theta + n[6] * theta + n[7]
+    return (2.0 * C / (-B + (B * B - 4.0 * A * C) ** 0.5)) ** 4
+
+
 def _check_region1(T, P):
-    """Validate that T and P are within IAPWS-IF97 Region 1 bounds."""
+    """
+    Validate that T and P are within IAPWS-IF97 Region 1 bounds.
+
+    Region 1 is compressed liquid: 273.15-623.15 K, bounded below by the
+    saturation line and above by 100 MPa.
+
+    The saturation line is NOT enforced here. Region 1 extrapolates smoothly
+    into the metastable liquid, and the brine models rely on that to obtain an
+    atmospheric-reference density at reservoir temperature. The check that does
+    matter - V2inf is meaningless when the solvent is vapour - is applied in
+    plyasunov_model.V2_inf via p_sat_if97.
+    """
     if T < 273.15 or T > 623.15:
         raise ValueError(f"Temperature {T} K is outside IAPWS-IF97 Region 1 bounds (273.15-623.15 K)")
     if P <= 0 or P > 100:

@@ -1229,14 +1229,21 @@ class CO2_Brine_Mixture():
         
         # -- Correcting brine density for dissolved CO2, JE Garcia, LBNL Report# 49023, Oct 2011, "Density of Aqueous Solutions of CO2"
         def garciaDensity(rhoBRnoCO2, tKel, pBar, ppm, xCO2, MwB, MwG):
-            # Algebraic reformulation of Garcia Eq 18: original form
-            #     (1 + mRat*xRat) / (vPhi*xRat/MwB + 1/rhoBRnoCO2) with xRat = xCO2/(1-xCO2)
-            # has a singularity at xCO2 -> 1. Multiplying numerator and denominator by
-            # (1-xCO2)*MwB removes xRat entirely and gives the same result.
-            xNotCO2 = 1.0 - xCO2                         #--Brine (H20+Salt) Mole Fraction
-            mRat = MwG / MwB                             #--Mole Weight Ratio  , Gas/Brine
+            # Garcia Eq 18 written per kg of water, which removes both the
+            # xCO2 -> 1 singularity of the original form and the mole-basis
+            # mismatch it used to carry: xCO2 here is Spycher-Pruess on the
+            # fully-ionised basis (H2O + Na+ + Cl-) while MwB is the paired-NaCl
+            # brine mole weight, so xNotCO2*MwB overstated the solvent mass by
+            # 8% at 5 molal and understated the CO2 densification to match.
+            #
+            # V_phi is defined against the whole gas-free brine, so:
+            #     rho = (Wb + mCO2*MwG) / (Wb/rhoBRnoCO2 + mCO2*vPhi)
+            # with Wb the gas-free brine mass per kg of water and mCO2 the CO2
+            # molality recovered from the ionised-basis mole fraction.
             vPhi = partMolVol(tKel)                      #--Apparent Molar Volume of Dissolved CO2
-            return MwB * (xNotCO2 + mRat * xCO2) / (vPhi * xCO2 + MwB * xNotCO2 / rhoBRnoCO2)
+            mCO2 = xCO2 * (CONMOLA + 2 * m) / (1.0 - xCO2)   #--gram mol CO2 / kg water
+            Wb = 1000.0 + m * MWSAL                          #--gas-free brine mass per kg water, g
+            return (Wb + mCO2 * MwG) / (Wb / rhoBRnoCO2 + mCO2 * vPhi)
         
         # Correct CO2 free brine viscosity for dissolved CO2
         # Calabrese, McBride-Wright, Maitland & Trusler (2019), JCED 64, 3831-3847, Eq. 25
@@ -1328,7 +1335,15 @@ def make_pvtw_table(*args, **kwargs):
 # ============================================================================
 # Viscosity correction constants for dissolved gases
 # ============================================================================
-_IC_A_H2S = 1.50       # Calibrated from Murphy & Gaines (1974)
+# H2S: Murphy & Gaines (1974) Table IV, DOI 10.1021/je60063a015, re-based
+# 2026-07-25 onto the solubility source THAT PAPER USED, Burgess & Germann
+# (1969) AIChE J 15:272. Murphy & Gaines report viscosity ratios but no mole
+# fractions; taking x_H2S from Soreide-Whitson instead put it 4.5 to 9.2% high
+# against Burgess & Germann, and since a scales as 1/x it biased the coefficient
+# low by the same amount. Implied coefficients on the correct basis are 2.31,
+# 1.54, 1.98, 1.31 and 0.27; the adopted value is the mean of the four below
+# 35 degC. Was 1.64 (S&W basis), and 1.50 before the primary source was read.
+_IC_A_H2S = 1.79       # Murphy & Gaines Table IV on Burgess & Germann solubility
 _IC_B = 1.0134         # Islam-Carlson exponent
 
 # Calabrese et al. (2019) Eq. 25 CO2 viscosity increment (JCED 64:3831):
@@ -1343,16 +1358,28 @@ _CAL_T0 = 142.0        # K
 # Ostermann (1985) SPE 14211 CH4 plateau coefficients
 # mu_sat/mu_free = c0 + c1*T + c2*T^2  (T in degF)
 # NOTE: SPE 14211 prints c2 as 1.0933e-5 (typo); correct is 1.0933e-6
-_OST_C0 = 1.109
-_OST_C1 = -5.98e-4
-_OST_C2 = 1.0933e-6
-
-# Calabrese-form sub-plateau ramp for CH4: ln(ratio) = e1*exp(-e2*(T_K/142-1))*x,
-# fitted to the Ostermann plateau ratios via S&W x_CH4 at 2000 psia (slope
-# residuals <=3.4%), capped at the measured plateau. Replaces the previous
-# on/off application below ~2000 psi CH4 partial pressure.
-_CAL_CH4_E1 = 93.6918
-_CAL_CH4_E2 = 0.957408
+# CH4 dissolved-gas viscosity: unified Arrhenius x Langmuir, fitted to the FULL
+# Ostermann SPE 14211 dataset (Tables 1a-1c, 23 measurements at 100/150/250 degF
+# and 500-7000 psi):
+#
+#     mu_sat/mu_free = 1 + _CH4_A * exp(_CH4_B / T_K) * x / (_CH4_K + x)
+#
+# One equation, three parameters, no cap. Arrhenius in T (activated flow; the
+# hydration structure carrying the excess is destroyed thermally, B = 1240 K =
+# 10.3 kJ/mol, about half a water hydrogen bond) and Langmuir in x (finite
+# structurable capacity). Linear in x as x -> 0 as the dilute limit requires,
+# and saturating naturally so no min() is needed.
+#
+# Supersedes a four-parameter construction (linear-in-x ramp spliced to a
+# temperature-only plateau by min()) built from the paper's three SUMMARY
+# plateau values. Reading the primary tables overturned its two premises: the
+# measured plateau is not flat (it drifts up 1.0-1.6 pp from 2000 to 7000 psi),
+# and Rsw is tabulated so x need not come from an EOS. Fit quality on the 23
+# points: this form 0.723 pp RMS with 3 parameters, the previous capped ramp
+# 0.713 pp with 4, an unsaturated linear form 1.146 pp with 2.
+_CH4_A = 1.71739196e-03
+_CH4_B = 1239.77535        # K
+_CH4_K = 1.52860547e-03    # half-saturation mole fraction
 
 # HC component molecular weights for SG-based splitting
 _MW_C1 = 16.043
@@ -1385,7 +1412,10 @@ _SW_GAS_MW = {
 }
 
 # Plyasunov model (internal submodule)
-from pyrestoolbox.plyasunov import V_phi as _plyasunov_V_phi, gas_mw as _plyasunov_gas_mw
+from pyrestoolbox.plyasunov import gas_mw as _plyasunov_gas_mw
+from pyrestoolbox.brine.vphi_route import (V_phi as _V_phi,
+                                            DEFAULT_ROUTE as _VPHI_ROUTE,
+                                            ROUTES as _VPHI_ROUTES)
 
 # VLE engine (local copy in brine package)
 from pyrestoolbox.brine._lib_vle_engine import calc_gas_brine_equilibrium as _calc_gas_brine_equilibrium
@@ -1403,7 +1433,10 @@ class SoreideWhitson:
         - Mole fraction of vaporised water in gas phase
         - Water content of gas (stb/mmscf, lb/mmscf)
         - Gas solubility in water (sm3/sm3 or scf/stb) — total and per-gas
-        - Gas-saturated brine density via Garcia (2001) Eq. 18 with Plyasunov V_phi
+        - Gas-saturated brine density via Garcia (2001) Eq. 18. V_phi comes from
+          the S&W modified-PR route by default (vphi_route='auto'), falling back
+          to Plyasunov where PR is not calibrated; 'plyasunov' forces the old
+          default and reproduces results from before 2026-07-25.
         - Gas-saturated brine viscosity with per-gas corrections (Calabrese CO2, Ostermann CH4, Murphy-Gaines H2S)
         - Brine FVF, compressibility, viscosibility
 
@@ -1483,7 +1516,17 @@ class SoreideWhitson:
     def __init__(self, pres=None, temp=None, ppm=None, y_CO2=0, y_H2S=0, y_N2=0, y_H2=0,
                  sg=0.65, metric=False, cw_sat=False,
                  framework='proposed', salinity_method='gamma_phi',
+                 vphi_route=_VPHI_ROUTE,
                  *, p=None, degf=None, wt=None):
+        # V_phi source for the Garcia density step. 'auto' (default) is the S&W
+        # modified-PR route with one volume shift per gas, falling back to
+        # Plyasunov where PR is not calibrated; 'plyasunov' forces the pre
+        # 2026-07-25 default. See brine/vphi_route.py.
+        if vphi_route not in _VPHI_ROUTES:
+            raise ValueError(
+                f"vphi_route must be one of {_VPHI_ROUTES}, got {vphi_route!r}")
+        self.vphi_route = vphi_route
+
         # Resolve parameter aliases (p/degf/wt -> pres/temp/ppm)
         if pres is None and p is not None:
             pres = p
@@ -1814,7 +1857,11 @@ class SoreideWhitson:
         rho_sc_brine_gcc = rho_sc_fw_gcc * salt_ratio_sc
 
         # ================================================================
-        # Step 3: Density correction via Garcia Eq. 18 + Plyasunov V_phi
+        # Step 3: Density correction via Garcia Eq. 18 + V_phi.
+        # V_phi comes from the S&W modified-PR route with one volume shift per
+        # gas, falling back to Plyasunov outside its calibration box or for
+        # C3H8/NC4H10. See brine/vphi_route.py for why and for the size of the
+        # step at the boundary.
         # ================================================================
         if self.x_total > 0:
             # Compute mole-fraction-weighted effective V_phi and MW
@@ -1825,17 +1872,25 @@ class SoreideWhitson:
                     continue
                 yi = x_i / self.x_total  # Fraction among dissolved gases
                 gas_ply = _VLE_TO_PLYASUNOV.get(gas_vle, gas_vle.upper())
-                vphi_eff += yi * _plyasunov_V_phi(gas_ply, tKel, Mpa)
+                vphi_eff += yi * _V_phi(gas_ply, tKel, Mpa, self.vphi_route)
                 mw_eff += yi * _plyasunov_gas_mw(gas_ply)
 
             # Garcia Eq. 18 in g/cm3, algebraically reformulated to remove the
             # x1 -> 0 singularity. Multiplying top/bot of
             #     (1 + x2*M2/(M1*x1)) / (x2*V_phi/(M1*x1) + 1/rho1)
             # by M1*x1 gives the equivalent, non-singular form below.
-            x1 = 1.0 - self.x_total
-            M1 = MWWAT
-            numerator = M1 * x1 + self.x_total * mw_eff
-            denominator = self.x_total * vphi_eff + M1 * x1 / rho_brine_gcc
+            #
+            # SOLVENT BASIS: V_phi is defined against the whole gas-free brine
+            # (V_phi = (V_solution - V_brine)/n_gas), so x2*V_phi is added to
+            # the brine volume, not to the water-only part of it. The flash x
+            # is salt-free, so (1-x2) moles of water carry a brine mass of
+            # W = (1-x2)*MWWAT/(1-S), S being the NaCl weight fraction. Using
+            # water mass alone inflates the dissolved-gas density effect by
+            # 1/(1-S): +5.6% at 1 mol/kg, +29% at 5 mol/kg NaCl.
+            S_wt = wt / 100.0
+            W = (1.0 - self.x_total) * MWWAT / (1.0 - S_wt)
+            numerator = W + self.x_total * mw_eff
+            denominator = self.x_total * vphi_eff + W / rho_brine_gcc
             rho_gas_brine_gcc = numerator / denominator
         else:
             rho_gas_brine_gcc = rho_brine_gcc
@@ -1857,9 +1912,7 @@ class SoreideWhitson:
                 vis_factor *= (1.0 + _IC_A_H2S * x_i ** _IC_B)
             elif gas_upper == 'CH4':
                 T_K = (degf - 32.0) / 1.8 + 273.15
-                ramp = np.exp(_CAL_CH4_E1 * np.exp(-_CAL_CH4_E2 * (T_K / _CAL_T0 - 1.0)) * x_i)
-                plateau = max(_OST_C0 + _OST_C1 * degf + _OST_C2 * degf ** 2, 1.0)
-                vis_factor *= min(ramp, plateau)
+                vis_factor *= 1.0 + _CH4_A * np.exp(_CH4_B / T_K) * x_i / (_CH4_K + x_i)
             # C2H6, N2, H2, C3H8, nC4H10: no correction (factor *= 1.0)
 
         vis_gas_brine = vis_base_cP * vis_factor
@@ -1935,12 +1988,11 @@ class SoreideWhitson:
                     continue
                 yi = x_i / self.x_total
                 gas_ply = _VLE_TO_PLYASUNOV.get(gas_vle, gas_vle.upper())
-                vphi_eff_p1 += yi * _plyasunov_V_phi(gas_ply, tKel, Mpa_p1)
+                vphi_eff_p1 += yi * _V_phi(gas_ply, tKel, Mpa_p1, self.vphi_route)
 
-            # Garcia Eq. 18 at P+1, same algebraically reformulated (non-singular)
-            # form as Step 3 — multiply top/bot through by M1*x1.
-            numerator_p1 = MWWAT * x1 + self.x_total * mw_eff
-            denom_p1 = self.x_total * vphi_eff_p1 + MWWAT * x1 / rho_brine_p1_gcc
+            # Garcia Eq. 18 at P+1, same gas-free-brine solvent basis as Step 3.
+            numerator_p1 = W + self.x_total * mw_eff
+            denom_p1 = self.x_total * vphi_eff_p1 + W / rho_brine_p1_gcc
             rho_p1_gcc = numerator_p1 / denom_p1
         else:
             rho_p1_gcc = rho_brine_p1_gcc

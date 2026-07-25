@@ -432,3 +432,50 @@ if __name__ == '__main__':
     print(f"Results: {passed} passed, {failed} failed out of {passed + failed}")
     print("=" * 70)
     sys.exit(1 if failed > 0 else 0)
+
+
+def test_dissolved_gas_viscosity_coefficients():
+    """Pin the dissolved-gas viscosity corrections to their calibration sources.
+
+    These had no value-level coverage before 2026-07-25: the suite only asserted
+    that gas-laden viscosity was positive and larger than gas-free.
+    """
+    from pyrestoolbox.brine.brine import (
+        _CAL_E1, _CAL_E2, _CAL_T0, _CH4_A, _CH4_B, _CH4_K, _IC_A_H2S, _IC_B,
+    )
+    import numpy as np
+
+    # Calabrese (2019) Eq. 25 for CO2: the headline claim is that the
+    # temperature-independent Islam-Carlson slope of 4.65 overstates it by
+    # 1.7x at 122 degF, 3.5x at 200 degF and 9.4x at 302 degF.
+    for degf, expected in ((122, 1.7), (200, 3.5), (302, 9.4)):
+        T_K = (degf - 32.0) / 1.8 + 273.15
+        slope = _CAL_E1 * np.exp(-_CAL_E2 * (T_K / _CAL_T0 - 1.0))
+        assert abs(4.65 / slope - expected) < 0.15
+
+    # CH4: unified Arrhenius x Langmuir fitted to all 23 SPE 14211 measurements
+    # (Tables 1a-1c). Spot-check against three of the measured points.
+    def ch4(x, degf):
+        T_K = (degf - 32.0) / 1.8 + 273.15
+        return 1.0 + _CH4_A * np.exp(_CH4_B / T_K) * x / (_CH4_K + x)
+
+    for degf, rsw, meas in ((100, 14.0, 1.05862), (150, 21.5, 1.04517),
+                            (250, 30.5, 1.02653)):
+        n_gas = rsw / 379.48
+        x = n_gas / (n_gas + 350.15 / 18.015)
+        assert abs(ch4(x, degf) - meas) < 0.01
+
+    # Saturates in x and decays in T, with a linear dilute limit
+    xs = [ch4(x, 150) for x in (1e-4, 1e-3, 1e-2, 1e-1)]
+    assert all(a < b for a, b in zip(xs, xs[1:]))
+    ts = [ch4(0.003, t) for t in range(60, 520, 20)]
+    assert all(a > b for a, b in zip(ts, ts[1:])) and ts[-1] > 1.0
+    assert abs((ch4(2e-9, 150) - 1) / (ch4(1e-9, 150) - 1) - 2.0) < 1e-4
+
+    # H2S, our own fit to Murphy & Gaines
+    # Re-pinned 2026-07-25 (was 1.046941 at a_H2S = 1.64) when x_H2S was
+    # re-based from S&W onto Burgess & Germann, the solubility source Murphy
+    # & Gaines themselves used.
+    assert abs((1.0 + _IC_A_H2S * 0.03 ** _IC_B) - 1.051235) < 1e-5
+
+    assert abs(_CH4_K - 1.52860547e-03) < 1e-10
