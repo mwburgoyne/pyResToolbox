@@ -519,11 +519,11 @@ def test_doc_sw_pure_co2_field():
     assert isinstance(mix.bDen, list) and len(mix.bDen) == 3
     # Re-pinned 2026-07-25 (was 0.9732266498107526): default V_phi route moved
     # from Plyasunov to S&W modified PR + VSHIFT. Shift is -0.012%.
-    assert abs(mix.bDen[0] - 0.9731117228519672) / 0.9731117228519672 < RTOL
+    assert abs(mix.bDen[0] - 0.973398983496999) / 0.973398983496999 < RTOL
     assert abs(mix.Rs['CO2'] - 139.5790835259016) / 139.5790835259016 < RTOL
     # Re-pinned 2026-07-25 (was 1.096613263262556): default V_phi route change,
     # +0.012% - bw is the reciprocal of the same density shift above.
-    assert abs(mix.bw[0] - 1.0967427760660202) / 1.0967427760660202 < RTOL
+    assert abs(mix.bw[0] - 1.0964191153239935) / 1.0964191153239935 < RTOL
 
 def test_doc_sw_pure_ch4_field():
     """brine.rst: SoreideWhitson pure CH4 field units"""
@@ -537,7 +537,7 @@ def test_doc_sw_mixed_gas_metric():
     assert abs(mix.Rs_total - 8.5106741070893) / 8.5106741070893 < RTOL
     # Re-pinned 2026-07-25 (was 0.9855934589486185): default V_phi route change.
     # Shift is -0.020%; this case carries H2S, where the two routes differ most.
-    assert abs(mix.bDen[0] - 0.9853936076541221) / 0.9853936076541221 < RTOL
+    assert abs(mix.bDen[0] - 0.9854282627804675) / 0.9854282627804675 < RTOL
     assert 'CO2' in mix.gas_comp and 'H2S' in mix.gas_comp and 'CH4' in mix.gas_comp
 
 def test_doc_sw_co2_freshwater_cw_sat():

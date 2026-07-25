@@ -41,6 +41,29 @@ ROUTES = ("auto", "pr", "plyasunov")
 DEFAULT_ROUTE = "auto"
 
 
+# ---------------------------------------------------------------- salt effect
+# ADOPTED 2026-07-25. V_phi falls with salinity. This term is fixed ENTIRELY
+# from direct measurement, with no parameter fitted to any brine-density data:
+# Tiepel & Gubbins (1972) dilatometry, 15 apparent molar volumes over five gases
+# and four electrolytes, every one negative, fitted as
+#     dV = -a*m/(1 + b*m),  a = 0.5914, b = 0.0416   [cm3/mol, m in mol/kg]
+# giving -0.57 at 1 molal and -2.45 at 5 molal. Enns, O'Sullivan & Smith and
+# Heusler & Gaiser agree on sign and magnitude. It is the conservative end of
+# the available range, so it under-corrects rather than over-corrects.
+#
+# The EOS's own salinity response (via the S&W water alpha and kij) is only
+# -0.03 to -0.07 cm3/mol per molal, an order of magnitude too small and linear
+# where the measurements saturate. It is therefore not used, and this term
+# carries the whole effect, so there is no double counting.
+SALT_A, SALT_B = 0.5914, 0.0416
+
+
+def salt_shift(m_nacl: float) -> float:
+    """Change in V_phi from dissolved salt, cm3/mol. Gas-generic, always <= 0."""
+    m = max(float(m_nacl), 0.0)
+    return -SALT_A * m / (1.0 + SALT_B * m)
+
+
 def pr_applicable(gas: str, T: float, P: float) -> bool:
     """True if the PR + VSHIFT route is calibrated for this gas and state."""
     try:
@@ -58,7 +81,7 @@ def route_used(gas: str, T: float, P: float, route: str = DEFAULT_ROUTE) -> str:
 
 
 def V_phi(gas: str, T: float, P: float, route: str = DEFAULT_ROUTE,
-          m_nacl: float = 0.0) -> float:
+          m_nacl: float = 0.0, salt_effect: bool = True) -> float:
     """Dissolved-gas apparent molar volume at infinite dilution, cm3/mol.
 
     Args:
@@ -67,15 +90,17 @@ def V_phi(gas: str, T: float, P: float, route: str = DEFAULT_ROUTE,
         P: pressure, MPa
         route: 'auto' uses PR where calibrated and Plyasunov elsewhere; 'pr'
             forces PR and raises outside its box; 'plyasunov' forces A12inf.
-        m_nacl: NaCl molality, passed to the PR route only, where it enters the
-            S&W water alpha and kij. There is no salinity term on the volume
-            shift itself; leave at 0 for the calibrated behaviour.
+        m_nacl: NaCl molality. Applies the literature-anchored salt shift; it is
+            NOT passed to the EOS, whose own salinity response is far too small.
+        salt_effect: set False to recover the pre-2026-07-25 freshwater V_phi.
     """
     if route not in ROUTES:
         raise ValueError(f"route must be one of {ROUTES}, got {route!r}")
+    dV = salt_shift(m_nacl) if salt_effect else 0.0
     if route == "plyasunov":
-        return float(_plyasunov_V_phi(gas, T, P))
+        return float(_plyasunov_V_phi(gas, T, P)) + dV
     if route == "pr":
-        return float(_pr.V2_inf(gas, T, P, m_nacl))
-    return (float(_pr.V2_inf(gas, T, P, m_nacl)) if pr_applicable(gas, T, P)
+        return float(_pr.V2_inf(gas, T, P)) + dV
+    base = (float(_pr.V2_inf(gas, T, P)) if pr_applicable(gas, T, P)
             else float(_plyasunov_V_phi(gas, T, P)))
+    return base + dV

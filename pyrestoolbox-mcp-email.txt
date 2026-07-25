@@ -1,0 +1,39 @@
+Subject: pyrestoolbox MCP server - test deployment package
+
+Hi <name>,
+
+Zip attached with the pyrestoolbox MCP server for a deployment test. It is self contained: unzip and build from the extracted folder, nothing else needed. DEPLOYMENT.md inside is the one pager.
+
+Quick start:
+
+    docker build -t pyrestoolbox-mcp .
+    docker run -p 8000:8000 pyrestoolbox-mcp
+
+Smoke test once it's up:
+
+    curl -s -X POST http://localhost:8000/mcp \
+      -H 'Content-Type: application/json' \
+      -H 'Accept: application/json, text/event-stream' \
+      -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
+
+A JSON-RPC result naming the server "pyrestoolbox" means it is alive.
+
+Assumptions we have made, worth checking against your environment:
+
+- The build host can reach Docker Hub (python:3.11-slim) and PyPI. The calculation library is pinned at pyrestoolbox==3.7.0 via a build arg. If you build through an internal mirror, repoint the FROM line and pip index as usual.
+- The platform supports remote MCP servers over streamable HTTP. The server listens on port 8000 and serves the MCP endpoint at /mcp. It is stateless, so replicas can sit behind a load balancer without session affinity.
+- Auth is the gateway's job. The server does none itself and expects to live behind your standard API gateway inside the network.
+- Runtime is pure computation: no outbound calls, no disk writes, no state between requests. Roughly 500 MB resident (numpy/scipy stack), CPU bound. One small container is enough to start.
+- Licence is GPL-3.0. Internal use is not distribution so no obligations are triggered, and the source is public in any case.
+
+One caveat: we have verified the streamable HTTP transport live with curl running the process directly, but the Docker image itself has not been built on our side yet (daemon issue on my box). Yours would be the first build; if it trips on anything, send me the log.
+
+Open questions to resolve:
+
+1. Does the platform support remote MCP (streamable HTTP)? If it is OpenAPI only, we can wrap the tool layer in FastAPI in about a day.
+2. What auth fronting will sit ahead of it, and does the server need to participate (headers, tokens) or is it transparent to the container?
+3. What is the registration process and URL convention for adding an MCP endpoint?
+4. Who owns version bumps? The library version is pinned in the image, so someone rebuilds deliberately when we publish a release.
+
+Cheers,
+Mark
