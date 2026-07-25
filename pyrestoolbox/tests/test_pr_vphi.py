@@ -17,7 +17,9 @@ def test_vshift_values_pinned():
                 'N2': -0.155288, 'H2': -0.177625, 'C2H6': -0.073142,
                 # C3H8 is not from that calibration: it is the mean of two
                 # direct 298 K determinations (see test below).
-                'C3H8': -0.112963}
+                'C3H8': -0.112963,
+                # NC4H10 from Moore (1982) 76.6; the only positive shift.
+                'NC4H10': +0.110924}
     assert pr_vphi.VSHIFT == pytest.approx(expected, abs=1e-9)
 
 
@@ -81,10 +83,9 @@ def test_range_guards_raise(T, P):
 
 
 def test_unsupported_gas_raises():
-    # NC4H10 has no fitted shift and is absent from the component set.
-    # C3H8 gained a shift 2026-07-25 and is no longer unsupported.
+    # C3H8 and NC4H10 both gained shifts 2026-07-25 and are supported now.
     with pytest.raises(ValueError):
-        pr_vphi.V2_inf('NC4H10', 350.0, 20.0)
+        pr_vphi.V2_inf('C5H12', 350.0, 20.0)
 
 
 def test_water_alpha_choice_is_immaterial():
@@ -138,7 +139,7 @@ def test_vphi_route_falls_back_only_where_it_must():
     from pyrestoolbox.brine import vphi_route as vr
 
     # NC4H10 alone has no fitted shift and is absent from the component set.
-    assert vr.route_used("NC4H10", 298.15, 20.0) == "plyasunov"
+    assert vr.route_used("C5H12", 298.15, 20.0) == "plyasunov"
     # C3H8 gained a shift 2026-07-25 and must no longer fall back.
     assert vr.route_used("C3H8", 298.15, 20.0) == "pr"
     assert vr.route_used("CO2", 624.0, 30.0) == "plyasunov"    # past IF97 R1
@@ -209,3 +210,19 @@ def test_c3h8_shift_sits_between_its_two_anchors():
     assert vr.V_phi("C3H8", 298.15, 20.0, "plyasunov") < 70.7
     # No temperature-resolved data at all, so it must stay declared.
     assert "C3H8" in pr_vphi.UNCALIBRATED_IN_T
+
+
+def test_nc4h10_reproduces_moores_measurement():
+    """Butane is the only gas needing a POSITIVE shift, and its evidence is thin.
+
+    Moore (1982) Table I gives 76.6 +/- 0.1 cm3/mol from two runs, against his
+    own stated overall imprecision of +/-1.5. It also breaks his own homologous
+    series: his CH2 increments run +18.4, +17.8, then +5.9. It is adopted
+    because it is the only direct measurement, not because it is well founded.
+    """
+    from pyrestoolbox.brine import pr_vphi, vphi_route as vr
+
+    assert abs(vr.V_phi("NC4H10", 298.15, 20.0, "pr") - 76.6) < 0.02
+    assert pr_vphi.VSHIFT["NC4H10"] > 0
+    assert all(v < 0 for g, v in pr_vphi.VSHIFT.items() if g != "NC4H10")
+    assert "NC4H10" in pr_vphi.UNCALIBRATED_IN_T

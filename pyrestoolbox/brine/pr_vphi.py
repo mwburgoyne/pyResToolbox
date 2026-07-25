@@ -86,7 +86,12 @@ T_VOUCHED_MAX = 450.0       # ~350 degF; the only one of the three that is an
                             # the fitted shift stops being fitted.
 P_MAX = 100.0
 
-SUPPORTED = ('CH4', 'CO2', 'H2S', 'N2', 'H2', 'C2H6', 'C3H8')
+SUPPORTED = ('CH4', 'CO2', 'H2S', 'N2', 'H2', 'C2H6', 'C3H8', 'NC4H10')
+
+# This library spells butane 'NC4H10'; the S&W component tables spell it
+# 'nC4H10'. That mismatch is why butane looked absent from the component
+# set until 2026-07-25 - it was there all along under the other spelling.
+_SW_NAME = {'NC4H10': 'nC4H10'}
 
 # WATER ALPHA INSENSITIVITY, measured 2026-07-25 and worth knowing before
 # porting. The S&W framework uses `alpha_water_soreide` for the sw_original and
@@ -116,16 +121,24 @@ VSHIFT = {
     # which is the honest uncertainty on this gas and is far wider than for any
     # other. It replaces a fallback that sat BELOW both of them (66.99).
     'C3H8': -0.112963,
+    # NC4H10 added 2026-07-25 from Moore (1982) Table I, 76.6 +/- 0.1 cm3/mol
+    # (2 runs; his stated overall imprecision is +/-1.5). Two oddities that
+    # should not be smoothed over: the shift is POSITIVE, alone among the
+    # eight, and it breaks Moore's own homologous series (his CH2 increments
+    # run +18.4, +17.8, then +5.9). Adopted because it is the only direct
+    # measurement of this quantity, but it is a single lab and two runs, and
+    # C4 sits outside the five-gas validated scope.
+    'NC4H10': +0.110924,
 }
 
 # Gases whose shift rests on 298 K data alone, so their temperature behaviour is
 # the EOS's unaided prediction and is NOT calibrated. Reported, not hidden.
-UNCALIBRATED_IN_T = ('N2', 'H2', 'C2H6', 'C3H8')
+UNCALIBRATED_IN_T = ('N2', 'H2', 'C2H6', 'C3H8', 'NC4H10')
 
 
 def _ab(species, T, m_nacl=0.0):
     """PR a(T) and b for one species, cm6.MPa/mol2 and cm3/mol."""
-    c = _SW.COMPONENTS[species]
+    c = _SW.COMPONENTS[_SW_NAME.get(species, species)]
     Pc = c.Pc / 1e6
     Tr = T / c.Tc
     if species == 'H2O':
@@ -196,7 +209,7 @@ def _check(gas, T, P):
 def V2_inf_raw(gas, T, P, m_nacl=0.0):
     """Unshifted V2inf from the exact EOS relation, cm3/mol. No range guard."""
     V = v_water_liquid(T, P, m_nacl)
-    kij = _SW.get_kij_aq(gas, T, m_nacl)
+    kij = _SW.get_kij_aq(_SW_NAME.get(gas, gas), T, m_nacl)
     # dP/dn2 at fixed T, V, n1: one-sided, because n2 = 0 is the boundary
     h = 1e-7
     dPdn2 = (_P_mix(T, V, 1.0, h, gas, kij, m_nacl)
