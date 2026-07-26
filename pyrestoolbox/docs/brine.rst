@@ -42,10 +42,10 @@ pressure raises ``ValueError``.
      - Spivey et al. (modified), per "Petroleum Reservoir Fluid Property Correlations", (McCain, Spivey & Lenn: Chapter 4)
    * - CO2 Corrected Brine Density
      - Molar volume of dissolved CO2 estimated with Garcia (2001) equation, used with xCO2 calculated from Spycher & Pruess, and CO2-free brine density to calculate insitu density
-   * - Pure Brine viscosity
-     - Mao-Duan (2009).
+   * - Gas-free Brine viscosity
+     - IAPWS-2008 water (Huber et al. 2009) x ion-additive Jones-Dole salt ratio (Appelo & Parkhurst, as implemented in PHREEQC) x Kestin (1981) measured pressure factor. **Changed in 3.7.3**; Mao-Duan (2009) remains available as ``route='mao_duan'``. See the ``brine_viscosity`` section below.
    * - CO2 Corrected Brine Viscosity
-     - "Viscosity Models and Effects of Dissolved CO2", Islam-Carlson (2012) to adjust the pure brine viscosity for xCO2 calculated from Spycher & Pruess.
+     - Calabrese et al. (2019) Eq. 25, a temperature-dependent increment fitted to 415 measured brine points. **Changed in 3.7.2**, superseding Islam-Carlson (2012), which carries no temperature dependence and overstates the effect by 3.5x at 366 K and 9.4x at 423 K.
      
 
 pyrestoolbox.brine.brine_props
@@ -311,12 +311,120 @@ Examples:
     >>> result['visw_ref']
     0.308131761431705
 
+pyrestoolbox.brine.brine_viscosity
+======================
+
+::
+
+    brine_viscosity(T_K, P_MPa, composition=None, salts=None, m=None, S=None, route=None, pressure_term=True) -> float
+
+Gas-free brine viscosity in mPa s (equivalently cP). New in 3.7.3, and now the
+baseline used internally by ``brine_props`` and ``SoreideWhitson``.
+
+::
+
+    mu = mu_water(T, P) x salt_ratio(T, ions) x pressure_factor(T, P, I)
+
+**MULTI-SALT.** The salt ratio is additive over ions rather than fitted to one
+salt, so any combination of the parameterised ions can be supplied. Exactly one
+salinity input is required, and **a salinity given with no species named means
+NaCl**, matching the density side:
+
+.. code-block:: python
+
+    from pyrestoolbox import brine
+
+    brine.brine_viscosity(373.15, 30.0, m=3.0)                      # 3 molal NaCl
+    brine.brine_viscosity(373.15, 30.0, S=0.1492)                    # weight fraction NaCl
+    brine.brine_viscosity(373.15, 30.0, salts={'NaCl': 2.0, 'CaCl2': 1.0})
+    brine.brine_viscosity(373.15, 30.0, composition={'Na+': 3.0, 'Cl-': 3.0})
+
+    brine.salt_ratio(373.15, 30.0, salts={'KCl': 4.0})               # the ratio alone
+
+``salts=`` accepts NaCl, KCl, CaCl2, MgCl2, CaBr2, Na2SO4, SrCl2 and BaCl2.
+``composition=`` accepts the ions directly, which is the more general form.
+An ion with no viscosity parameterisation raises rather than contributing zero.
+
+.. list-table:: Inputs
+   :widths: 12 12 46
+   :header-rows: 1
+
+   * - Input
+     - Units
+     - Description
+   * - T_K
+     - K
+     - Temperature
+   * - P_MPa
+     - MPa
+     - Pressure
+   * - m
+     - mol/kg
+     - NaCl molality. One of m, S, salts or composition must be supplied
+   * - S
+     - fraction
+     - NaCl weight fraction
+   * - salts
+     - dict
+     - {salt name: molality}, e.g. {'NaCl': 2.0, 'CaCl2': 1.0}
+   * - composition
+     - dict
+     - {ion: molality}, e.g. {'Na+': 3.0, 'Cl-': 3.0}
+   * - route
+     - str
+     - 'jones_dole' (default, multi-salt) or 'mao_duan' (NaCl only, pre-3.7.3)
+   * - pressure_term
+     - bool
+     - Apply Kestin's measured pressure factor. Default True
+
+.. list-table:: Accuracy against measured viscosity (salt ratio only)
+   :widths: 30 15 15
+   :header-rows: 1
+
+   * - Data
+     - Mean
+     - Max
+   * - NaCl, Kestin (1981), 298-423 K, 0.1-35 MPa, 0.5-5 mol/kg
+     - 0.300%
+     - 0.78%
+   * - KCl, Kestin (1981) companion tables, same box
+     - 0.764%
+     - 4.62%
+
+**BEHAVIOUR CHANGE IN 3.7.3.** Existing NaCl viscosities move by 0.34% on
+average and 1.36% at most, and on freshwater by +0.069%, which is the water leg
+alone. This is a change of route rather than a correction of an error: on NaCl
+the old and new salt ratios are statistically indistinguishable (0.443% against
+0.415% mean against Kestin, both inside his stated +/-0.5%). What the new
+baseline buys is the measured pressure dependence and salts other than sodium
+chloride. Pass ``route='mao_duan'`` to reproduce pre-3.7.3 numbers exactly; that
+route is NaCl only and raises on any other salt rather than silently treating it
+as NaCl, which would cost 15.9% on average and 51.2% at worst on KCl.
+
+**Three limits ship with this baseline and should be quoted with any result.**
+
+1. **Ion mixing is not validated against measurement.** Every brine scored above
+   is a single salt, because no measured viscosity of a mixed brine at known
+   composition, temperature and pressure was found. The multi-salt capability
+   reproduces the reference implementation to 0.0015% over 145 cases, which
+   tests this implementation rather than the model. Describe mixed-brine results
+   in those terms.
+2. **Above 35 MPa the pressure factor is held, not extrapolated**, so the
+   baseline is pressure-blind from 35 to 100 MPa. Kestin's own factor at 35 MPa
+   is the largest pressure correction applied anywhere in the chain.
+3. **The K+ worst case is 4.6%**, at 298 to 323 K and 4 to 5 mol/kg. Na+ is
+   worst at 0.78% over the same box, so the ion-additive form is better on
+   average and far better away from NaCl, not uniformly better.
+
+No PHREEQC installation is required: the per-ion parameters are embedded and are
+machine-verified against the source database.
+
 pyrestoolbox.brine.SoreideWhitson
 ======================
 
 .. code-block:: python
 
-    SoreideWhitson(pres, temp, ppm=0, y_CO2=0, y_H2S=0, y_N2=0, y_H2=0, sg=0.65, metric=False, cw_sat=False, framework='proposed', salinity_method='gamma_phi') -> class
+    SoreideWhitson(pres, temp, ppm=0, y_CO2=0, y_H2S=0, y_N2=0, y_H2=0, sg=0.65, metric=False, cw_sat=False, framework='proposed', salinity_method='gamma_phi', vphi_route='auto', *, p=None, degf=None, wt=None) -> class
 
 Soreide-Whitson (1992) VLE model for multicomponent gas solubility in water/brine, with Garcia/Plyasunov
 density corrections and calibrated viscosity corrections. Supports gas mixtures containing any combination
@@ -338,11 +446,38 @@ based on the gas specific gravity using constrained exponential decay to match t
    * - Brine Salinity Correction
      - Spivey et al. (modified), per "Petroleum Reservoir Fluid Property Correlations", (McCain, Spivey & Lenn: Chapter 4)
    * - Gas-Corrected Brine Density
-     - Garcia (2001) Eq. 18 mixing rule with Plyasunov (2019-2021) apparent molar volumes for each dissolved gas
-   * - Pure Brine Viscosity
-     - Mao-Duan (2009)
+     - Mass and volume balance (an identity, not a fitted mixing rule) with apparent molar volumes from the Soreide-Whitson modified PR route plus one volume shift per gas. **Changed in 3.7.2**; the Plyasunov (2019-2021) correlation is retained as ``vphi_route='plyasunov'``. A literature-anchored salinity shift is applied to V_phi from 3.7.3, disabled with ``salt_effect=False``.
+   * - Gas-free Brine Viscosity
+     - IAPWS-2008 water x ion-additive Jones-Dole salt ratio x Kestin measured pressure factor. **Changed in 3.7.3**; Mao-Duan (2009) remains available. See the ``brine_viscosity`` section below.
    * - Gas-Corrected Brine Viscosity
-     - Per-gas multiplicative corrections: Islam-Carlson (2012) for CO2, Murphy-Gaines (1974) for H2S, Ostermann (SPE-14211, 1985) for CH4
+     - Per-gas multiplicative corrections: Calabrese et al. (2019) Eq. 25 for CO2 (**changed in 3.7.2**, superseding Islam-Carlson), an Arrhenius-times-Langmuir form refitted to all 23 Ostermann (SPE-14211, 1985) measurements for CH4, and Murphy & Gaines (1974) for H2S. C2H6 and N2 are measured nulls; H2, C3H8 and nC4H10 carry no correction because no data exists.
+
+**Apparent molar volume route** (``vphi_route``, new in 3.7.2). ``'auto'`` is the
+default and uses the Soreide-Whitson modified PR route with one dimensionless
+volume shift per gas, falling back to the Plyasunov correlation for C3H8 and
+nC4H10 and outside the PR route's validity box. ``'pr'`` and ``'plyasunov'``
+force one route; ``'plyasunov'`` reproduces pre-3.7.2 results exactly. The PR
+route needs one fitted number per gas against 35 coefficients per gas for the
+correlation, matches or beats it on five of six gases against the calibration
+densimetry, and reproduces an H2S temperature trend the correlation misses.
+The delivered shifts are CH4 -0.109632, CO2 -0.037913, H2S -0.078975,
+N2 -0.155288, H2 -0.177625, C2H6 -0.073142, C3H8 -0.112963 and
+nC4H10 +0.110924.
+
+Three ceilings should not be conflated: the arithmetic stops at 623.15 K, the
+volume shift stops being fitted at 473.15 K, and **accuracy is claimed only to
+about 450 K (300 to 350 degF)**, which is the only one of the three that is a
+statement about the answer. N2, H2, C2H6, C3H8 and nC4H10 have no
+temperature-resolved calibration data, so for those the temperature behaviour is
+the equation of state unaided.
+
+**Salinity shift on V_phi** (new in 3.7.3). A gas-generic additive term
+``dV = -0.5914 m/(1 + 0.0416 m)`` cm3/mol is applied, giving -0.57 cm3/mol at
+1 mol/kg and -2.45 at 5 mol/kg. It is fixed entirely from dilatometry with no
+parameter fitted to any brine-density data. Freshwater results are unchanged
+exactly; gas-saturated brine densities move by up to a few hundredths of a
+percent. Pass ``salt_effect=False`` to ``brine.vphi_route.V_phi`` to recover the
+previous behaviour.
 
 .. list-table:: Inputs
    :widths: 10 15 40
