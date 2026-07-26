@@ -1,4 +1,5 @@
 from .brine import *
+from .brine import recommended_method  # which entry point to use, and why
 from . import pr_vphi
 from .pr_vphi import V2_inf as V_phi_pr
 from . import vphi_route

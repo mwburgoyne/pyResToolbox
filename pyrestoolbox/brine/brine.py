@@ -367,7 +367,15 @@ def brine_props(p: float = None, degf: float = None, wt: float = None, ch4_sat: 
     # Superseded the Mao-Duan chain in 3.7.3; NaCl viscosities move by 0.34%
     # mean and 1.36% max, which is the route change rather than a regression.
     # Mao-Duan remains available as route='mao_duan' for reproducibility.
-    ub_tpm = _brine_viscosity(degk, Mpa, m=m)  # cP
+    ub_tpm = _brine_viscosity(degk, Mpa, m=m)  # cP, gas-free
+
+    # Dissolved-CH4 viscosity correction, applied from 3.7.4. This function had
+    # returned the GAS-FREE viscosity for a brine it reports as methane
+    # saturated, which understated the measured effect (Ostermann 1985: +3 to 6%)
+    # by the full size of that effect. mch4 is the dissolved molality from
+    # Eqs 4.15-4.18; the correction is a function of mole fraction.
+    ub_tpm = ub_tpm * ch4_viscosity_factor(
+        degk, ch4_mole_fraction_from_molality(mch4))
 
     bw = Bw  # rb/stb (dimensionless ratio, same in both unit systems)
     lden = rhobtpbch4  # sg (g/cm3)
@@ -1363,6 +1371,31 @@ _CH4_A = 1.71739196e-03
 _CH4_B = 1239.77535        # K
 _CH4_K = 1.52860547e-03    # half-saturation mole fraction
 
+_MW_H2O = 18.015268
+
+
+def ch4_viscosity_factor(T_K, x_ch4):
+    """Dissolved-CH4 viscosity multiplier, Ostermann (1985) SPE 14211.
+
+    x_ch4 is the dissolved mole fraction on the SALT-FREE basis, which is what
+    the S&W flash returns and what the fit was performed against.
+
+    Shared by SoreideWhitson and brine_props so the two cannot diverge. Before
+    3.7.4 brine_props applied no CH4 viscosity correction at all: it returned the
+    gas-free viscosity for a brine it simultaneously reported as methane
+    saturated, understating the measured effect by 3 to 6 percent.
+    """
+    if x_ch4 <= 0.0:
+        return 1.0
+    return 1.0 + _CH4_A * np.exp(_CH4_B / T_K) * x_ch4 / (_CH4_K + x_ch4)
+
+
+def ch4_mole_fraction_from_molality(m_ch4):
+    """Dissolved CH4 molality (mol/kg water) -> salt-free mole fraction."""
+    if m_ch4 <= 0.0:
+        return 0.0
+    return m_ch4 / (m_ch4 + 1000.0 / _MW_H2O)
+
 # HC component molecular weights for SG-based splitting
 _MW_C1 = 16.043
 _MW_C2 = 30.069
@@ -1900,7 +1933,7 @@ class SoreideWhitson:
                 vis_factor *= (1.0 + _IC_A_H2S * x_i ** _IC_B)
             elif gas_upper == 'CH4':
                 T_K = (degf - 32.0) / 1.8 + 273.15
-                vis_factor *= 1.0 + _CH4_A * np.exp(_CH4_B / T_K) * x_i / (_CH4_K + x_i)
+                vis_factor *= ch4_viscosity_factor(T_K, x_i)
             # C2H6, N2, H2, C3H8, nC4H10: no correction (factor *= 1.0)
 
         vis_gas_brine = vis_base_cP * vis_factor
@@ -1987,3 +2020,36 @@ class SoreideWhitson:
             rho_p1_gcc = rho_brine_p1_gcc
 
         self.Cf_usat = 1.0 - rho_gas_brine_gcc / rho_p1_gcc  # 1/bar
+
+# ============================================================================
+# Single recommended entry point
+# ============================================================================
+
+_BRINE_METHODS = {
+    'co2': ('CO2_Brine_Mixture', 'Spycher-Pruess mutual solubility'),
+    'sw': ('SoreideWhitson', 'Soreide-Whitson multicomponent PR flash'),
+    'ch4': ('brine_props', 'Duan-Mao/McCain Ch. 4 methane solubility'),
+}
+
+
+def recommended_method(y_CO2=0.0, y_H2S=0.0, y_N2=0.0, y_H2=0.0, ch4_only=False):
+    """Which brine entry point to use for a given equilibrium gas, and why.
+
+    The three entry points are not interchangeable wrappers: they carry three
+    different SOLUBILITY models, and each is the better choice somewhere. This
+    returns the recommendation rather than hiding it, because which model
+    produced a number is part of the answer.
+
+    Returns (function name, solubility model, reason).
+    """
+    others = float(y_H2S) + float(y_N2) + float(y_H2)
+    if float(y_CO2) >= 1.0 - 1e-12 and others <= 1e-12:
+        return _BRINE_METHODS['co2'] + (
+            'pure CO2: Spycher-Pruess scores 3.7% MARE against Yan (2011) '
+            'where the S&W flash scores 8.3%',)
+    if ch4_only and others <= 1e-12 and float(y_CO2) <= 1e-12:
+        return _BRINE_METHODS['ch4'] + (
+            'methane only, in oilfield units, following McCain Ch. 4; use '
+            'SoreideWhitson instead if you want the S&W flash or any other gas',)
+    return _BRINE_METHODS['sw'] + (
+        'any gas mixture, or any gas other than pure CO2',)

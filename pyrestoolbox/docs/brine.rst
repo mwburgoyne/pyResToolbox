@@ -2,12 +2,60 @@
 Brine PVT with differing degrees of methane, CO2, or multicomponent gas saturation
 ===================================
 
-Three brine property models are available:
+Which one should I use?
+----------------------
+
+Three brine property models are available. They are **not** interchangeable
+wrappers around one calculation: they carry three different *solubility* models,
+and each is the better choice somewhere. The density and viscosity legs
+downstream of the solubility are now shared, so the models agree on gas-free
+brine density to 0.03 to 0.05% and on CH4-saturated viscosity to 0.33%; what
+distinguishes them is how much gas they put into the brine.
+
+.. list-table:: Choosing an entry point
+   :widths: 22 20 48
+   :header-rows: 1
+
+   * - Equilibrium gas
+     - Use
+     - Why
+   * - Pure CO2
+     - ``CO2_Brine_Mixture``
+     - Spycher-Pruess is more accurate than the S&W flash for pure CO2: 3.7% MARE against Yan (2011) where S&W scores 8.3%
+   * - Any mixture, or any single gas other than pure CO2
+     - ``SoreideWhitson``
+     - The only route that handles mixtures, and the only one covering H2S, N2 and H2
+   * - Methane only, oilfield units, following the textbook
+     - ``brine_props``
+     - Duan-Mao/McCain Ch. 4 solubility. Use ``SoreideWhitson`` instead if you want the S&W flash or any other gas
+   * - Gas-free brine viscosity on its own
+     - ``brine_viscosity``
+     - Multi-salt, and the baseline the other three multiply
+
+``brine.recommended_method()`` returns the same recommendation programmatically,
+along with the solubility model it implies and the reason, so a script can record
+which model produced a number:
+
+.. code-block:: python
+
+    >>> from pyrestoolbox import brine
+    >>> brine.recommended_method(y_CO2=1.0)[0]
+    'CO2_Brine_Mixture'
+    >>> brine.recommended_method(y_CO2=0.5)[0]
+    'SoreideWhitson'
+
+What each returns
+----------------------
 
 **brine_props** — Methane-saturated brine using IAPWS-IF97 freshwater density with Spivey salt correction per McCain Petroleum Reservoir Fluid Properties pg 160. Includes effect of user specified salt concentration and degree of methane saturation.
-Returns tuple of (Bw (rb/stb), Density (sg), viscosity (cP), Compressibility (1/psi), Rw GOR (scf/stb))
+Returns tuple of (Bw (rb/stb), Density (sg), viscosity (cP), Compressibility (1/psi), Rw GOR (scf/stb)).
+**Changed in 3.7.4:** the returned viscosity now includes the dissolved-methane
+correction. Before 3.7.4 it returned the gas-free viscosity even at
+``ch4_sat=1.0``, understating the measured effect (Ostermann 1985: +3 to 6%) by
+its full size. Expect the reported viscosity to rise by up to a few percent at
+high methane saturation; density, Bw, Cw and Rsw are unchanged.
 
-**CO2_Brine_Mixture** — CO2-saturated brine via Spycher-Pruess mutual solubility model. Returns a class object with calculated CO2 saturated brine property attributes.
+**CO2_Brine_Mixture** — CO2-saturated brine via Spycher-Pruess mutual solubility model. Returns a class object with calculated CO2 saturated brine property attributes. Retained deliberately rather than folded into ``SoreideWhitson``, because it is the more accurate route for pure CO2.
 
 **SoreideWhitson** — Multicomponent gas-saturated brine via Soreide-Whitson (1992) VLE model. Supports mixtures of C1, C2, C3, nC4, CO2, H2S, N2 and H2 in fresh or saline water.
 
@@ -115,7 +163,7 @@ Examples:
     >>> print('Rsw:', rsw)
     Bw: 1.0152005799432318
     SGw: 0.9950108380379709
-    Visw: 0.5010724777812223
+    Visw: 0.5047732519299403
     Cw_usat: 2.9696277255527504e-06
     Cw_sat: 0.0001539877228225709
     Rsw: 1.2567682353688225
