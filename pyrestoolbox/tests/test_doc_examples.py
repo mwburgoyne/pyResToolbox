@@ -487,8 +487,10 @@ def test_doc_brine_props():
     bw, lsg, visw, cw, rsw = brine.brine_props(p=160, degf=135, wt=1.5, ch4_sat=1.0)
     assert abs(bw - 1.0152005799432318) / 1.0152005799432318 < RTOL
     assert abs(lsg - 0.9950108380379709) / 0.9950108380379709 < RTOL
-    # RE-PINNED 3.7.3 (was 0.49829396877490323; 1.5 wt% brine, +0.558%).
-    assert abs(visw - 0.5010724777812223) / 0.5010724777812223 < RTOL
+    # RE-PINNED 3.7.4: brine_props now applies the dissolved-CH4 viscosity
+    # correction it had always omitted (+0.739% here at ch4_sat=1.0). Was
+    # 0.5010724777812223 in 3.7.3 and 0.49829396877490323 before that.
+    assert abs(visw - 0.5047732519299403) / 0.5047732519299403 < RTOL
     assert isinstance(cw, list) and len(cw) == 2, f"Cw should be [usat, sat] list, got {cw}"
     assert abs(cw[0] - 2.9696277255527504e-06) / 2.9696277255527504e-06 < RTOL  # Undersaturated Cw
     assert abs(cw[1] - 0.0001539877228225709) / 0.0001539877228225709 < RTOL  # Saturated Cw
