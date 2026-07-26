@@ -426,8 +426,8 @@ pyrestoolbox.brine.SoreideWhitson
 
     SoreideWhitson(pres, temp, ppm=0, y_CO2=0, y_H2S=0, y_N2=0, y_H2=0, sg=0.65, metric=False, cw_sat=False, framework='proposed', salinity_method='gamma_phi', vphi_route='auto', *, p=None, degf=None, wt=None) -> class
 
-Soreide-Whitson (1992) VLE model for multicomponent gas solubility in water/brine, with Garcia/Plyasunov
-density corrections and calibrated viscosity corrections. Supports gas mixtures containing any combination
+Soreide-Whitson (1992) VLE model for multicomponent gas solubility in water/brine, with
+mass-balance density corrections and calibrated viscosity corrections. Supports gas mixtures containing any combination
 of C1, C2, C3, nC4, CO2, H2S, N2 and H2 in fresh or saline water.
 
 The hydrocarbon portion of the gas (1 - y_CO2 - y_H2S - y_N2 - y_H2) is automatically split among C1-C4
@@ -628,57 +628,91 @@ Pure CO2 fresh water at 175 Bar x 85 degC with saturated compressibility:
 References:
 
 - Soreide, I. and Whitson, C.H., "Peng-Robinson Predictions for Hydrocarbons, CO2, N2, and H2S with Pure Water and NaCl Brine", Fluid Phase Equilibria, 77, 217-240, 1992.
-- Garcia, J.E., "Density of Aqueous Solutions of CO2", LBNL Report 49023, 2001.
-- Plyasunov, A.V., "Values of the Apparent Molar Volumes...," Fluid Phase Equilibria, Parts I-IV, 2019-2021.
-- Islam, A.W. and Carlson, E.S. (2012), "Viscosity Models and Effects of Dissolved CO2", Energy & Fuels, 26(8), 5330-5336.
+- Calabrese, C., McBride-Wright, M., Maitland, G.C. and Trusler, J.P.M. (2019), J. Chem. Eng. Data, 64, 3831-3847. (CO2 viscosity increment, and the CO2-brine density validation set)
 - Ostermann, R.D. et al. (1985), "The Effect of Dissolved Gas on Reservoir Brine Viscosity", SPE 14211.
+- Murphy, W.R. and Gaines, T.M. (1974), J. Chem. Eng. Data, 19(4), 359-362. (H2S)
+- Huber, M.L. et al. (2009), "New International Formulation for the Viscosity of H2O", J. Phys. Chem. Ref. Data, 38(2), 101-125.
+- Kestin, J., Khalifa, H.E. and Correia, R.J. (1981), J. Phys. Chem. Ref. Data, 10, 71. (measured NaCl viscosity, and the pressure factor)
+- Appelo, C.A.J., Parkhurst, D.L. and Post, V.E.A. (2014), Geochim. Cosmochim. Acta, 125, 49-67. (ion-additive salt ratio)
+- Hnedkovsky, L., Wood, R.H. and Majer, V. (1996), J. Chem. Thermodynamics, 28, 125-142. (the densimetry the volume shifts are fitted to)
+- Plyasunov, A.V., "Values of the Apparent Molar Volumes...," Fluid Phase Equilibria, Parts I-IV, 2019-2021. (the fallback V_phi route)
+- Garcia, J.E., "Density of Aqueous Solutions of CO2", LBNL Report 49023, 2001. (the CO2 V_phi cubic used by CO2_Brine_Mixture)
+- Islam, A.W. and Carlson, E.S. (2012), "Viscosity Models and Effects of Dissolved CO2", Energy & Fuels, 26(8), 5330-5336. (superseded by Calabrese in 3.7.2; listed for provenance)
 
 Density and Viscosity Calculation Details
 ----------------------
 
-**Gas-corrected brine density** uses the Garcia (2001) Eq. 18 mixing rule, which is thermodynamically generic
-and applicable to any dissolved gas or mixture of dissolved gases. For each dissolved gas species, the apparent
-molar volume at infinite dilution V_phi(T,P) is computed using the Plyasunov (2019-2021) A12-infinity model
-with IAPWS-IF97 Region 1 pure water properties. This provides rigorous T- and P-dependent V_phi for all 8
-supported gas species (H2, N2, CH4, CO2, C2H6, C3H8, nC4H10, H2S).
+**Gas-corrected brine density** is a mass and volume balance. It is an identity rather than a
+fitted mixing rule: mass is additive, and the apparent molar volume is *defined* so that the
+solution volume equals the gas-free solvent volume plus the dissolved moles times V_phi.
+Nothing in it is fitted or fittable, and it is gas-generic by construction.
 
-For mixed dissolved gases, mole-fraction-weighted effective V_phi and MW are used:
+For each dissolved species the apparent molar volume at infinite dilution V_phi(T,P) comes from
+the Soreide-Whitson modified PR equation of state, using the exact relation
+V_bar_2 = -(dP/dn2)/(dP/dV) at fixed temperature evaluated on the water-rich liquid root, plus
+one dimensionless volume shift per gas. **This became the default in 3.7.2**; the Plyasunov
+(2019-2021) A12-infinity model is retained as the fallback for C3H8 and nC4H10 and outside the
+PR route's validity box, and is selectable with ``vphi_route='plyasunov'``. A literature-anchored
+salinity shift is applied to V_phi from 3.7.3.
+
+For mixed dissolved gases, mole-fraction-weighted effective V_phi and MW are used. The weighting
+is an exact algebraic identity; the approximation is the physics it rests on, namely that each
+gas contributes its infinite-dilution volume with no solute-solute cross term, which is exact
+only as the dissolved amount tends to zero:
 
 .. code-block:: text
 
     V_phi_eff = sum(yi * V_phi_i) / sum(yi)
     MW_eff    = sum(yi * MW_i) / sum(yi)
 
-    rho = (1 + x_gas * MW_eff / (MW_brine * x_brine)) / (x_gas * V_phi_eff / (MW_brine * x_brine) + 1/rho_brine)
+    rho = (1 + x_gas * MW_eff / (Mw * x_w)) / (x_gas * V_phi_eff / (Mw * x_w) + 1/rho_brine)
 
-where x_gas is the total dissolved gas mole fraction, x_brine = 1 - x_gas, and rho_brine is the gas-free
-brine density (IAPWS-IF97 freshwater with Spivey salt correction).
+**SOLVENT BASIS, which is easy to get wrong.** V_phi is defined against the whole gas-free
+brine, so ``x_gas * V_phi`` adds to the volume of water *and salt together*. Where the dissolved
+mole fraction is returned on a salt-free basis, as VLE models normally return it, the solvent
+term ``Mw * x_w`` is the mass of water only and must be grossed up to brine mass by dividing by
+(1 - S), with S the salt weight fraction. Pairing the water molecular weight with a brine
+density instead omits the salt from both mass and volume and inflates the whole dissolved-gas
+density effect by a factor approaching 1/(1 - S): 5.6% at 1 mol/kg NaCl, 11% at 2 and 28% at 5.
+The two forms are identical in freshwater. This was corrected in 3.7.2.
 
-Gases with MW/V_phi > 1 (CO2, H2S) increase brine density; gases with MW/V_phi < 1 (CH4, N2, H2, C2H6, C3H8)
-decrease it.
+**Which gases densify.** The sign is that of ``MW_gas - rho_brine * V_phi``, *not* of
+MW/V_phi against 1. Of the gases in scope only CO2 is positive: at 298.15 K and 30 MPa it
+carries 44.0 g/mol against a displaced 33.3 cm3/mol, a margin of +10.4 g/mol. **H2S lightens
+brine**, by -0.9 g/mol at 298.15 K widening to -7.3 g/mol by 453 K, and above about 327 K it
+lightens brine more than any other gas in the set. H2S is the near-miss case and at ambient
+temperature its sign should be read as probable rather than established. CH4, N2, H2, C2H6,
+C3H8 and nC4H10 lighten brine throughout.
 
-**Gas-corrected brine viscosity** applies multiplicative per-gas corrections to the gas-free Mao-Duan (2009)
-brine viscosity:
+**Gas-corrected brine viscosity** applies multiplicative per-gas corrections to the gas-free
+baseline described in the ``brine_viscosity`` section above. Every correction is calibrated
+directly to measured viscosity; none is scaled from the density change, which experiment
+refutes, getting the sign wrong for three of five gases.
 
 .. list-table:: Viscosity correction by gas
-   :widths: 15 40 20
+   :widths: 12 46 26
    :header-rows: 1
 
    * - Gas
      - Correction
      - Reference
    * - CO2
-     - mu x (1 + 4.65 x xCO2^1.0134)
-     - Islam-Carlson (2012)
-   * - H2S
-     - mu x (1 + 1.5 x xH2S^1.0134)
-     - Murphy-Gaines (1974)
+     - ln(mu/mu_brine) = e1 exp(-e2 (T/T0 - 1)) x, with e1 = 65.560, e2 = 2.468, T0 = 142 K
+     - Calabrese et al. (2019) Eq. 25, 415 measured brine points. **Changed in 3.7.2**, superseding Islam-Carlson
    * - CH4
-     - mu x max(1.109 - 5.98e-4*T + 1.0933e-6*T^2, 1.0), T in degF
-     - Ostermann (SPE-14211, 1985)
-   * - Other
-     - No correction (factor = 1.0)
-     - Negligible effect at typical dissolved concentrations
+     - mu x (1 + A exp(B/T) x/(K + x)), with A = 1.71739196e-3, B = 1239.77535 K, K = 1.52860547e-3
+     - Refitted here to all 23 Ostermann (SPE-14211, 1985) measurements rather than to his three summary values
+   * - H2S
+     - mu x (1 + 1.79 x^1.0134)
+     - Murphy-Gaines (1974), on their own solubility source. **About 27% uncertain**; five points, all below 309 K
+   * - C2H6, N2
+     - No correction
+     - Measured nulls. N2's null bounds the effect below about 2.5% rather than establishing zero
+   * - H2, C3H8, nC4H10
+     - No correction
+     - **No measurement exists.** The zero is a conservative default, not evidence; treat H2 as 0 to several percent
 
-For gas mixtures, the corrections are applied multiplicatively across all dissolved species.
+For gas mixtures the corrections are applied multiplicatively across all dissolved species.
+That is a design choice rather than a validated one: no mixed-dissolved-gas viscosity data
+exist, and the assumption plausibly overstates the combined effect at high total dissolved gas.
 
