@@ -1,8 +1,9 @@
 """Tests for the S&W PR + VSHIFT route to dissolved-gas V2inf.
 
-Ported from ~/projects/garcia_extension 2026-07-25. The reference values below
-are the garcia_extension implementation, which is itself pinned against direct
-volumetric measurements in that project's validation.py (109 checks).
+Ported from ~/projects/brine_props 2026-07-25 (the project was named
+garcia_extension at the time). The reference values below are the brine_props
+implementation, which is itself pinned against direct volumetric measurements
+in that project's validation.py.
 """
 import pytest
 
@@ -12,7 +13,7 @@ from pyrestoolbox.plyasunov import V2_inf as V_plyasunov
 
 def test_vshift_values_pinned():
     """The shifts are load-bearing: refitting them requires regenerating the
-    garcia_extension calibration (code/fit_pr_vshift.py) and updating both."""
+    brine_props calibration (code/fit_pr_vshift.py) and updating both."""
     expected = {'CH4': -0.109632, 'CO2': -0.037913, 'H2S': -0.078975,
                 'N2': -0.155288, 'H2': -0.177625, 'C2H6': -0.073142,
                 # C3H8 is not from that calibration: it is the mean of two

@@ -477,7 +477,9 @@ def test_doc_make_pvtw_table():
     assert abs(result['bw_ref'] - 1.027589195773527) / 1.027589195773527 < RTOL
     assert isinstance(result['cw_ref'], list) and len(result['cw_ref']) == 2, "cw_ref should be [usat, sat] list"
     assert abs(result['cw_ref'][0] - 3.0887176266534516e-06) / 3.0887176266534516e-06 < RTOL
-    assert abs(result['visw_ref'] - 0.30791821315761636) / 0.30791821315761636 < RTOL
+    # RE-PINNED 3.7.3 with the new gas-free viscosity base (was
+    # 0.30791821315761636 on the Mao-Duan chain; freshwater, so +0.069%).
+    assert abs(result['visw_ref'] - 0.308131761431705) / 0.308131761431705 < RTOL
     assert 'table' in result
 
 def test_doc_brine_props():
@@ -485,7 +487,8 @@ def test_doc_brine_props():
     bw, lsg, visw, cw, rsw = brine.brine_props(p=160, degf=135, wt=1.5, ch4_sat=1.0)
     assert abs(bw - 1.0152005799432318) / 1.0152005799432318 < RTOL
     assert abs(lsg - 0.9950108380379709) / 0.9950108380379709 < RTOL
-    assert abs(visw - 0.49829396877490323) / 0.49829396877490323 < RTOL
+    # RE-PINNED 3.7.3 (was 0.49829396877490323; 1.5 wt% brine, +0.558%).
+    assert abs(visw - 0.5010724777812223) / 0.5010724777812223 < RTOL
     assert isinstance(cw, list) and len(cw) == 2, f"Cw should be [usat, sat] list, got {cw}"
     assert abs(cw[0] - 2.9696277255527504e-06) / 2.9696277255527504e-06 < RTOL  # Undersaturated Cw
     assert abs(cw[1] - 0.0001539877228225709) / 0.0001539877228225709 < RTOL  # Saturated Cw
