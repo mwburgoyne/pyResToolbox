@@ -29,6 +29,7 @@ Includes functions to perform calculations including;
 - Generation of AQUTAB include file influence functions for use in ECLIPSE
 - Creation of Corey, LET and Jerauld relative permeability tables in Eclipse format, with curve fitting support
 - Calculation of Methane, CO2 and multicomponent gas saturated brine properties (Soreide-Whitson VLE)
+- Multi-salt gas-free brine viscosity: IAPWS-2008 water, an ion-additive salt ratio over any combination of Na, K, Mg, Ca, Sr, Ba, Cl, Br, sulfate and carbonate, and a measured pressure factor
 - Method recommendation engine for selecting appropriate correlations based on fluid composition
 - Sensitivity analysis with parameter sweeps and tornado charts
 
@@ -101,7 +102,7 @@ Module List
    * - `library <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/library.rst>`_
      - Return critical parameters for typical single components
    * - `brine <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/brine.rst>`_
-     - Calculate suite of brine properties with variable methane, Calculate suite of CO2 saturated brine properties, Multicomponent gas-saturated brine (Soreide-Whitson VLE)
+     - Calculate suite of brine properties with variable methane, Calculate suite of CO2 saturated brine properties, Multicomponent gas-saturated brine (Soreide-Whitson VLE), multi-salt gas-free brine viscosity
    * - `layer <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/layer.rst>`_
      - Lorenz coefficient from Beta value, Lorenz coefficient from flow fraction, Lorenz coefficient to flow fraction, Lorenz coefficient to permeability array
    * - `simtools <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/simtools.rst>`_
