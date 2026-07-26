@@ -49,6 +49,8 @@ from pyrestoolbox.constants import (psc, tsc, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_
                                     BAR_TO_PSI, degc_to_degf,
                                     INVPSI_TO_INVBAR, SCF_PER_STB_TO_SM3_PER_SM3)
 from pyrestoolbox.plyasunov.iapws_if97 import rho_if97 as _rho_if97
+from pyrestoolbox.brine.viscosity_route import (
+    brine_viscosity as _brine_viscosity, mu_water as _mu_water_route)
 from pyrestoolbox._accelerator import RUST_AVAILABLE as _RUST_AVAILABLE
 if _RUST_AVAILABLE:
     from pyrestoolbox import _native as _rust
@@ -360,25 +362,12 @@ def brine_props(p: float = None, degf: float = None, wt: float = None, ch4_sat: 
     rsw_new = mch4 * vmch4g_sc / ((1000 + m * 58.4428) * vb0_sc)
     rsw_new_oilfield = rsw_new / _SM3_TO_SCFSTB  # Convert to scf/stb
 
-    d = _MAODUAN_D
-    a = _MAODUAN_A
-    b = _MAODUAN_B
-    c = _MAODUAN_C
-
-    lnuw_tp = sum([d[i] * np.power(degk, (i - 3)) for i in range(1, 6)])
-    lnuw_tp += sum(
-        [rhowtp * (d[i] * np.power(degk, (i - 8))) for i in range(6, 11)]
-    )
-
-    uw_tp = np.exp(lnuw_tp)
-
-    AA = a[0] + a[1] * degk + a[2] * degk * degk  # Eq 4.43
-    BB = b[0] + b[1] * degk + b[2] * degk * degk
-    CC = c[0] + c[1] * degk
-
-    lnur_tm = AA * m + BB * m * m + CC * m * m * m  # Eq 4.46
-    ur_tm = np.exp(lnur_tm)
-    ub_tpm = ur_tm * uw_tp * 1000  # cP - Eq 4.48
+    # Gas-free brine viscosity: IAPWS-2008 water x ion-additive Jones-Dole salt
+    # ratio x Kestin's measured pressure factor (`brine.viscosity_route`).
+    # Superseded the Mao-Duan chain in 3.7.3; NaCl viscosities move by 0.34%
+    # mean and 1.36% max, which is the route change rather than a regression.
+    # Mao-Duan remains available as route='mao_duan' for reproducibility.
+    ub_tpm = _brine_viscosity(degk, Mpa, m=m)  # cP
 
     bw = Bw  # rb/stb (dimensionless ratio, same in both unit systems)
     lden = rhobtpbch4  # sg (g/cm3)
@@ -1204,23 +1193,16 @@ class CO2_Brine_Mixture():
             salt_ratio = rhob_spivey / rhowtp_spivey if m > 0 else 1.0
             return rhowtp * salt_ratio, rhowtp
         
-        # -- CO2 free brine viscosity Mao-Duan (2009) + fresh water viscosity
+        # -- CO2 free brine viscosity + fresh water viscosity.
+        # IAPWS-2008 water x ion-additive Jones-Dole salt ratio x Kestin's
+        # measured pressure factor (`brine.viscosity_route`). Superseded the
+        # Mao-Duan chain in 3.7.3; NaCl viscosities move by 0.34% mean and
+        # 1.36% max, which is the route change rather than a regression.
+        # `rhowtp` is no longer needed - the water leg takes its own density
+        # from IF97 - but the signature is kept so call sites do not move.
         def vis_brine(Mpa, rhowtp):
-            
-            #-- Viscosity of pure water - Eq 4.41 - 4.42
-            lnuw_tp = sum([d[i] * np.power(tKel, (i - 3)) for i in range(1, 6)])
-            lnuw_tp += sum([rhowtp * (d[i] * np.power(tKel, (i - 8))) for i in range(6, 11)])
-            uw_tp = np.exp(lnuw_tp)
-    
-            #-- Calculate relative viscosity of brine.    Eq 4.43 - 4.47
-            AA = a[0] + a[1] * tKel + a[2] * tKel * tKel 
-            BB = b[0] + b[1] * tKel + b[2] * tKel * tKel
-            CC = c[0] + c[1] * tKel
-            lnur_tm = AA * m + BB * m ** 2 + CC * m ** 3
-            ur_tm = np.exp(lnur_tm)
-            
-            # And then brine viscosity in Pa.s, converted to cP
-            return (ur_tm * uw_tp * 1000, uw_tp*1000)  # cP - Eq 4.48
+            return (_brine_viscosity(tKel, Mpa, m=m),
+                    _mu_water_route(tKel, Mpa))  # cP
         
         def partMolVol(degK):
             #  Partial Molar Volume of dissolved CO2: Garcia Eq (3)

@@ -52,7 +52,7 @@ for the set and the exclusions. Indirect determinations (solubility-versus-
 pressure, electrochemical) and V_phi inverted from brine density are excluded
 from the fit, the latter because they scatter five to seven times wider.
 
-PROVENANCE. Developed in ~/projects/garcia_extension (`code/pr_vphi_model.py`,
+PROVENANCE. Developed in ~/projects/brine_props (`code/pr_vphi_model.py`,
 calibrated by `code/fit_pr_vshift.py`) and ported here 2026-07-25. The S&W alpha,
 the aqueous kij correlations and the critical properties are taken from this
 package's own `_lib_vle_engine`, not re-copied.

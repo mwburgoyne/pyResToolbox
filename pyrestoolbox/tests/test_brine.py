@@ -162,7 +162,11 @@ def test_sw_rejects_both_wt_and_ppm():
 _FROZEN_BASELINES = {
     'bw_3000_200_fresh': 1.027589195773527,
     'lden_3000_200_fresh': 0.972276768415092,
-    'visw_3000_200_fresh': 0.30791821315761636,
+    # RE-PINNED 3.7.3: the gas-free viscosity base moved from Mao-Duan to
+    # IAPWS-2008 water x ion-additive Jones-Dole salt ratio x Kestin's measured
+    # pressure factor. This is freshwater, so the +0.069% here is the WATER leg
+    # alone (0.30791821315761636 before). Brine cases move more - up to 1.36%.
+    'visw_3000_200_fresh': 0.308131761431705,
     'cw_3000_200_fresh': 3.0887176266534516e-06,
     'co2_xco2_200_80': 0.02036714644979853,
     'co2_rs_200_80': 26.141605639385897,

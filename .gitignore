@@ -43,3 +43,6 @@ ilt/
 benchmark_ilt.py
 benchmark_rust.py
 BUILD_INSTRUCTIONS.txt
+
+# local virtualenv (389 MB, never committed)
+.venv/
