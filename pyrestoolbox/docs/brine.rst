@@ -57,7 +57,7 @@ high methane saturation; density, Bw, Cw and Rsw are unchanged.
 
 **CO2_Brine_Mixture** — CO2-saturated brine via Spycher-Pruess mutual solubility model. Returns a class object with calculated CO2 saturated brine property attributes. Retained deliberately rather than folded into ``SoreideWhitson``, because it is the more accurate route for pure CO2.
 
-**SoreideWhitson** — Multicomponent gas-saturated brine via Soreide-Whitson (1992) VLE model. Supports mixtures of C1, C2, C3, nC4, CO2, H2S, N2 and H2 in fresh or saline water.
+**SoreideWhitson** — Multicomponent gas-saturated brine via the Soreide-Whitson VLE model, using by default the refreshed BIP relationships of `Burgoyne & Nielsen (2026) <https://doi.org/10.1016/j.fluid.2026.114824>`_. Supports mixtures of C1, C2, C3, nC4, CO2, H2S, N2 and H2 in fresh or saline water.
 
 Unit System Support
 ----------------------
@@ -474,8 +474,9 @@ pyrestoolbox.brine.SoreideWhitson
 
     SoreideWhitson(pres, temp, ppm=0, y_CO2=0, y_H2S=0, y_N2=0, y_H2=0, sg=0.65, metric=False, cw_sat=False, framework='proposed', salinity_method='gamma_phi', vphi_route='auto', *, p=None, degf=None, wt=None) -> class
 
-Soreide-Whitson (1992) VLE model for multicomponent gas solubility in water/brine, with
-mass-balance density corrections and calibrated viscosity corrections. Supports gas mixtures containing any combination
+Soreide-Whitson VLE model for multicomponent gas solubility in water/brine, using by
+default the refreshed BIP relationships of `Burgoyne & Nielsen (2026) <https://doi.org/10.1016/j.fluid.2026.114824>`_,
+with mass-balance density corrections and calibrated viscosity corrections. Supports gas mixtures containing any combination
 of C1, C2, C3, nC4, CO2, H2S, N2 and H2 in fresh or saline water.
 
 The hydrocarbon portion of the gas (1 - y_CO2 - y_H2S - y_N2 - y_H2) is automatically split among C1-C4
@@ -488,7 +489,7 @@ based on the gas specific gravity using constrained exponential decay to match t
    * - Property
      - Calculation method
    * - Gas-Brine Equilibrium
-     - Soreide-Whitson (1992), Peng-Robinson EOS VLE flash
+     - Soreide-Whitson Peng-Robinson EOS VLE flash, refreshed BIPs of Burgoyne & Nielsen (2026) by default
    * - Pure Water Density
      - IAPWS-IF97 Region 1 (international reference standard)
    * - Brine Salinity Correction
@@ -570,7 +571,7 @@ V_phi.
      - If True, will also calculate saturated brine compressibility. Default False
    * - framework
      - str
-     - VLE framework used by the S&W engine. ``'proposed'`` (default, Soreide-Whitson 1992 re-fit), ``'sw_original'`` (original 1992 published coefficients), or ``'dropin'`` (PR-EOS fitted with brine-aware water alpha). Affects kij and ks correlations.
+     - VLE framework used by the S&W engine. ``'proposed'`` (default, the `Burgoyne & Nielsen (2026) <https://doi.org/10.1016/j.fluid.2026.114824>`_ refreshed BIPs), ``'sw_original'`` (original 1992 published coefficients), or ``'dropin'`` (PR-EOS fitted with brine-aware water alpha). Affects kij and ks correlations.
    * - salinity_method
      - str
      - How salinity enters the flash. ``'gamma_phi'`` (default, Sechenov salting-out via activity coefficient), ``'embedded'`` (salinity inside kij — only compatible with ``'dropin'``/``'sw_original'``), ``'explicit'`` (brine treated as a component in the flash), ``'sechenov'`` and ``'auto'`` (both accepted aliases that normalise to ``gamma_phi``). ``framework='proposed'`` + ``salinity_method='embedded'`` emits a warning and falls back to ``gamma_phi``. Note that the Rust-accelerated flash runs only for ``framework='proposed'`` with ``salinity_method='gamma_phi'``; other combinations use the pure-Python flash.

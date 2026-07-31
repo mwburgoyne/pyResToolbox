@@ -1440,8 +1440,10 @@ from pyrestoolbox.brine._lib_vle_engine import calc_gas_brine_equilibrium as _ca
 
 
 class SoreideWhitson:
-    """ Soreide-Whitson (1992) VLE model for multicomponent gas solubility in water/brine,
-        with Garcia/Plyasunov density corrections and calibrated viscosity corrections.
+    """ Soreide-Whitson VLE model for multicomponent gas solubility in water/brine,
+        using by default the refreshed BIP relationships of Burgoyne & Nielsen (2026),
+        Fluid Phase Equilibria 114824, doi:10.1016/j.fluid.2026.114824, with
+        mass-balance density corrections and calibrated viscosity corrections.
 
         Uses the S&W VLE engine for gas-brine equilibrium calculations, supporting
         multicomponent gas mixtures containing: C1, C2, C3, nC4, CO2, H2S, N2, H2.
@@ -1475,7 +1477,8 @@ class SoreideWhitson:
             sg: Gas specific gravity — used to estimate HC split among C1-C4 (default 0.65)
             metric: Boolean for units (True=metric, False=oilfield). Default False.
             cw_sat: If True, also calculate saturated compressibility (default False)
-            framework: VLE framework. 'proposed' (default, Soreide-Whitson 1992 re-fit),
+            framework: VLE framework. 'proposed' (default, the Burgoyne & Nielsen 2026
+                refreshed Soreide-Whitson BIPs, doi:10.1016/j.fluid.2026.114824),
                 'sw_original' (original 1992 published), or 'dropin' (fitted to PR-EOS with
                 brine-aware water alpha). Affects kij and ks correlations.
             salinity_method: How salinity enters the flash. 'gamma_phi' (default, Sechenov
