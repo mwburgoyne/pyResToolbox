@@ -37,10 +37,14 @@ RACHFORD-RICE SOLVER:
 
 References:
 - Soreide & Whitson, Fluid Phase Equilibria 77 (1992) 217-240 + Errata
+- Burgoyne & Nielsen, Fluid Phase Equilibria (2026) 114824,
+  doi:10.1016/j.fluid.2026.114824 - the refreshed framework implemented here;
+  "this work" in comments below refers to this paper. Includes the H2
+  correlations (A=-14.59, B=2.184, C=0.365, kij_NA=0.468), the CH4 rational
+  form (A=-2.1642, B=1.7325, C=0.2105, MC-3 alpha), the embedded salinity
+  BIPs and the H2S salting-out treatment.
 - Yan et al., Fluid Phase Equilibria 298 (2011) 180-189 (improved CO2)
 - Nielsen & Lia, Fluid Phase Equilibria (2022) - Robust RR solver
-- This work (H2 correlations): A=-14.59, B=2.184, C=0.365, kij_NA=0.468
-- This work (CH4 rational): A=-2.1642, B=1.7325, C=0.2105 (MC-3 alpha)
 
 Author: Mark Burgoyne, Markus H. Nielsen
 Date: 2025-2026
@@ -366,7 +370,7 @@ _SW_GASES_WITH_EMBEDDED_SALINITY = {
 GASES_WITH_EMBEDDED_SALINITY = _SW_GASES_WITH_EMBEDDED_SALINITY
 
 
-# --- Proposed freshwater kij_AQ (Paper 2, MC-3 alpha) ---
+# --- Proposed freshwater kij_AQ (Burgoyne & Nielsen 2026, MC-3 alpha) ---
 def kij_aq_co2_proposed(T_K: float, salinity_molal: float = 0.0) -> float:
     """CO2: cubic in T(K), n=614, MAE=0.0119 (MC-3 alpha)."""
     return -1.5127 + 9.4980e-3*T_K - 2.1680e-5*T_K**2 + 1.8500e-8*T_K**3
@@ -380,7 +384,7 @@ def kij_aq_n2_proposed(T_K: float, salinity_molal: float = 0.0) -> float:
     return -1.6669 + 3.447873e-3 * T_K
 
 def kij_aq_h2_proposed(T_K: float, salinity_molal: float = 0.0) -> float:
-    """H2: rational, n=162, MAE=0.0400 (Paper 2 MC-3 coefficients)."""
+    """H2: rational, n=162, MAE=0.0400 (Burgoyne & Nielsen 2026 MC-3 coefficients)."""
     Tr = T_K / 33.145
     return (-14.6157 + Tr) / (3.5494 + 0.2230 * Tr)
 
@@ -513,7 +517,7 @@ KIJ_AQ_FUNCTIONS: Dict[str, Callable] = KIJ_AQ_PROPOSED
 
 
 # =============================================================================
-# Embedded Salinity BIP Parameters (Paper 2, all 8 gases)
+# Embedded Salinity BIP Parameters (Burgoyne & Nielsen 2026, all 8 gases)
 # =============================================================================
 # Form: kij(T,m) = kij_fw(T) + (a0 + a1*Tr + a2*Tr^2)*m  [+ (b0 + b1*Tr)*m^2 for CO2]
 # Tr = T/Tc for each gas. Fitted with MC-3 alpha + proposed kij_fw.
@@ -1446,7 +1450,7 @@ class SWBinaryVLE:
                     params=EMBEDDED_SALINITY_PARAMS_DROPIN[self.gas])
                 kij_aq = kij_fw + delta
             else:
-                # Use Paper 2 embedded delta (proposed framework)
+                # Use Burgoyne & Nielsen 2026 embedded delta (proposed framework)
                 delta = calc_embedded_delta_kij(self.gas, T_K, self.salinity)
                 kij_aq = kij_fw + delta
             x_gas = self._calc_x_with_kij(T_K, P_Pa, kij_aq)
@@ -1702,7 +1706,7 @@ def get_gas_gas_bip(gas_a: str, gas_b: str) -> float:
 
 _SW_KVALUE_PARAMS = {
     # Light gases: Cross form [a, b, c, d, e, f]
-    # Fitted using proposed Paper 2 freshwater kij_AQ forms (Feb 2026)
+    # Fitted using proposed Burgoyne & Nielsen 2026 freshwater kij_AQ forms (Feb 2026)
     'H2':     [6.4295, 25.5844, -0.5985, -50.0000, -0.0007, -3.2598],
     'CO2':    [-5.9974, 26.3804, -0.9380, -16.3941, 0.0607, 0.3688],
     'N2':     [1.4998, 36.4929, -0.6419, -50.0000, 0.0110, -0.6328],
