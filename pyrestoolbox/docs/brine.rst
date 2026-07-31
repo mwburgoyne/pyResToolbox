@@ -494,7 +494,7 @@ based on the gas specific gravity using constrained exponential decay to match t
    * - Brine Salinity Correction
      - Spivey et al. (modified), per "Petroleum Reservoir Fluid Property Correlations", (McCain, Spivey & Lenn: Chapter 4)
    * - Gas-Corrected Brine Density
-     - Mass and volume balance (an identity, not a fitted mixing rule) with apparent molar volumes from the Soreide-Whitson modified PR route plus one volume shift per gas. **Changed in 3.7.2**; the Plyasunov (2019-2021) correlation is retained as ``vphi_route='plyasunov'``. A literature-anchored salinity shift is applied to V_phi from 3.7.3, disabled with ``salt_effect=False``.
+     - Mass and volume balance (an identity, not a fitted mixing rule) with apparent molar volumes from the Soreide-Whitson modified PR route plus one volume shift per gas. **Changed in 3.7.2**; the Plyasunov (2019-2021) correlation is retained as ``vphi_route='plyasunov'``. A literature-anchored salinity shift is applied to V_phi from 3.7.3 (relative form from 3.7.4), disabled with ``salt_effect=False``.
    * - Gas-free Brine Viscosity
      - IAPWS-2008 water x ion-additive Jones-Dole salt ratio x Kestin measured pressure factor. **Changed in 3.7.3**; Mao-Duan (2009) remains available. See the ``brine_viscosity`` section below.
    * - Gas-Corrected Brine Viscosity
@@ -519,13 +519,17 @@ statement about the answer. N2, H2, C2H6, C3H8 and nC4H10 have no
 temperature-resolved calibration data, so for those the temperature behaviour is
 the equation of state unaided.
 
-**Salinity shift on V_phi** (new in 3.7.3). A gas-generic additive term
-``dV = -0.5914 m/(1 + 0.0416 m)`` cm3/mol is applied, giving -0.57 cm3/mol at
-1 mol/kg and -2.45 at 5 mol/kg. It is fixed entirely from dilatometry with no
-parameter fitted to any brine-density data. Freshwater results are unchanged
-exactly; gas-saturated brine densities move by up to a few hundredths of a
-percent. Pass ``salt_effect=False`` to ``brine.vphi_route.V_phi`` to recover the
-previous behaviour.
+**Salinity shift on V_phi** (new in 3.7.3; relative form from 3.7.4). A
+gas-generic dimensionless fraction is applied,
+``V_eff = V_phi(T,P) * (1 + g(m))`` with
+``g(m) = -1.7009 m/(1 + 0.090684 m)`` percent, giving -1.56% at 1 mol/kg and
+-5.85% at 5 mol/kg (for CO2, -0.5 to -2.7 cm3/mol over the working range). It
+is fixed entirely from Tiepel and Gubbins (1972) KCl dilatometry with no
+parameter fitted to any brine-density data; the magnitude is known to about a
+factor of two. Freshwater results are unchanged exactly; gas-saturated brine
+densities move by up to a few hundredths of a percent. Pass
+``salt_effect=False`` to ``brine.vphi_route.V_phi`` to recover freshwater
+V_phi.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -701,7 +705,7 @@ V_bar_2 = -(dP/dn2)/(dP/dV) at fixed temperature evaluated on the water-rich liq
 one dimensionless volume shift per gas. **This became the default in 3.7.2**; the Plyasunov
 (2019-2021) A12-infinity model is retained as the fallback for C3H8 and nC4H10 and outside the
 PR route's validity box, and is selectable with ``vphi_route='plyasunov'``. A literature-anchored
-salinity shift is applied to V_phi from 3.7.3.
+salinity shift is applied to V_phi from 3.7.3, as a relative fraction from 3.7.4.
 
 For mixed dissolved gases, mole-fraction-weighted effective V_phi and MW are used. The weighting
 is an exact algebraic identity; the approximation is the physics it rests on, namely that each
@@ -751,7 +755,7 @@ refutes, getting the sign wrong for three of five gases.
      - mu x (1 + A exp(B/T) x/(K + x)), with A = 1.71739196e-3, B = 1239.77535 K, K = 1.52860547e-3
      - Refitted here to all 23 Ostermann (SPE-14211, 1985) measurements rather than to his three summary values
    * - H2S
-     - mu x (1 + 1.79 x^1.0134)
+     - mu x (1 + 1.70 x)
      - Murphy-Gaines (1974), on their own solubility source. **About 27% uncertain**; five points, all below 309 K
    * - C2H6, N2
      - No correction

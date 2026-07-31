@@ -1330,11 +1330,14 @@ def make_pvtw_table(*args, **kwargs):
 # (1969) AIChE J 15:272. Murphy & Gaines report viscosity ratios but no mole
 # fractions; taking x_H2S from Soreide-Whitson instead put it 4.5 to 9.2% high
 # against Burgess & Germann, and since a scales as 1/x it biased the coefficient
-# low by the same amount. Implied coefficients on the correct basis are 2.31,
-# 1.54, 1.98, 1.31 and 0.27; the adopted value is the mean of the four below
-# 35 degC. Was 1.64 (S&W basis), and 1.50 before the primary source was read.
-_IC_A_H2S = 1.79       # Murphy & Gaines Table IV on Burgess & Germann solubility
-_IC_B = 1.0134         # Islam-Carlson exponent
+# low by the same amount. Implied coefficients on the correct basis are 2.20,
+# 1.47, 1.89, 1.25 and 0.26; the adopted value is the mean of the four below
+# 35 degC. Exponent set to UNITY 2026-07-31: the prior 1.0134 was borrowed
+# from Islam-Carlson's CO2 fit and never fitted to H2S, and the five points
+# cannot distinguish exponents (RMS 1.740 vs 1.738 pp). Was 1.79 with the
+# borrowed exponent, 1.64 (S&W basis), and 1.50 before the primary source
+# was read.
+_H2S_A = 1.70          # Murphy & Gaines Table IV on Burgess & Germann solubility
 
 # Calabrese et al. (2019) Eq. 25 CO2 viscosity increment (JCED 64:3831):
 # ln(mu/mu_brine) = e1 * exp(-e2*(T_K/T0 - 1)) * x_CO2
@@ -1930,7 +1933,7 @@ class SoreideWhitson:
                 T_K = (degf - 32.0) / 1.8 + 273.15
                 vis_factor *= np.exp(_CAL_E1 * np.exp(-_CAL_E2 * (T_K / _CAL_T0 - 1.0)) * x_i)
             elif gas_upper == 'H2S':
-                vis_factor *= (1.0 + _IC_A_H2S * x_i ** _IC_B)
+                vis_factor *= (1.0 + _H2S_A * x_i)
             elif gas_upper == 'CH4':
                 T_K = (degf - 32.0) / 1.8 + 273.15
                 vis_factor *= ch4_viscosity_factor(T_K, x_i)

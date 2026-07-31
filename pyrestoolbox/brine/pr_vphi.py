@@ -208,15 +208,19 @@ def _check(gas, T, P):
 
 def V2_inf_raw(gas, T, P, m_nacl=0.0):
     """Unshifted V2inf from the exact EOS relation, cm3/mol. No range guard."""
-    V = v_water_liquid(T, P, m_nacl)
+    # The two derivatives of V2 = -(dP/dn2)/(dP/dV) are evaluated ANALYTICALLY
+    # at n1 = 1, n2 = 0, V = v_w (closed forms: manuscript Appendix B).
+    # Switched from finite differences 2026-07-31; the difference evaluation
+    # agrees to 4e-5 cm3/mol, its truncation error.
+    v = v_water_liquid(T, P, m_nacl)
     kij = _SW.get_kij_aq(_SW_NAME.get(gas, gas), T, m_nacl)
-    # dP/dn2 at fixed T, V, n1: one-sided, because n2 = 0 is the boundary
-    h = 1e-7
-    dPdn2 = (_P_mix(T, V, 1.0, h, gas, kij, m_nacl)
-             - _P_mix(T, V, 1.0, 0.0, gas, kij, m_nacl)) / h
-    dV = V * 1e-7
-    dPdV = (_P_mix(T, V + dV, 1.0, 0.0, gas, kij, m_nacl)
-            - _P_mix(T, V - dV, 1.0, 0.0, gas, kij, m_nacl)) / (2.0 * dV)
+    a1, b1 = _ab('H2O', T, m_nacl)
+    a2, b2 = _ab(gas, T)
+    a12 = np.sqrt(a1 * a2) * (1.0 - kij)
+    D = v * v + 2.0 * b1 * v - b1 * b1
+    dPdn2 = (R * T / (v - b1) + R * T * b2 / (v - b1) ** 2
+             - (2.0 * a12 * D - 2.0 * a1 * b2 * (v - b1)) / D ** 2)
+    dPdV = -R * T / (v - b1) ** 2 + 2.0 * a1 * (v + b1) / D ** 2
     return -dPdn2 / dPdV
 
 
@@ -228,9 +232,10 @@ def V2_inf(gas, T, P, m_nacl=0.0, s=None):
         T: K, within T_MIN..T_MAX and above the water saturation pressure
         P: MPa, up to P_MAX
         m_nacl: NaCl molality. Enters the S&W water alpha and kij only; there is
-            NO salinity term on the volume shift, consistent with the project's
-            decision that a salt effect on V_phi is real but not applied
-            (see salt_effect_vphi.py). Leave at 0 for the calibrated behaviour.
+            NO salinity term on the volume shift. The salt effect on V_phi
+            is applied one level up (vphi_route, as a relative fraction since
+            2026-07-30), never here, so there is no double counting. Leave at
+            0 for the calibrated behaviour.
         s: override the dimensionless volume shift (for refitting).
 
     Returns:
