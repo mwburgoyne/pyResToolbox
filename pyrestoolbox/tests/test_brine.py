@@ -445,7 +445,7 @@ def test_dissolved_gas_viscosity_coefficients():
     that gas-laden viscosity was positive and larger than gas-free.
     """
     from pyrestoolbox.brine.brine import (
-        _CAL_E1, _CAL_E2, _CAL_T0, _CH4_A, _CH4_B, _CH4_K, _IC_A_H2S, _IC_B,
+        _CAL_E1, _CAL_E2, _CAL_T0, _CH4_A, _CH4_B, _CH4_K, _H2S_A,
     )
     import numpy as np
 
@@ -477,9 +477,10 @@ def test_dissolved_gas_viscosity_coefficients():
     assert abs((ch4(2e-9, 150) - 1) / (ch4(1e-9, 150) - 1) - 2.0) < 1e-4
 
     # H2S, our own fit to Murphy & Gaines
-    # Re-pinned 2026-07-25 (was 1.046941 at a_H2S = 1.64) when x_H2S was
-    # re-based from S&W onto Burgess & Germann, the solubility source Murphy
-    # & Gaines themselves used.
-    assert abs((1.0 + _IC_A_H2S * 0.03 ** _IC_B) - 1.051235) < 1e-5
+    # Re-pinned 2026-07-31 when the exponent was set to unity (1.0134 was
+    # borrowed from Islam-Carlson's CO2 fit, never fitted to H2S; the five
+    # points cannot distinguish exponents). Previously re-pinned 2026-07-25
+    # (1.051235 at a_H2S = 1.79 with the borrowed exponent).
+    assert abs((1.0 + _H2S_A * 0.03) - 1.051) < 1e-9
 
     assert abs(_CH4_K - 1.52860547e-03) < 1e-10
