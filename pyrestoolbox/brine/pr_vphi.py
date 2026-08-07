@@ -110,7 +110,7 @@ VSHIFT = {
     'CH4':  -0.109632,
     'CO2':  -0.037913,
     'H2S':  -0.078975,
-    'N2':   -0.155288,
+    'N2':   -0.176510,
     'H2':   -0.177625,
     'C2H6': -0.073142,
     # C3H8 added 2026-07-25. NOT fitted to a densimetric data set, because none
