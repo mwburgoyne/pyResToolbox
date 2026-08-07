@@ -15,7 +15,7 @@ def test_vshift_values_pinned():
     """The shifts are load-bearing: refitting them requires regenerating the
     brine_props calibration (code/fit_pr_vshift.py) and updating both."""
     expected = {'CH4': -0.109632, 'CO2': -0.037913, 'H2S': -0.078975,
-                'N2': -0.155288, 'H2': -0.177625, 'C2H6': -0.073142,
+                'N2': -0.176510, 'H2': -0.177625, 'C2H6': -0.073142,
                 # C3H8 is not from that calibration: it is the mean of two
                 # direct 298 K determinations (see test below).
                 'C3H8': -0.112963,
@@ -37,7 +37,7 @@ def test_peneloux_identity_is_exact():
     ('CH4', 350.0, 20.0, 39.4072),
     ('CO2', 350.0, 20.0, 36.1979),
     ('H2S', 350.0, 20.0, 37.1617),
-    ('N2', 350.0, 20.0, 37.1810),
+    ('N2', 350.0, 20.0, 37.6901),
     ('H2', 350.0, 20.0, 27.3687),
     ('C2H6', 350.0, 20.0, 55.5740),
 ])

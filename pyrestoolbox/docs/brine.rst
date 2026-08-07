@@ -510,7 +510,7 @@ route needs one fitted number per gas against 35 coefficients per gas for the
 correlation, matches or beats it on five of six gases against the calibration
 densimetry, and reproduces an H2S temperature trend the correlation misses.
 The delivered shifts are CH4 -0.109632, CO2 -0.037913, H2S -0.078975,
-N2 -0.155288, H2 -0.177625, C2H6 -0.073142, C3H8 -0.112963 and
+N2 -0.176510, H2 -0.177625, C2H6 -0.073142, C3H8 -0.112963 and
 nC4H10 +0.110924.
 
 Three ceilings should not be conflated: the arithmetic stops at 623.15 K, the
