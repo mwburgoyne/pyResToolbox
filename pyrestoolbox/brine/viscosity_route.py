@@ -34,7 +34,8 @@ companion paper (`Papers/51`):
 
 THE PRESSURE FACTOR. Neither salt model carries any pressure dependence, and the
 measured one is not small: Kestin's NaCl ratio moves +3.2% from 0.1 to 35 MPa at
-20 degC / 4 molal, reversing sign above ~80 degC. The shipped ratio is therefore
+20 degC / 4 molal, the dependence's sign reversing above ~91 degC (molality-
+independent; KCl crosses at ~68 degC). The shipped ratio is therefore
 multiplied by Kestin's factor normalised to 0.1 MPa, evaluated at the brine's
 IONIC STRENGTH as an NaCl-equivalent molality. That is a first-order,
 electrolyte-generic correction rather than an NaCl-specific one: NaCl and KCl

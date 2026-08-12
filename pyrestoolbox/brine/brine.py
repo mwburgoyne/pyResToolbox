@@ -90,11 +90,12 @@ _DUAN_LAMBDA = [0, -0.80898, 1.0827e-3, 183.85, 0, 0,
                 3.924e-4, 0, 0, 0, -1.97e-6]
 _DUAN_ETA = [0, -3.89e-3, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
-# Mao-Duan (2009) viscosity coefficients (McCain Table 4-14)
-_MAODUAN_D = [0, 2885310, -11072.577, -9.0834095, 0.030925651, -0.0000274071,
+# Mao-Duan (2009) viscosity coefficients, Tables 2-3 of the primary (d1 and b2
+# corrected from the McCain Table 4-14 lineage 2026-08-08, worth <=0.0094%)
+_MAODUAN_D = [0, 2885317, -11072.577, -9.0834095, 0.030925651, -0.0000274071,
               -1928385.1, 5621.6046, 13.82725, -0.047609523, 0.000035545041]
 _MAODUAN_A = [-0.21319213, 0.0013651589, -0.0000012191756]
-_MAODUAN_B = [0.069161945, -0.00027292263, 0.0000002085244]
+_MAODUAN_B = [0.069161945, -0.00027292263, 0.00000020852448]
 _MAODUAN_C = [-0.0025988855, 0.0000077989227]
 
 # Gas constant in cm3·MPa/(mol·K)
@@ -1160,7 +1161,7 @@ class CO2_Brine_Mixture():
         Fm1t_arr = _FM1T_ARR
         Fm12t_arr = _FM12T_ARR
         
-        # Table 4-14 Mao-Duan Coefficients
+        # Mao-Duan (2009) coefficients, verified against the primary
         d = _MAODUAN_D
         a = _MAODUAN_A
         b = _MAODUAN_B
