@@ -26,6 +26,7 @@ Functions
 ---------
 gas_z           Z-factor (DAK, HY, or BNS methods)
 gas_ug          Gas viscosity (cP)
+gas_thermal     Enthalpy, Cp, Cv and Joule-Thomson coefficient (BNS only)
 gas_bg          Gas formation volume factor (rcf/scf)
 gas_cg          Gas compressibility (1/psi)
 gas_den         Gas density (lb/cuft)
@@ -51,7 +52,7 @@ HydrateResult   Dataclass returned by gas_hydrate()
 """
 
 __all__ = [
-    'gas_z', 'gas_ug', 'gas_bg', 'gas_cg', 'gas_den', 'gas_sg',
+    'gas_z', 'gas_ug', 'gas_thermal', 'gas_bg', 'gas_cg', 'gas_den', 'gas_sg',
     'gas_tc_pc', 'gas_dmp', 'gas_ponz2p', 'gas_grad2sg', 'gas_fws_sg',
     'gas_water_content', 'gas_rate_radial', 'gas_rate_linear', 'darcy_gas',
     'gas_hydrate',
@@ -694,12 +695,54 @@ _BIP_SLOPE_TC = np.array([
 
 _BIP_GAS_SLOPES = np.array([0.276572, -0.122378, 0.0605506, 0.0427873])
 
-def _calc_bips_fast(degR, tpc_hc):
-    """Compute 5x5 BIP matrix using precomputed constants."""
+def _bip_slope_matrix(tpc_hc):
+    """5x5 matrix of the 1/T BIP slopes, with the hydrocarbon row/column filled in."""
     slope_tc = _BIP_SLOPE_TC.copy()
     slope_tc[4, :4] = _BIP_GAS_SLOPES * tpc_hc
     slope_tc[:4, 4] = slope_tc[4, :4]
-    return _BIP_CONST + slope_tc / degR
+    return slope_tc
+
+def _calc_bips_fast(degR, tpc_hc):
+    """Compute 5x5 BIP matrix using precomputed constants."""
+    return _BIP_CONST + _bip_slope_matrix(tpc_hc) / degR
+
+def _calc_bip_derivs(degR, tpc_hc):
+    """First and second temperature derivatives of the BNS BIP matrix.
+
+    kij = const + slope/T, so dkij/dT = -slope/T**2 and d2kij/dT2 = 2*slope/T**3.
+    These terms are needed for departure enthalpy and Cp; omitting them leaves Z
+    unchanged but makes the caloric properties wrong.
+    """
+    slope_tc = _bip_slope_matrix(tpc_hc)
+    return -slope_tc / degR**2, 2.0 * slope_tc / degR**3
+
+# --- BNS caloric parameters (Burgoyne, Nielsen & Stanko 2025, SPE-229932-MS) ---
+# Ideal-gas Cp as a Riazi-form polynomial in T(K), Cp/R = sum(coeff * T**i).
+# Fitted to zero-pressure NIST heat capacities. Order [CO2, H2S, N2, H2, Gas(C1+)].
+_BNS_CP_POLY = np.array([
+    [2.725473196,  0.004103751,  1.5602E-05, -4.19321E-08,  3.10542E-11],  # CO2
+    [4.446031265, -0.005296052,  2.0533E-05, -2.58993E-08,  1.25555E-11],  # H2S
+    [3.423811591,  0.001007461, -4.58491E-06,  8.4252E-09, -4.38083E-12],  # N2
+    [1.421468418,  0.018192108, -6.04285E-05,  9.08033E-08, -5.18972E-11],  # H2
+    [5.369051342, -0.014851371,  4.86358E-05, -3.70187E-08,  1.80641E-12],  # C1+
+])
+# Quadratic scaling applied to the C1+ Cp coefficients as its MW rises above methane
+_BNS_CP_SCALE_A0 = np.array([7.8570E-04, 1.3123E-03, 9.8133E-04, 1.6463E-03, 1.7306E-02])
+_BNS_CP_SCALE_A1 = np.array([-8.1649E-03, 5.5485E-03, 8.3258E-02, 2.0635E-01, 2.5551E+00])
+# Reference enthalpy per component at 60 degF and 14.696 psia (Btu/lb-mol)
+_BNS_H0 = np.array([-16.6022, -21.5512, -3.57757, 0.008054, 0.0])
+_BNS_H0_HC = (-0.015774, -0.646645, -8.2551915)   # quadratic in (hc_mw - mw_CH4)
+_BNS_T_REF_F = 60.0            # enthalpy reference temperature (deg F)
+_BNS_P_REF_PSIA = 14.696       # enthalpy reference pressure (psia)
+R_THERMO = 1.98588             # Btu/(lb-mol.degR)
+FT3_PSIA_TO_BTU = 5.403        # ft3.psia -> Btu
+
+def _bns_cp_poly(hc_mw):
+    """Ideal-gas Cp polynomial coefficients with the C1+ row scaled for its MW."""
+    x = hc_mw - _BNS_CH4_MW
+    cp = _BNS_CP_POLY.copy()
+    cp[-1, :] *= _BNS_CP_SCALE_A0 * x**2 + _BNS_CP_SCALE_A1 * x + 1.0
+    return cp
 
 def _cardano_cubic(c2, c1, c0, flag=0):
     """Analytic Cardano solver for monic cubic Z^3 + c2*Z^2 + c1*Z + c0 = 0.
@@ -775,6 +818,49 @@ def _halley_cubic_vec(c2, c1, c0, A, B, max_iter=50, tol=1e-12):
             Z[idx] = _cardano_cubic(c2[idx], c1[idx], c0[idx], flag=1)
 
     return Z
+
+def _bns_z_eos(A, B, c2, c1_coeff, c0):
+    """Untranslated BNS PR root, vectorised over pressure.
+
+    Takes the vapour root, then where three real roots exist selects the phase with
+    the lower fugacity coefficient (Gibbs criterion), so the liquid branch is picked
+    up when it is the stable one. Shared by gas_z and gas_thermal so both always
+    resolve to the same root.
+    """
+    Z_raw = _halley_cubic_vec(c2, c1_coeff, c0, A=A, B=B)
+
+    # Discriminant of the depressed cubic: disc < 0 means three real roots
+    p_d = (3.0 * c1_coeff - c2**2) / 3.0
+    q_d = (2.0 * c2**3 - 9.0 * c2 * c1_coeff + 27.0 * c0) / 27.0
+    disc = q_d**2 / 4.0 + p_d**3 / 27.0
+    three_roots = disc < -1e-15
+
+    if np.any(three_roots):
+        idx = three_roots
+        Z_max_s = Z_raw[idx]
+        A_s, B_s = A[idx], B[idx]
+
+        # Deflate the cubic by Z_max to get the quadratic for the remaining roots
+        b_q = c2[idx] + Z_max_s
+        c_q = c1_coeff[idx] + Z_max_s * b_q
+        det = np.maximum(b_q**2 - 4.0 * c_q, 0.0)
+        Z_min = (-b_q - np.sqrt(det)) / 2.0
+
+        sqrt2 = np.sqrt(2.0)
+        s2p1, s2m1 = 1.0 + sqrt2, sqrt2 - 1.0
+
+        def _ln_phi(Zv):
+            return ((Zv - 1.0) - np.log(Zv - B_s)
+                    - A_s / (2.0 * sqrt2 * B_s)
+                    * np.log((Zv + s2p1 * B_s) / (Zv - s2m1 * B_s)))
+
+        # Only compare where the min root is physically valid (Z > B)
+        valid = Z_min > B_s
+        Z_min_safe = np.where(valid, Z_min, Z_max_s)
+        use_min = valid & (_ln_phi(Z_min_safe) < _ln_phi(Z_max_s))
+        Z_raw[idx] = np.where(use_min, Z_min, Z_max_s)
+
+    return Z_raw
 
 def gas_z(
     p: npt.ArrayLike,
@@ -961,44 +1047,8 @@ def gas_z(
         c1_coeff = A - 3.0 * B**2 - 2.0 * B
         c0 = -(A * B - B**2 - B**3)
 
-        # Solve all cubics at once - get max (vapor) root
-        Z_raw = _halley_cubic_vec(c2, c1_coeff, c0, A=A, B=B)    # (N,)
-
-        # Fugacity-based root selection for sub-critical conditions
-        # When 3 real roots exist, the thermodynamically stable phase
-        # is the one with the lowest fugacity coefficient (Gibbs criterion).
-        # Discriminant of depressed cubic: disc < 0 means 3 real roots
-        p_d = (3.0 * c1_coeff - c2**2) / 3.0
-        q_d = (2.0 * c2**3 - 9.0 * c2 * c1_coeff + 27.0 * c0) / 27.0
-        disc = q_d**2 / 4.0 + p_d**3 / 27.0
-        three_roots = disc < -1e-15
-
-        if np.any(three_roots):
-            idx = three_roots
-            Z_max_s = Z_raw[idx]
-            A_s, B_s = A[idx], B[idx]
-
-            # Deflate cubic by Z_max to get quadratic for remaining roots
-            b_q = c2[idx] + Z_max_s
-            c_q = c1_coeff[idx] + Z_max_s * b_q
-            det = np.maximum(b_q**2 - 4.0 * c_q, 0.0)
-            sqrt_det = np.sqrt(det)
-            Z_min = (-b_q - sqrt_det) / 2.0  # Smallest root
-
-            # PR fugacity coefficient: ln(phi) for root selection
-            sqrt2 = np.sqrt(2.0)
-            s2p1, s2m1 = 1.0 + sqrt2, sqrt2 - 1.0
-
-            def _ln_phi(Zv):
-                return ((Zv - 1.0) - np.log(Zv - B_s)
-                        - A_s / (2.0 * sqrt2 * B_s)
-                        * np.log((Zv + s2p1 * B_s) / (Zv - s2m1 * B_s)))
-
-            # Only compare where min root is physically valid (Z > B)
-            valid = Z_min > B_s
-            Z_min_safe = np.where(valid, Z_min, Z_max_s)
-            use_min = valid & (_ln_phi(Z_min_safe) < _ln_phi(Z_max_s))
-            Z_raw[idx] = np.where(use_min, Z_min, Z_max_s)
+        # Solve all cubics at once, with Gibbs-criterion root selection
+        Z_raw = _bns_z_eos(A, B, c2, c1_coeff, c0)               # (N,)
 
         # Volume translation
         vshift = np.sum(z * VSHIFT * Bi, axis=1)       # (N,)
@@ -1182,6 +1232,186 @@ def gas_ug(
         return process_output(ug * zee, is_list)
     else:
         return process_output(ug, is_list)
+
+def gas_thermal(
+    p: npt.ArrayLike,
+    sg: float,
+    degf: float,
+    co2: float = 0,
+    h2s: float = 0,
+    n2: float = 0,
+    h2: float = 0,
+    tc: float = 0,
+    pc: float = 0,
+    metric: bool = False,
+) -> dict:
+    """ Returns gas enthalpy, heat capacities and Joule-Thomson coefficient from the BNS
+        tuned 5-component Peng Robinson EOS (Burgoyne, Nielsen & Stanko 2025, SPE-229932-MS).
+
+        Only the BNS method is supported; DAK and HY are Z-factor correlations and carry no
+        caloric information.
+
+        Returns a dict of {'H', 'Cp', 'Cv', 'JT'}, each a float or numpy array matching the
+        shape of p:
+            'H'  : Enthalpy relative to 60 degF and 14.696 psia (Btu/lb-mol | kJ/kmol)
+            'Cp' : Isobaric heat capacity                       (Btu/(lb-mol.degR) | kJ/(kmol.K))
+            'Cv' : Isochoric heat capacity                      (Btu/(lb-mol.degR) | kJ/(kmol.K))
+            'JT' : Joule-Thomson coefficient                    (degF/psi | degC/MPa)
+
+        p: Gas pressure (psia | barsa)
+        sg: Gas SG relative to air. Single float only
+        degf: Gas temperature (deg F | deg C)
+        co2: Molar fraction of CO2. Defaults to zero
+        h2s: Molar fraction of H2S. Defaults to zero
+        n2: Molar fraction of N2. Defaults to zero
+        h2: Molar fraction of H2. Defaults to zero
+        tc: Overrides the hydrocarbon pseudo-component Tc (deg R | K). Inert Tc stay at BNS
+            internal constants
+        pc: Overrides the hydrocarbon pseudo-component Pc (psia | barsa). Inert Pc stay at BNS
+            internal constants
+        metric: If True, input/output in Eclipse METRIC units. Defaults to False (FIELD)
+
+        Accuracy, measured against CoolProp reference EOS over 60-300 degF and
+        100-10,000 psia, single phase (see docs):
+            Pure CO2: Cp within 4.3% mean, JT within 4.1% mean
+            Pure CH4: Cp within 0.8% mean, JT within 9.5% mean
+        Worst Cp errors (about -24%) occur close to the CO2 critical point, where a cubic
+        cannot represent the heat-capacity ridge. Use a reference EOS for dense-phase CO2.
+        Departure enthalpy for lean hydrocarbon gas carries a systematic bias of about -11%
+        against the reference and should be treated with caution.
+    """
+    p, degf, tc_in, pc_in = _metric_to_field_pvt(p, degf, tc, pc, metric)
+    psias, is_list = np.asarray(p, dtype=float).reshape(-1), isinstance(p, (list, tuple, np.ndarray))
+    degR = degf + degF2R
+
+    # Hydrocarbon pseudo-component critical properties from the BNS correlation,
+    # honouring a user override exactly as gas_z does
+    tc_hc, pc_hc = gas_tc_pc(sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2, cmethod='BNS',
+                             tc=tc_in, pc=pc_in)
+
+    zf = np.array([co2, h2s, n2, h2, 1 - co2 - h2s - n2 - h2])
+    if zf[-1] < 0:
+        raise ValueError("Inert mole fractions sum to more than 1.0")
+
+    tcs, pcs, mws = _BNS_TCS.copy(), _BNS_PCS.copy(), _BNS_MWS.copy()
+    tcs[-1], pcs[-1] = tc_hc, pc_hc
+    if co2 + h2s + n2 + h2 < 1.0:
+        hc_sg = (sg - (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2) / MW_AIR) \
+                / (1 - co2 - h2s - n2 - h2)
+    else:
+        hc_sg = 0.75
+    hc_mw = max(_BNS_SG_METHANE, hc_sg) * MW_AIR
+    mws[-1] = hc_mw
+
+    ACF, VSHIFT = _BNS_ACF, _BNS_VSHIFT
+    OmegaA, OmegaB = _BNS_OMEGAA, _BNS_OMEGAB
+    trs, prs = degR / tcs, psias[:, None] / pcs[None, :]
+
+    m_i = 0.37464 + 1.54226 * ACF - 0.26992 * ACF**2
+    sqrt_tr = np.sqrt(trs)
+    alpha = (1.0 + m_i * (1.0 - sqrt_tr))**2
+    a_c_i = OmegaA * R**2 * tcs**2 / pcs
+    a_i = a_c_i * alpha
+    b_i = OmegaB * R * tcs / pcs
+
+    kij = _calc_bips_fast(degR, tc_hc)
+    dkij_dT, d2kij_dT2 = _calc_bip_derivs(degR, tc_hc)
+
+    # Temperature derivatives of alpha, and hence of a_i
+    d_alpha_dT = (-m_i * (1.0 + m_i * (1.0 - sqrt_tr)) / sqrt_tr) / tcs
+    d2_alpha_dT2 = (2.0 * (-m_i / (2.0 * sqrt_tr))**2
+                    + 2.0 * (1.0 + m_i * (1.0 - sqrt_tr)) * (m_i / (4.0 * trs**1.5))) / tcs**2
+    da_i_dT, d2a_i_dT2 = a_c_i * d_alpha_dT, a_c_i * d2_alpha_dT2
+
+    # Mixture a and its temperature derivatives. The dkij/dT and d2kij/dT2 terms are
+    # required because the BNS BIPs are temperature dependent.
+    sqrt_aij = np.sqrt(np.outer(a_i, a_i))
+    N_ij = da_i_dT[:, None] * a_i[None, :] + a_i[:, None] * da_i_dT[None, :]
+    aij = sqrt_aij * (1.0 - kij)
+    daij_dT = -dkij_dT * sqrt_aij + (1.0 - kij) * 0.5 * (N_ij / sqrt_aij)
+    d2a_term = (d2a_i_dT2[:, None] * a_i[None, :]
+                + 2.0 * da_i_dT[:, None] * da_i_dT[None, :]
+                + a_i[:, None] * d2a_i_dT2[None, :])
+    d2aij_dT2 = (-(N_ij / sqrt_aij) * dkij_dT
+                 + (1.0 - kij) * 0.5 * (d2a_term / sqrt_aij - N_ij**2 / (2.0 * sqrt_aij**3))
+                 - sqrt_aij * d2kij_dT2)
+
+    zzT = np.outer(zf, zf)
+    a_mix = float(np.sum(zzT * aij))
+    da_mix_dT = float(np.sum(zzT * daij_dT))
+    d2a_mix_dT2 = float(np.sum(zzT * d2aij_dT2))
+    b_mix = float(np.dot(zf, b_i))
+
+    RT = R * degR
+    A = a_mix * psias / RT**2
+    B = b_mix * psias / RT
+    c2 = -(1.0 - B)
+    c1_coeff = A - 3.0 * B**2 - 2.0 * B
+    c0 = -(A * B - B**2 - B**3)
+    z_eos = _bns_z_eos(A, B, c2, c1_coeff, c0)
+
+    # Peneloux translation as a constant molar volume offset (cuft/lb-mol). The p/T
+    # dependence of Bi cancels against RT/p exactly, so c_mix is constant. A constant
+    # translation leaves Cp, Cv and entropy unchanged, but shifts enthalpy by -c_mix*p
+    # and the Joule-Thomson coefficient by +c_mix/Cp.
+    c_mix = float(np.dot(zf, VSHIFT * b_i))
+
+    # Ideal-gas Cp and its integral from the reference temperature
+    cp_poly = _bns_cp_poly(hc_mw)
+    T_K, T_ref_K = degR * 5.0 / 9.0, (_BNS_T_REF_F + degF2R) * 5.0 / 9.0
+    Cp_IG = float(np.dot(zf, np.array([np.polyval(cp_poly[i, ::-1], T_K) for i in range(5)]))) * R_THERMO
+    H_IG = R_THERMO * 9.0 / 5.0 * float(np.dot(zf, sum(
+        cp_poly[:, k] / (k + 1) * (T_K**(k + 1) - T_ref_K**(k + 1)) for k in range(5))))
+
+    H0_ = _BNS_H0.copy()
+    x_hc = hc_mw - _BNS_CH4_MW
+    H0_[-1] = _BNS_H0_HC[0] * x_hc**2 + _BNS_H0_HC[1] * x_hc + _BNS_H0_HC[2]
+    H0 = float(np.dot(zf, H0_))
+
+    # PR departure enthalpy
+    sqrt2 = np.sqrt(2.0)
+    Bdim = b_mix * psias / RT
+    log_arg = (z_eos + (sqrt2 + 1.0) * Bdim) / (z_eos - (sqrt2 - 1.0) * Bdim)
+    X = (degR * da_mix_dT - a_mix) / (2.0 * sqrt2 * b_mix)
+    H_dep = (R * degR * (z_eos - 1.0) + X * np.log(log_arg)) / FT3_PSIA_TO_BTU
+    H_vshift = -c_mix * (psias - _BNS_P_REF_PSIA) / FT3_PSIA_TO_BTU
+    H_total = H_IG + H_dep + H_vshift - H0
+
+    # dZ/dT at constant p, by implicit differentiation of the cubic
+    dB_dT = -B / degR
+    dA_dT = psias / RT**2 * da_mix_dT - 2.0 * a_mix * psias / (R**2 * degR**3)
+    dF_dz = 3.0 * z_eos**2 - 2.0 * (1.0 - B) * z_eos + (A - 3.0 * B**2 - 2.0 * B)
+    dF_dA = z_eos - B
+    dF_dB = z_eos**2 - (6.0 * B + 2.0) * z_eos - A + 2.0 * B + 3.0 * B**2
+    dz_dT = -(dF_dA * dA_dT + dF_dB * dB_dT) / dF_dz
+
+    # Cp = Cp_ideal + d(H_departure)/dT at constant p
+    dBdim_dT = -Bdim / degR
+    Nn, Dd = z_eos + (sqrt2 + 1.0) * Bdim, z_eos - (sqrt2 - 1.0) * Bdim
+    dln_dT = (dz_dT + (sqrt2 + 1.0) * dBdim_dT) / Nn - (dz_dT - (sqrt2 - 1.0) * dBdim_dT) / Dd
+    dX_dT = degR * d2a_mix_dT2 / (2.0 * sqrt2 * b_mix)
+    dHdep_dT = (R * (z_eos - 1.0) + R * degR * dz_dT
+                + dX_dT * np.log(Nn / Dd) + X * dln_dT) / FT3_PSIA_TO_BTU
+    Cp_total = Cp_IG + dHdep_dT
+
+    # Cv and JT. Cp and Cv are evaluated on the untranslated EOS deliberately: a constant
+    # translation leaves U(T,V) and S(T,p) unchanged, so both heat capacities are invariant
+    # under it. Only the volume itself is translated, which is what JT sees.
+    V = z_eos * RT / psias
+    V_shifted = V - c_mix
+    dV_dT = (R / psias) * (z_eos + degR * dz_dT)
+    dP_dV_T = (-RT / (V - b_mix)**2
+               + 2.0 * a_mix * (V + b_mix) / (V**2 + 2.0 * b_mix * V - b_mix**2)**2)
+    Cv_total = Cp_total + (degR * dV_dT**2 * dP_dV_T) / FT3_PSIA_TO_BTU
+    JT = (degR * dV_dT - V_shifted) / (Cp_total * FT3_PSIA_TO_BTU)
+
+    result = {'H': H_total, 'Cp': Cp_total, 'Cv': Cv_total, 'JT': JT}
+    if metric:
+        result['H'] = result['H'] * 2.326            # Btu/lb-mol -> kJ/kmol
+        result['Cp'] = result['Cp'] * 4.186800585    # Btu/(lb-mol.degR) -> kJ/(kmol.K)
+        result['Cv'] = result['Cv'] * 4.186800585
+        result['JT'] = result['JT'] * 80.576521      # degF/psi -> degC/MPa
+    return {k: process_output(v, is_list) for k, v in result.items()}
 
 def gas_cg(
     p: npt.ArrayLike,

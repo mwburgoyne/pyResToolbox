@@ -1052,6 +1052,92 @@ def test_gaspvt_skin_methods():
     assert abs(sp - 2.15548) < 0.005
 
 
+# =============================================================================
+# gas_thermal - BNS caloric properties (enthalpy, Cp, Cv, Joule-Thomson)
+# Reference values captured from the BNS reference implementation at
+# github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor, with the Peneloux
+# volume shift carried into the caloric path.
+# =============================================================================
+
+def test_gas_thermal_keys_and_magnitudes():
+    """Returns the four caloric properties with physically sensible magnitudes"""
+    r = gas.gas_thermal(p=1500, sg=0.65, degf=100, co2=0.05, n2=0.02)
+    assert set(r) == {'H', 'Cp', 'Cv', 'JT'}
+    assert all(isinstance(v, float) for v in r.values())
+    assert 5 < r['Cp'] < 60, f"Cp={r['Cp']} outside plausible range"
+    assert 0 < r['Cv'] < r['Cp'], f"Cv={r['Cv']} must be positive and below Cp={r['Cp']}"
+    assert 0 < r['JT'] < 0.2, f"JT={r['JT']} outside plausible range for gas"
+
+
+def test_gas_thermal_regression_anchor():
+    """Matches the BNS reference implementation for a sour, inert-rich gas"""
+    r = gas.gas_thermal(p=2000, sg=0.8, degf=120, co2=0.2, h2s=0.1, n2=0.02, h2=0.1)
+    assert abs(r['H'] - (-533.48986785)) < 1e-5
+    assert abs(r['Cp'] - 12.88069548) < 1e-6
+    assert abs(r['Cv'] - 7.07947589) < 1e-6
+    assert abs(r['JT'] - 0.03602552) < 1e-8
+
+
+def test_gas_thermal_cv_below_cp_across_envelope():
+    """Cp > Cv > 0 everywhere; guards the sign of the residual heat-capacity term"""
+    for degf in (60, 150, 300):
+        r = gas.gas_thermal(p=[100, 1000, 5000, 10000], sg=0.75, degf=degf, co2=0.3)
+        assert np.all(r['Cv'] > 0), f"Cv <= 0 at {degf} degF"
+        assert np.all(r['Cp'] > r['Cv']), f"Cp <= Cv at {degf} degF"
+
+
+def test_gas_thermal_array_input():
+    """Array pressures return arrays of matching length; H falls with pressure"""
+    ps = [500, 1500, 3000]
+    r = gas.gas_thermal(p=ps, sg=0.7, degf=150, co2=0.1)
+    for k in ('H', 'Cp', 'Cv', 'JT'):
+        assert isinstance(r[k], np.ndarray) and len(r[k]) == len(ps)
+    assert np.all(np.diff(r['H']) < 0), "enthalpy should fall with pressure at fixed T"
+
+
+def test_gas_thermal_reference_state():
+    """H is zero at the 60 degF, 14.696 psia reference state"""
+    r = gas.gas_thermal(p=14.696, sg=0.75, degf=60)
+    assert abs(r['H']) < 0.5, f"H={r['H']} should be ~0 at the reference state"
+
+
+def test_gas_thermal_metric_consistency():
+    """Metric output equals field output times the documented unit factors"""
+    fld = gas.gas_thermal(p=2000, sg=0.8, degf=120, co2=0.2)
+    met = gas.gas_thermal(p=2000 * 0.0689475729, sg=0.8, degf=(120 - 32) / 1.8, co2=0.2,
+                          metric=True)
+    assert abs(met['H'] - fld['H'] * 2.326) < 1e-3 * abs(fld['H'] * 2.326)
+    assert abs(met['Cp'] - fld['Cp'] * 4.186800585) < 1e-3 * fld['Cp'] * 4.186800585
+    assert abs(met['JT'] - fld['JT'] * 80.576521) < 1e-3 * abs(fld['JT'] * 80.576521)
+
+
+def test_gas_thermal_rejects_impossible_composition():
+    """Inert fractions summing above 1.0 are rejected"""
+    with pytest.raises(ValueError):
+        gas.gas_thermal(p=1000, sg=0.75, degf=150, co2=0.6, h2s=0.5)
+
+
+def test_gas_thermal_pure_co2_against_reference_eos():
+    """Pure CO2 Cp and JT against Span-Wagner, away from the critical region.
+
+    Tolerances are set from the measured accuracy of the model, not from hope: Cp is
+    within about 4% mean and JT within about 4% mean over this range. Points near the
+    CO2 critical point are excluded because a cubic cannot represent the Cp ridge there.
+    """
+    CoolProp = pytest.importorskip("CoolProp.CoolProp")
+    PSIA2PA, BTU = 6894.757293168, 0.2388459
+    for degf, psia in ((200, 600), (200, 1500), (250, 1000), (300, 2500)):
+        T = (degf + 459.67) * 5 / 9
+        r = gas.gas_thermal(p=psia, sg=0.75, degf=degf, co2=1.0)
+        cp_ref = CoolProp.PropsSI("CPMOLAR", "T", T, "P", psia * PSIA2PA, "CO2") * BTU
+        jt_ref = CoolProp.PropsSI("d(T)/d(P)|H", "T", T, "P", psia * PSIA2PA, "CO2") * PSIA2PA * 1.8
+        assert abs(r['Cp'] - cp_ref) / cp_ref < 0.10, \
+            f"Cp {r['Cp']:.3f} vs {cp_ref:.3f} at {degf} degF, {psia} psia"
+        assert abs(r['JT'] - jt_ref) / abs(jt_ref) < 0.10, \
+            f"JT {r['JT']:.5f} vs {jt_ref:.5f} at {degf} degF, {psia} psia"
+
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("GAS MODULE VALIDATION TESTS")
