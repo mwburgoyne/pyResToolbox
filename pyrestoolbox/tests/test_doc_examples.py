@@ -1680,3 +1680,32 @@ if __name__ == '__main__':
         for name, msg in errors:
             print(f"  - {name}: {msg}")
     print("="*60)
+
+# =============================================================================
+# README.rst examples (README is NOT under the RST doc-example contract, so
+# printed outputs there drift silently unless pinned here. Found stale by the
+# 2026-08-19 audit: oil_pbub was 0.38% off, matbal/dca stale in last digits.
+# ANY value printed in README.rst must have a matching assertion below.)
+# =============================================================================
+
+def test_readme_oil_pbub():
+    """README.rst: front-page oil_pbub example"""
+    result = oil.oil_pbub(api=43, degf=185, rsb=2350, sg_g=0.72, pbmethod='VALMC')
+    assert abs(result - 5199.2406069808885) / 5199.2406069808885 < RTOL
+
+def test_readme_dca_fit_and_eur():
+    """README.rst: fit_decline + eur example"""
+    t = np.arange(1, 51, dtype=float)
+    q = 1000 * np.exp(-0.05 * t)
+    result = dca.fit_decline(t, q, method='exponential')
+    assert abs(result.qi - 999.9999999999953) < 1e-6
+    assert abs(result.di - 0.049999999999999885) < 1e-9
+    e = dca.eur(qi=result.qi, di=result.di, b=0, q_min=10)
+    assert abs(e - 19799.999999999953) < 1e-6
+
+def test_readme_gas_matbal():
+    """README.rst: gas_matbal example"""
+    r = matbal.gas_matbal(p=[3000, 2700, 2400, 2100, 1800],
+                          Gp=[0, 5, 12, 22, 35], degf=200, sg=0.65)
+    assert abs(r.ogip - 87.60264634235122) / 87.60264634235122 < RTOL
+    assert abs(r.r_squared - 0.9734793606102145) / 0.9734793606102145 < RTOL
