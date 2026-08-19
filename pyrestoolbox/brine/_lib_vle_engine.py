@@ -103,17 +103,17 @@ COMPONENTS = {
     'H2S': ComponentProperties('Hydrogen Sulfide', 373.2, 8.94e6, 0.1081, 212.8, 34.082),
 
     # Nitrogen
-    'N2': ComponentProperties('Nitrogen', 126.1, 3.40e6, 0.0403, 77.36, 28.014),
+    'N2': ComponentProperties('Nitrogen', 126.1, 3.40e6, 0.0403, 77.3, 28.014),
 
     # Hydrocarbons (S&W 1992 Table 5)
-    'CH4': ComponentProperties('Methane', 190.6, 4.60e6, 0.0108, 111.66, 16.043),
-    'C2H6': ComponentProperties('Ethane', 305.4, 4.88e6, 0.0986, 184.6, 30.07),
-    'C3H8': ComponentProperties('Propane', 369.8, 4.25e6, 0.1524, 231.1, 44.097),
-    'iC4H10': ComponentProperties('i-Butane', 408.1, 3.65e6, 0.1770, 261.4, 58.123),
+    'CH4': ComponentProperties('Methane', 190.6, 4.60e6, 0.0108, 111.6, 16.043),
+    'C2H6': ComponentProperties('Ethane', 305.4, 4.88e6, 0.0998, 184.6, 30.07),
+    'C3H8': ComponentProperties('Propane', 369.8, 4.25e6, 0.1517, 231.1, 44.097),
+    'iC4H10': ComponentProperties('i-Butane', 408.1, 3.65e6, 0.1770, 261.3, 58.123),
     'nC4H10': ComponentProperties('n-Butane', 425.2, 3.80e6, 0.1931, 272.7, 58.123),
-    'iC5H12': ComponentProperties('i-Pentane', 460.4, 3.38e6, 0.2270, 301.0, 72.15),
-    'nC5H12': ComponentProperties('n-Pentane', 469.6, 3.37e6, 0.2510, 309.2, 72.15),
-    'nC6H14': ComponentProperties('n-Hexane', 507.4, 3.01e6, 0.2990, 341.9, 86.18),
+    'iC5H12': ComponentProperties('i-Pentane', 460.4, 3.38e6, 0.2275, 301.0, 72.15),
+    'nC5H12': ComponentProperties('n-Pentane', 469.6, 3.37e6, 0.2486, 309.2, 72.15),
+    'nC6H14': ComponentProperties('n-Hexane', 507.4, 3.01e6, 0.3047, 341.9, 86.18),
     'nC7H16': ComponentProperties('n-Heptane', 540.3, 2.74e6, 0.3490, 371.6, 100.2),
     'nC8H18': ComponentProperties('n-Octane', 568.8, 2.49e6, 0.3980, 398.8, 114.2),
     'nC10H22': ComponentProperties('n-Decane', 617.7, 2.10e6, 0.4900, 447.3, 142.3),
@@ -391,12 +391,12 @@ def kij_aq_h2_proposed(T_K: float, salinity_molal: float = 0.0) -> float:
 def kij_aq_c2h6_proposed(T_K: float, salinity_molal: float = 0.0) -> float:
     """C2H6: rational, n=94, MAE=0.0095 (MC-3 alpha)."""
     Tr = T_K / 305.40
-    return (-1.2685 + Tr) / (0.3647 + 1.2800 * Tr)
+    return (-1.2683 + Tr) / (0.3352 + 1.3035 * Tr)
 
 def kij_aq_c3h8_proposed(T_K: float, salinity_molal: float = 0.0) -> float:
     """C3H8: rational, n=59, MAE=0.0022 (MC-3 alpha)."""
     Tr = T_K / 369.80
-    return (-1.1492 + Tr) / (0.6127 + 1.3198 * Tr)
+    return (-1.1491 + Tr) / (0.6126 + 1.3183 * Tr)
 
 # CH4 kij_aq_ch4 is already MC-3 rational form — used directly in proposed dict.
 # For nC4H10+ in proposed mode: call kij_aq_hydrocarbon at cs=0 (freshwater).
@@ -434,12 +434,12 @@ def kij_aq_ch4_dropin(T_K: float, salinity_molal: float = 0.0) -> float:
 def kij_aq_c2h6_dropin(T_K: float, salinity_molal: float = 0.0) -> float:
     """C2H6: rational, n=94, MAE=0.0095 (S&W alpha)."""
     Tr = T_K / 305.40
-    return (-1.2668 + Tr) / (0.1739 + 1.4165 * Tr)
+    return (-1.2669 + Tr) / (0.1526 + 1.4335 * Tr)
 
 def kij_aq_c3h8_dropin(T_K: float, salinity_molal: float = 0.0) -> float:
     """C3H8: rational, n=59, MAE=0.0022 (S&W alpha)."""
     Tr = T_K / 369.80
-    return (-1.1496 + Tr) / (0.3501 + 1.5930 * Tr)
+    return (-1.1460 + Tr) / (0.5760 + 1.3107 * Tr)
 
 
 # --- Proposed freshwater wrappers for HCs without fitted correlations ---
@@ -543,7 +543,7 @@ EMBEDDED_SALINITY_PARAMS_DROPIN: Dict[str, Dict] = {
     'CH4':  {'Tc': 190.60, 'a0': 0.1304, 'a1': -0.1295, 'a2': 0.0394},
     'N2':   {'Tc': 126.10, 'a0': 0.2173, 'a1': -0.1468, 'a2': 0.0302},
     'H2':   {'Tc': 33.145, 'a0': 0.3658, 'a1': -0.0625, 'a2': 0.0030},
-    'C2H6':   {'Tc': 305.40, 'a0': 0.0812, 'a1': -0.1286, 'a2': 0.0646},
+    'C2H6':   {'Tc': 305.40, 'a0': 0.0813, 'a1': -0.1287, 'a2': 0.0646},
     'C3H8':   {'Tc': 369.80, 'a0': 0.0606, 'a1': -0.1165, 'a2': 0.0772},  # From proposed (not refitted)
     'nC4H10': {'Tc': 425.20, 'a0': 0.0488, 'a1': -0.1072, 'a2': 0.0836},  # From proposed (not refitted)
 }
@@ -655,15 +655,15 @@ KIJ_NA: Dict[str, Optional[float]] = {
     'H2S': 0.1610,     # This work (constant; replaces S&W Eq 17)
     'CH4': 0.4850,     # S&W 1992
     'C2H6': 0.4920,    # S&W 1992
-    'C3H8': 0.5070,    # S&W 1992
-    'iC4H10': 0.5080,  # S&W 1992
-    'nC4H10': 0.5080,  # S&W 1992
-    'iC5H12': 0.5090,  # S&W 1992
-    'nC5H12': 0.5090,  # S&W 1992
-    'nC6H14': 0.5100,  # S&W 1992
-    'nC7H16': 0.5100,  # S&W 1992
-    'nC8H18': 0.5100,  # S&W 1992
-    'nC10H22': 0.5100, # S&W 1992
+    'C3H8': 0.5525,    # S&W 1992 Table 5 (0.5070 was a transcription error)
+    'iC4H10': 0.5091,  # not in S&W Table 5; set equal to nC4H10
+    'nC4H10': 0.5091,  # S&W 1992 Table 5 (0.5080 was a transcription error)
+    'iC5H12': 0.5000,  # Whitson & Brule 2000 Table 9.3 (C5+)
+    'nC5H12': 0.5000,  # Whitson & Brule 2000 Table 9.3 (C5+)
+    'nC6H14': 0.5000,  # Whitson & Brule 2000 Table 9.3 (C5+)
+    'nC7H16': 0.5000,  # Whitson & Brule 2000 Table 9.3 (C5+)
+    'nC8H18': 0.5000,  # Whitson & Brule 2000 Table 9.3 (C5+)
+    'nC10H22': 0.5000, # Whitson & Brule 2000 Table 9.3 (C5+)
 }
 
 

@@ -63,23 +63,23 @@ pub const COMPONENT_DB: [ComponentProperties; NUM_COMPONENTS] = [
     // H2S
     ComponentProperties { tc: 373.2, pc: 8.94e6, omega: 0.1081, tb: 212.8, mw: 34.082 },
     // N2
-    ComponentProperties { tc: 126.1, pc: 3.40e6, omega: 0.0403, tb: 77.36, mw: 28.014 },
+    ComponentProperties { tc: 126.1, pc: 3.40e6, omega: 0.0403, tb: 77.3, mw: 28.014 },
     // CH4
-    ComponentProperties { tc: 190.6, pc: 4.60e6, omega: 0.0108, tb: 111.66, mw: 16.043 },
+    ComponentProperties { tc: 190.6, pc: 4.60e6, omega: 0.0108, tb: 111.6, mw: 16.043 },
     // C2H6
-    ComponentProperties { tc: 305.4, pc: 4.88e6, omega: 0.0986, tb: 184.6, mw: 30.07 },
+    ComponentProperties { tc: 305.4, pc: 4.88e6, omega: 0.0998, tb: 184.6, mw: 30.07 },
     // C3H8
-    ComponentProperties { tc: 369.8, pc: 4.25e6, omega: 0.1524, tb: 231.1, mw: 44.097 },
+    ComponentProperties { tc: 369.8, pc: 4.25e6, omega: 0.1517, tb: 231.1, mw: 44.097 },
     // iC4H10
-    ComponentProperties { tc: 408.1, pc: 3.65e6, omega: 0.1770, tb: 261.4, mw: 58.123 },
+    ComponentProperties { tc: 408.1, pc: 3.65e6, omega: 0.1770, tb: 261.3, mw: 58.123 },
     // nC4H10
     ComponentProperties { tc: 425.2, pc: 3.80e6, omega: 0.1931, tb: 272.7, mw: 58.123 },
     // iC5H12
-    ComponentProperties { tc: 460.4, pc: 3.38e6, omega: 0.2270, tb: 301.0, mw: 72.15 },
+    ComponentProperties { tc: 460.4, pc: 3.38e6, omega: 0.2275, tb: 301.0, mw: 72.15 },
     // nC5H12
-    ComponentProperties { tc: 469.6, pc: 3.37e6, omega: 0.2510, tb: 309.2, mw: 72.15 },
+    ComponentProperties { tc: 469.6, pc: 3.37e6, omega: 0.2486, tb: 309.2, mw: 72.15 },
     // nC6H14
-    ComponentProperties { tc: 507.4, pc: 3.01e6, omega: 0.2990, tb: 341.9, mw: 86.18 },
+    ComponentProperties { tc: 507.4, pc: 3.01e6, omega: 0.3047, tb: 341.9, mw: 86.18 },
     // nC7H16
     ComponentProperties { tc: 540.3, pc: 2.74e6, omega: 0.3490, tb: 371.6, mw: 100.2 },
     // nC8H18

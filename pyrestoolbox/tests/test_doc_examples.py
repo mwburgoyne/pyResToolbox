@@ -772,8 +772,8 @@ def test_doc_gas_hydrate_composition():
     """gas.rst: gas_hydrate with CO2 composition and reservoir P,T"""
     r = gas.gas_hydrate(p=1000, degf=50, sg=0.65, hydmethod='MOTIEE', inhibitor_type='MEG', co2=0.05,
                          p_res=3000, degf_res=200)
-    assert abs(r.water_vaporized_res - 0.9117474657011074) / 0.9117474657011074 < RTOL
-    assert abs(r.water_condensed - 0.8763919457975714) / 0.8763919457975714 < RTOL
+    assert abs(r.water_vaporized_res - 0.9104464022241924) / 0.9104464022241924 < RTOL
+    assert abs(r.water_condensed - 0.8751290587605479) / 0.8751290587605479 < RTOL
     assert abs(r.required_inhibitor_wt_pct - 23.07967423824071) / 23.07967423824071 < RTOL
     assert r.inhibitor_underdosed is False
 

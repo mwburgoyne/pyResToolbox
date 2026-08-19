@@ -62,13 +62,13 @@ fn kij_aq_h2_proposed(t_k: f64) -> f64 {
 /// C2H6-water kij_AQ (proposed, rational, MC-3 alpha).
 fn kij_aq_c2h6_proposed(t_k: f64) -> f64 {
     let tr = t_k / 305.40;
-    (-1.2685 + tr) / (0.3647 + 1.2800 * tr)
+    (-1.2683 + tr) / (0.3352 + 1.3035 * tr)
 }
 
 /// C3H8-water kij_AQ (proposed, rational, MC-3 alpha).
 fn kij_aq_c3h8_proposed(t_k: f64) -> f64 {
     let tr = t_k / 369.80;
-    (-1.1492 + tr) / (0.6127 + 1.3198 * tr)
+    (-1.1491 + tr) / (0.6126 + 1.3183 * tr)
 }
 
 /// Freshwater wrapper for HCs without fitted proposed correlations.
@@ -111,15 +111,15 @@ const KIJ_NA_TABLE: [f64; NUM_COMPONENTS] = [
     0.4778, // N2
     0.4850, // CH4
     0.4920, // C2H6
-    0.5070, // C3H8
-    0.5080, // iC4H10
-    0.5080, // nC4H10
-    0.5090, // iC5H12
-    0.5090, // nC5H12
-    0.5100, // nC6H14
-    0.5100, // nC7H16
-    0.5100, // nC8H18
-    0.5100, // nC10H22
+    0.5525, // C3H8 (S&W 1992 Table 5; 0.5070 was a transcription error)
+    0.5091, // iC4H10 (not in S&W Table 5; set equal to nC4H10)
+    0.5091, // nC4H10 (S&W 1992 Table 5; 0.5080 was a transcription error)
+    0.5000, // iC5H12 (Whitson & Brule 2000 Table 9.3, C5+)
+    0.5000, // nC5H12 (Whitson & Brule 2000 Table 9.3, C5+)
+    0.5000, // nC6H14 (Whitson & Brule 2000 Table 9.3, C5+)
+    0.5000, // nC7H16 (Whitson & Brule 2000 Table 9.3, C5+)
+    0.5000, // nC8H18 (Whitson & Brule 2000 Table 9.3, C5+)
+    0.5000, // nC10H22 (Whitson & Brule 2000 Table 9.3, C5+)
 ];
 
 /// Get kij_NA for a given component index.
