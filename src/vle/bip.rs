@@ -98,6 +98,109 @@ pub fn get_kij_aq_proposed(comp_idx: usize, t_k: f64) -> f64 {
 }
 
 // =============================================================================
+// Default framework kij_AQ (S&W water alpha, refitted freshwater correlations)
+// =============================================================================
+// Burgoyne & Nielsen (2026), the published and recommended framework. Salinity
+// is NOT in these correlations: it enters through the additive embedded
+// delta_kij below. Mirrors KIJ_AQ_DEFAULT in _lib_vle_engine.py.
+
+fn kij_aq_co2_default(t_k: f64) -> f64 {
+    -1.5893 + 9.8873e-3 * t_k - 2.2188e-5 * t_k * t_k + 1.8499e-8 * t_k * t_k * t_k
+}
+
+fn kij_aq_h2s_default(t_k: f64) -> f64 {
+    -74.6914 / t_k + 1348.9615 * (-4504.96 / t_k).exp() + 0.22598
+}
+
+fn kij_aq_n2_default(t_k: f64) -> f64 {
+    -1.6689 + 3.441589e-3 * t_k
+}
+
+fn kij_aq_h2_default(t_k: f64) -> f64 {
+    let tr = t_k / 33.145;
+    (-14.9412 + tr) / (2.2832 + 0.3893 * tr)
+}
+
+fn kij_aq_ch4_default(t_k: f64) -> f64 {
+    let tr = t_k / 190.60;
+    (-2.1756 + tr) / (1.0388 + 0.6436 * tr)
+}
+
+fn kij_aq_c2h6_default(t_k: f64) -> f64 {
+    let tr = t_k / 305.40;
+    (-1.2669 + tr) / (0.1526 + 1.4335 * tr)
+}
+
+fn kij_aq_c3h8_default(t_k: f64) -> f64 {
+    let tr = t_k / 369.80;
+    (-1.1460 + tr) / (0.5760 + 1.3107 * tr)
+}
+
+/// Get kij_AQ for any supported gas (default framework, freshwater only).
+pub fn get_kij_aq_default(comp_idx: usize, t_k: f64) -> f64 {
+    match comp_idx {
+        IDX_H2 => kij_aq_h2_default(t_k),
+        IDX_CO2 => kij_aq_co2_default(t_k),
+        IDX_N2 => kij_aq_n2_default(t_k),
+        IDX_H2S => kij_aq_h2s_default(t_k),
+        IDX_CH4 => kij_aq_ch4_default(t_k),
+        IDX_C2H6 => kij_aq_c2h6_default(t_k),
+        IDX_C3H8 => kij_aq_c3h8_default(t_k),
+        IDX_IC4H10 | IDX_NC4H10 | IDX_IC5H12 | IDX_NC5H12
+        | IDX_NC6H14 | IDX_NC7H16 | IDX_NC8H18 | IDX_NC10H22 => {
+            kij_aq_hc_proposed(comp_idx, t_k)
+        }
+        _ => 0.0, // H2O-H2O or unknown
+    }
+}
+
+// =============================================================================
+// Embedded salinity delta_kij (paper Table 7)
+// =============================================================================
+// delta_kij = (a0 + a1*Tr + a2*Tr^2)*m, plus (b0 + b1*Tr)*m^2 for CO2 only.
+// Mirrors EMBEDDED_SALINITY_PARAMS_DEFAULT and calc_embedded_delta_kij in
+// _lib_vle_engine.py.
+
+/// (tc, a0, a1, a2, b0, b1). b0/b1 are zero for the linear-in-m gases.
+fn embedded_delta_params(comp_idx: usize) -> Option<(f64, f64, f64, f64, f64, f64)> {
+    match comp_idx {
+        IDX_CO2 => Some((304.20, 0.0409, -0.0807, 0.0526, 0.0079, -0.0085)),
+        IDX_H2S => Some((373.20, 0.0341, -0.0655, 0.0376, 0.0, 0.0)),
+        IDX_CH4 => Some((190.60, 0.1304, -0.1295, 0.0394, 0.0, 0.0)),
+        IDX_N2 => Some((126.10, 0.2173, -0.1468, 0.0302, 0.0, 0.0)),
+        IDX_H2 => Some((33.145, 0.3658, -0.0625, 0.0030, 0.0, 0.0)),
+        IDX_C2H6 => Some((305.40, 0.0813, -0.1287, 0.0646, 0.0, 0.0)),
+        IDX_C3H8 => Some((369.80, 0.0606, -0.1165, 0.0772, 0.0, 0.0)),
+        IDX_NC4H10 => Some((425.20, 0.0488, -0.1072, 0.0836, 0.0, 0.0)),
+        _ => None,
+    }
+}
+
+/// Embedded salinity correction on kij_AQ. Zero for m <= 0 or an unfitted gas.
+pub fn calc_embedded_delta_kij(comp_idx: usize, t_k: f64, salinity_molal: f64) -> f64 {
+    if salinity_molal <= 0.0 {
+        return 0.0;
+    }
+    match embedded_delta_params(comp_idx) {
+        None => 0.0,
+        Some((tc, a0, a1, a2, b0, b1)) => {
+            let tr = t_k / tc;
+            let m = salinity_molal;
+            (a0 + a1 * tr + a2 * tr * tr) * m + (b0 + b1 * tr) * m * m
+        }
+    }
+}
+
+/// Which BIP set and water alpha the flash should use.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Framework {
+    /// S&W water alpha + refitted freshwater kij + embedded delta_kij.
+    Default,
+    /// Mathias-Copeman 3-parameter water alpha + freshwater kij + gamma-phi.
+    Mc3,
+}
+
+// =============================================================================
 // kij_NA Values (Non-Aqueous Phase) — S&W 1992 Table 5 + this work
 // =============================================================================
 
@@ -232,6 +335,8 @@ pub fn build_kij_matrix(
     comp_indices: &[usize],
     t_k: f64,
     mode_aq: bool,
+    framework: Framework,
+    salinity_molal: f64,
 ) -> Vec<f64> {
     let nc = comp_indices.len();
     let mut kij = vec![0.0; nc * nc];
@@ -245,7 +350,15 @@ pub fn build_kij_matrix(
                 // Gas-water pair
                 let gas_idx = if idx_i == IDX_H2O { idx_j } else { idx_i };
                 if mode_aq {
-                    get_kij_aq_proposed(gas_idx, t_k)
+                    match framework {
+                        Framework::Mc3 => get_kij_aq_proposed(gas_idx, t_k),
+                        // Salinity rides on the BIP in the default framework,
+                        // so it is added here rather than through gamma.
+                        Framework::Default => {
+                            get_kij_aq_default(gas_idx, t_k)
+                                + calc_embedded_delta_kij(gas_idx, t_k, salinity_molal)
+                        }
+                    }
                 } else {
                     get_kij_na(gas_idx)
                 }

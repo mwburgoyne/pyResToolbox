@@ -2063,25 +2063,28 @@ class SWMultiComponentFlash:
         z = np.asarray(z, dtype=float)
         z = z / np.sum(z)
 
-        # Rust acceleration path — gamma is always passed explicitly.
-        # The Rust entry point trusts the caller-supplied gamma and never
-        # substitutes its own S&W Eq 8 ks fallback. framework='default'
-        # specialised ks models (Dubessy CO2, Akinfiev H2S, S&W Eq 8 with
-        # a small N2 offset for the remaining gases) are applied in
-        # self.calc_gamma() on the Python side.
+        # Rust acceleration path. Rust implements two of the three frameworks:
         #
-        # Restricted to framework='mc3': the Rust flash hardcodes the
-        # MC-3 water alpha and its kij_AQ. The 'default' and 'sw_original'
-        # frameworks use the salinity-dependent Soreide water alpha and
-        # different kij_AQ correlations that Rust does not implement, so they
-        # must take the Python path to avoid a silent downgrade.
-        if _RUST_AVAILABLE and self.framework == 'mc3':
+        #   'mc3'      MC-3 water alpha + its freshwater kij_AQ. The salt effect
+        #              arrives entirely through the caller-supplied gamma, which
+        #              carries the specialised ks models (Dubessy CO2, Akinfiev
+        #              H2S, S&W Eq 8 with a small N2 offset elsewhere) computed
+        #              by self.calc_gamma() on the Python side. Rust trusts that
+        #              gamma and never substitutes its own Eq 8 fallback.
+        #   'default'  S&W water alpha + refitted freshwater kij_AQ + embedded
+        #              delta_kij. Salinity enters the water alpha and the BIP
+        #              inside Rust, so it is passed through rather than folded
+        #              into gamma.
+        #
+        # 'sw_original' has no Rust implementation and takes the Python path
+        # rather than being silently downgraded.
+        if _RUST_AVAILABLE and self.framework in ('mc3', 'default'):
             try:
                 gamma_arr = np.asarray(gamma, dtype=float) if gamma is not None \
                     else np.ones(self.nc)
                 V, x_r, y_r, conv_r = _rust.flash_tp_rust(
                     T_K, P_Pa, z.tolist(), list(self.names),
-                    0.0, mode, gamma_arr.tolist(),
+                    self.salinity, mode, gamma_arr.tolist(), self.framework,
                 )
                 return V, np.array(x_r), np.array(y_r), conv_r
             except (ImportError, AttributeError):
@@ -2206,14 +2209,19 @@ class SWMultiComponentFlash:
 
         # Rust acceleration path: compute gamma in Python (correct ks models),
         # then use Rust flash_tp for the two flashes. Restricted to
-        # framework='mc3': the Rust flash implements the MC-3 water alpha and
-        # its kij_AQ only; 'default'/'sw_original' would be silently downgraded
-        # to 'mc3', so they take the Python path.
-        if (_RUST_AVAILABLE and salinity_method == 'gamma_phi'
-                and self.framework == 'mc3'):
+        # Rust covers 'mc3' with gamma-phi and 'default' with embedded
+        # delta_kij, which are the two framework/salinity pairs it implements.
+        # 'sw_original', and any other pairing, takes the Python path rather
+        # than being silently downgraded.
+        if (_RUST_AVAILABLE
+                and ((self.framework == 'mc3' and salinity_method == 'gamma_phi')
+                     or (self.framework == 'default' and salinity_method == 'embedded'))):
             try:
+                # Under 'mc3' the salt effect is a gamma on the K-value; under
+                # 'default' it is already inside the water alpha and the BIP, so
+                # gamma stays at unity and salinity is passed through instead.
                 gamma_aq = None
-                if self.salinity > 0:
+                if self.salinity > 0 and self.framework == 'mc3':
                     P_bar = P_Pa / 1e5
                     gamma_aq = self.calc_gamma(T_K, P_bar=P_bar,
                                                ks_override=ks_override)
@@ -2223,11 +2231,11 @@ class SWMultiComponentFlash:
 
                 V_aq, x_aq_r, y_aq_r, conv_aq = _rust.flash_tp_rust(
                     T_K, P_Pa, z.tolist(), names_list,
-                    self.salinity, 'AQ', gamma_list,
+                    self.salinity, 'AQ', gamma_list, self.framework,
                 )
                 V_na, x_na_r, y_na_r, conv_na = _rust.flash_tp_rust(
                     T_K, P_Pa, z.tolist(), names_list,
-                    self.salinity, 'NA', [1.0] * self.nc,
+                    self.salinity, 'NA', [1.0] * self.nc, self.framework,
                 )
                 x_aq = np.array(x_aq_r)
                 y_na = np.array(y_na_r)

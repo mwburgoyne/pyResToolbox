@@ -76,10 +76,20 @@ pub fn flash_tp_rust(
     salinity: f64,
     mode: String,
     gamma: Vec<f64>,
+    framework: String,
 ) -> PyResult<(f64, Vec<f64>, Vec<f64>, bool)> {
-    // Salinity arg is retained for signature stability / future diagnostics;
-    // currently unused because gamma is always caller-supplied.
-    let _ = salinity;
+    // Salinity is used by the default framework, where it enters the water
+    // alpha and the embedded delta_kij. Under 'mc3' the salt effect arrives
+    // entirely through the caller-supplied gamma and salinity is unused.
+    let fw = match framework.as_str() {
+        "default" => crate::vle::bip::Framework::Default,
+        "mc3" => crate::vle::bip::Framework::Mc3,
+        _ => {
+            return Err(PyValueError::new_err(
+                "framework must be 'default' or 'mc3'",
+            ));
+        }
+    };
 
     // Validate inputs
     if !t_k.is_finite() || t_k <= 0.0 {
@@ -118,6 +128,8 @@ pub fn flash_tp_rust(
         &comp_indices,
         mode_aq,
         &gamma,
+        fw,
+        salinity,
         200,
         1e-10,
     );

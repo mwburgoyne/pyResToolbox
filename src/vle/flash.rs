@@ -5,8 +5,8 @@
 ///   Flash 2: All gas-water BIPs = kij_NA → take NON-AQUEOUS phase (water content)
 ///   True K-values: K_i = y_i(Flash 2) / x_i(Flash 1)
 
-use crate::vle::alpha::{alpha_standard_pr, alpha_water_mc3};
-use crate::vle::bip::build_kij_matrix;
+use crate::vle::alpha::{alpha_standard_pr, alpha_water_mc3, alpha_water_soreide};
+use crate::vle::bip::{build_kij_matrix, Framework};
 use crate::vle::components::*;
 use crate::vle::fugacity::calc_fugacity_fast;
 use crate::vle::k_init::sw_kvalue_init;
@@ -20,14 +20,25 @@ struct EosPrecomputed {
     onemk: Vec<f64>,   // Flattened (1 - kij) matrix, nc x nc
 }
 
-/// Calculate alpha for all components using proposed framework (MC-3 for water).
-fn calc_alpha_proposed(comp_indices: &[usize], t_k: f64, tc: &[f64]) -> Vec<f64> {
+/// Calculate alpha for all components. The water alpha follows the framework:
+/// Soreide-Whitson (salinity-dependent) for the default framework, and
+/// Mathias-Copeman 3-parameter for mc3.
+fn calc_alpha(
+    comp_indices: &[usize],
+    t_k: f64,
+    tc: &[f64],
+    framework: Framework,
+    salinity_molal: f64,
+) -> Vec<f64> {
     let nc = comp_indices.len();
     let mut alpha = vec![0.0; nc];
     for i in 0..nc {
         if comp_indices[i] == IDX_H2O {
             let tr_w = t_k / tc[i];
-            alpha[i] = alpha_water_mc3(tr_w);
+            alpha[i] = match framework {
+                Framework::Mc3 => alpha_water_mc3(tr_w),
+                Framework::Default => alpha_water_soreide(tr_w, salinity_molal),
+            };
         } else {
             let tr = t_k / tc[i];
             alpha[i] = alpha_standard_pr(tr, COMPONENT_DB[comp_indices[i]].omega);
@@ -56,9 +67,11 @@ fn precompute_eos(
     t_k: f64,
     p_pa: f64,
     kij_flat: &[f64],
+    framework: Framework,
+    salinity_molal: f64,
 ) -> EosPrecomputed {
     let nc = comp_indices.len();
-    let alpha = calc_alpha_proposed(comp_indices, t_k, tc);
+    let alpha = calc_alpha(comp_indices, t_k, tc, framework, salinity_molal);
     let (ai, bi) = calc_ai_bi(&alpha, tc, pc);
 
     let rt = R_GAS * t_k;
@@ -105,6 +118,8 @@ pub fn flash_tp(
     comp_indices: &[usize],
     mode_aq: bool,
     gamma: &[f64],
+    framework: Framework,
+    salinity_molal: f64,
     max_iter: usize,
     tol: f64,
 ) -> (f64, Vec<f64>, Vec<f64>, bool) {
@@ -117,7 +132,7 @@ pub fn flash_tp(
     let z_norm: Vec<f64> = z.iter().map(|&x| x / z_sum).collect();
 
     // Build kij matrix
-    let kij_flat = build_kij_matrix(comp_indices, t_k, mode_aq);
+    let kij_flat = build_kij_matrix(comp_indices, t_k, mode_aq, framework, salinity_molal);
 
     // Build component property arrays
     let tc: Vec<f64> = comp_indices.iter().map(|&i| COMPONENT_DB[i].tc).collect();
@@ -125,7 +140,9 @@ pub fn flash_tp(
     let omega: Vec<f64> = comp_indices.iter().map(|&i| COMPONENT_DB[i].omega).collect();
 
     // Precompute EOS quantities
-    let eos = precompute_eos(comp_indices, &tc, &pc, t_k, p_pa, &kij_flat);
+    let eos = precompute_eos(
+        comp_indices, &tc, &pc, t_k, p_pa, &kij_flat, framework, salinity_molal,
+    );
 
     // Find water index in the component array
     let iw = comp_indices.iter().position(|&i| i == IDX_H2O).unwrap_or(0);
@@ -229,6 +246,8 @@ mod tests {
             &comp,
             true,   // AQ mode
             &gamma,
+            Framework::Mc3,
+            0.0,    // freshwater
             200,
             1e-10,
         );

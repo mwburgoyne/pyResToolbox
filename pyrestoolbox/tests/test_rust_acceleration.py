@@ -661,14 +661,17 @@ def test_sw_parity_natural_gas_only(pres, temp):
 
 @rust_required
 @pytest.mark.parametrize('framework', ['default', 'sw_original'])
-def test_sw_non_mc3_framework_not_downgraded(framework):
-    """Regression: the Rust flash only implements the 'mc3' framework (MC-3
-    water alpha + its kij_AQ). 'default'/'sw_original' must take the Python
-    path so they are not silently computed as 'mc3'.
+def test_sw_framework_not_downgraded_to_mc3(framework):
+    """Each framework must deliver its own answer whether or not Rust is in play.
 
-    With Rust available, a non-mc3 framework must (a) match its own
-    forced-Python result and (b) differ from the 'mc3' result on a
-    saline point where the framework choice matters.
+    Rust implements two of the three: 'default' (S&W water alpha + refitted
+    kij_AQ + embedded delta_kij) and 'mc3' (MC-3 alpha + gamma-phi).
+    'sw_original' has no Rust implementation and takes the Python path. Either
+    way the requirement is the same, and it is what this test pins: with Rust
+    available a framework must (a) match its own forced-Python result, which is
+    a parity check where Rust implements it and a no-downgrade check where it
+    does not, and (b) differ from the 'mc3' result on a saline point where the
+    framework choice matters.
     """
     from pyrestoolbox.brine import brine
     kwargs = dict(pres=3000, temp=200, ppm=50000, y_CO2=1.0, y_H2S=0, y_N2=0,

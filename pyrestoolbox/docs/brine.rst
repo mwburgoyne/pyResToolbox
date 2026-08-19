@@ -472,7 +472,7 @@ pyrestoolbox.brine.SoreideWhitson
 
 .. code-block:: python
 
-    SoreideWhitson(pres, temp, ppm=0, y_CO2=0, y_H2S=0, y_N2=0, y_H2=0, sg=0.65, metric=False, cw_sat=False, framework='default', salinity_method='gamma_phi', vphi_route='auto', *, p=None, degf=None, wt=None) -> class
+    SoreideWhitson(pres, temp, ppm=0, y_CO2=0, y_H2S=0, y_N2=0, y_H2=0, sg=0.65, metric=False, cw_sat=False, framework='default', salinity_method='auto', vphi_route='auto', *, p=None, degf=None, wt=None) -> class
 
 Soreide-Whitson VLE model for multicomponent gas solubility in water/brine, using by
 default the refreshed BIP relationships of `Burgoyne & Nielsen (2026) <https://doi.org/10.1016/j.fluid.2026.114824>`_,
@@ -571,16 +571,23 @@ V_phi.
      - If True, will also calculate saturated brine compressibility. Default False
    * - framework
      - str
-     - VLE framework used by the S&W engine, affecting the kij and ks correlations:
+     - VLE framework used by the S&W engine. It sets three things together: the water alpha function, the freshwater kij correlations, and how salinity is applied.
 
-       * ``'default'`` - the `Burgoyne & Nielsen (2026) <https://doi.org/10.1016/j.fluid.2026.114824>`_ refreshed BIPs on the Mathias-Copeman 3-parameter water alpha, with salinity handled separately by Sechenov salting-out. Use this unless you have a reason not to.
-       * ``'sw_original'`` - Soreide & Whitson (1992) exactly as published: their water alpha, their kij correlations, with salinity embedded in kij for the hydrocarbons, CO2 and N2 (H2 and H2S have no embedded term, so Sechenov is applied to those).
-       * ``'dropin'`` - the refreshed freshwater BIPs re-fitted on top of the ORIGINAL S&W water alpha, with the salinity effect carried by an embedded delta on kij. It exists so that an existing S&W implementation can take the improved BIPs by swapping its kij correlations alone, without touching its water alpha. Slightly less accurate than ``'default'``, and the choice to make when you must match a legacy S&W tool's alpha function.
+       * ``'default'`` - what `Burgoyne & Nielsen (2026) <https://doi.org/10.1016/j.fluid.2026.114824>`_ publish and recommend. The **original S&W water alpha is retained** (their Table 8), the freshwater kij are refitted from roughly 2000 pointwise-regressed BIP values, and salinity is carried by an additive embedded ``delta_kij(T, m)`` fitted to reproduce modern Sechenov models (their Table 7). Because the alpha is unchanged, an existing S&W implementation adopts this by swapping its kij correlations alone.
+       * ``'sw_original'`` - Soreide & Whitson (1992) exactly as published: their water alpha, their kij correlations, salinity embedded in kij for the hydrocarbons, CO2 and N2. H2 and H2S have no embedded term there, so Sechenov salting-out is applied to those two.
+       * ``'mc3'`` - the alternative the same paper investigated and did not adopt (their Section 7.1): a Mathias-Copeman 3-parameter water alpha with salinity applied as an explicit gamma-phi Sechenov correction, which routes to the best available ks model per gas (Dubessy for CO2, Akinfiev for H2S, S&W Eq. 12 otherwise). The paper found the two indistinguishable in fit quality once the BIP is refitted, and recommended the simpler embedded approach; on delivered numbers they differ by up to about 4% in solubility.
 
-       ``'proposed'`` is accepted as a legacy alias for ``'default'`` (it was the name up to 3.7.4, when the refresh was still an unpublished proposal).
+       The pre-3.7.5 names remain accepted and keep their old meaning, so existing calls are unaffected: ``'dropin'`` for ``'default'`` and ``'proposed'`` for ``'mc3'``.
    * - salinity_method
      - str
-     - How salinity enters the flash. ``'gamma_phi'`` (default, Sechenov salting-out via activity coefficient), ``'embedded'`` (salinity inside kij — only compatible with ``'dropin'``/``'sw_original'``), ``'explicit'`` (brine treated as a component in the flash), ``'sechenov'`` and ``'auto'`` (both accepted aliases that normalise to ``gamma_phi``). ``framework='proposed'`` + ``salinity_method='embedded'`` emits a warning and falls back to ``gamma_phi``. Note that the Rust-accelerated flash runs only for ``framework='proposed'`` with ``salinity_method='gamma_phi'``; other combinations use the pure-Python flash.
+     - How salinity enters the flash.
+
+       * ``'auto'`` (default) - takes the route each framework was fitted with: ``'embedded'`` for ``'default'`` and ``'sw_original'``, ``'gamma_phi'`` for ``'mc3'``. Leave it alone unless you are deliberately crossing a framework with a route it was not fitted for.
+       * ``'embedded'`` - salinity inside kij, as an additive ``delta_kij(T, m)``. Defined for all three frameworks, each with its own fitted coefficients.
+       * ``'gamma_phi'`` - Sechenov salting-out applied as an activity coefficient on the dissolved gas, leaving the BIP freshwater. ``'sechenov'`` is an accepted alias.
+       * ``'explicit'`` - brine treated as a component in the flash.
+
+       The Rust-accelerated flash covers the two pairings the accelerator implements, ``'default'`` with ``'embedded'`` and ``'mc3'`` with ``'gamma_phi'``, which are both defaults. Anything else runs the pure-Python flash and returns the same numbers.
 
 .. list-table:: Returns (SoreideWhitson)
    :widths: 10 15 40
