@@ -1,9 +1,9 @@
-===================================
+==================================================================================
 Brine PVT with differing degrees of methane, CO2, or multicomponent gas saturation
-===================================
+==================================================================================
 
 Which one should I use?
-----------------------
+-----------------------
 
 Three brine property models are available. They are **not** interchangeable
 wrappers around one calculation: they carry three different *solubility* models,
@@ -45,22 +45,17 @@ which model produced a number:
     'SoreideWhitson'
 
 What each returns
-----------------------
+-----------------
 
 **brine_props** — Methane-saturated brine using IAPWS-IF97 freshwater density with Spivey salt correction per McCain Petroleum Reservoir Fluid Properties pg 160. Includes effect of user specified salt concentration and degree of methane saturation.
 Returns tuple of (Bw (rb/stb), Density (sg), viscosity (cP), Compressibility (1/psi), Rw GOR (scf/stb)).
-**Changed in 3.7.4:** the returned viscosity now includes the dissolved-methane
-correction. Before 3.7.4 it returned the gas-free viscosity even at
-``ch4_sat=1.0``, understating the measured effect (Ostermann 1985: +3 to 6%) by
-its full size. Expect the reported viscosity to rise by up to a few percent at
-high methane saturation; density, Bw, Cw and Rsw are unchanged.
 
 **CO2_Brine_Mixture** — CO2-saturated brine via Spycher-Pruess mutual solubility model. Returns a class object with calculated CO2 saturated brine property attributes. Retained deliberately rather than folded into ``SoreideWhitson``, because it is the more accurate route for pure CO2.
 
 **SoreideWhitson** — Multicomponent gas-saturated brine via the Soreide-Whitson VLE model, using by default the refreshed BIP relationships of `Burgoyne & Nielsen (2026) <https://doi.org/10.1016/j.fluid.2026.114824>`_. Supports mixtures of C1, C2, C3, nC4, CO2, H2S, N2 and H2 in fresh or saline water.
 
 Unit System Support
-----------------------
+-------------------
 
 All three brine models default to oilfield units (psia, degF, 1/psi, scf/stb) and accept ``metric=True`` to switch to Eclipse METRIC (barsa, degC, 1/bar, sm3/sm3):
 
@@ -76,28 +71,8 @@ pressure raises ``ValueError``.
 
     All "standard" volumes (Bw, Rs) use oilfield standard conditions (60 deg F, 14.696 psia) regardless of unit system.
 
-.. list-table:: Method employed for different calculations (CO2_Brine_Mixture)
-   :widths: 30 40
-   :header-rows: 1
-
-   * - Property
-     - Calculation method
-   * - Mutual Solubility between CO2 and Brine
-     - Spycher & Pruess (2010), modified SRK Cubic EOS method
-   * - Pure Water Density
-     - IAPWS-IF97 Region 1 (international reference standard)
-   * - Brine Salinity Correction
-     - Spivey et al. (modified), per "Petroleum Reservoir Fluid Property Correlations", (McCain, Spivey & Lenn: Chapter 4)
-   * - CO2 Corrected Brine Density
-     - Molar volume of dissolved CO2 estimated with Garcia (2001) equation, used with xCO2 calculated from Spycher & Pruess, and CO2-free brine density to calculate insitu density
-   * - Gas-free Brine viscosity
-     - IAPWS-2008 water (Huber et al. 2009) x ion-additive Jones-Dole salt ratio (Appelo & Parkhurst, as implemented in PHREEQC) x Kestin (1981) measured pressure factor. **Changed in 3.7.3**; Mao-Duan (2009) remains available as ``route='mao_duan'``. See the ``brine_viscosity`` section below.
-   * - CO2 Corrected Brine Viscosity
-     - Calabrese et al. (2019) Eq. 25, a temperature-dependent increment fitted to 415 measured brine points. **Changed in 3.7.2**, superseding Islam-Carlson (2012), which carries no temperature dependence and overstates the effect by 3.5x at 366 K and 9.4x at 423 K.
-     
-
 pyrestoolbox.brine.brine_props
-======================
+==============================
 
 .. code-block:: python
 
@@ -149,6 +124,12 @@ pyrestoolbox.brine.brine_props
      - float
      - Rsw — solution gas-water ratio (scf/stb, or sm3/sm3 if metric=True)
 
+**Changed in 3.7.4:** the returned viscosity now includes the dissolved-methane
+correction. Before 3.7.4 it returned the gas-free viscosity even at
+``ch4_sat=1.0``, understating the measured effect (Ostermann 1985: +3 to 6%) by
+its full size. Expect the reported viscosity to rise by up to a few percent at
+high methane saturation; density, Bw, Cw and Rsw are unchanged.
+
 Examples:
 
 .. code-block:: python
@@ -174,11 +155,30 @@ Examples:
     Bw (rb/stb), density (SG), and viscosity (cP) are unchanged by the unit system.
 
 pyrestoolbox.brine.CO2_Brine_Mixture
-======================
+====================================
 
 .. code-block:: python
 
     CO2_Brine_Mixture(pres, temp, ppm = 0, metric = False, cw_sat = False) -> class
+
+.. list-table:: Method employed for different calculations (CO2_Brine_Mixture)
+   :widths: 30 40
+   :header-rows: 1
+
+   * - Property
+     - Calculation method
+   * - Mutual Solubility between CO2 and Brine
+     - Spycher & Pruess (2010), modified SRK Cubic EOS method
+   * - Pure Water Density
+     - IAPWS-IF97 Region 1 (international reference standard)
+   * - Brine Salinity Correction
+     - Spivey et al. (modified), per "Petroleum Reservoir Fluid Property Correlations", (McCain, Spivey & Lenn: Chapter 4)
+   * - CO2 Corrected Brine Density
+     - Molar volume of dissolved CO2 estimated with Garcia (2001) equation, used with xCO2 calculated from Spycher & Pruess, and CO2-free brine density to calculate insitu density
+   * - Gas-free Brine viscosity
+     - IAPWS-2008 water (Huber et al. 2009) x ion-additive Jones-Dole salt ratio (Appelo & Parkhurst, as implemented in PHREEQC) x Kestin (1981) measured pressure factor. **Changed in 3.7.3**; Mao-Duan (2009) remains available as ``route='mao_duan'``. See the ``brine_viscosity`` section below.
+   * - CO2 Corrected Brine Viscosity
+     - Calabrese et al. (2019) Eq. 25, a temperature-dependent increment fitted to 415 measured brine points. **Changed in 3.7.2**, superseding Islam-Carlson (2012), which carries no temperature dependence and overstates the effect by 3.5x at 366 K and 9.4x at 423 K.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -268,7 +268,7 @@ Usage example for 175 Bara x 85 degC and 0% NaCl brine:
     24.743651168969475
 
 pyrestoolbox.brine.make_pvtw_table
-======================
+==================================
 
 .. note::
 
@@ -360,7 +360,7 @@ Examples:
     0.308131761431705
 
 pyrestoolbox.brine.brine_viscosity
-======================
+==================================
 
 ::
 
@@ -468,7 +468,7 @@ No PHREEQC installation is required: the per-ion parameters are embedded and are
 machine-verified against the source database.
 
 pyrestoolbox.brine.SoreideWhitson
-======================
+=================================
 
 .. code-block:: python
 
@@ -497,40 +497,13 @@ based on the gas specific gravity using constrained exponential decay to match t
    * - Gas-Corrected Brine Density
      - Mass and volume balance (an identity, not a fitted mixing rule) with apparent molar volumes from the Soreide-Whitson modified PR route plus one volume shift per gas. **Changed in 3.7.2**; the Plyasunov (2019-2021) correlation is retained as ``vphi_route='plyasunov'``. A literature-anchored salinity shift is applied to V_phi from 3.7.3 (relative form from 3.7.4), disabled with ``salt_effect=False``.
    * - Gas-free Brine Viscosity
-     - IAPWS-2008 water x ion-additive Jones-Dole salt ratio x Kestin measured pressure factor. **Changed in 3.7.3**; Mao-Duan (2009) remains available. See the ``brine_viscosity`` section below.
+     - IAPWS-2008 water x ion-additive Jones-Dole salt ratio x Kestin measured pressure factor. **Changed in 3.7.3**; Mao-Duan (2009) remains available. See the ``brine_viscosity`` section above.
    * - Gas-Corrected Brine Viscosity
      - Per-gas multiplicative corrections: Calabrese et al. (2019) Eq. 25 for CO2 (**changed in 3.7.2**, superseding Islam-Carlson), an Arrhenius-times-Langmuir form refitted to all 23 Ostermann (SPE-14211, 1985) measurements for CH4, and Murphy & Gaines (1974) for H2S. C2H6 and N2 are measured nulls; H2, C3H8 and nC4H10 carry no correction because no data exists.
 
-**Apparent molar volume route** (``vphi_route``, new in 3.7.2). ``'auto'`` is the
-default and uses the Soreide-Whitson modified PR route with one dimensionless
-volume shift per gas, falling back to the Plyasunov correlation for C3H8 and
-nC4H10 and outside the PR route's validity box. ``'pr'`` and ``'plyasunov'``
-force one route; ``'plyasunov'`` reproduces pre-3.7.2 results exactly. The PR
-route needs one fitted number per gas against 35 coefficients per gas for the
-correlation, matches or beats it on five of six gases against the calibration
-densimetry, and reproduces an H2S temperature trend the correlation misses.
-The delivered shifts are CH4 -0.109632, CO2 -0.037913, H2S -0.078975,
-N2 -0.176510, H2 -0.177625, C2H6 -0.073142, C3H8 -0.112963 and
-nC4H10 +0.110924.
-
-Three ceilings should not be conflated: the arithmetic stops at 623.15 K, the
-volume shift stops being fitted at 473.15 K, and **accuracy is claimed only to
-about 450 K (300 to 350 degF)**, which is the only one of the three that is a
-statement about the answer. N2, H2, C2H6, C3H8 and nC4H10 have no
-temperature-resolved calibration data, so for those the temperature behaviour is
-the equation of state unaided.
-
-**Salinity shift on V_phi** (new in 3.7.3; relative form from 3.7.4). A
-gas-generic dimensionless fraction is applied,
-``V_eff = V_phi(T,P) * (1 + g(m))`` with
-``g(m) = -1.7009 m/(1 + 0.090684 m)`` percent, giving -1.56% at 1 mol/kg and
--5.85% at 5 mol/kg (for CO2, -0.5 to -2.7 cm3/mol over the working range). It
-is fixed entirely from Tiepel and Gubbins (1972) KCl dilatometry with no
-parameter fitted to any brine-density data; the magnitude is known to about a
-factor of two. Freshwater results are unchanged exactly; gas-saturated brine
-densities move by up to a few hundredths of a percent. Pass
-``salt_effect=False`` to ``brine.vphi_route.V_phi`` to recover freshwater
-V_phi.
+The V_phi used in the density step comes from the route set by ``vphi_route``
+(``'auto'`` default); see *Density and Viscosity Calculation Details* at the end
+of this page for the routes, the fitted shifts and their validity limits.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -588,6 +561,12 @@ V_phi.
        * ``'explicit'`` - brine treated as a component in the flash.
 
        The Rust-accelerated flash covers the two pairings the accelerator implements, ``'default'`` with ``'embedded'`` and ``'mc3'`` with ``'gamma_phi'``, which are both defaults. Anything else runs the pure-Python flash and returns the same numbers.
+   * - vphi_route
+     - str
+     - Source of the dissolved-gas apparent molar volume for the density step. ``'auto'`` (default, S&W PR + volume shift with Plyasunov fallback), ``'pr'``, or ``'plyasunov'`` (reproduces pre-3.7.2 densities exactly). See *Density and Viscosity Calculation Details* below.
+   * - p, degf, wt
+     - float
+     - Keyword-only aliases for pres, temp and salinity: ``wt`` is salt weight% (``ppm = wt * 10000``). Supply either naming convention, not both.
 
 .. list-table:: Returns (SoreideWhitson)
    :widths: 10 15 40
@@ -706,7 +685,7 @@ References:
 - Islam, A.W. and Carlson, E.S. (2012), "Viscosity Models and Effects of Dissolved CO2", Energy & Fuels, 26(8), 5330-5336. (superseded by Calabrese in 3.7.2; listed for provenance)
 
 Density and Viscosity Calculation Details
-----------------------
+-----------------------------------------
 
 **Gas-corrected brine density** is a mass and volume balance. It is an identity rather than a
 fitted mixing rule: mass is additive, and the apparent molar volume is *defined* so that the
@@ -718,10 +697,38 @@ the Soreide-Whitson modified PR equation of state, using the exact relation
 V_bar_2 = -(dP/dn2)/(dP/dV) at fixed temperature evaluated on the water-rich liquid root, plus
 one dimensionless Peneloux volume shift per gas (``brine.pr_vphi.VSHIFT``, a property of the
 aqueous-phase route and unrelated to the BNS gas-phase shift used by ``gas.gas_z``).
-**This became the default in 3.7.2**; the Plyasunov
-(2019-2021) A12-infinity model is retained as the fallback for C3H8 and nC4H10 and outside the
-PR route's validity box, and is selectable with ``vphi_route='plyasunov'``. A literature-anchored
-salinity shift is applied to V_phi from 3.7.3, as a relative fraction from 3.7.4.
+
+**Route selection** (``vphi_route``, new in 3.7.2). ``'auto'`` is the default
+and uses this PR route wherever the state is inside its validity box, falling
+back to the Plyasunov correlation outside it. All eight gases carry a fitted
+shift since 3.7.3, so the fallback is by state, not by gas. ``'pr'`` and
+``'plyasunov'`` force one route; ``'plyasunov'`` reproduces pre-3.7.2 results
+exactly. The PR
+route needs one fitted number per gas against 35 coefficients per gas for the
+correlation, matches or beats it on five of six gases against the calibration
+densimetry, and reproduces an H2S temperature trend the correlation misses.
+The delivered shifts are CH4 -0.109632, CO2 -0.037913, H2S -0.078975,
+N2 -0.176510, H2 -0.177625, C2H6 -0.073142, C3H8 -0.112963 and
+nC4H10 +0.110924.
+
+Three ceilings should not be conflated: the arithmetic stops at 623.15 K, the
+volume shift stops being fitted at 473.15 K, and **accuracy is claimed only to
+about 450 K (300 to 350 degF)**, which is the only one of the three that is a
+statement about the answer. N2, H2, C2H6, C3H8 and nC4H10 have no
+temperature-resolved calibration data, so for those the temperature behaviour is
+the equation of state unaided.
+
+**Salinity shift on V_phi** (new in 3.7.3; relative form from 3.7.4). A
+gas-generic dimensionless fraction is applied,
+``V_eff = V_phi(T,P) * (1 + g(m))`` with
+``g(m) = -1.7009 m/(1 + 0.090684 m)`` percent, giving -1.56% at 1 mol/kg and
+-5.85% at 5 mol/kg (for CO2, -0.5 to -2.7 cm3/mol over the working range). It
+is fixed entirely from Tiepel and Gubbins (1972) KCl dilatometry with no
+parameter fitted to any brine-density data; the magnitude is known to about a
+factor of two. Freshwater results are unchanged exactly; gas-saturated brine
+densities move by up to a few hundredths of a percent. Pass
+``salt_effect=False`` to ``brine.vphi_route.V_phi`` to recover freshwater
+V_phi.
 
 For mixed dissolved gases, mole-fraction-weighted effective V_phi and MW are used. The weighting
 is an exact algebraic identity; the approximation is the physics it rests on, namely that each

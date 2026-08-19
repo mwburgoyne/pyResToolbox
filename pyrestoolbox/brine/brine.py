@@ -439,7 +439,7 @@ BBL2CUFT = 5.614583333 # cuft in a bbl
 #                               per "Petroleum Reservoir Fluid Property Correlations", (McCain, Spivey & Lenn: Chapter 4)
 #CO2 Corrected Brine Density    Molar volume of dissolved CO2 estimated with Garcia (2001) equation, used with xCO2 calculated 
 #                               from Spycher & Pruess, and CO2-free brine density from Spivey et al to calculate insitu density
-#Pure Brine viscosity           Mao-Duan (2009) approach for pure brine viscosity
+#Pure Brine viscosity           IAPWS-2008 water x Jones-Dole salt ratio x Kestin pressure factor (Mao-Duan superseded 3.7.3)
 #CO2 Corrected Brine Viscosity  Calabrese et al. (2019) Eq. 25 T-dependent increment (supersedes Islam-Carlson 2012)
 #                               to adjust the pure brine viscosity for xCO2 calculated from Spycher & Pruess
 #===================================================================================================================
@@ -1119,7 +1119,7 @@ class CO2_Brine_Mixture():
         """ Calculates CO2 saturated Brine properties
             1. Pure Water Density:            IAPWS-IF97 Region 1
             2. Brine Salt Correction:         Spivey et al. (modified)
-            3. Pure Brine viscosity:          Mao-Duan (2009)
+            3. Pure Brine viscosity:          IAPWS-2008 x Jones-Dole x Kestin (brine.viscosity_route)
             4. CO2 Corrected Brine Density:   Garcia (2001)
             5. CO2 Corrected Brine Viscosity: Calabrese et al. (2019) Eq. 25
             
@@ -1259,7 +1259,7 @@ class CO2_Brine_Mixture():
         sg_CO2_Brine_ = garciaDensity(sg_brine_, tKel, pBar + 1, ppm, xCO2, MwB, MwG)
         cP_CO2_brine_ = co2_vis_brine(cP_brine_, xCO2)
         
-        # -- Numerically calculate viscosibility from Mao-Duan (2009) base viscosity with Garcia correction for CO2
+        # -- Numerically calculate viscosibility from the Jones-Dole chain base viscosity with Calabrese correction for CO2
         dvdpsi = (cP_CO2_brine_ - cP_CO2_brine)  #-- d[Viscosity/dp [cP/bar]
         viscosblty = dvdpsi * 2 / (cP_CO2_brine + cP_CO2_brine_)  # (1/bar)
         
@@ -1852,7 +1852,7 @@ class SoreideWhitson:
         # Step 2: Base brine properties (gas-free)
         #   Freshwater density: IAPWS-IF97 (international reference standard)
         #   Salt correction: Spivey/McCain ratio (Eq 4.6-4.12 vs Eq 4.1-4.5)
-        #   Viscosity: Mao-Duan (2009) via brine_props
+        #   Viscosity: IAPWS-2008 x Jones-Dole x Kestin chain via brine_props
         # ================================================================
         # brine_props still needed for viscosity, compressibility, Bw, Rsw
         bw_base, den_base_sg, vis_base_cP, _, rsw_base = brine_props(
