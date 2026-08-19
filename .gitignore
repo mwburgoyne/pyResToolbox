@@ -46,3 +46,12 @@ BUILD_INSTRUCTIONS.txt
 
 # local virtualenv (389 MB, never committed)
 .venv/
+
+# Internal development artifacts (kept locally, not published)
+reviews/
+benchmarks/
+benchmark_*.py
+zstar_*
+pyresToolbox_rust_acceleration_instructions.md
+pyrestoolbox-mcp-email.txt
+*.zip
