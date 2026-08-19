@@ -703,7 +703,9 @@ Nothing in it is fitted or fittable, and it is gas-generic by construction.
 For each dissolved species the apparent molar volume at infinite dilution V_phi(T,P) comes from
 the Soreide-Whitson modified PR equation of state, using the exact relation
 V_bar_2 = -(dP/dn2)/(dP/dV) at fixed temperature evaluated on the water-rich liquid root, plus
-one dimensionless volume shift per gas. **This became the default in 3.7.2**; the Plyasunov
+one dimensionless Peneloux volume shift per gas (``brine.pr_vphi.VSHIFT``, a property of the
+aqueous-phase route and unrelated to the BNS gas-phase shift used by ``gas.gas_z``).
+**This became the default in 3.7.2**; the Plyasunov
 (2019-2021) A12-infinity model is retained as the fallback for C3H8 and nC4H10 and outside the
 PR route's validity box, and is selectable with ``vphi_route='plyasunov'``. A literature-anchored
 salinity shift is applied to V_phi from 3.7.3, as a relative fraction from 3.7.4.
