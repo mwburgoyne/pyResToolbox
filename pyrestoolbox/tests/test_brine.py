@@ -115,10 +115,21 @@ def test_co2_brine_converged_flag():
 def test_sw_framework_and_salinity_method_exposed():
     """SoreideWhitson should accept framework + salinity_method kwargs and store them."""
     mix = brine.SoreideWhitson(pres=200, temp=80, ppm=30000, y_CO2=1.0,
-                               metric=True, framework='proposed',
+                               metric=True, framework='default',
                                salinity_method='gamma_phi')
-    assert mix.framework == 'proposed'
+    assert mix.framework == 'default'
     assert mix.salinity_method == 'gamma_phi'
+
+
+def test_sw_accepts_legacy_proposed_framework_alias():
+    """'proposed' was the name of the default framework up to 3.7.4; it must
+    still be accepted, and must normalise to 'default'."""
+    kwargs = dict(pres=200, temp=80, ppm=30000, y_CO2=1.0, metric=True,
+                  salinity_method='gamma_phi')
+    legacy = brine.SoreideWhitson(framework='proposed', **kwargs)
+    current = brine.SoreideWhitson(framework='default', **kwargs)
+    assert legacy.framework == 'default'
+    assert legacy.Rs_total == current.Rs_total
 
 
 def test_sw_rejects_invalid_framework():
@@ -358,7 +369,7 @@ def test_sw_sechenov_auto_alias_equal_gamma_phi():
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             m = brine.SoreideWhitson(pres=3000, temp=200, ppm=200000, y_CO2=0,
-                                     sg=0.554, metric=False, framework='proposed',
+                                     sg=0.554, metric=False, framework='default',
                                      salinity_method=sm)
         return m.salinity_method, m.x.get('CH4', 0.0)
     base_norm, base_x = run('gamma_phi')

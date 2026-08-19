@@ -70,7 +70,7 @@ if _RUST_AVAILABLE:
 
 
 # ---------------------------------------------------------------------------
-# Named constants — extracted from inline magic numbers per CLAUDE.md rules.
+# Named constants, extracted from inline magic numbers.
 # ---------------------------------------------------------------------------
 
 # Arps hyperbolic b-grid search (Arps 1945; boundary-dominated b in (0, 1))

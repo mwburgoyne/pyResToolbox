@@ -204,7 +204,7 @@ Changelist in 3.4.0:
 
   - Removed private-helper re-exports ``_cofb_mccain``, ``_perrine_co_sat``, ``_resolve_pb_rsb``, ``_build_bot_tables``, ``_format_bot_results`` from ``pyrestoolbox.oil`` public namespace. Still reachable via ``pyrestoolbox.oil._tables`` / ``._density`` / ``._compressibility`` for advanced users; ``simtools.make_bot_og`` updated internally.
   - Dead imports removed across ``_compressibility``, ``_correlations``, ``_density``, ``_harmonize``, ``_tables`` sub-files (11 symbols total).
-  - Valko-McCain (2003) coefficient matrices for ``sg_st_gas`` and ``oil_rs_st`` extracted to ``_constants.py`` with paper citations, per CLAUDE.md named-constants rule.
+  - Valko-McCain (2003) coefficient matrices for ``sg_st_gas`` and ``oil_rs_st`` extracted to ``_constants.py`` with paper citations.
 
 - **Oil documentation sync**: ``docs/oil.rst`` updated — ``oil_deno`` parameter listed as ``sg_o`` (matches code; was incorrectly ``sg_sto``). ``make_bot_og`` result-dict table now documents ``vis_frac`` (was previously omitted despite being returned).
 

@@ -661,13 +661,13 @@ def test_sw_parity_natural_gas_only(pres, temp):
 
 @rust_required
 @pytest.mark.parametrize('framework', ['dropin', 'sw_original'])
-def test_sw_non_proposed_framework_not_downgraded(framework):
-    """Regression: the Rust flash only implements the 'proposed' framework
-    (MC-3 water alpha + proposed kij_AQ). 'dropin'/'sw_original' must take the
-    Python path so they are not silently computed as 'proposed'.
+def test_sw_non_default_framework_not_downgraded(framework):
+    """Regression: the Rust flash only implements the 'default' framework
+    (MC-3 water alpha + refitted kij_AQ). 'dropin'/'sw_original' must take the
+    Python path so they are not silently computed as 'default'.
 
-    With Rust available, a non-proposed framework must (a) match its own
-    forced-Python result and (b) differ from the 'proposed' result on a
+    With Rust available, a non-default framework must (a) match its own
+    forced-Python result and (b) differ from the 'default' result on a
     saline point where the framework choice matters.
     """
     from pyrestoolbox.brine import brine
@@ -676,15 +676,15 @@ def test_sw_non_proposed_framework_not_downgraded(framework):
     mix_rust = brine.SoreideWhitson(framework=framework, **kwargs)
     with force_python():
         mix_python = brine.SoreideWhitson(framework=framework, **kwargs)
-    # (a) Rust-available path must not downgrade — equals forced-Python path.
+    # (a) Rust-available path must not downgrade: equals forced-Python path.
     np.testing.assert_allclose(
         mix_rust.Rs_total, mix_python.Rs_total, rtol=RTOL_MEDIUM, atol=1e-6,
         err_msg=f"framework={framework} silently downgraded on Rust path",
     )
-    # (b) The framework choice must actually change the answer vs 'proposed'.
-    mix_proposed = brine.SoreideWhitson(framework='proposed', **kwargs)
-    assert abs(mix_rust.Rs_total - mix_proposed.Rs_total) > 1e-4, (
-        f"framework={framework} produced the 'proposed' result — gate ineffective"
+    # (b) The framework choice must actually change the answer vs 'default'.
+    mix_default = brine.SoreideWhitson(framework='default', **kwargs)
+    assert abs(mix_rust.Rs_total - mix_default.Rs_total) > 1e-4, (
+        f"framework={framework} produced the 'default' result, gate ineffective"
     )
 
 

@@ -1438,6 +1438,8 @@ from pyrestoolbox.brine.vphi_route import (V_phi as _V_phi,
 
 # VLE engine (local copy in brine package)
 from pyrestoolbox.brine._lib_vle_engine import calc_gas_brine_equilibrium as _calc_gas_brine_equilibrium
+from pyrestoolbox.brine._lib_vle_engine import VALID_FRAMEWORKS as _VALID_FRAMEWORKS_ENGINE
+from pyrestoolbox.brine._lib_vle_engine import normalise_framework as _normalise_framework
 
 
 class SoreideWhitson:
@@ -1478,10 +1480,13 @@ class SoreideWhitson:
             sg: Gas specific gravity — used to estimate HC split among C1-C4 (default 0.65)
             metric: Boolean for units (True=metric, False=oilfield). Default False.
             cw_sat: If True, also calculate saturated compressibility (default False)
-            framework: VLE framework. 'proposed' (default, the Burgoyne & Nielsen 2026
+            framework: VLE framework. 'default' (the Burgoyne & Nielsen 2026
                 refreshed Soreide-Whitson BIPs, doi:10.1016/j.fluid.2026.114824),
-                'sw_original' (original 1992 published), or 'dropin' (fitted to PR-EOS with
-                brine-aware water alpha). Affects kij and ks correlations.
+                'sw_original' (original 1992 published), or 'dropin' (the refreshed
+                BIPs re-fitted on top of the ORIGINAL S&W water alpha, so an existing
+                S&W implementation can adopt them by swapping the kij correlations
+                alone). Affects kij and ks correlations. 'proposed' is accepted as a
+                legacy alias for 'default'.
             salinity_method: How salinity enters the flash. 'gamma_phi' (default, Sechenov
                 salting-out via activity coefficient), 'embedded' (salinity inside kij —
                 only for 'dropin'/'sw_original'), 'explicit' (brine treated as a component),
@@ -1532,12 +1537,12 @@ class SoreideWhitson:
             Murphy, W.R. and Gaines, T.M. (1974), J. Chem. Eng. Data 19(4), 359-362.
     """
 
-    _VALID_FRAMEWORKS = ('proposed', 'sw_original', 'dropin')
+    _VALID_FRAMEWORKS = _VALID_FRAMEWORKS_ENGINE
     _VALID_SALINITY_METHODS = ('gamma_phi', 'embedded', 'explicit', 'auto', 'sechenov')
 
     def __init__(self, pres=None, temp=None, ppm=None, y_CO2=0, y_H2S=0, y_N2=0, y_H2=0,
                  sg=0.65, metric=False, cw_sat=False,
-                 framework='proposed', salinity_method='gamma_phi',
+                 framework='default', salinity_method='gamma_phi',
                  vphi_route=_VPHI_ROUTE,
                  *, p=None, degf=None, wt=None):
         # V_phi source for the Garcia density step. 'auto' (default) is the S&W
@@ -1564,17 +1569,14 @@ class SoreideWhitson:
             raise ValueError(f"ppm must be non-negative, got {ppm}")
         if ppm >= 1e6:
             raise ValueError(f"ppm must be less than 1,000,000, got {ppm}")
-        if framework not in self._VALID_FRAMEWORKS:
-            raise ValueError(
-                f"Invalid framework: {framework!r}. Valid options: {list(self._VALID_FRAMEWORKS)}"
-            )
+        framework = _normalise_framework(framework)
         if salinity_method not in self._VALID_SALINITY_METHODS:
             raise ValueError(
                 f"Invalid salinity_method: {salinity_method!r}. Valid options: {list(self._VALID_SALINITY_METHODS)}"
             )
-        if framework == 'proposed' and salinity_method == 'embedded':
+        if framework == 'default' and salinity_method == 'embedded':
             warnings.warn(
-                "framework='proposed' does not define embedded-salinity kij; "
+                "framework='default' does not define embedded-salinity kij; "
                 "falling back to the 'gamma_phi' salinity method.",
                 stacklevel=2,
             )

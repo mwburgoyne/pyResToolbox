@@ -583,9 +583,28 @@ def calc_embedded_delta_kij(gas: str, T_K: float, salinity_molal: float,
         delta += (params['b0'] + params['b1'] * Tr) * m**2
     return delta
 
+# =============================================================================
+# Framework names
+# =============================================================================
+# 'default' is the Burgoyne & Nielsen (2026) refresh of Soreide-Whitson and is
+# what the library uses unless told otherwise. It was called 'proposed' up to
+# 3.7.4, back when it was the proposal of a paper under review; that name is
+# still accepted so existing calls keep working.
+VALID_FRAMEWORKS = ('default', 'sw_original', 'dropin')
+_FRAMEWORK_ALIASES = {'proposed': 'default'}
+
+
+def normalise_framework(framework: str) -> str:
+    """Canonical framework name, accepting the legacy 'proposed' alias."""
+    fw = _FRAMEWORK_ALIASES.get(framework, framework)
+    if fw not in VALID_FRAMEWORKS:
+        raise ValueError(f"Unknown framework: {framework}. "
+                         f"Use one of {list(VALID_FRAMEWORKS)}.")
+    return fw
+
 
 def get_kij_aq(gas: str, T_K: float, salinity_molal: float = 0.0,
-               framework: str = 'proposed') -> float:
+               framework: str = 'default') -> float:
     """
     Get kij_AQ for any supported gas.
 
@@ -593,18 +612,20 @@ def get_kij_aq(gas: str, T_K: float, salinity_molal: float = 0.0,
         gas: Gas name (e.g., 'H2', 'CO2', 'CH4')
         T_K: Temperature in Kelvin
         salinity_molal: Salt concentration in mol/kg water
-        framework: 'proposed' (MC-3 alpha, freshwater kij + Sechenov),
+        framework: 'default' (MC-3 alpha, freshwater kij + Sechenov),
                    'sw_original' (S&W alpha with embedded salinity in kij), or
-                   'dropin' (S&W alpha + new freshwater kij + embedded delta)
+                   'dropin' (S&W alpha + new freshwater kij + embedded delta).
+                   'proposed' is accepted as a legacy alias for 'default'.
 
     Returns:
         kij_AQ value
     """
-    if framework == 'proposed':
+    framework = normalise_framework(framework)
+    if framework == 'default':
         dispatch = KIJ_AQ_PROPOSED
         if gas not in dispatch:
             raise ValueError(f"Unknown gas: {gas}. Supported: {list(dispatch.keys())}")
-        # Proposed mode: always freshwater kij (salinity handled via Sechenov)
+        # Default mode: always freshwater kij (salinity handled via Sechenov)
         return dispatch[gas](T_K, 0.0)
     elif framework == 'dropin':
         dispatch = KIJ_AQ_DROPIN
@@ -620,7 +641,7 @@ def get_kij_aq(gas: str, T_K: float, salinity_molal: float = 0.0,
         return dispatch[gas](T_K, salinity_molal)
     else:
         raise ValueError(f"Unknown framework: {framework}. "
-                         "Use 'proposed', 'sw_original', or 'dropin'")
+                         f"Use one of {list(VALID_FRAMEWORKS)}.")
 
 
 # =============================================================================
@@ -713,11 +734,11 @@ def sw_equation_8_ks(T_C: float, Tb_K: float) -> float:
 
 def get_sechenov_ks(gas: str, T_K: float, salinity_molal: float = 1.0,
                     P_bar: float = 100.0,
-                    framework: str = 'proposed') -> float:
+                    framework: str = 'default') -> float:
     """
     Get the recommended Sechenov coefficient ks for a given gas.
 
-    In 'proposed' framework, routes to best-available ks model per gas:
+    In the 'default' framework, routes to best-available ks model per gas:
       - CO2: Dubessy et al. 2005 extended Sechenov + constant offset
       - H2S: Akinfiev et al. 2016 Pitzer model (salting_library)
       - All others (HCs, N2, H2): S&W Equation 8 (Tb-based)
@@ -731,12 +752,14 @@ def get_sechenov_ks(gas: str, T_K: float, salinity_molal: float = 1.0,
         T_K: Temperature in Kelvin
         salinity_molal: NaCl molality (needed for Pitzer models). Default 1.0.
         P_bar: Pressure in bar. Default 100.
-        framework: 'proposed', 'sw_original', or 'dropin'
+        framework: 'default', 'sw_original', or 'dropin' ('proposed' is a
+                   legacy alias for 'default')
 
     Returns:
         ks: Sechenov coefficient (log10 basis, kg/mol)
     """
-    if framework == 'proposed':
+    framework = normalise_framework(framework)
+    if framework == 'default':
         if gas == 'CO2':
             from pyrestoolbox.brine._lib_salting_library import ks_dubessy_co2
             # Dubessy 2005 + MARE-optimal shift (-0.011)
@@ -751,8 +774,8 @@ def get_sechenov_ks(gas: str, T_K: float, salinity_molal: float = 1.0,
         raise ValueError(f"Unknown gas: {gas}")
     T_C = T_K - 273.15
     ks = sw_equation_8_ks(T_C, COMPONENTS[gas].Tb)
-    # N2: empirical +0.02 offset (proposed mode only)
-    if gas == 'N2' and framework == 'proposed':
+    # N2: empirical +0.02 offset (default mode only)
+    if gas == 'N2' and framework == 'default':
         ks += 0.02
     return ks
 
@@ -1291,7 +1314,7 @@ class SWBinaryVLE:
     - Water content: kij_NA for BOTH phases
 
     Framework modes:
-    - 'proposed' (default): MC-3 alpha + proposed freshwater kij + Sechenov for all gases
+    - 'default': MC-3 alpha + refitted freshwater kij + Sechenov for all gases
     - 'sw_original': S&W alpha (with embedded salinity) + S&W kij + Eq 8 for all gases
 
     Example:
@@ -1301,22 +1324,21 @@ class SWBinaryVLE:
     """
 
     def __init__(self, gas: str, salinity_molal: float = 0.0,
-                 framework: str = 'proposed'):
+                 framework: str = 'default'):
         """
         Initialize VLE calculator.
 
         Args:
             gas: Gas name (e.g., 'H2', 'CO2', 'CH4')
             salinity_molal: Salt concentration in mol/kg water
-            framework: 'proposed' (MC-3 alpha, freshwater kij, Sechenov routing),
+            framework: 'default' (MC-3 alpha, freshwater kij, Sechenov routing),
                        'sw_original' (S&W alpha, embedded salinity kij, Eq 8), or
-                       'dropin' (S&W alpha, new freshwater kij, embedded delta)
+                       'dropin' (S&W alpha, new freshwater kij, embedded delta).
+                       'proposed' is accepted as a legacy alias for 'default'.
         """
         if gas not in COMPONENTS:
             raise ValueError(f"Unknown gas: {gas}. Supported: {list(COMPONENTS.keys())}")
-        if framework not in ('proposed', 'sw_original', 'dropin'):
-            raise ValueError(f"Unknown framework: {framework}. "
-                             "Use 'proposed', 'sw_original', or 'dropin'")
+        framework = normalise_framework(framework)
 
         self.gas = gas
         self.salinity = salinity_molal
@@ -1411,8 +1433,8 @@ class SWBinaryVLE:
 
         if salinity_method == 'auto':
             # Default salinity handling depends on framework
-            if fw == 'proposed':
-                # Proposed: freshwater kij + Sechenov for ALL gases when salinity > 0
+            if fw == 'default':
+                # Default: freshwater kij + Sechenov for ALL gases when salinity > 0
                 kij_aq = get_kij_aq(self.gas, T_K, 0.0, framework=fw)
                 x_gas = self._calc_x_with_kij(T_K, P_Pa, kij_aq)
                 if self.salinity > 0:
@@ -1802,12 +1824,10 @@ class SWMultiComponentFlash:
     """
 
     def __init__(self, component_names: List[str], salinity_molal: float = 0.0,
-                 framework: str = 'proposed', salinity_method: str = 'gamma_phi'):
+                 framework: str = 'default', salinity_method: str = 'gamma_phi'):
         if 'H2O' not in component_names:
             raise ValueError("H2O must be in component list")
-        if framework not in ('proposed', 'sw_original', 'dropin'):
-            raise ValueError(f"Unknown framework: {framework}. "
-                             "Use 'proposed', 'sw_original', or 'dropin'")
+        framework = normalise_framework(framework)
         self.names = list(component_names)
         self.nc = len(self.names)
         self.salinity = salinity_molal
@@ -2033,17 +2053,17 @@ class SWMultiComponentFlash:
 
         # Rust acceleration path — gamma is always passed explicitly.
         # The Rust entry point trusts the caller-supplied gamma and never
-        # substitutes its own S&W Eq 8 ks fallback. framework='proposed'
+        # substitutes its own S&W Eq 8 ks fallback. framework='default'
         # specialised ks models (Dubessy CO2, Akinfiev H2S, S&W Eq 8 with
         # a small N2 offset for the remaining gases) are applied in
         # self.calc_gamma() on the Python side.
         #
-        # Restricted to framework='proposed': the Rust flash hardcodes the
+        # Restricted to framework='default': the Rust flash hardcodes the
         # MC-3 water alpha and the proposed-framework kij_AQ. The 'dropin'
         # and 'sw_original' frameworks use a salinity-dependent Soreide water
         # alpha and different kij_AQ correlations that Rust does not implement,
         # so they must take the Python path to avoid a silent downgrade.
-        if _RUST_AVAILABLE and self.framework == 'proposed':
+        if _RUST_AVAILABLE and self.framework == 'default':
             try:
                 gamma_arr = np.asarray(gamma, dtype=float) if gamma is not None \
                     else np.ones(self.nc)
@@ -2174,11 +2194,11 @@ class SWMultiComponentFlash:
 
         # Rust acceleration path: compute gamma in Python (correct ks models),
         # then use Rust flash_tp for the two flashes. Restricted to
-        # framework='proposed' — Rust only implements the proposed-framework
+        # framework='default': Rust only implements the default-framework
         # water alpha (MC-3) and kij_AQ; 'dropin'/'sw_original' would be
-        # silently downgraded to 'proposed', so they take the Python path.
+        # silently downgraded to 'default', so they take the Python path.
         if (_RUST_AVAILABLE and salinity_method == 'gamma_phi'
-                and self.framework == 'proposed'):
+                and self.framework == 'default'):
             try:
                 gamma_aq = None
                 if self.salinity > 0:
@@ -2279,7 +2299,7 @@ def calc_gas_brine_equilibrium(
     y_H2: float = 0.0,
     method: str = 'henry',
     salinity_method: str = 'gamma_phi',
-    framework: str = 'proposed',
+    framework: str = 'default',
 ) -> Tuple[Dict[str, float], Dict[str, float]]:
     """
     Calculate gas-brine equilibrium using Soreide-Whitson framework.
@@ -2314,7 +2334,8 @@ def calc_gas_brine_equilibrium(
         y_*: Mole fractions of each gas in dry gas (will be normalized)
         method: 'henry' (binary decomposition) or 'flash' (multi-component)
         salinity_method: 'gamma_phi', 'explicit', or 'embedded'
-        framework: 'proposed', 'sw_original', or 'dropin'
+        framework: 'default', 'sw_original', or 'dropin' ('proposed' is a
+                   legacy alias for 'default')
 
     Returns:
         Tuple of:
