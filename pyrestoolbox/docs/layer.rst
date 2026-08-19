@@ -1,10 +1,10 @@
-===================================
+=====================
 Permeability Layering
-===================================
+=====================
 
-A number of functions used to help characterize heterogeneity in permeability layering and/or create permeability array consistant with observed levels of heterogeneity and observed average permeability.
+A number of functions used to help characterize heterogeneity in permeability layering and/or create a permeability array consistent with observed levels of heterogeneity and observed average permeability.
 
-Heteogeneity is characterized via the Lorenz coefficient, and implemented via one of two methods, both of which can be described by a single Beta value;
+Heterogeneity is characterized via the Lorenz coefficient, and implemented via one of two methods, both of which can be described by a single Beta value;
   - Exponential ('EXP')
   - Langmuir    ('LANG')
 
@@ -18,7 +18,7 @@ For the Langmuir formulation:
 
 
 pyrestoolbox.layer.lorenz2b
-======================
+===========================
 
 .. code-block:: python
 
@@ -63,7 +63,7 @@ Examples:
     7.978108090962671
     
 pyrestoolbox.layer.lorenzfromb
-======================
+==============================
 
 .. code-block:: python
 
@@ -107,7 +107,7 @@ Examples:
     0.7500000108799212
     
 pyrestoolbox.layer.lorenz_from_flow_fraction
-======================
+============================================
 
 .. code-block:: python
 
@@ -154,7 +154,7 @@ Examples:
 
 
 pyrestoolbox.layer.lorenz_2_flow_frac
-======================
+=====================================
 
 .. code-block:: python
 
@@ -205,13 +205,13 @@ Examples:
    
        
 pyrestoolbox.layer.lorenz_2_layers
-======================
+==================================
 
 .. code-block:: python
 
     lorenz_2_layers(lorenz, k_avg, nlayers = 1, shuffle = False, lrnz_method = 'EXP', B = -1, phi_h_fracs = None) -> np.ndarray
 
-Returns np.array of permeability values honoring a specified average permeability (assuming equal thickness layers unless list of phi_h_fracs is provided), with degree of heterogeneity consistant with specified Lorenz coefficient and method
+Returns np.array of permeability values honoring a specified average permeability (assuming equal thickness layers unless list of phi_h_fracs is provided), with degree of heterogeneity consistent with specified Lorenz coefficient and method
         
 If B is left default, then it will be calculated. If B is explictly specified > 0, then it will be used instead of the provided lorenz coefficient so as to eliminate repetitive solving for B.
 

@@ -1,13 +1,14 @@
-===================================
+===============================
 Plyasunov Dissolved Gas Volumes
-===================================
+===============================
 
 Infinite-dilution apparent molar volumes of gases dissolved in water, after
 Plyasunov (Fluid Phase Equilibria, 2019-2021, Parts I-IV), with pure water
 properties from IAPWS-IF97 Region 1. This is a supporting module: the brine
-module uses it to correct brine density for dissolved gas
-(``SoreideWhitson``), and most users will consume it indirectly through
-``brine``. It is documented here because the functions are stable, physically
+module uses it as the reference and fallback route for the dissolved-gas
+molar volume in its density step (``SoreideWhitson``; the default route since
+3.7.2 is the S&W modified-PR + volume shift model in ``brine.pr_vphi``), and
+most users will consume it indirectly through ``brine``. It is documented here because the functions are stable, physically
 meaningful on their own, and useful wherever a partial molar volume of a
 dissolved gas is needed.
 

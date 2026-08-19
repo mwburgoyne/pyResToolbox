@@ -1,6 +1,6 @@
-=========================================
+================================
 pyResToolbox Documentation Index
-=========================================
+================================
 
 This directory ships inside the installed package. Locate it at runtime with
 ``pyrestoolbox.docs_dir()``. Each RST file documents one module, with a
@@ -17,8 +17,9 @@ Module documentation
 ===================  ==========================================================================
 File                 Content
 ===================  ==========================================================================
-gas.rst              Gas PVT (Z-factor, viscosity, Bg, Cg, density, pseudopressure), flow
-                     rates, pseudoskins, hydrates, GasPVT class
+gas.rst              Gas PVT (Z-factor, viscosity, Bg, Cg, density, pseudopressure),
+                     caloric properties (H, Cp, Cv, JT), flow rates, pseudoskins,
+                     hydrates, GasPVT class
 oil.rst              Oil PVT (Pb, Rs, Bo, density, viscosity, compressibility), flow rates,
                      harmonization, black oil tables, OilPVT class
 brine.rst            Brine properties: CH4-saturated (brine_props), CO2-saturated
@@ -45,7 +46,7 @@ Example notebooks
 ===========================  ====================================================
 File                         Content
 ===========================  ====================================================
-examples.ipynb               All documented examples plus BNS/BUR demonstrations
+examples.ipynb               Worked examples across the modules plus BNS/BUR demonstrations
 nodal_examples.ipynb         Multi-segment nodal framework examples
 nodal_hydrate_demo.ipynb     VLP, VFPPROD, nodal solutions and hydrate analysis
 ===========================  ====================================================

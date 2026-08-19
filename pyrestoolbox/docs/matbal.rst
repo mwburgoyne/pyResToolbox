@@ -1,12 +1,12 @@
-===================================
+================
 Material Balance
-===================================
+================
 
 Material balance functions for estimating original hydrocarbons in place from pressure-production history. Gas reservoirs use P/Z linear regression with optional Havlena-Odeh aquifer influx correction. Oil reservoirs use the Havlena-Odeh method with drive index decomposition and optional parameter regression.
 
 
 pyrestoolbox.matbal.gas_matbal
-======================
+==============================
 
 .. code-block:: python
 
@@ -29,7 +29,7 @@ P/Z gas material balance for OGIP estimation. Performs linear regression of P/Z 
      - Reservoir pressures at each survey (psia | barsa). First value is initial pressure
    * - Gp
      - array-like
-     - Cumulative gas production at each pressure survey. Same length as p. Units are user-defined (e.g. Bscf, MMscf) — OGIP will be in the same units. When Wp or We are provided, Gp should be in scf (or sm3 if metric) for dimensional consistency with Bg
+     - Cumulative gas production at each pressure survey. Same length as p. Units are user-defined (e.g. Bscf, MMscf) - OGIP will be in the same units. When Wp or We are provided, Gp should be in scf (or sm3 if metric) for dimensional consistency with Bg
    * - degf
      - float
      - Reservoir temperature (deg F | deg C)
@@ -187,7 +187,7 @@ Tabulated PVT Example (Z-factor table):
 
 
 pyrestoolbox.matbal.oil_matbal
-======================
+==============================
 
 .. code-block:: python
 
@@ -405,11 +405,11 @@ Tabulated PVT Example:
        >>> props = brine.brine_props(p=4000, degf=220, wt=3)
        >>> cw_usat, cw_sat = props['cw']  # [undersaturated, saturated]
 
-   Similarly, ``oil.oil_co(co_sat=True)`` returns ``[co_usat, co_sat]`` — the undersaturated value is the liquid-phase compressibility, while the saturated value includes gas evolution effects (Perrine's definition).
+   Similarly, ``oil.oil_co(co_sat=True)`` returns ``[co_usat, co_sat]`` - the undersaturated value is the liquid-phase compressibility, while the saturated value includes gas evolution effects (Perrine's definition).
 
 
 Class Objects
-======================
+=============
 
 .. list-table::
    :widths: 15 40

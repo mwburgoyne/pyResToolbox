@@ -1,14 +1,14 @@
-===================================
+======================
 Decline Curve Analysis
-===================================
+======================
 
 Functions for fitting and forecasting production decline using Arps (exponential, hyperbolic, harmonic), modified hyperbolic (hyperbolic-to-exponential), two-segment hyperbolic (transient-to-boundary-dominated) and Duong models. Includes rate-vs-cumulative fitting, EUR-constrained type-curve generation, secondary phase ratio forecasting, uptime inference, and EUR estimation.
 
-All functions are unit-agnostic — they operate on the numerical values you provide. If you pass rates in stb/d and time in months, the fitted ``qi`` comes back in stb/d and ``di`` in 1/month. No unit conversions are performed internally.
+All functions are unit-agnostic - they operate on the numerical values you provide. If you pass rates in stb/d and time in months, the fitted ``qi`` comes back in stb/d and ``di`` in 1/month. No unit conversions are performed internally.
 
 
 pyrestoolbox.dca.arps_rate
-======================
+==========================
 
 .. code-block:: python
 
@@ -69,7 +69,7 @@ Examples:
 
 
 pyrestoolbox.dca.arps_cum
-======================
+=========================
 
 .. code-block:: python
 
@@ -120,7 +120,7 @@ Examples:
 
 
 pyrestoolbox.dca.mh_rate
-======================
+========================
 
 .. code-block:: python
 
@@ -179,7 +179,7 @@ Examples (qi = 1000 stb/d, di = 0.005/day nominal, default b = 2, terminal decli
 
 
 pyrestoolbox.dca.mh_cum
-======================
+=======================
 
 .. code-block:: python
 
@@ -230,7 +230,7 @@ Examples:
 
 
 pyrestoolbox.dca.mh_eur
-======================
+=======================
 
 .. code-block:: python
 
@@ -281,7 +281,7 @@ Examples:
 
 
 pyrestoolbox.dca.hyp2_rate
-======================
+==========================
 
 .. code-block:: python
 
@@ -346,7 +346,7 @@ Examples (qi = 1000 stb/d, di = 0.005/day nominal, transition at 730 days, defau
 
 
 pyrestoolbox.dca.hyp2_cum
-======================
+=========================
 
 .. code-block:: python
 
@@ -363,7 +363,7 @@ Examples:
 
 
 pyrestoolbox.dca.hyp2_eur
-======================
+=========================
 
 .. code-block:: python
 
@@ -380,7 +380,7 @@ Examples:
 
 
 pyrestoolbox.dca.hyp2_from_eur
-======================
+==============================
 
 .. code-block:: python
 
@@ -445,7 +445,7 @@ Examples (target EUR of 1.5e6 mscf at 100 mscf/d abandonment from 1500 mscf/d in
 
 
 pyrestoolbox.dca.duong_rate
-======================
+===========================
 
 .. code-block:: python
 
@@ -496,7 +496,7 @@ Examples:
 
 
 pyrestoolbox.dca.eur
-======================
+====================
 
 .. code-block:: python
 
@@ -547,7 +547,7 @@ Examples:
 
 
 pyrestoolbox.dca.fit_decline
-======================
+============================
 
 .. code-block:: python
 
@@ -679,7 +679,7 @@ Two-segment hyperbolic fitting example (transient b1 = 1.8 transitioning to boun
 
 
 pyrestoolbox.dca.fit_decline_cum
-======================
+================================
 
 .. code-block:: python
 
@@ -786,7 +786,7 @@ Windowed cumulative fitting example:
 
 
 pyrestoolbox.dca.fit_ratio
-======================
+==========================
 
 .. code-block:: python
 
@@ -794,7 +794,7 @@ pyrestoolbox.dca.fit_ratio
 
 Fit a ratio model (e.g. GOR, WOR) to data. Four models available: linear (R = a + b*x), exponential (R = a*exp(b*x)), power (R = a*x^b), and logistic (R = Rmax/(1 + c*exp(-b*x))).
 
-The ``domain`` parameter ('cum' or 'time') is stored in the result and controls how ``forecast()`` evaluates the ratio — against cumulative production or time.
+The ``domain`` parameter ('cum' or 'time') is stored in the result and controls how ``forecast()`` evaluates the ratio - against cumulative production or time.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -814,7 +814,7 @@ The ``domain`` parameter ('cum' or 'time') is stored in the result and controls 
      - 'linear', 'exponential', 'power', 'logistic', or 'best' (default)
    * - domain
      - str
-     - 'cum' or 'time' — stored in result for use by forecast()
+     - 'cum' or 'time' - stored in result for use by forecast()
 
 .. list-table:: Returns (RatioResult)
    :widths: 10 15 40
@@ -837,7 +837,7 @@ The ``domain`` parameter ('cum' or 'time') is stored in the result and controls 
      - Logistic offset parameter (only used for logistic model, 0 otherwise)
    * - domain
      - str
-     - 'time' or 'cum' — tells forecast() which x-axis to use
+     - 'time' or 'cum' - tells forecast() which x-axis to use
    * - r_squared
      - float
      - Coefficient of determination of the fit
@@ -863,7 +863,7 @@ Examples:
 
 
 pyrestoolbox.dca.ratio_forecast
-======================
+===============================
 
 .. code-block:: python
 
@@ -906,7 +906,7 @@ Examples:
 
 
 pyrestoolbox.dca.forecast
-======================
+=========================
 
 .. code-block:: python
 
@@ -987,7 +987,7 @@ Examples:
 
 
 Class Objects
-======================
+=============
 
 .. list-table::
    :widths: 15 40

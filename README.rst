@@ -1,10 +1,10 @@
-===================================
+================
 ``pyrestoolbox``
-===================================
+================
 
---------------------------------------------------
+-----------------------------------------------
 A collection of Reservoir Engineering Utilities
---------------------------------------------------
+-----------------------------------------------
 
 This set of functions focuses on those that the author uses often while crafting programming solutions.
 These are the scripts that are often copy/pasted from previous work - sometimes slightly modified - resulting in a trail of slightly different versions over the years. Some attempt has been made here to make this implementation flexible enough such that it can be relied on as-is going forward.
@@ -13,7 +13,7 @@ Note: Version 3.0 consolidates simulation-oriented functions under the simtools 
 
 Includes functions to perform calculations including;
 
-- Decline Curve Analysis with Arps and Duong models — fitting, forecasting, EUR, windowed fitting, secondary phase ratio models, and uptime inference
+- Decline Curve Analysis with Arps and Duong models - fitting, forecasting, EUR, windowed fitting, secondary phase ratio models, and uptime inference
 - Material Balance for gas (P/Z with Cole plot and Havlena-Odeh aquifer support) and oil (Havlena-Odeh with drive indices, parameter regression, and tabulated PVT)
 - Inflow Performance Relationships (IPR) for oil and gas wells
 - Vertical Lift Performance (VLP) with four multiphase flow correlations (Hagedorn-Brown, Woldesemayat-Ghajar, Gray, Beggs & Brill)
@@ -21,6 +21,7 @@ Includes functions to perform calculations including;
 - Eclipse VFP table generation (VFPPROD and VFPINJ keywords)
 - PVT Calculations for oil
 - PVT calculation for gas, including up to 100% inerts for CO2, H2S, N2 and H2
+- Gas caloric properties (enthalpy, Cp, Cv, Joule-Thomson coefficient) from the BNS tuned Peng Robinson EOS
 - Gas hydrate formation prediction with thermodynamic inhibitor calculations
 - Return critical parameters for typical components
 - Creation of Black Oil Table information (PVDO, PVDG, PVTO, PVTW keywords)
@@ -36,33 +37,33 @@ Includes functions to perform calculations including;
 All public PVT, flow rate, and simulation table functions support both oilfield (psia, deg F, ft) and Eclipse METRIC (barsa, deg C, m) unit systems via an optional ``metric=False`` parameter. See individual module documentation for unit mapping details.
 
 Rust Acceleration (Optional)
------------------------------
+----------------------------
 
 pyResToolbox includes optional Rust-compiled extensions that accelerate computationally intensive algorithms. When the compiled extension is present and loadable, these functions run automatically through Rust with no API changes. When the extension is unavailable, all functions fall back silently to the pure Python implementation.
 
 **Accelerated functions:**
 
-- **Nodal VLP segment loops** — all 8 VLP method functions (4 methods x gas/oil)
-- **Gas Z-factor** — DAK, Hall-Yarborough, and BNS full-pipeline calculations
-- **Gas viscosity** — LGE and LBC correlations
-- **Gas pseudopressure** — Gauss-Legendre quadrature integration
-- **Oil density** — Standing-Witte-McCain-Hill (iterative and above-Pb)
-- **Oil FVF** — McCain density-based method
-- **DCA hyperbolic fitting** — grid search with RANSAC (``fit_decline``, ``fit_decline_cum``)
-- **Material balance** — oil matbal regression objective function
-- **CO2-Brine solubility** — Spycher-Pruess iterative RK-EOS solver
-- **VLE flash** — Soreide-Whitson multi-component Peng-Robinson flash
+- **Nodal VLP segment loops** - all 8 VLP method functions (4 methods x gas/oil)
+- **Gas Z-factor** - DAK, Hall-Yarborough, and BNS full-pipeline calculations
+- **Gas viscosity** - LGE and LBC correlations
+- **Gas pseudopressure** - Gauss-Legendre quadrature integration
+- **Oil density** - Standing-Witte-McCain-Hill (iterative and above-Pb)
+- **Oil FVF** - McCain density-based method
+- **DCA hyperbolic fitting** - grid search with RANSAC (``fit_decline``, ``fit_decline_cum``)
+- **Material balance** - oil matbal regression objective function
+- **CO2-Brine solubility** - Spycher-Pruess iterative RK-EOS solver
+- **VLE flash** - Soreide-Whitson multi-component Peng-Robinson flash
 
 **Behavior:**
 
 - If the Rust extension is not found on disk, pure Python is used with no warning
 - If the extension fails to load (e.g. OS permission restrictions, architecture mismatch), a sentinel file is written to avoid repeated probe attempts on subsequent imports. The sentinel is automatically invalidated when the extension file changes (new build or update)
-- All Rust-accelerated paths use ``try/except`` wrappers — any Rust-side error falls back to the Python implementation transparently
+- All Rust-accelerated paths use ``try/except`` wrappers - any Rust-side error falls back to the Python implementation transparently
 
 **Environment variables:**
 
-- ``PYRESTOOLBOX_NO_RUST=1`` — Force pure Python mode (skip Rust extension entirely)
-- ``PYRESTOOLBOX_RETRY_RUST=1`` — Ignore the sentinel file and retry loading the extension
+- ``PYRESTOOLBOX_NO_RUST=1`` - Force pure Python mode (skip Rust extension entirely)
+- ``PYRESTOOLBOX_RETRY_RUST=1`` - Ignore the sentinel file and retry loading the extension
 
 **Programmatic status check:**
 
@@ -84,7 +85,7 @@ Upgrade previous installations with
 
 
 Module List
-=============
+===========
 
 .. list-table::
    :widths: 30 70
@@ -94,7 +95,7 @@ Module List
    * - `matbal <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/matbal.rst>`_
      - Gas P/Z material balance (OGIP), Cole plot diagnostics, Havlena-Odeh with aquifer influx, Oil Havlena-Odeh material balance (OOIP) with drive indices, Parameter regression with bounds, Tabulated PVT support
    * - `gas <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/gas.rst>`_
-     - Gas Tc & Pc Calculation, Gas Z-Factor Calculation, Gas Viscosity, Gas Viscosity \* Z, Gas Compressibility, Gas Formation Volume Factor, Gas Density, Gas Water of Condensation, Convert P/Z to P, Convert Gas Gradient to SG, Delta Pseudopressure, Gas Condensate FWS SG, Gas Flow Rate Radial, Gas Flow Rate Linear, Gas Hydrate Prediction
+     - Gas Tc & Pc Calculation, Gas Z-Factor Calculation, Gas Viscosity, Gas Viscosity \* Z, Gas Compressibility, Gas Formation Volume Factor, Gas Density, Gas Water of Condensation, Convert P/Z to P, Convert Gas Gradient to SG, Delta Pseudopressure, Gas Condensate FWS SG, Gas Flow Rate Radial, Gas Flow Rate Linear, Gas Hydrate Prediction, Gas Caloric Properties (H, Cp, Cv, Joule-Thomson), Non-Darcy and Partial-Penetration Pseudoskins
    * - `oil <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/oil.rst>`_
      - Oil Density from MW, Oil Critical Properties with Twu, Incremental GOR post Separation, Oil Bubble Point Pressure, Oil GOR at Pb, Oil GOR at P, Oil Compressibility, Oil Density, Oil Formation Volume Factor, Oil Viscosity, Harmonize Pb and Rsb, Estimate soln gas SG from oil, Estimate SG of gas post separator, Calculate weighted average surface gas SG, Oil API to SG, Oil SG to API, Oil Flow Rate Radial, Oil Flow Rate Linear
    * - `nodal <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/nodal.rst>`_
@@ -130,8 +131,8 @@ A simple example below of estimating oil bubble point pressure.
 .. code-block:: python
 
     >>> from pyrestoolbox import oil
-    >>> oil.oil_pbub(api=43, degf=185, rsb=2350, sg_g =0.72, pbmethod ='VALMC')
-    5179.51086900132
+    >>> oil.oil_pbub(api=43, degf=185, rsb=2350, sg_g=0.72, pbmethod='VALMC')
+    5199.2406069808885
 
 Fit a decline curve to production data and estimate ultimate recovery.
 
@@ -143,9 +144,9 @@ Fit a decline curve to production data and estimate ultimate recovery.
     >>> q = 1000 * np.exp(-0.05 * t)
     >>> result = dca.fit_decline(t, q, method='exponential')
     >>> result.qi, result.di
-    (1000.0000000000007, 0.05000000000000006)
+    (999.9999999999953, 0.049999999999999885)
     >>> dca.eur(qi=result.qi, di=result.di, b=0, q_min=10)
-    19799.99999999999
+    19799.999999999953
 
 Estimate gas in place from pressure-production history.
 
@@ -158,9 +159,9 @@ Estimate gas in place from pressure-production history.
     ...     degf=200, sg=0.65
     ... )
     >>> r.ogip
-    87.602774253829
+    87.60264634235122
     >>> r.r_squared
-    0.9734794008096929
+    0.9734793606102145
 
 A set of Gas-Oil relative permeability curves with the LET method
 

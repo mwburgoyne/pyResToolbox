@@ -1,12 +1,12 @@
-===================================
+======================
 Method Recommendations
-===================================
+======================
 
 Decision-tree engine for selecting appropriate PVT, Z-factor, and VLP correlations based on fluid composition and well geometry.
 
 
 pyrestoolbox.recommend.recommend_gas_methods
-======================
+============================================
 
 .. code-block:: python
 
@@ -81,7 +81,7 @@ Examples:
 
 
 pyrestoolbox.recommend.recommend_oil_methods
-======================
+============================================
 
 .. code-block:: python
 
@@ -133,7 +133,7 @@ Examples:
 
 
 pyrestoolbox.recommend.recommend_vlp_method
-======================
+===========================================
 
 .. code-block:: python
 
@@ -186,7 +186,7 @@ Examples:
 
 
 pyrestoolbox.recommend.recommend_methods
-======================
+========================================
 
 .. code-block:: python
 
@@ -269,7 +269,7 @@ Examples:
 
 
 Class Objects
-======================
+=============
 
 .. list-table::
    :widths: 15 40

@@ -47,12 +47,12 @@ which model produced a number:
 What each returns
 -----------------
 
-**brine_props** — Methane-saturated brine using IAPWS-IF97 freshwater density with Spivey salt correction per McCain Petroleum Reservoir Fluid Properties pg 160. Includes effect of user specified salt concentration and degree of methane saturation.
+**brine_props** - Methane-saturated brine using IAPWS-IF97 freshwater density with Spivey salt correction per McCain Petroleum Reservoir Fluid Properties pg 160. Includes effect of user specified salt concentration and degree of methane saturation.
 Returns tuple of (Bw (rb/stb), Density (sg), viscosity (cP), Compressibility (1/psi), Rw GOR (scf/stb)).
 
-**CO2_Brine_Mixture** — CO2-saturated brine via Spycher-Pruess mutual solubility model. Returns a class object with calculated CO2 saturated brine property attributes. Retained deliberately rather than folded into ``SoreideWhitson``, because it is the more accurate route for pure CO2.
+**CO2_Brine_Mixture** - CO2-saturated brine via Spycher-Pruess mutual solubility model. Returns a class object with calculated CO2 saturated brine property attributes. Retained deliberately rather than folded into ``SoreideWhitson``, because it is the more accurate route for pure CO2.
 
-**SoreideWhitson** — Multicomponent gas-saturated brine via the Soreide-Whitson VLE model, using by default the refreshed BIP relationships of `Burgoyne & Nielsen (2026) <https://doi.org/10.1016/j.fluid.2026.114824>`_. Supports mixtures of C1, C2, C3, nC4, CO2, H2S, N2 and H2 in fresh or saline water.
+**SoreideWhitson** - Multicomponent gas-saturated brine via the Soreide-Whitson VLE model, using by default the refreshed BIP relationships of `Burgoyne & Nielsen (2026) <https://doi.org/10.1016/j.fluid.2026.114824>`_. Supports mixtures of C1, C2, C3, nC4, CO2, H2S, N2 and H2 in fresh or saline water.
 
 Unit System Support
 -------------------
@@ -110,7 +110,7 @@ pyrestoolbox.brine.brine_props
      - Description
    * - [0]
      - float
-     - Bw — water formation volume factor (rb/stb)
+     - Bw - water formation volume factor (rb/stb)
    * - [1]
      - float
      - Density (specific gravity relative to water)
@@ -122,7 +122,7 @@ pyrestoolbox.brine.brine_props
      - Compressibility [undersaturated, saturated] (1/psi, or 1/barsa if metric=True). The undersaturated value (Cw[0]) is the isothermal compressibility of the brine at constant dissolved gas content. The saturated value (Cw[1]) is a pseudo-compressibility representing the average compressibility of the brine and differentially evolved gas system, accounting for both liquid compression and gas exsolution volume changes
    * - [4]
      - float
-     - Rsw — solution gas-water ratio (scf/stb, or sm3/sm3 if metric=True)
+     - Rsw - solution gas-water ratio (scf/stb, or sm3/sm3 if metric=True)
 
 **Changed in 3.7.4:** the returned viscosity now includes the dissolved-methane
 correction. Before 3.7.4 it returned the gas-free viscosity even at

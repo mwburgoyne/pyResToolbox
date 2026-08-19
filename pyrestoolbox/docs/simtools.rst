@@ -1,6 +1,6 @@
-===================================
+==================
 Simulation Helpers
-===================================
+==================
 
 Simulation-oriented utilities for deck management, aquifer modelling, phase equilibrium, relative permeability curve generation and fitting, and PVT/VFP table generation for Eclipse.
 
@@ -84,7 +84,7 @@ Function List
 
 
 pyrestoolbox.simtools.ix_extract_problem_cells
-======================
+==============================================
 
 .. code-block:: python
 
@@ -144,7 +144,7 @@ Examples:
 
 
 pyrestoolbox.simtools.influence_tables
-======================
+======================================
 
 .. code-block:: python
 
@@ -222,7 +222,7 @@ Examples:
 
 
 pyrestoolbox.simtools.zip_check_sim_deck
-======================
+========================================
 
 .. code-block:: python
 
@@ -296,7 +296,7 @@ Examples:
 
 
 pyrestoolbox.simtools.rr_solver
-======================
+===============================
 
 .. code-block:: python
 
@@ -357,7 +357,7 @@ Examples:
 
 
 pyrestoolbox.simtools.rel_perm_table
-======================
+====================================
 
 .. code-block:: python
 
@@ -440,16 +440,18 @@ pyrestoolbox.simtools.rel_perm_table
      - kr_family
      - A string or kr_family Enum class that specifies one of three curve function choices. Defaults to 'COR'.
        Options are:
-        + 'COR': Corey Curve function
-        + 'LET': LET Relative permeability function
-        + 'JER': Jerauld (Arco) two-parameter model
+
+       + 'COR': Corey Curve function
+       + 'LET': LET Relative permeability function
+       + 'JER': Jerauld (Arco) two-parameter model
    * - krtable
      - kr_table
      - A string or kr_table Enum class that specifies one of three table type choices. Default is 'SWOF'.
        Options are:
-        + SWOF: Water / Oil table
-        + SGOF: Gas / Oil table
-        + SGWFN: Gas / Water table
+
+       + SWOF: Water / Oil table
+       + SGOF: Gas / Oil table
+       + SGWFN: Gas / Water table
 
 .. list-table:: Returns
    :widths: 10 15 40
@@ -498,7 +500,7 @@ Examples:
 
 
 pyrestoolbox.simtools.corey
-======================
+===========================
 
 .. code-block:: python
 
@@ -543,7 +545,7 @@ Examples:
 
 
 pyrestoolbox.simtools.LET
-======================
+=========================
 
 .. code-block:: python
 
@@ -594,7 +596,7 @@ Examples:
 
 
 pyrestoolbox.simtools.jerauld
-======================
+=============================
 
 .. code-block:: python
 
@@ -642,7 +644,7 @@ Examples:
 
 
 pyrestoolbox.simtools.is_let_physical
-======================
+=====================================
 
 .. code-block:: python
 
@@ -693,7 +695,7 @@ Examples:
 
 
 pyrestoolbox.simtools.fit_rel_perm
-======================
+==================================
 
 .. code-block:: python
 
@@ -772,7 +774,7 @@ Examples:
 
 
 pyrestoolbox.simtools.fit_rel_perm_best
-======================
+=======================================
 
 .. code-block:: python
 
@@ -857,7 +859,7 @@ Examples:
 
 
 pyrestoolbox.simtools.make_vfpinj
-======================
+=================================
 
 .. code-block:: python
 
@@ -972,7 +974,7 @@ Examples:
 
 
 pyrestoolbox.simtools.make_vfpprod
-======================
+==================================
 
 .. code-block:: python
 
@@ -1128,7 +1130,7 @@ Examples:
 
 
 pyrestoolbox.simtools.make_bot_og
-======================
+=================================
 
 .. code-block:: python
 
@@ -1245,7 +1247,7 @@ Examples:
 
 
 pyrestoolbox.simtools.make_pvtw_table
-======================
+=====================================
 
 .. code-block:: python
 

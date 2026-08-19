@@ -1,6 +1,6 @@
-===================================
+=====================================
 Component Critical Properties Library
-===================================
+=====================================
 
 Excel-based database of critical properties for over 100 petroleum and chemical species (C1 through C34, plus noble gases, common inorganics, and aromatics). Properties include molecular weight, critical temperature and pressure, acentric factor, volume translation, and viscosity Zc, with EOS-model-specific values for PR79, PR77, SRK, and RK.
 
@@ -29,7 +29,7 @@ Function List
      
 
 pyrestoolbox.library.prop
-======================
+=========================
 
 .. code-block:: python
 
@@ -80,7 +80,7 @@ Examples:
 
 
 pyrestoolbox.library.components
-======================
+===============================
 
 .. code-block:: python
 
@@ -109,7 +109,7 @@ Example:
 
 
 pyrestoolbox.library.names
-======================
+==========================
 
 .. code-block:: python
 
@@ -137,7 +137,7 @@ Example:
 
 
 pyrestoolbox.library.property_list
-======================
+==================================
 
 .. code-block:: python
 
@@ -165,7 +165,7 @@ Example:
 
 
 pyrestoolbox.library.models
-======================
+===========================
 
 .. code-block:: python
 
@@ -193,7 +193,7 @@ Example:
 
 
 pyrestoolbox.library.df
-======================
+=======================
 
 .. code-block:: python
 

@@ -126,6 +126,24 @@ def test_doc_gas_den():
     assert isinstance(result, float)
     assert abs(result - 7.736656004563576) / 7.736656004563576 < RTOL
 
+def test_doc_gas_thermal_field():
+    """gas.rst: gas_thermal field units with CO2"""
+    r = gas.gas_thermal(p=3000, sg=0.75, degf=200, co2=0.1)
+    assert abs(r['Cp'] - 13.83976426974385) / 13.83976426974385 < RTOL
+    assert abs(r['JT'] - 0.017781089107395787) / 0.017781089107395787 < RTOL
+
+def test_doc_gas_thermal_array():
+    """gas.rst: gas_thermal array of pressures"""
+    r = gas.gas_thermal(p=[1000, 3000, 6000], sg=0.65, degf=180)
+    expected = np.array([0.03955315, 0.01665755, 0.00185701])
+    np.testing.assert_allclose(r['JT'], expected, rtol=1e-5)
+
+def test_doc_gas_thermal_metric():
+    """gas.rst: gas_thermal metric units"""
+    r = gas.gas_thermal(p=200, sg=0.75, degf=90, co2=0.1, metric=True)
+    assert abs(r['Cp'] - 57.9386394857566) / 57.9386394857566 < RTOL
+    assert abs(r['JT'] - 1.5177952095464358) / 1.5177952095464358 < RTOL
+
 def test_doc_gas_water_content():
     """gas.rst: gas_water_content"""
     result = gas.gas_water_content(p=1500, degf=165)

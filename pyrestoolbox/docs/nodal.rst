@@ -1,6 +1,6 @@
-===================================
+====================
 Nodal Analysis & VLP
-===================================
+====================
 
 Vertical Lift Performance (VLP) calculations, Inflow Performance Relationships (IPR), and nodal operating point analysis for gas and oil wells. The typical workflow is: define a wellbore geometry using ``Completion`` (with optional ``WellSegment`` objects for deviated wells), define reservoir properties using ``Reservoir``, then find the operating point where VLP and IPR curves intersect using ``operating_point()``. Individual VLP and IPR curves can also be generated independently.
 
@@ -225,7 +225,7 @@ Multi-segment deviated well using WellSegment:
 
 
 Completion.geometry_at_md
---------------------------
+-------------------------
 
 .. code-block:: python
 
@@ -290,7 +290,7 @@ Query geometry in a legacy completion with casing section:
 
 
 Completion.profile
--------------------
+------------------
 
 .. code-block:: python
 
@@ -397,7 +397,7 @@ Examples:
 
 
 pyrestoolbox.nodal.fbhp
-========================
+=======================
 
 .. code-block:: python
 
@@ -649,7 +649,7 @@ Examples:
 
 
 pyrestoolbox.nodal.ipr_curve
-=============================
+============================
 
 .. code-block:: python
 
@@ -736,11 +736,11 @@ Examples:
 
 
 pyrestoolbox.nodal.operating_point
-===================================
+==================================
 
 .. code-block:: python
 
-    operating_point(thp, completion, reservoir, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, gor=0, wc=0, wsg=1.07, gsg=0.65, pb=0, rsb=0, sgsp=0.65, bo=1.2, uo=1.0, n_points=25, metric=False) -> dict
+    operating_point(thp, completion, reservoir, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65, bo=1.2, uo=1.0, n_points=25, metric=False) -> dict
 
 Finds the operating point where VLP outflow curve intersects the IPR inflow curve via bisection.
 
@@ -843,10 +843,11 @@ pyResToolBox uses class objects to track calculation options through the functio
      - vlp_method
      - Multiphase flow correlation for VLP calculations. Defaults to 'WG'.
        Options are:
-        + 'HB': Hagedorn-Brown (1965) with Orkiszewski bubble flow correction
-        + 'WG': Woldesemayat-Ghajar (2007) drift-flux model
-        + 'GRAY': Gray (1978) effective roughness with acceleration term
-        + 'BB': Beggs & Brill (1973) with Payne et al. correction
+
+       + 'HB': Hagedorn-Brown (1965) with Orkiszewski bubble flow correction
+       + 'WG': Woldesemayat-Ghajar (2007) drift-flux model
+       + 'GRAY': Gray (1978) effective roughness with acceleration term
+       + 'BB': Beggs & Brill (1973) with Payne et al. correction
 
 Users can specify which calculation method to use either by passing an option string, or a class object to any given function.
 
@@ -874,7 +875,7 @@ Comparing all four VLP methods for the same gas well:
 
 
 VLP Method Suitability for Deviated and Horizontal Wells
-=========================================================
+========================================================
 
 .. warning::
 

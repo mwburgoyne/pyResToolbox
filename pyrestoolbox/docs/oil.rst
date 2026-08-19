@@ -1,6 +1,6 @@
-===================================
+====================
 Oil PVT & Flow Rates
-===================================
+====================
 
 Oil property calculations including bubble point pressure, solution GOR, formation volume factor, density, viscosity, compressibility, and flow rates (radial and linear with Vogel correction). Provides correlation harmonization for consistent Pb/Rsb/viscosity matching and black oil table generation for reservoir simulation.
 
@@ -19,46 +19,53 @@ pyResToolBox uses class objects to track calculation options through the functio
      - z_method
      - Method for calculating gas Z-Factor. Defaults to 'DAK'. 
        Options are:
-        + 'DAK': Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al. - Slowest, Most Accurate
-        + 'HY': Hall & Yarborough (1973) - Second Fastest
-        + 'BUR'/'BNS': Fast, can handle 100% inerts and Hydrogen. Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen & Stanko (2025), `SPE-229932-MS <https://doi.org/10.2118/229932-MS>`_
+
+       + 'DAK': Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al. - Slowest, Most Accurate
+       + 'HY': Hall & Yarborough (1973) - Second Fastest
+       + 'BUR'/'BNS': Fast, can handle 100% inerts and Hydrogen. Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen & Stanko (2025), `SPE-229932-MS <https://doi.org/10.2118/229932-MS>`_
    * - cmethod
      - c_method
      - Method for calculating gas critical properties. Defaults to 'PMC' 
        Options are:
-        + 'SUT': Sutton with Wichert & Aziz non-hydrocarbon corrections
-        + 'PMC': Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-        + 'BUR': Burgoyne method (2024). If h2 > 0, or the 'BUR' method is used for Z-Factor then 'BUR' will automatically be used
+
+       + 'SUT': Sutton with Wichert & Aziz non-hydrocarbon corrections
+       + 'PMC': Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
+       + 'BUR': Burgoyne method (2024). If h2 > 0, or the 'BUR' method is used for Z-Factor then 'BUR' will automatically be used
    * - pbmethod
      - pb_method
      - Method for calculating bubble point pressure of oil. Defaults to 'VALMC' ('VELAR' for make_bot_og).
        Choices are:
-        + 'STAN': Standing Correlation (1947)
-        + 'VALMC': Valko-McCain Correlation (2003)
-        + 'VELAR': Velarde, Blasingame 
+
+       + 'STAN': Standing Correlation (1947)
+       + 'VALMC': Valko-McCain Correlation (2003)
+       + 'VELAR': Velarde, Blasingame 
    * - rsmethod
      - rs_method
      - Method for calculating solution gas-oil ratio. Defaults to 'VELAR'
        Options are:
-        + 'VELAR': Velarde, Blasingame & McCain (1999)
-        + 'STAN': Standing Correlation (1947)
-        + 'VALMC': Valko-McCain Correlation (2003) - Only for oil_rs_bub (Rs at Pb)
+
+       + 'VELAR': Velarde, Blasingame & McCain (1999)
+       + 'STAN': Standing Correlation (1947)
+       + 'VALMC': Valko-McCain Correlation (2003) - Only for oil_rs_bub (Rs at Pb)
    * - comethod
      - co_method
      - Method for calculating undersaturated oil compressibility. Defaults to 'EXPLT'.
        Options are:
-        + 'EXPLT': Explicit calculation with numerical derivatives via co = -1/bo*dBo/dp at constant Rs.
+
+       + 'EXPLT': Explicit calculation with numerical derivatives via co = -1/bo*dBo/dp at constant Rs.
    * - denomethod
      - deno_method
      - Method for calculating oil density. Defaults to 'SWMH'
        Options are:
-        + 'SWMH': Standing, White, McCain-Hill (1995)
+
+       + 'SWMH': Standing, White, McCain-Hill (1995)
    * - bomethod
      - bo_method
      - Method for calculating oil formation volume factor. Defaults to 'MCAIN'
        Options are:
-        + 'STAN': Standing Correlation for saturated Bo, with McCain cofb undersaturated correction applied above Pb
-        + 'MCAIN': McCain approach, calculating from densities -- Default
+
+       + 'STAN': Standing Correlation for saturated Bo, with McCain cofb undersaturated correction applied above Pb
+       + 'MCAIN': McCain approach, calculating from densities -- Default
 
 Users can specify which calculation method to use either by passing an option string, or a class object to any given function. The implementation of class objects should make it easier to program in an IDE that supports type hinting
 
@@ -182,7 +189,7 @@ Function List
      - `pyrestoolbox.oil.OilPVT`_
 
 pyrestoolbox.oil.oil_ja_sg
-======================
+==========================
 
 .. code-block:: python
 
@@ -223,7 +230,7 @@ Examples:
     0.8583666666666667
 
 pyrestoolbox.oil.oil_twu_props
-==================
+==============================
 
 .. code-block:: python
 
@@ -292,7 +299,7 @@ Examples:
 
     
 pyrestoolbox.oil.oil_rs_st
-===================
+==========================
 
 .. code-block:: python
 
@@ -346,7 +353,7 @@ Examples:
     65.13473727262924
     
 pyrestoolbox.oil.oil_pbub
-====================
+=========================
 
 .. code-block:: python
 
@@ -411,11 +418,11 @@ Examples:
     358.5685338835858
 
 pyrestoolbox.oil.oil_rs_bub
-===================
+===========================
 
 .. code-block:: python
 
-    oil_rs_bub(api, degf, pb, sg_g =0, sg_sp =0, pbmethod ='VALMC', rsmethod='VELAR', metric = False) -> float
+    oil_rs_bub(api, degf, pb, sg_g=0, sg_sp=0, rsmethod='VELAR', metric=False) -> float
 
 Returns solution GOR (scf/stb, or sm3/sm3 if metric=True) at bubble point pressure. Uses the inverse of the Bubble point pressure correlations, with the same method families. Note: The VALMC Pb correlation has a representable maximum Pb for any given fluid properties. Requesting a pb above that maximum raises a ValueError.
 At least one of sg_g and sg_sp must be supplied. This function will make simple assumption to estimate missing gas sg if only one is provided.
@@ -442,12 +449,9 @@ At least one of sg_g and sg_sp must be supplied. This function will make simple 
    * - sg_sp
      - float
      - Specific gravity of separator gas (relative to air).
-   * - pbmethod
-     - string or pb_method
-     - The method of Pb calculation to be employed. `Calculation Methods and Class Objects`_.
    * - rsmethod
      - string or rs_method
-     - The method of Rs calculation to be employed. `Calculation Methods and Class Objects`_.
+     - Selects the Pb correlation family to invert. VASBG is not available, since it requires Pb as an input. `Calculation Methods and Class Objects`_.
    * - metric
      - bool
      - Use Eclipse METRIC units for inputs/outputs. Default False
@@ -472,7 +476,7 @@ Examples:
     
 
 pyrestoolbox.oil.oil_rs
-===================
+=======================
 
 .. code-block:: python
 
@@ -543,15 +547,15 @@ Examples:
     947.1133546937306
 
 pyrestoolbox.oil.oil_co
-=====================
+=======================
 
 .. code-block:: python
 
-    oil_co(p, api, degf, sg_sp=0, sg_g=0, pb=0, rsb=0, co_sat=False, comethod='EXPLT', zmethod='DAK', rsmethod='VELAR', cmethod='PMC', denomethod='SWMH', bomethod='MCAIN', pbmethod='VALMC', metric=False) -> float or list
+    oil_co(p, api, degf, sg_sp=0, sg_g=0, pb=0, rsb=0, co_sat=False, undersaturated_only=False, comethod='EXPLT', zmethod='DAK', rsmethod='VELAR', cmethod='PMC', denomethod='SWMH', bomethod='MCAIN', pbmethod='VALMC', metric=False) -> float or list
 
 Returns oil compressibility (1/psi, or 1/barsa if metric=True).
 
-By default (``co_sat=False``) returns **undersaturated** compressibility calculated with ``Co = -1/Bo * dBo/dp`` at constant Rs, using correlation values and their numerical derivatives. Rs is held at the equilibrium value for the specified pressure — rsb when above Pb, or the correlation value at p when below Pb. This yields the isothermal compressibility of the liquid oil phase at its current dissolved gas content, without mixing in the volume of differentially evolved gas.
+By default (``co_sat=False``) returns **undersaturated** compressibility calculated with ``Co = -1/Bo * dBo/dp`` at constant Rs, using correlation values and their numerical derivatives. Rs is held at the equilibrium value for the specified pressure - rsb when above Pb, or the correlation value at p when below Pb. This yields the isothermal compressibility of the liquid oil phase at its current dissolved gas content, without mixing in the volume of differentially evolved gas.
 
 When ``co_sat=True``, returns a ``[co_usat, co_sat]`` list. The **saturated** compressibility uses Perrine's definition: ``co_sat = -(1/Bo)*dBo/dp + (Bg/Bo)*dRs/dp``, where both Bo and Rs vary with pressure. This is a pseudo-compressibility representing the average compressibility of the oil and its differentially evolved gas. Above Pb, ``co_sat`` equals ``co_usat`` (no gas evolution).
 
@@ -590,6 +594,9 @@ Either pb, rsb or both need to be specified. If one is missing, the other will b
    * - co_sat
      - bool
      - If True, return ``[co_usat, co_sat]`` list. Default False (returns float)
+   * - undersaturated_only
+     - bool
+     - If True, use the analytical undersaturated cofb correlation at all pressures, avoiding the Pb discontinuity. Default False
    * - comethod
      - string or co_method
      - The method of Compressibility calculation to be employed. `Calculation Methods and Class Objects`_.
@@ -645,7 +652,7 @@ Examples:
 
 
 pyrestoolbox.oil.oil_bt
-=====================
+=======================
 
 .. code-block:: python
 
@@ -737,7 +744,7 @@ Examples:
 
 
 pyrestoolbox.oil.oil_deno
-==============================
+=========================
 
 .. code-block:: python
 
@@ -882,7 +889,7 @@ Examples:
     1.5393786735904431
     
 pyrestoolbox.oil.oil_viso
-========================
+=========================
 
 .. code-block:: python
 
@@ -936,7 +943,7 @@ Examples:
     
 
 pyrestoolbox.oil.oil_harmonize
-=====================
+==============================
 
 .. code-block:: python
 
@@ -1028,7 +1035,7 @@ Examples:
 
 
 pyrestoolbox.oil.make_bot_og
-=====================
+============================
 
 .. note::
 
@@ -1174,7 +1181,7 @@ Examples:
     :alt: Black Oil Table DataFrame
 
 pyrestoolbox.oil.sg_evolved_gas
-==============================
+===============================
 
 .. code-block:: python
 
@@ -1225,7 +1232,7 @@ Examples:
     0.7872810977386344
 
 pyrestoolbox.oil.sg_st_gas
-=======================
+==========================
 
 .. code-block:: python
 
@@ -1274,7 +1281,7 @@ Examples:
 
         
 pyrestoolbox.oil.sgg_wt_avg
-=======================
+===========================
 
 .. code-block:: python
 
@@ -1322,7 +1329,7 @@ Examples:
 
 
 pyrestoolbox.oil.oil_api
-=======================
+========================
 
 .. code-block:: python
 
@@ -1399,7 +1406,7 @@ Examples:
     0.8016997167138811
     
 pyrestoolbox.oil.oil_rate_radial
-======================
+================================
 
 .. code-block:: python
 
@@ -1499,7 +1506,7 @@ Using a viscosity-tuned OilPVT object (auto-harmonization sets vis_frac from mea
     263.1989576453467
 
 pyrestoolbox.oil.oil_rate_linear
-======================
+================================
 
 .. code-block:: python
 
@@ -1585,7 +1592,7 @@ Using an OilPVT object:
     7.1430484805272005
 
 pyrestoolbox.oil.OilPVT
-========================
+=======================
 
 .. code-block:: python
 
@@ -1593,7 +1600,7 @@ pyrestoolbox.oil.OilPVT
 
 Stores oil characterization parameters and method choices. Computes ``sg_o`` from API in constructor. Can be passed directly to ``fbhp()`` and ``operating_point()`` for VLP calculations, and to ``oil_rate_radial()`` and ``oil_rate_linear()`` for IPR rate calculations.
 
-**Auto-harmonization:** When ``degf`` is provided (> 0), the constructor automatically calls ``oil_harmonize()`` to resolve consistent Pb, Rsb, rsb_frac, and vis_frac. This means ``rsb`` becomes optional — if omitted, it is calculated from ``pb`` using the selected correlation. If both ``pb`` and ``rsb`` are provided along with ``degf``, ``rsb_frac`` is computed to honor both values. If ``uo_target`` and ``p_uo`` are also provided, ``vis_frac`` is computed to match the target viscosity. Without ``degf``, ``rsb`` must be provided explicitly (legacy behavior).
+**Auto-harmonization:** When ``degf`` is provided (> 0), the constructor automatically calls ``oil_harmonize()`` to resolve consistent Pb, Rsb, rsb_frac, and vis_frac. This means ``rsb`` becomes optional - if omitted, it is calculated from ``pb`` using the selected correlation. If both ``pb`` and ``rsb`` are provided along with ``degf``, ``rsb_frac`` is computed to honor both values. If ``uo_target`` and ``p_uo`` are also provided, ``vis_frac`` is computed to match the target viscosity. Without ``degf``, ``rsb`` must be provided explicitly (legacy behavior).
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -1613,7 +1620,7 @@ Stores oil characterization parameters and method choices. Computes ``sg_o`` fro
      - Bubble point pressure (psia, or barsa if metric=True)
    * - rsb
      - float
-     - Solution GOR at Pb (scf/STB, or sm3/sm3 if metric=True). Default 0 — calculated from pb when degf is provided
+     - Solution GOR at Pb (scf/STB, or sm3/sm3 if metric=True). Default 0 - calculated from pb when degf is provided
    * - sg_g
      - float
      - Weighted average surface gas SG. Estimated from sg_sp if not provided
@@ -1730,7 +1737,7 @@ Convenience class method that calls ``oil.oil_harmonize()`` internally to resolv
 .. code-block:: python
 
     >>> from pyrestoolbox import oil
-    >>> # Create from Pb only — Rsb calculated automatically
+    >>> # Create from Pb only - Rsb calculated automatically
     >>> opvt = oil.OilPVT.from_harmonize(degf=200, api=35, sg_g=0.75, pb=3000)
     >>> opvt.rs(2000, 200)
     >>> opvt.viscosity(2000, 200)

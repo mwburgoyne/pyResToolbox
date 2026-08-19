@@ -1,6 +1,6 @@
-===================================
+==============
 Gas PVT & Flow
-===================================
+==============
 
 Gas property calculations for hydrocarbon mixtures with optional impurity components (CO2, H2S, N2, H2). Includes Z-factor, viscosity, density, compressibility, formation volume factor, pseudopressure, gas flow rates (radial and linear), water content, and hydrate formation prediction with inhibitor dosing.
 
@@ -19,31 +19,35 @@ pyResToolBox uses class objects to track calculation options through the functio
      - z_method
      - Method for calculating gas Z-Factor. Defaults to 'DAK'. 
        Options are:
-        + 'DAK': Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al. - Slowest, Most Accurate
-        + 'HY': Hall & Yarborough (1973) - Second Fastest
-        + 'BUR'/'BNS': Tuned five component Peng Robinson EOS model, Burgoyne, Nielsen & Stanko (2025), `SPE-229932-MS <https://doi.org/10.2118/229932-MS>`_ - Fast, reliable, and able to handle wide range of mixture types including CO2, H2S, N2 and H2 at concentrations up to pure inerts. More information about the method can be found `here <https://github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor>`_
+
+       + 'DAK': Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al. - Slowest, Most Accurate
+       + 'HY': Hall & Yarborough (1973) - Second Fastest
+       + 'BUR'/'BNS': Tuned five component Peng Robinson EOS model, Burgoyne, Nielsen & Stanko (2025), `SPE-229932-MS <https://doi.org/10.2118/229932-MS>`_ - Fast, reliable, and able to handle wide range of mixture types including CO2, H2S, N2 and H2 at concentrations up to pure inerts. More information about the method can be found `here <https://github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor>`_
    * - cmethod
      - c_method
      - Method for calculating gas critical properties. Defaults to 'PMC' 
        Options are:
-        + 'SUT': Sutton with Wichert & Aziz non-hydrocarbon corrections
-        + 'PMC': Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-        + 'BUR': Correlation tuned to return the critical properties of the pure hydrocarbon component of a mixture, required for the 'BUR' (tuned Peng Robinson) Z-Factor method. More information about the method can be found `here <https://github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor>`_
+
+       + 'SUT': Sutton with Wichert & Aziz non-hydrocarbon corrections
+       + 'PMC': Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
+       + 'BUR': Correlation tuned to return the critical properties of the pure hydrocarbon component of a mixture, required for the 'BUR' (tuned Peng Robinson) Z-Factor method. More information about the method can be found `here <https://github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor>`_
    * - hydmethod
      - hyd_method
      - Method for calculating gas hydrate formation temperature. Defaults to 'TOWLER'.
        Options are:
-        + 'TOWLER': Towler & Mokhatab (2005) — T-explicit, gas gravity based. Hydrocarbon Processing 84, pp 61-62
-        + 'MOTIEE': Motiee (1991) — T-explicit, gas gravity based. Hydrocarbon Processing 70, pp 98-99
+
+       + 'TOWLER': Towler & Mokhatab (2005) - T-explicit, gas gravity based. Hydrocarbon Processing 84, pp 61-62
+       + 'MOTIEE': Motiee (1991) - T-explicit, gas gravity based. Hydrocarbon Processing 70, pp 98-99
    * - inhibitor_type
      - inhibitor
      - Thermodynamic hydrate inhibitor type. Optional (None = no inhibitor).
        Options are:
-        + 'MEOH': Methanol
-        + 'MEG': Monoethylene Glycol
-        + 'DEG': Diethylene Glycol
-        + 'TEG': Triethylene Glycol
-        + 'ETOH': Ethanol
+
+       + 'MEOH': Methanol
+       + 'MEG': Monoethylene Glycol
+       + 'DEG': Diethylene Glycol
+       + 'TEG': Triethylene Glycol
+       + 'ETOH': Ethanol
 
 
 Users can specify which calculation method to use either by passing an option string, or a class object to any given function. The implementation of class objects should make it easier to program in an IDE that supports type hinting
@@ -119,6 +123,8 @@ Function List
      - `pyrestoolbox.gas.gas_bg`_  
    * - Gas Density
      - `pyrestoolbox.gas.gas_den`_  
+   * - Gas Enthalpy, Cp, Cv & Joule-Thomson
+     - `pyrestoolbox.gas.gas_thermal`_
    * - Gas Water of Condensation
      - `pyrestoolbox.gas.gas_water_content`_
    * - Convert P/Z to P
@@ -148,7 +154,7 @@ Function List
 
 
 pyrestoolbox.gas.gas_tc_pc
-======================
+==========================
 
 .. code-block:: python
 
@@ -227,7 +233,7 @@ Using metric units (returns Tc in K, Pc in barsa):
     (202.18820601746322, 50.90644977899459)
 
 pyrestoolbox.gas.gas_z
-==================
+======================
 
 .. code-block:: python
 
@@ -306,7 +312,7 @@ Examples:
     array([0.91900003, 0.87160514])
 
 pyrestoolbox.gas.gas_ug
-===================
+=======================
 
 .. code-block:: python
 
@@ -390,7 +396,7 @@ Examples:
     
     
 pyrestoolbox.gas.gas_cg
-===================
+=======================
 
 .. code-block:: python
 
@@ -464,7 +470,7 @@ Examples:
     
 
 pyrestoolbox.gas.gas_bg
-===================
+=======================
 
 .. code-block:: python
 
@@ -540,7 +546,7 @@ Examples:
     array([168.70336688, 249.54573283])
 
 pyrestoolbox.gas.gas_den
-=====================
+========================
 
 .. code-block:: python
 
@@ -613,8 +619,113 @@ Examples:
     7.736656004563576
     
 
+pyrestoolbox.gas.gas_thermal
+============================
+
+.. code-block:: python
+
+    gas_thermal(p, sg, degf, co2=0, h2s=0, n2=0, h2=0, tc=0, pc=0, metric=False) -> dict
+
+Returns gas enthalpy, isobaric and isochoric heat capacities and the Joule-Thomson
+coefficient from the BNS tuned 5-component Peng Robinson EOS (Burgoyne, Nielsen &
+Stanko 2025, `SPE-229932-MS <https://doi.org/10.2118/229932-MS>`_). Only the BNS
+method carries caloric information, so unlike ``gas_z`` there is no ``zmethod``
+choice: DAK and HY are Z-factor correlations with no thermodynamic content. Root
+selection is shared with ``gas_z``, so Z and the caloric properties always resolve
+to the same phase root.
+
+Accuracy, measured against a reference EOS (CoolProp) over 60-300 deg F and
+100-10,000 psia, single phase: pure CO2 Cp within 4.3% mean and JT within 4.1%
+mean; pure CH4 Cp within 0.8% mean and JT within 9.5% mean. The worst Cp errors
+(about -24%) sit close to the CO2 critical point, where a cubic EOS cannot
+represent the heat-capacity ridge; use a reference EOS for dense-phase CO2.
+Departure enthalpy for lean hydrocarbon gas carries a systematic bias of about
+-11% and should be treated with caution.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - p
+     - float, list or np.array
+     - Gas pressure (psia, or barsa if metric=True)
+   * - sg
+     - float
+     - Gas specific gravity relative to air
+   * - degf
+     - float
+     - Gas temperature (deg F, or deg C if metric=True)
+   * - co2
+     - float
+     - Molar fraction of CO2. Defaults to 0
+   * - h2s
+     - float
+     - Molar fraction of H2S. Defaults to 0
+   * - n2
+     - float
+     - Molar fraction of N2. Defaults to 0
+   * - h2
+     - float
+     - Molar fraction of H2. Defaults to 0
+   * - tc
+     - float
+     - Overrides the hydrocarbon pseudo-component Tc (deg R, or K if metric=True). Inert Tc stay at BNS internal constants
+   * - pc
+     - float
+     - Overrides the hydrocarbon pseudo-component Pc (psia, or barsa if metric=True). Inert Pc stay at BNS internal constants
+   * - metric
+     - bool
+     - If True, inputs and outputs use Eclipse METRIC units. Defaults to False
+
+.. list-table:: Returns (dict; each value a float or np.array matching the shape of p)
+   :widths: 10 40
+   :header-rows: 1
+
+   * - Key
+     - Description
+   * - 'H'
+     - Enthalpy relative to 60 deg F and 14.696 psia (Btu/lb-mol, or kJ/kmol if metric=True)
+   * - 'Cp'
+     - Isobaric heat capacity (Btu/(lb-mol.degR), or kJ/(kmol.K) if metric=True)
+   * - 'Cv'
+     - Isochoric heat capacity (Btu/(lb-mol.degR), or kJ/(kmol.K) if metric=True)
+   * - 'JT'
+     - Joule-Thomson coefficient (deg F/psi, or deg C/MPa if metric=True)
+
+Examples:
+
+.. code-block:: python
+
+    >>> from pyrestoolbox import gas
+    >>> r = gas.gas_thermal(p=3000, sg=0.75, degf=200, co2=0.1)
+    >>> r['Cp']
+    13.83976426974385
+    >>> r['JT']
+    0.017781089107395787
+
+Array of pressures, showing the Joule-Thomson coefficient falling with pressure:
+
+.. code-block:: python
+
+    >>> r = gas.gas_thermal(p=[1000, 3000, 6000], sg=0.65, degf=180)
+    >>> r['JT']
+    array([0.03955315, 0.01665755, 0.00185701])
+
+Metric units (200 barsa, 90 deg C):
+
+.. code-block:: python
+
+    >>> r = gas.gas_thermal(p=200, sg=0.75, degf=90, co2=0.1, metric=True)
+    >>> r['Cp']
+    57.9386394857566
+    >>> r['JT']  # deg C/MPa
+    1.5177952095464358
+
 pyrestoolbox.gas.gas_water_content
-==============================
+==================================
 
 .. code-block:: python
 
@@ -664,7 +775,7 @@ Examples:
     0.628635730743162
 
 pyrestoolbox.gas.gas_ponz2p
-=======================
+===========================
 
 .. code-block:: python
 
@@ -743,7 +854,7 @@ Examples:
     array([2081.54892921, 4856.97983205])
     
 pyrestoolbox.gas.gas_grad2sg
-========================
+============================
 
 .. code-block:: python
 
@@ -818,7 +929,7 @@ Examples:
     
 
 pyrestoolbox.gas.gas_dmp
-=====================
+========================
 
 .. code-block:: python
 
@@ -896,7 +1007,7 @@ Examples:
     -213713909.36339885
         
 pyrestoolbox.gas.gas_fws_sg
-=======================
+===========================
 
 .. code-block:: python
 
@@ -945,7 +1056,7 @@ Examples:
     
     
 pyrestoolbox.gas.gas_rate_radial
-======================
+================================
 
 .. code-block:: python
 
@@ -1052,7 +1163,7 @@ Using a GasPVT object:
     
 
 pyrestoolbox.gas.gas_sg
-======================
+=======================
 
 .. code-block:: python
 
@@ -1106,7 +1217,7 @@ Examples:
 
 
 pyrestoolbox.gas.gas_rate_linear
-======================
+================================
 
 .. code-block:: python
 
@@ -1204,7 +1315,7 @@ Using a GasPVT object:
 
 
 pyrestoolbox.gas.gas_hydrate
-=============================
+============================
 
 .. code-block:: python
 
@@ -1216,9 +1327,9 @@ Returns a ``HydrateResult`` dataclass with gas hydrate formation temperature (HF
 
 Two HFT correlations are available: Motiee (1991) and Towler & Mokhatab (2005). Hydrate formation pressure is computed by bisection inversion of the HFT correlation. Inhibitor temperature depression uses the Østergaard et al. (2005) cubic polynomial, and required inhibitor concentration is computed by Newton-Raphson inversion of the same polynomial. The required concentration is capped at the physical maximum for each inhibitor type.
 
-**Water balance.** The gas leaves the reservoir saturated with vaporized water at reservoir P,T (``p_res``, ``degf_res``). At the operating point (lower P,T), the gas can hold less water vapor — the excess condenses as liquid. The function computes vaporized water at both conditions and reports the condensed amount. Any free liquid water entrained from the reservoir (``additional_water``) is added to the condensed water to give the total liquid water at the operating point. When gas composition is provided (``co2``/``h2s``/``n2``/``h2``), the SoreideWhitson VLE model is used; otherwise the Danesh correlation. If ``p_res``/``degf_res`` are not provided, the operating ``p``/``degf`` are used for both (no condensation).
+**Water balance.** The gas leaves the reservoir saturated with vaporized water at reservoir P,T (``p_res``, ``degf_res``). At the operating point (lower P,T), the gas can hold less water vapor - the excess condenses as liquid. The function computes vaporized water at both conditions and reports the condensed amount. Any free liquid water entrained from the reservoir (``additional_water``) is added to the condensed water to give the total liquid water at the operating point. When gas composition is provided (``co2``/``h2s``/``n2``/``h2``), the SoreideWhitson VLE model is used; otherwise the Danesh correlation. If ``p_res``/``degf_res`` are not provided, the operating ``p``/``degf`` are used for both (no condensation).
 
-**Inhibitor injection rate** is calculated from the **total liquid water** at the operating point (condensed + free water) and the required inhibitor concentration. Only liquid water needs treatment — vaporized water does not form hydrates. The ``inhibitor_wt_pct`` parameter represents the concentration of inhibitor in the aqueous phase (water + inhibitor mixture), not the mass fraction of the total stream. Injection rates are reported in lb/MMscf and gal/MMscf (oilfield) or kg/sm3 and L/sm3 (metric).
+**Inhibitor injection rate** is calculated from the **total liquid water** at the operating point (condensed + free water) and the required inhibitor concentration. Only liquid water needs treatment - vaporized water does not form hydrates. The ``inhibitor_wt_pct`` parameter represents the concentration of inhibitor in the aqueous phase (water + inhibitor mixture), not the mass fraction of the total stream. Injection rates are reported in lb/MMscf and gal/MMscf (oilfield) or kg/sm3 and L/sm3 (metric).
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -1303,7 +1414,7 @@ Two HFT correlations are available: Motiee (1991) and Towler & Mokhatab (2005). 
      - Maximum valid wt% for selected inhibitor type (MEOH: 25, MEG: 70, DEG: 70, TEG: 50, ETOH: 30). 0 if no inhibitor specified
    * - inhibitor_underdosed
      - bool
-     - True if ``required_inhibitor_wt_pct`` exceeds ``max_inhibitor_wt_pct`` for the selected inhibitor type — meaning this inhibitor **cannot** provide sufficient depression even at its physical maximum concentration. This does NOT indicate whether the *applied* ``inhibitor_wt_pct`` is sufficient; compare ``inhibited_hft`` to the operating temperature to determine if the applied dose provides protection
+     - True if ``required_inhibitor_wt_pct`` exceeds ``max_inhibitor_wt_pct`` for the selected inhibitor type - meaning this inhibitor **cannot** provide sufficient depression even at its physical maximum concentration. This does NOT indicate whether the *applied* ``inhibitor_wt_pct`` is sufficient; compare ``inhibited_hft`` to the operating temperature to determine if the applied dose provides protection
    * - water_vaporized_res
      - float
      - Vaporized water content at reservoir P,T (stb/MMscf | sm3/sm3). This is the water the gas picked up in the reservoir
@@ -1571,7 +1682,7 @@ Using damaged-zone β (krg < 1) and the TCK correlation:
     >>> round(r['S_hvf'], 4)
     0.1534
 
-Metric units (sm3/D, m) — same well, same skin:
+Metric units (sm3/D, m) - same well, same skin:
 
 .. code-block:: python
 
@@ -1592,7 +1703,7 @@ Returns the partial-penetration pseudoskin S\ :sub:`p` for a vertical well in a 
 
 The series is summed directly (up to 20,000 terms, vectorised) with Bessel K₀ evaluated via ``scipy.special.k0``. A warning is emitted when the tail of the summation suggests the series has not fully converged (typical for very thin wellbores, i.e. r\ :sub:`w`/h\ :sub:`tot` ≪ 10⁻³ combined with small k\ :sub:`v`).
 
-**All length inputs must share a consistent unit** (ft or m — only ratios enter the formula), so there is no separate ``metric`` flag on this function.
+**All length inputs must share a consistent unit** (ft or m - only ratios enter the formula), so there is no separate ``metric`` flag on this function.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -1625,7 +1736,7 @@ Example (field units, ft):
     ...                                   rw=0.3543, kh_kv=8.0)
     2.155398050852645
 
-Metric call using meters — same well, dimensionless result is essentially identical:
+Metric call using meters - same well, dimensionless result is essentially identical:
 
 .. code-block:: python
 
@@ -1642,7 +1753,7 @@ Fully perforated interval (S\ :sub:`p` → 0):
 
 
 pyrestoolbox.gas.GasPVT
-========================
+=======================
 
 .. code-block:: python
 

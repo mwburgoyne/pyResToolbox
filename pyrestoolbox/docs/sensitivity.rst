@@ -1,12 +1,12 @@
-===================================
+====================
 Sensitivity Analysis
-===================================
+====================
 
-Framework for parameter sweeps and tornado-chart sensitivity analysis. Works with any callable function — not limited to pyResToolbox functions.
+Framework for parameter sweeps and tornado-chart sensitivity analysis. Works with any callable function - not limited to pyResToolbox functions.
 
 
 pyrestoolbox.sensitivity.sweep
-======================
+==============================
 
 .. code-block:: python
 
@@ -75,7 +75,7 @@ Examples:
 
 
 pyrestoolbox.sensitivity.tornado
-======================
+================================
 
 .. code-block:: python
 
@@ -141,7 +141,7 @@ Examples:
 
 
 Class Objects
-======================
+=============
 
 .. list-table::
    :widths: 15 40
