@@ -644,11 +644,11 @@ Pure CO2 case at 5000 psia x 275 deg F and 3% NaCl brine:
     >>> from pyrestoolbox import brine
     >>> mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=1.0, metric=False)
     >>> mix.bDen  # Returns [Gas Saturated, Gas-Free Brine, Freshwater]
-    [0.973398983496999, 0.968164592979362, 0.9476497407774847]
+    [0.9738595754362946, 0.968164592979362, 0.9476497407774847]
     >>> mix.Rs  # Returns per-gas Rs dict (scf/stb)
-    {'CO2': 139.5790835259016}
+    {'CO2': 151.30103411561777}
     >>> mix.bw  # Returns [Gas Saturated, Gas-Free, Freshwater]
-    [1.096613263262556, 1.0543023174291248, 1.0542033190822462]
+    [1.099911782644371, 1.0543023174291248, 1.0542033190822462]
 
 Pure CH4 case (SG=0.554) at 5000 psia x 275 deg F and 3% NaCl brine:
 
@@ -656,9 +656,9 @@ Pure CH4 case (SG=0.554) at 5000 psia x 275 deg F and 3% NaCl brine:
 
     >>> mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=0, sg=0.554, metric=False)
     >>> mix.Rs
-    {'CH4': 21.21234560600256}
+    {'CH4': 22.119943364817185}
     >>> mix.bDen
-    [0.9641838754552089, 0.968164592979362, 0.9476497407774847]
+    [0.964025696752258, 0.968164592979362, 0.9476497407774847]
 
 Mixed gas (10% CO2, 5% H2S, SG=0.7) at 200 Bar x 80 degC and 10,000 ppm NaCl:
 
@@ -668,9 +668,9 @@ Mixed gas (10% CO2, 5% H2S, SG=0.7) at 200 Bar x 80 degC and 10,000 ppm NaCl:
     >>> mix.gas_comp  # Estimated gas composition including HC split
     {'CO2': 0.1, 'H2S': 0.05, 'CH4': 0.8133, 'C2H6': 0.0351, 'C3H8': 0.0015, 'nC4H10': 0.0001}
     >>> mix.Rs_total  # Total dissolved gas (sm3/sm3)
-    8.5106741070893
+    8.611222366730054
     >>> mix.bDen
-    [0.9855934589486185, 0.9871360082710434, 0.9804911502375318]
+    [0.9854888113586086, 0.9871360082710434, 0.9804911502375318]
 
 Pure CO2 fresh water at 175 Bar x 85 degC with saturated compressibility:
 
@@ -678,11 +678,11 @@ Pure CO2 fresh water at 175 Bar x 85 degC with saturated compressibility:
 
     >>> mix = brine.SoreideWhitson(pres=175, temp=85, ppm=0, y_CO2=1.0, metric=True, cw_sat=True)
     >>> mix.Rs_total  # sm3 dissolved CO2 / sm3 Brine
-    24.188037633302223
+    24.906989289860665
     >>> mix.Cf_sat
-    0.00016012590421810821
+    0.0001619153778313409
     >>> mix.water_content
-    {'y_H2O': 0.013982317814779299, 'stb_mmscf': 1.923030543083137, 'lb_mmscf': 673.2379475216799}
+    {'y_H2O': 0.013968581961446491, 'stb_mmscf': 1.9211146471984861, 'lb_mmscf': 672.5672073622544}
 
 References:
 

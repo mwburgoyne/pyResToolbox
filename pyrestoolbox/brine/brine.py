@@ -1480,17 +1480,25 @@ class SoreideWhitson:
             sg: Gas specific gravity — used to estimate HC split among C1-C4 (default 0.65)
             metric: Boolean for units (True=metric, False=oilfield). Default False.
             cw_sat: If True, also calculate saturated compressibility (default False)
-            framework: VLE framework. 'default' (the Burgoyne & Nielsen 2026
-                refreshed Soreide-Whitson BIPs, doi:10.1016/j.fluid.2026.114824),
-                'sw_original' (original 1992 published), or 'dropin' (the refreshed
-                BIPs re-fitted on top of the ORIGINAL S&W water alpha, so an existing
-                S&W implementation can adopt them by swapping the kij correlations
-                alone). Affects kij and ks correlations. 'proposed' is accepted as a
-                legacy alias for 'default'.
-            salinity_method: How salinity enters the flash. 'gamma_phi' (default, Sechenov
-                salting-out via activity coefficient), 'embedded' (salinity inside kij —
-                only for 'dropin'/'sw_original'), 'explicit' (brine treated as a component),
-                'sechenov' (legacy alias for gamma_phi), or 'auto' (pick per-gas defaults).
+            framework: VLE framework, affecting the kij and ks correlations.
+                'default' is what Burgoyne & Nielsen (2026) publish and recommend
+                (doi:10.1016/j.fluid.2026.114824): the original S&W water alpha,
+                refitted freshwater kij, and salinity carried by an additive
+                embedded delta_kij. 'mc3' is the alternative that paper
+                investigated and did not adopt, pairing a Mathias-Copeman
+                3-parameter water alpha with an explicit gamma-phi Sechenov
+                correction; the two are indistinguishable in solubility once the
+                BIP is refitted. 'sw_original' is S&W 1992 as published.
+                'dropin' and 'proposed' remain accepted as legacy names for
+                'default' and 'mc3' respectively, so pre-3.7.5 calls keep their
+                previous numerical behaviour.
+            salinity_method: How salinity enters the flash. 'auto' (default) takes
+                the route each framework was fitted with: 'embedded' for 'default'
+                and 'sw_original', 'gamma_phi' for 'mc3'. 'embedded' puts salinity
+                inside kij and is defined for all three frameworks. 'gamma_phi'
+                applies Sechenov salting-out through an activity coefficient.
+                'explicit' treats the brine as a component. 'sechenov' is a legacy
+                alias for 'gamma_phi'.
 
         Returns object with following calculated properties:
             .x          : Dict of dissolved gas mole fractions, e.g. {'CO2': 0.024, 'CH4': 0.0015}
@@ -1542,7 +1550,7 @@ class SoreideWhitson:
 
     def __init__(self, pres=None, temp=None, ppm=None, y_CO2=0, y_H2S=0, y_N2=0, y_H2=0,
                  sg=0.65, metric=False, cw_sat=False,
-                 framework='default', salinity_method='gamma_phi',
+                 framework='default', salinity_method='auto',
                  vphi_route=_VPHI_ROUTE,
                  *, p=None, degf=None, wt=None):
         # V_phi source for the Garcia density step. 'auto' (default) is the S&W
@@ -1574,18 +1582,15 @@ class SoreideWhitson:
             raise ValueError(
                 f"Invalid salinity_method: {salinity_method!r}. Valid options: {list(self._VALID_SALINITY_METHODS)}"
             )
-        if framework == 'default' and salinity_method == 'embedded':
-            warnings.warn(
-                "framework='default' does not define embedded-salinity kij; "
-                "falling back to the 'gamma_phi' salinity method.",
-                stacklevel=2,
-            )
+        # 'sechenov' is an accepted alias for the gamma_phi (Sechenov
+        # activity-coefficient) salting-out method.
+        if salinity_method == 'sechenov':
             salinity_method = 'gamma_phi'
-        # 'sechenov' and 'auto' are accepted aliases that normalise to the
-        # gamma_phi (Sechenov activity-coefficient) salting-out method. Without
-        # this, the flash path would silently apply no salinity correction.
-        if salinity_method in ('sechenov', 'auto'):
-            salinity_method = 'gamma_phi'
+        # 'auto' resolves per framework to the salting-out route that framework
+        # was fitted with. It must resolve to something: left unresolved, the
+        # flash path would silently apply no salinity correction at all.
+        if salinity_method == 'auto':
+            salinity_method = 'gamma_phi' if framework == 'mc3' else 'embedded'
         self.framework = framework
         self.salinity_method = salinity_method
         # Validate pressure and temperature (convert to oilfield units for validation)

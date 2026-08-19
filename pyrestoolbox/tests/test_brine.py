@@ -121,15 +121,17 @@ def test_sw_framework_and_salinity_method_exposed():
     assert mix.salinity_method == 'gamma_phi'
 
 
-def test_sw_accepts_legacy_proposed_framework_alias():
-    """'proposed' was the name of the default framework up to 3.7.4; it must
-    still be accepted, and must normalise to 'default'."""
+def test_sw_accepts_legacy_framework_aliases():
+    """The pre-3.7.5 framework names must keep working AND keep their previous
+    numerical behaviour: 'proposed' was the MC-3 framework, 'dropin' was the
+    published one that is now the default."""
     kwargs = dict(pres=200, temp=80, ppm=30000, y_CO2=1.0, metric=True,
                   salinity_method='gamma_phi')
-    legacy = brine.SoreideWhitson(framework='proposed', **kwargs)
-    current = brine.SoreideWhitson(framework='default', **kwargs)
-    assert legacy.framework == 'default'
-    assert legacy.Rs_total == current.Rs_total
+    for legacy_name, current_name in (('proposed', 'mc3'), ('dropin', 'default')):
+        legacy = brine.SoreideWhitson(framework=legacy_name, **kwargs)
+        current = brine.SoreideWhitson(framework=current_name, **kwargs)
+        assert legacy.framework == current_name
+        assert legacy.Rs_total == current.Rs_total
 
 
 def test_sw_rejects_invalid_framework():
@@ -362,21 +364,31 @@ def _xch4_flash(framework, salinity_method, wt):
     return x['CH4']
 
 
-def test_sw_sechenov_auto_alias_equal_gamma_phi():
-    """sechenov/auto must normalise to gamma_phi (else they silently skip salting)."""
+def test_sw_salinity_method_aliases_resolve():
+    """'sechenov' is gamma_phi; 'auto' resolves to the route each framework was
+    fitted with. Neither may be left unresolved, which would silently skip
+    salting-out altogether."""
     import warnings
-    def run(sm):
+    def run(sm, fw):
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             m = brine.SoreideWhitson(pres=3000, temp=200, ppm=200000, y_CO2=0,
-                                     sg=0.554, metric=False, framework='default',
+                                     sg=0.554, metric=False, framework=fw,
                                      salinity_method=sm)
         return m.salinity_method, m.x.get('CH4', 0.0)
-    base_norm, base_x = run('gamma_phi')
-    for sm in ('sechenov', 'auto'):
-        norm, x = run(sm)
-        assert norm == 'gamma_phi', f"{sm} should normalise to gamma_phi, got {norm}"
-        assert abs(x - base_x) < 1e-15, f"{sm} x_CH4 {x} != gamma_phi {base_x}"
+    # 'sechenov' is gamma_phi on any framework
+    for fw in ('default', 'mc3', 'sw_original'):
+        base_norm, base_x = run('gamma_phi', fw)
+        norm, x = run('sechenov', fw)
+        assert norm == 'gamma_phi', f"sechenov should be gamma_phi on {fw}, got {norm}"
+        assert abs(x - base_x) < 1e-15
+    # 'auto' takes the fitted route: embedded for the published framework and
+    # for sw_original, gamma_phi for mc3
+    for fw, expected in (('default', 'embedded'), ('sw_original', 'embedded'),
+                         ('mc3', 'gamma_phi')):
+        norm, x = run('auto', fw)
+        assert norm == expected, f"auto on {fw} should be {expected}, got {norm}"
+        assert x > 0, f"auto on {fw} produced no dissolved CH4"
 
 
 def test_engine_rejects_unimplemented_salinity_method():

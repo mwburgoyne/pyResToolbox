@@ -522,39 +522,43 @@ def test_doc_sw_pure_co2_field():
     """brine.rst: SoreideWhitson pure CO2 field units"""
     mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=1.0, metric=False)
     assert isinstance(mix.bDen, list) and len(mix.bDen) == 3
-    # Re-pinned 2026-07-25 (was 0.9732266498107526): default V_phi route moved
-    # from Plyasunov to S&W modified PR + VSHIFT. Shift is -0.012%.
-    assert abs(mix.bDen[0] - 0.973398983496999) / 0.973398983496999 < RTOL
-    assert abs(mix.Rs['CO2'] - 139.5790835259016) / 139.5790835259016 < RTOL
-    # Re-pinned 2026-07-25 (was 1.096613263262556): default V_phi route change,
-    # +0.012% - bw is the reciprocal of the same density shift above.
-    assert abs(mix.bw[0] - 1.0964191153239935) / 1.0964191153239935 < RTOL
+    # Re-pinned 2026-08-19 (was 0.9732266498107526 before the 2026-07-25 V_phi
+    # route change): published framework is now the default.
+    assert abs(mix.bDen[0] - 0.9738595754362946) / 0.9738595754362946 < RTOL
+    assert abs(mix.Rs['CO2'] - 151.30103411561777) / 151.30103411561777 < RTOL
+    # Re-pinned 2026-08-19 (was 1.0964191153239935, and 1.096613263262556
+    # before the 2026-07-25 V_phi route change): published framework is now the
+    # default. bw is the reciprocal of the density shift above.
+    assert abs(mix.bw[0] - 1.099911782644371) / 1.099911782644371 < RTOL
 
 def test_doc_sw_pure_ch4_field():
     """brine.rst: SoreideWhitson pure CH4 field units"""
     mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=0, sg=0.554, metric=False)
-    assert abs(mix.Rs['CH4'] - 21.21234560600256) / 21.21234560600256 < RTOL
-    assert abs(mix.bDen[0] - 0.9642344204009531) / 0.9642344204009531 < RTOL
+    assert abs(mix.Rs['CH4'] - 22.119943364817185) / 22.119943364817185 < RTOL
+    # Re-pinned 2026-08-19 (was 0.9642344204009531).
+    assert abs(mix.bDen[0] - 0.964025696752258) / 0.964025696752258 < RTOL
 
 def test_doc_sw_mixed_gas_metric():
     """brine.rst: SoreideWhitson mixed gas metric"""
     mix = brine.SoreideWhitson(pres=200, temp=80, ppm=10000, y_CO2=0.1, y_H2S=0.05, sg=0.7, metric=True)
-    assert abs(mix.Rs_total - 8.5106741070893) / 8.5106741070893 < RTOL
-    # Re-pinned 2026-07-25 (was 0.9855934589486185): default V_phi route change.
-    # Shift is -0.020%; this case carries H2S, where the two routes differ most.
-    assert abs(mix.bDen[0] - 0.9854282627804675) / 0.9854282627804675 < RTOL
+    assert abs(mix.Rs_total - 8.611222366730054) / 8.611222366730054 < RTOL
+    # Re-pinned 2026-08-19 (was 0.9854282627804675, and 0.9855934589486185
+    # before the 2026-07-25 V_phi route change): published framework is now the
+    # default. This case carries H2S.
+    assert abs(mix.bDen[0] - 0.9854888113586086) / 0.9854888113586086 < RTOL
     assert 'CO2' in mix.gas_comp and 'H2S' in mix.gas_comp and 'CH4' in mix.gas_comp
 
 def test_doc_sw_co2_freshwater_cw_sat():
     """brine.rst: SoreideWhitson pure CO2 freshwater with Cf_sat"""
     mix = brine.SoreideWhitson(pres=175, temp=85, ppm=0, y_CO2=1.0, metric=True, cw_sat=True)
-    assert abs(mix.Rs_total - 24.188037633302223) / 24.188037633302223 < RTOL
-    # Re-pinned 2026-07-25 (was 0.00016012590421810821): default V_phi route
-    # change. Cf_sat is a difference of two densities so it amplifies the shift
-    # to -1.2%, which is why it moves more than bDen does.
-    assert abs(mix.Cf_sat - 0.00015823417319616538) / 0.00015823417319616538 < RTOL
+    assert abs(mix.Rs_total - 24.906989289860665) / 24.906989289860665 < RTOL
+    # Re-pinned 2026-08-19 (was 0.00015823417319616538, and
+    # 0.00016012590421810821 before the 2026-07-25 V_phi route change): published
+    # framework is now the default. Cf_sat is a difference of two densities, so
+    # it amplifies whatever moves the density.
+    assert abs(mix.Cf_sat - 0.0001619153778313409) / 0.0001619153778313409 < RTOL
     assert isinstance(mix.water_content, dict)
-    assert abs(mix.water_content['stb_mmscf'] - 1.923030543083137) / 1.923030543083137 < RTOL
+    assert abs(mix.water_content['stb_mmscf'] - 1.9211146471984861) / 1.9211146471984861 < RTOL
 
 # =============================================================================
 # Layer Module Documentation Examples (docs/layer.rst)
@@ -772,8 +776,8 @@ def test_doc_gas_hydrate_composition():
     """gas.rst: gas_hydrate with CO2 composition and reservoir P,T"""
     r = gas.gas_hydrate(p=1000, degf=50, sg=0.65, hydmethod='MOTIEE', inhibitor_type='MEG', co2=0.05,
                          p_res=3000, degf_res=200)
-    assert abs(r.water_vaporized_res - 0.9104464022241924) / 0.9104464022241924 < RTOL
-    assert abs(r.water_condensed - 0.8751290587605479) / 0.8751290587605479 < RTOL
+    assert abs(r.water_vaporized_res - 0.9115399200502281) / 0.9115399200502281 < RTOL
+    assert abs(r.water_condensed - 0.8805095446084514) / 0.8805095446084514 < RTOL
     assert abs(r.required_inhibitor_wt_pct - 23.07967423824071) / 23.07967423824071 < RTOL
     assert r.inhibitor_underdosed is False
 

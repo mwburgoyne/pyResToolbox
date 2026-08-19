@@ -456,7 +456,7 @@ def _kij_aq_hc_proposed(gas: str):
 # Dual Dispatch Dictionaries
 # =============================================================================
 # Proposed: MC-3 alpha + freshwater-only kij. Salinity via Sechenov/gamma-phi.
-KIJ_AQ_PROPOSED: Dict[str, Callable] = {
+KIJ_AQ_MC3: Dict[str, Callable] = {
     'H2': kij_aq_h2_proposed,
     'CO2': kij_aq_co2_proposed,
     'N2': kij_aq_n2_proposed,
@@ -494,7 +494,7 @@ KIJ_AQ_SW_ORIGINAL: Dict[str, Callable] = {
 }
 
 # Drop-in: S&W alpha + freshwater-only kij refitted for S&W alpha + embedded delta.
-KIJ_AQ_DROPIN: Dict[str, Callable] = {
+KIJ_AQ_DEFAULT: Dict[str, Callable] = {
     'H2': kij_aq_h2_dropin,
     'CO2': kij_aq_co2_dropin,
     'N2': kij_aq_n2_dropin,
@@ -513,7 +513,7 @@ KIJ_AQ_DROPIN: Dict[str, Callable] = {
 }
 
 # Default dispatch = proposed (backward compatible alias)
-KIJ_AQ_FUNCTIONS: Dict[str, Callable] = KIJ_AQ_PROPOSED
+KIJ_AQ_FUNCTIONS: Dict[str, Callable] = KIJ_AQ_MC3
 
 
 # =============================================================================
@@ -521,7 +521,7 @@ KIJ_AQ_FUNCTIONS: Dict[str, Callable] = KIJ_AQ_PROPOSED
 # =============================================================================
 # Form: kij(T,m) = kij_fw(T) + (a0 + a1*Tr + a2*Tr^2)*m  [+ (b0 + b1*Tr)*m^2 for CO2]
 # Tr = T/Tc for each gas. Fitted with MC-3 alpha + proposed kij_fw.
-EMBEDDED_SALINITY_PARAMS = {
+EMBEDDED_SALINITY_PARAMS_MC3 = {
     'CO2':    {'Tc': 304.20, 'a0': 0.0305, 'a1': -0.0525, 'a2': 0.0315,
                'b0': 0.0024, 'b1': -0.0027},  # Quadratic-in-m (5 params)
     'H2S':    {'Tc': 373.20, 'a0': 0.0454, 'a1': -0.0884, 'a2': 0.0484},
@@ -536,7 +536,7 @@ EMBEDDED_SALINITY_PARAMS = {
 # Drop-in embedded salinity BIP parameters (Track 2, S&W alpha).
 # Fitted with brine VLE using alpha_water_soreide(Tr, m). C3H8 and nC4H10
 # reuse the proposed-framework values (not separately refitted).
-EMBEDDED_SALINITY_PARAMS_DROPIN: Dict[str, Dict] = {
+EMBEDDED_SALINITY_PARAMS_DEFAULT: Dict[str, Dict] = {
     'CO2':  {'Tc': 304.20, 'a0': 0.0409, 'a1': -0.0807, 'a2': 0.0526,
              'b0': 0.0079, 'b1': -0.0085},  # Quadratic-in-m (5 params)
     'H2S':  {'Tc': 373.20, 'a0': 0.0341, 'a1': -0.0655, 'a2': 0.0376},
@@ -564,7 +564,7 @@ def calc_embedded_delta_kij(gas: str, T_K: float, salinity_molal: float,
         gas: Gas name
         T_K: Temperature in Kelvin
         salinity_molal: NaCl molality
-        params: Override parameter dict (default: use EMBEDDED_SALINITY_PARAMS)
+        params: Override parameter dict (default: use EMBEDDED_SALINITY_PARAMS_MC3)
 
     Returns:
         delta_kij value
@@ -572,9 +572,9 @@ def calc_embedded_delta_kij(gas: str, T_K: float, salinity_molal: float,
     if salinity_molal <= 0:
         return 0.0
     if params is None:
-        if gas not in EMBEDDED_SALINITY_PARAMS:
+        if gas not in EMBEDDED_SALINITY_PARAMS_MC3:
             return 0.0
-        params = EMBEDDED_SALINITY_PARAMS[gas]
+        params = EMBEDDED_SALINITY_PARAMS_MC3[gas]
 
     Tr = T_K / params['Tc']
     m = salinity_molal
@@ -586,16 +586,25 @@ def calc_embedded_delta_kij(gas: str, T_K: float, salinity_molal: float,
 # =============================================================================
 # Framework names
 # =============================================================================
-# 'default' is the Burgoyne & Nielsen (2026) refresh of Soreide-Whitson and is
-# what the library uses unless told otherwise. It was called 'proposed' up to
-# 3.7.4, back when it was the proposal of a paper under review; that name is
-# still accepted so existing calls keep working.
-VALID_FRAMEWORKS = ('default', 'sw_original', 'dropin')
-_FRAMEWORK_ALIASES = {'proposed': 'default'}
+# 'default' is what Burgoyne & Nielsen (2026) publish and recommend: the
+# ORIGINAL S&W water alpha, refitted freshwater kij, and salinity carried by an
+# additive embedded delta_kij (paper Table 7). It was called 'dropin' up to
+# 3.7.4, after its drop-in compatibility with existing S&W implementations.
+#
+# 'mc3' is the alternative the paper investigated and did not adopt: the
+# Mathias-Copeman 3-parameter water alpha with salinity applied as an explicit
+# gamma-phi Sechenov correction. The paper found the two indistinguishable once
+# the BIP is refitted, and recommended the simpler embedded approach. It was
+# called 'proposed' up to 3.7.4.
+#
+# Both old names are still accepted, each mapping to the framework it named, so
+# existing calls keep their previous numerical behaviour.
+VALID_FRAMEWORKS = ('default', 'mc3', 'sw_original')
+_FRAMEWORK_ALIASES = {'dropin': 'default', 'proposed': 'mc3'}
 
 
 def normalise_framework(framework: str) -> str:
-    """Canonical framework name, accepting the legacy 'proposed' alias."""
+    """Canonical framework name, accepting the legacy 'dropin'/'proposed' names."""
     fw = _FRAMEWORK_ALIASES.get(framework, framework)
     if fw not in VALID_FRAMEWORKS:
         raise ValueError(f"Unknown framework: {framework}. "
@@ -612,26 +621,27 @@ def get_kij_aq(gas: str, T_K: float, salinity_molal: float = 0.0,
         gas: Gas name (e.g., 'H2', 'CO2', 'CH4')
         T_K: Temperature in Kelvin
         salinity_molal: Salt concentration in mol/kg water
-        framework: 'default' (MC-3 alpha, freshwater kij + Sechenov),
-                   'sw_original' (S&W alpha with embedded salinity in kij), or
-                   'dropin' (S&W alpha + new freshwater kij + embedded delta).
-                   'proposed' is accepted as a legacy alias for 'default'.
+        framework: 'default' (S&W alpha + refitted freshwater kij + embedded
+                   delta_kij; the published recommendation), 'mc3' (MC-3 alpha,
+                   freshwater kij + explicit Sechenov), or 'sw_original' (S&W
+                   1992 as published). 'dropin' and 'proposed' are accepted as
+                   legacy aliases for 'default' and 'mc3' respectively.
 
     Returns:
         kij_AQ value
     """
     framework = normalise_framework(framework)
-    if framework == 'default':
-        dispatch = KIJ_AQ_PROPOSED
+    if framework == 'mc3':
+        dispatch = KIJ_AQ_MC3
         if gas not in dispatch:
             raise ValueError(f"Unknown gas: {gas}. Supported: {list(dispatch.keys())}")
-        # Default mode: always freshwater kij (salinity handled via Sechenov)
+        # MC-3 mode: always freshwater kij (salinity handled via Sechenov)
         return dispatch[gas](T_K, 0.0)
-    elif framework == 'dropin':
-        dispatch = KIJ_AQ_DROPIN
+    elif framework == 'default':
+        dispatch = KIJ_AQ_DEFAULT
         if gas not in dispatch:
             raise ValueError(f"Unknown gas: {gas}. Supported: {list(dispatch.keys())}")
-        # Drop-in mode: freshwater kij only (salinity via embedded delta)
+        # Default mode: freshwater kij only (salinity via embedded delta)
         return dispatch[gas](T_K, 0.0)
     elif framework == 'sw_original':
         dispatch = KIJ_AQ_SW_ORIGINAL
@@ -752,14 +762,14 @@ def get_sechenov_ks(gas: str, T_K: float, salinity_molal: float = 1.0,
         T_K: Temperature in Kelvin
         salinity_molal: NaCl molality (needed for Pitzer models). Default 1.0.
         P_bar: Pressure in bar. Default 100.
-        framework: 'default', 'sw_original', or 'dropin' ('proposed' is a
-                   legacy alias for 'default')
+        framework: 'default', 'mc3', or 'sw_original' ('dropin' and
+                   'proposed' are legacy aliases for 'default' and 'mc3')
 
     Returns:
         ks: Sechenov coefficient (log10 basis, kg/mol)
     """
     framework = normalise_framework(framework)
-    if framework == 'default':
+    if framework == 'mc3':
         if gas == 'CO2':
             from pyrestoolbox.brine._lib_salting_library import ks_dubessy_co2
             # Dubessy 2005 + MARE-optimal shift (-0.011)
@@ -774,8 +784,8 @@ def get_sechenov_ks(gas: str, T_K: float, salinity_molal: float = 1.0,
         raise ValueError(f"Unknown gas: {gas}")
     T_C = T_K - 273.15
     ks = sw_equation_8_ks(T_C, COMPONENTS[gas].Tb)
-    # N2: empirical +0.02 offset (default mode only)
-    if gas == 'N2' and framework == 'default':
+    # N2: empirical +0.02 offset (mc3 mode only)
+    if gas == 'N2' and framework == 'mc3':
         ks += 0.02
     return ks
 
@@ -1331,10 +1341,11 @@ class SWBinaryVLE:
         Args:
             gas: Gas name (e.g., 'H2', 'CO2', 'CH4')
             salinity_molal: Salt concentration in mol/kg water
-            framework: 'default' (MC-3 alpha, freshwater kij, Sechenov routing),
-                       'sw_original' (S&W alpha, embedded salinity kij, Eq 8), or
-                       'dropin' (S&W alpha, new freshwater kij, embedded delta).
-                       'proposed' is accepted as a legacy alias for 'default'.
+            framework: 'default' (S&W alpha, refitted freshwater kij, embedded
+                       delta_kij), 'mc3' (MC-3 alpha, freshwater kij, Sechenov
+                       routing), or 'sw_original' (S&W alpha, embedded salinity
+                       kij, Eq 8). 'dropin' and 'proposed' are legacy aliases
+                       for 'default' and 'mc3'.
         """
         if gas not in COMPONENTS:
             raise ValueError(f"Unknown gas: {gas}. Supported: {list(COMPONENTS.keys())}")
@@ -1353,7 +1364,7 @@ class SWBinaryVLE:
         """Calculate alpha for both components (framework-dependent for water)."""
         alpha = np.zeros(2)
         Tr_w = T_K / self.Tc[0]
-        if self.framework in ('sw_original', 'dropin'):
+        if self.framework in ('sw_original', 'default'):
             alpha[0] = alpha_water_soreide(Tr_w, self.salinity)
         else:
             alpha[0] = alpha_water_mc3(Tr_w)
@@ -1433,21 +1444,21 @@ class SWBinaryVLE:
 
         if salinity_method == 'auto':
             # Default salinity handling depends on framework
-            if fw == 'default':
-                # Default: freshwater kij + Sechenov for ALL gases when salinity > 0
+            if fw == 'mc3':
+                # MC-3: freshwater kij + Sechenov for ALL gases when salinity > 0
                 kij_aq = get_kij_aq(self.gas, T_K, 0.0, framework=fw)
                 x_gas = self._calc_x_with_kij(T_K, P_Pa, kij_aq)
                 if self.salinity > 0:
                     P_bar = P_Pa / 1e5
                     ks = get_sechenov_ks(self.gas, T_K, self.salinity, P_bar, framework=fw)
                     x_gas *= 10**(-ks * self.salinity)
-            elif fw == 'dropin':
-                # Drop-in: freshwater kij (dropin) + embedded delta for brine
+            elif fw == 'default':
+                # Default: refitted freshwater kij + embedded delta for brine
                 kij_aq = get_kij_aq(self.gas, T_K, 0.0, framework=fw)
-                if self.salinity > 0 and self.gas in EMBEDDED_SALINITY_PARAMS_DROPIN:
+                if self.salinity > 0 and self.gas in EMBEDDED_SALINITY_PARAMS_DEFAULT:
                     delta = calc_embedded_delta_kij(
                         self.gas, T_K, self.salinity,
-                        params=EMBEDDED_SALINITY_PARAMS_DROPIN[self.gas])
+                        params=EMBEDDED_SALINITY_PARAMS_DEFAULT[self.gas])
                     kij_aq += delta
                 x_gas = self._calc_x_with_kij(T_K, P_Pa, kij_aq)
             else:
@@ -1466,13 +1477,13 @@ class SWBinaryVLE:
             if fw == 'sw_original' and self.gas in _SW_GASES_WITH_EMBEDDED_SALINITY:
                 # S&W original embedded gases: use S&W kij directly (salinity already in kij)
                 kij_aq = get_kij_aq(self.gas, T_K, self.salinity, framework=fw)
-            elif fw == 'dropin' and self.gas in EMBEDDED_SALINITY_PARAMS_DROPIN:
+            elif fw == 'default' and self.gas in EMBEDDED_SALINITY_PARAMS_DEFAULT:
                 delta = calc_embedded_delta_kij(
                     self.gas, T_K, self.salinity,
-                    params=EMBEDDED_SALINITY_PARAMS_DROPIN[self.gas])
+                    params=EMBEDDED_SALINITY_PARAMS_DEFAULT[self.gas])
                 kij_aq = kij_fw + delta
             else:
-                # Use Burgoyne & Nielsen 2026 embedded delta (proposed framework)
+                # Burgoyne & Nielsen 2026 embedded delta, MC-3-alpha variant
                 delta = calc_embedded_delta_kij(self.gas, T_K, self.salinity)
                 kij_aq = kij_fw + delta
             x_gas = self._calc_x_with_kij(T_K, P_Pa, kij_aq)
@@ -1845,7 +1856,7 @@ class SWMultiComponentFlash:
         for i in range(self.nc):
             if self.names[i] == 'H2O':
                 Tr_w = T_K / self.Tc[i]
-                if self.framework in ('sw_original', 'dropin'):
+                if self.framework in ('sw_original', 'default'):
                     alpha[i] = alpha_water_soreide(Tr_w, self.salinity)
                 else:
                     alpha[i] = alpha_water_mc3(Tr_w)
@@ -1883,16 +1894,17 @@ class SWMultiComponentFlash:
                     if mode == 'AQ':
                         val = get_kij_aq(gas, T_K, self.salinity,
                                          framework=self.framework)
-                        # dropin framework keeps kij_AQ freshwater-only; the
-                        # 'embedded' salinity_method adds the fitted delta_kij
-                        # here (sw_original already embeds salinity via get_kij_aq).
+                        # The default framework keeps kij_AQ freshwater-only;
+                        # the 'embedded' salinity_method adds the fitted
+                        # delta_kij here (sw_original already embeds salinity
+                        # via get_kij_aq).
                         if (self.salinity_method == 'embedded'
-                                and self.framework == 'dropin'
+                                and self.framework == 'default'
                                 and self.salinity > 0
-                                and gas in EMBEDDED_SALINITY_PARAMS_DROPIN):
+                                and gas in EMBEDDED_SALINITY_PARAMS_DEFAULT):
                             val += calc_embedded_delta_kij(
                                 gas, T_K, self.salinity,
-                                params=EMBEDDED_SALINITY_PARAMS_DROPIN[gas])
+                                params=EMBEDDED_SALINITY_PARAMS_DEFAULT[gas])
                         # sw_original gases without an embedded csw term (H2S,
                         # H2) would otherwise get NO salting under 'embedded';
                         # fall back to the proposed delta, matching the binary
@@ -1901,7 +1913,7 @@ class SWMultiComponentFlash:
                                 and self.framework == 'sw_original'
                                 and self.salinity > 0
                                 and gas not in _SW_GASES_WITH_EMBEDDED_SALINITY
-                                and gas in EMBEDDED_SALINITY_PARAMS):
+                                and gas in EMBEDDED_SALINITY_PARAMS_MC3):
                             val += calc_embedded_delta_kij(gas, T_K, self.salinity)
                     else:
                         val = get_kij_na(gas, T_K)
@@ -2058,12 +2070,12 @@ class SWMultiComponentFlash:
         # a small N2 offset for the remaining gases) are applied in
         # self.calc_gamma() on the Python side.
         #
-        # Restricted to framework='default': the Rust flash hardcodes the
-        # MC-3 water alpha and the proposed-framework kij_AQ. The 'dropin'
-        # and 'sw_original' frameworks use a salinity-dependent Soreide water
-        # alpha and different kij_AQ correlations that Rust does not implement,
-        # so they must take the Python path to avoid a silent downgrade.
-        if _RUST_AVAILABLE and self.framework == 'default':
+        # Restricted to framework='mc3': the Rust flash hardcodes the
+        # MC-3 water alpha and its kij_AQ. The 'default' and 'sw_original'
+        # frameworks use the salinity-dependent Soreide water alpha and
+        # different kij_AQ correlations that Rust does not implement, so they
+        # must take the Python path to avoid a silent downgrade.
+        if _RUST_AVAILABLE and self.framework == 'mc3':
             try:
                 gamma_arr = np.asarray(gamma, dtype=float) if gamma is not None \
                     else np.ones(self.nc)
@@ -2194,11 +2206,11 @@ class SWMultiComponentFlash:
 
         # Rust acceleration path: compute gamma in Python (correct ks models),
         # then use Rust flash_tp for the two flashes. Restricted to
-        # framework='default': Rust only implements the default-framework
-        # water alpha (MC-3) and kij_AQ; 'dropin'/'sw_original' would be
-        # silently downgraded to 'default', so they take the Python path.
+        # framework='mc3': the Rust flash implements the MC-3 water alpha and
+        # its kij_AQ only; 'default'/'sw_original' would be silently downgraded
+        # to 'mc3', so they take the Python path.
         if (_RUST_AVAILABLE and salinity_method == 'gamma_phi'
-                and self.framework == 'default'):
+                and self.framework == 'mc3'):
             try:
                 gamma_aq = None
                 if self.salinity > 0:
@@ -2334,8 +2346,8 @@ def calc_gas_brine_equilibrium(
         y_*: Mole fractions of each gas in dry gas (will be normalized)
         method: 'henry' (binary decomposition) or 'flash' (multi-component)
         salinity_method: 'gamma_phi', 'explicit', or 'embedded'
-        framework: 'default', 'sw_original', or 'dropin' ('proposed' is a
-                   legacy alias for 'default')
+        framework: 'default', 'mc3', or 'sw_original' ('dropin' and
+                   'proposed' are legacy aliases for 'default' and 'mc3')
 
     Returns:
         Tuple of:

@@ -660,14 +660,14 @@ def test_sw_parity_natural_gas_only(pres, temp):
 
 
 @rust_required
-@pytest.mark.parametrize('framework', ['dropin', 'sw_original'])
-def test_sw_non_default_framework_not_downgraded(framework):
-    """Regression: the Rust flash only implements the 'default' framework
-    (MC-3 water alpha + refitted kij_AQ). 'dropin'/'sw_original' must take the
-    Python path so they are not silently computed as 'default'.
+@pytest.mark.parametrize('framework', ['default', 'sw_original'])
+def test_sw_non_mc3_framework_not_downgraded(framework):
+    """Regression: the Rust flash only implements the 'mc3' framework (MC-3
+    water alpha + its kij_AQ). 'default'/'sw_original' must take the Python
+    path so they are not silently computed as 'mc3'.
 
-    With Rust available, a non-default framework must (a) match its own
-    forced-Python result and (b) differ from the 'default' result on a
+    With Rust available, a non-mc3 framework must (a) match its own
+    forced-Python result and (b) differ from the 'mc3' result on a
     saline point where the framework choice matters.
     """
     from pyrestoolbox.brine import brine
@@ -681,10 +681,10 @@ def test_sw_non_default_framework_not_downgraded(framework):
         mix_rust.Rs_total, mix_python.Rs_total, rtol=RTOL_MEDIUM, atol=1e-6,
         err_msg=f"framework={framework} silently downgraded on Rust path",
     )
-    # (b) The framework choice must actually change the answer vs 'default'.
-    mix_default = brine.SoreideWhitson(framework='default', **kwargs)
-    assert abs(mix_rust.Rs_total - mix_default.Rs_total) > 1e-4, (
-        f"framework={framework} produced the 'default' result, gate ineffective"
+    # (b) The framework choice must actually change the answer vs 'mc3'.
+    mix_mc3 = brine.SoreideWhitson(framework='mc3', **kwargs)
+    assert abs(mix_rust.Rs_total - mix_mc3.Rs_total) > 1e-4, (
+        f"framework={framework} produced the 'mc3' result, gate ineffective"
     )
 
 

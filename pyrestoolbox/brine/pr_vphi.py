@@ -213,7 +213,10 @@ def V2_inf_raw(gas, T, P, m_nacl=0.0):
     # Switched from finite differences 2026-07-31; the difference evaluation
     # agrees to 4e-5 cm3/mol, its truncation error.
     v = v_water_liquid(T, P, m_nacl)
-    kij = _SW.get_kij_aq(_SW_NAME.get(gas, gas), T, m_nacl)
+    # Pinned to the 'mc3' kij_AQ set, which is what the VSHIFT values below were
+    # fitted against. This must not follow the library's default framework: the
+    # shift and the kij are one calibration and cannot be mixed across sets.
+    kij = _SW.get_kij_aq(_SW_NAME.get(gas, gas), T, m_nacl, framework='mc3')
     a1, b1 = _ab('H2O', T, m_nacl)
     a2, b2 = _ab(gas, T)
     a12 = np.sqrt(a1 * a2) * (1.0 - kij)
