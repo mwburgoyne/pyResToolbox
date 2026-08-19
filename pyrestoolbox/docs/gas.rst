@@ -632,7 +632,11 @@ Stanko 2025, `SPE-229932-MS <https://doi.org/10.2118/229932-MS>`_). Only the BNS
 method carries caloric information, so unlike ``gas_z`` there is no ``zmethod``
 choice: DAK and HY are Z-factor correlations with no thermodynamic content. Root
 selection is shared with ``gas_z``, so Z and the caloric properties always resolve
-to the same phase root.
+to the same phase root. The Peneloux volume shift is carried into the caloric
+path, consistent with its use in Z and density: the shift reduces to a constant
+molar volume offset, which leaves Cp and Cv unchanged but shifts enthalpy by
+``-c*p`` and the Joule-Thomson coefficient by ``+c/Cp``, roughly halving the JT
+bias against a reference EOS.
 
 Accuracy, measured against a reference EOS (CoolProp) over 60-300 deg F and
 100-10,000 psia, single phase: pure CO2 Cp within 4.3% mean and JT within 4.1%
