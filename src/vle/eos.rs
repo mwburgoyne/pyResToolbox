@@ -7,7 +7,7 @@
 
 const MAX_ITER: usize = 50;
 const TOL: f64 = 1e-10;
-const SQRT2: f64 = 1.4142135623730951;
+use std::f64::consts::SQRT_2 as SQRT2;
 
 /// Solve depressed cubic Z^3 + c2*Z^2 + c1*Z + c0 = 0 using Halley iteration.
 ///

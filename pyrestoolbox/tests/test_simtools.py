@@ -472,6 +472,137 @@ def test_vfpprod_bad_wct():
         pass
 
 
+
+# =============================================================================
+# Simulation deck INCLUDE crawl
+# =============================================================================
+
+import tempfile
+import contextlib
+
+
+@contextlib.contextmanager
+def _deck_dir(files):
+    """Build a throwaway directory of deck files and run inside it."""
+    cwd = os.getcwd()
+    with tempfile.TemporaryDirectory() as tmp:
+        for name, text in files.items():
+            full = os.path.join(tmp, name)
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w") as fh:
+                fh.write(text)
+        try:
+            os.chdir(tmp)
+            yield tmp
+        finally:
+            os.chdir(cwd)
+
+
+def _scan(deck="CASE.DATA"):
+    return simtools.zip_check_sim_deck(
+        files2scrape=[deck], tozip=False, console_summary=False,
+        non_interactive=True)
+
+
+def test_deck_crawl_nested_includes_all_present():
+    """Nested INCLUDE files that all exist report nothing missing."""
+    files = {
+        "CASE.DATA": "RUNSPEC\nINCLUDE\n  'GRID.INC' /\n",
+        "GRID.INC": "INCLUDE\n  'PROPS.INC' /\n",
+        "PROPS.INC": "PORO\n 0.2 /\n",
+    }
+    with _deck_dir(files):
+        assert _scan() == []
+
+
+def test_deck_crawl_reports_missing_include():
+    """A referenced INCLUDE that does not exist is returned."""
+    files = {"CASE.DATA": "INCLUDE\n  'ABSENT.INC' /\n"}
+    with _deck_dir(files):
+        assert _scan() == ["ABSENT.INC"]
+
+
+def test_deck_crawl_skips_comments_and_stops_at_end():
+    """Commented INCLUDEs are ignored, and nothing after END is scanned."""
+    files = {
+        "CASE.DATA": (
+            "-- INCLUDE\n--  'COMMENTED.INC' /\n"
+            "# INCLUDE\n#  'HASHED.INC' /\n"
+            "END\n"
+            "INCLUDE\n  'AFTER_END.INC' /\n"
+        ),
+    }
+    with _deck_dir(files):
+        assert _scan() == []
+
+
+def test_deck_crawl_handles_double_quotes_and_trailing_comment():
+    """Double quotes are accepted and trailing comments do not corrupt the name."""
+    files = {
+        "CASE.DATA": 'INCLUDE\n  "GRID.INC" /  -- the grid\n',
+        "GRID.INC": "PORO\n 0.2 /\n",
+    }
+    with _deck_dir(files):
+        assert _scan() == []
+
+
+def test_deck_crawl_does_not_revisit_repeated_includes():
+    """The same INCLUDE named twice is scanned once and not double-reported."""
+    files = {
+        "CASE.DATA": ("INCLUDE\n  'MISSING.INC' /\n"
+                      "INCLUDE\n  'MISSING.INC' /\n"),
+    }
+    with _deck_dir(files):
+        assert _scan() == ["MISSING.INC"]
+
+
+def test_deck_crawl_flags_parent_directory_include():
+    """An INCLUDE above the deck directory is found but flagged, not zipped."""
+    files = {
+        "deck/CASE.DATA": "INCLUDE\n  '../shared/PVT.INC' /\n",
+        "shared/PVT.INC": "PVTO\n /\n",
+    }
+    with _deck_dir(files):
+        os.chdir("deck")
+        assert _scan() == []
+
+
+def test_deck_crawl_missing_nested_include():
+    """A missing file two levels down is reported."""
+    files = {
+        "CASE.DATA": "INCLUDE\n  'GRID.INC' /\n",
+        "GRID.INC": "INCLUDE\n  'DEEP.INC' /\n",
+    }
+    with _deck_dir(files):
+        assert _scan() == ["DEEP.INC"]
+
+
+def test_deck_zip_refuses_when_files_missing():
+    """Non-interactive zip with a missing INCLUDE raises rather than prompting."""
+    files = {"CASE.DATA": "INCLUDE\n  'ABSENT.INC' /\n"}
+    with _deck_dir(files):
+        with pytest.raises(RuntimeError):
+            simtools.zip_check_sim_deck(
+                files2scrape=["CASE.DATA"], tozip=True,
+                console_summary=False, non_interactive=True)
+
+
+def test_deck_zip_creates_archive():
+    """A complete deck zips to <deckname>.zip containing every file."""
+    import zipfile
+    files = {
+        "CASE.DATA": "INCLUDE\n  'GRID.INC' /\n",
+        "GRID.INC": "PORO\n 0.2 /\n",
+    }
+    with _deck_dir(files):
+        simtools.zip_check_sim_deck(
+            files2scrape=["CASE.DATA"], tozip=True,
+            console_summary=False, non_interactive=True)
+        assert os.path.exists("CASE.zip")
+        with zipfile.ZipFile("CASE.zip") as z:
+            assert sorted(z.namelist()) == ["CASE.DATA", "GRID.INC"]
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("SIMTOOLS MODULE VALIDATION TESTS")

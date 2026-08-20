@@ -5,7 +5,7 @@
 
 use crate::vle::eos::solve_cubic_eos;
 
-const SQRT2: f64 = 1.4142135623730951;
+use std::f64::consts::SQRT_2 as SQRT2;
 
 /// Calculate fugacity coefficient for component i in mixture.
 ///

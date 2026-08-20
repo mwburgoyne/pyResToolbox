@@ -1,5 +1,5 @@
 /// Serghides explicit Fanning friction factor.
-/// Direct port of nodal.py lines 635-647.
+/// Direct port of nodal.py _serghides_fanning.
 
 const LN10: f64 = std::f64::consts::LN_10;
 

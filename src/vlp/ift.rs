@@ -1,5 +1,5 @@
 /// Interfacial tension correlations for VLP.
-/// Direct port of nodal.py lines 589-628.
+/// Direct port of nodal.py _dead_oil_ift / _gas_oil_ift / _gas_water_ift.
 
 use super::pvt_helpers::clamp;
 

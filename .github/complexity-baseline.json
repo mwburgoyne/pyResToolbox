@@ -27,10 +27,9 @@
   "pyrestoolbox/oil/_correlations.py::oil_pbub": 16,
   "pyrestoolbox/oil/_harmonize.py::oil_harmonize": 16,
   "pyrestoolbox/shared_fns/shared_fns.py::validate_pe_inputs": 43,
+  "pyrestoolbox/simtools/_decks.py::_crawl_deck_includes": 16,
   "pyrestoolbox/simtools/_decks.py::ix_extract_problem_cells": 41,
-  "pyrestoolbox/simtools/_decks.py::zip_check_sim_deck": 52,
-  "pyrestoolbox/simtools/_relperm.py::rel_perm_table": 60,
   "pyrestoolbox/simtools/_vfp.py::_format_vfpprod": 19,
-  "pyrestoolbox/simtools/_vfp.py::make_vfpinj": 31,
-  "pyrestoolbox/simtools/_vfp.py::make_vfpprod": 65
+  "pyrestoolbox/simtools/_vfp.py::_vfpprod_axes_to_oilfield": 24,
+  "pyrestoolbox/simtools/_vfp.py::make_vfpinj": 20
 }

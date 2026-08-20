@@ -29,7 +29,7 @@ pub fn sutton_pseudocritical(
             "SUT method requires hydrocarbon fraction > 0 (n2 + co2 + h2s must be < 1.0)"
         ));
     }
-    // MW values match gas.py line 391: N2=28.01, CO2=44.01, H2S=34.1
+    // MW values match the gas.py sg_hc correction: N2=28.01, CO2=44.01, H2S=34.1
     let sg_hc = (sg - (n2 * 28.01 + co2 * 44.01 + h2s * 34.1) / MW_AIR) / hc_frac;
 
     let ppc_hc = 756.8 - 131.0 * sg_hc - 3.6 * sg_hc * sg_hc;
@@ -146,7 +146,7 @@ pub fn sutton_wa_internal(
     if hc_frac <= 0.0 {
         return Err("SUT method requires hydrocarbon fraction > 0".to_string());
     }
-    // MW values match gas.py line 391: N2=28.01, CO2=44.01, H2S=34.1
+    // MW values match the gas.py sg_hc correction: N2=28.01, CO2=44.01, H2S=34.1
     let sg_hc = (sg - (n2 * 28.01 + co2 * 44.01 + h2s * 34.1) / MW_AIR) / hc_frac;
 
     let ppc_hc = 756.8 - 131.0 * sg_hc - 3.6 * sg_hc * sg_hc;

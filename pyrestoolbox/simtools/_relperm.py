@@ -179,6 +179,33 @@ def _build_kr_table(rows, krfamily, grid_lo, grid_hi, anchors, sat_col,
     return kr_df
 
 
+# Curve parameters by phase, in the fixed slot order (n, L, E, T, a, b) that the
+# *_params tuples below use. Each family reads only its own slots.
+_PARAM_LETTERS = ("n", "L", "E", "T", "a", "b")
+_FAMILY_SLOTS = {"COR": (0,), "LET": (1, 2, 3), "JER": (4, 5)}
+_FAMILY_LABELS = {"COR": "Corey", "LET": "LET", "JER": "Jerauld"}
+# Phases each table curves, ordered as the keyword name reads
+_TABLE_PHASES = {"SWOF": ("w", "o"), "SGOF": ("g", "o"), "SGWFN": ("g", "w")}
+
+
+def _validate_family_params(table_name, family_name, phase_params):
+    """Every curve parameter the chosen family/table pair needs must be > 0.
+
+    phase_params: {phase letter: (n, L, E, T, a, b)} for w, o and g. Adding a
+    family or a table type is a data edit here, not another validation clause.
+    """
+    names = []
+    ok = True
+    for phase in _TABLE_PHASES[table_name]:
+        vals = phase_params[phase]
+        for slot in _FAMILY_SLOTS[family_name]:
+            names.append(f"{_PARAM_LETTERS[slot]}{phase}")
+            ok = ok and vals[slot] > 0
+    if not ok:
+        raise ValueError(f"{_FAMILY_LABELS[family_name]} {table_name} requires "
+                         f"{', '.join(names)} all > 0")
+
+
 def rel_perm_table(
     rows: int,
     krtable: kr_table = kr_table.SWOF,
@@ -264,34 +291,12 @@ def rel_perm_table(
     if errors:
         raise ValueError("Saturation consistency check failure: " + "; ".join(errors))
 
-    fname = krfamily.name
-
-    # Validate that required parameters are available for the chosen family
-    if fname == "COR":
-        if krtable.name == "SWOF" and not (no > 0 and nw > 0):
-            raise ValueError("Corey SWOF requires no > 0 and nw > 0")
-        if krtable.name == "SGOF" and not (no > 0 and ng > 0):
-            raise ValueError("Corey SGOF requires no > 0 and ng > 0")
-        if krtable.name == "SGWFN" and not (ng > 0 and nw > 0):
-            raise ValueError("Corey SGWFN requires ng > 0 and nw > 0")
-    elif fname == "LET":
-        if krtable.name == "SWOF" and not (Lw > 0 and Ew > 0 and Tw > 0 and Lo > 0 and Eo > 0 and To > 0):
-            raise ValueError("LET SWOF requires Lw, Ew, Tw, Lo, Eo, To all > 0")
-        if krtable.name == "SGOF" and not (Lg > 0 and Eg > 0 and Tg > 0 and Lo > 0 and Eo > 0 and To > 0):
-            raise ValueError("LET SGOF requires Lg, Eg, Tg, Lo, Eo, To all > 0")
-        if krtable.name == "SGWFN" and not (Lw > 0 and Ew > 0 and Tw > 0 and Lg > 0 and Eg > 0 and Tg > 0):
-            raise ValueError("LET SGWFN requires Lw, Ew, Tw, Lg, Eg, Tg all > 0")
-    elif fname == "JER":
-        if krtable.name == "SWOF" and not (ao > 0 and bo > 0 and aw > 0 and bw > 0):
-            raise ValueError("Jerauld SWOF requires ao, bo, aw, bw all > 0")
-        if krtable.name == "SGOF" and not (ao > 0 and bo > 0 and ag > 0 and bg > 0):
-            raise ValueError("Jerauld SGOF requires ao, bo, ag, bg all > 0")
-        if krtable.name == "SGWFN" and not (ag > 0 and bg > 0 and aw > 0 and bw > 0):
-            raise ValueError("Jerauld SGWFN requires ag, bg, aw, bw all > 0")
-
     water_params = (nw, Lw, Ew, Tw, aw, bw)
     oil_params = (no, Lo, Eo, To, ao, bo)
     gas_params = (ng, Lg, Eg, Tg, ag, bg)
+
+    _validate_family_params(krtable.name, krfamily.name,
+                            {"w": water_params, "o": oil_params, "g": gas_params})
 
     if krtable.name == "SWOF":
         # Grid spans [swcr, 1-sorw]; water mobile above swcr, oil immobile above 1-sorw

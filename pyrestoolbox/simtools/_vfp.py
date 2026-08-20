@@ -25,6 +25,7 @@ keyword tables via the nodal module VLP correlations.
 """
 
 import warnings
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -170,6 +171,115 @@ def _format_vfpprod(table_num, datum_depth, flo_type, wfr_type, gfr_type,
     return "\n".join(lines) + "\n"
 
 
+def _validate_table_num(table_num):
+    """VFP table numbers are 1-based integers."""
+    if not isinstance(table_num, int) or table_num < 1:
+        raise ValueError(f"table_num must be a positive integer, got {table_num}")
+
+
+def _axis_out(original, oilfield_values, convert):
+    """Axis values for a metric Eclipse string: echo what the caller passed if
+    they passed anything, otherwise convert the oilfield defaults back."""
+    return list(original) if original is not None else convert(oilfield_values)
+
+
+def _export_vfp(export, filename, default_name, eclipse_str):
+    """Write the keyword string to disk when export is requested."""
+    if not export:
+        return
+    with open(filename if filename else default_name, "w") as f:
+        f.write(eclipse_str)
+
+
+def _sweep_vfpinj_bhp(completion, vlpm, flo_type, thp_values, flo_rates,
+                      gas_pvt, oil_pvt, gsg, wsg, sgsp, api, pb, rsb):
+    """BHP grid (NTHP x NFLO) in oilfield units, injection sense.
+
+    Points the VLP march cannot solve are set to 1e-6 and counted, so a partly
+    converged table is still usable rather than raising the whole call away.
+    """
+    from pyrestoolbox.nodal import fbhp as nodal_fbhp
+
+    bhp_array = np.zeros((len(thp_values), len(flo_rates)))
+    n_failed = 0
+    for it, thp in enumerate(thp_values):
+        for iflo, flo in enumerate(flo_rates):
+            try:
+                if flo_type == 'GAS':
+                    bhp_val = nodal_fbhp(
+                        thp=thp, completion=completion,
+                        vlpmethod=vlpm, well_type='gas',
+                        gas_pvt=gas_pvt,
+                        qg_mmscfd=flo / 1000.0, cgr=0, qw_bwpd=0,
+                        wsg=wsg, gsg=gsg, injection=True)
+                elif flo_type == 'WAT':
+                    bhp_val = nodal_fbhp(
+                        thp=thp, completion=completion,
+                        vlpmethod=vlpm, well_type='oil',
+                        qt_stbpd=flo, gor=0, wc=1.0,
+                        wsg=wsg, gsg=gsg, injection=True,
+                        pb=0, rsb=0, sgsp=sgsp, api=api)
+                else:  # OIL
+                    bhp_val = nodal_fbhp(
+                        thp=thp, completion=completion,
+                        vlpmethod=vlpm, well_type='oil',
+                        oil_pvt=oil_pvt,
+                        qt_stbpd=flo, gor=0, wc=0,
+                        wsg=wsg, gsg=gsg, injection=True,
+                        pb=pb, rsb=rsb, sgsp=sgsp, api=api)
+                bhp_array[it, iflo] = bhp_val
+            except (RuntimeError, ValueError, ZeroDivisionError):
+                bhp_array[it, iflo] = 1e-6
+                n_failed += 1
+    return bhp_array, n_failed
+
+
+def _sweep_vfpprod_bhp(completion, vlpm, well_type, thp_values, wfr_values,
+                       gfr_values, alq_values, flo_rates, gas_pvt, oil_pvt,
+                       gsg, wsg, sgsp, api, oil_vis, pr, pb, rsb):
+    """BHP grid (NTHP x NWFR x NGFR x NALQ x NFLO) in oilfield units.
+
+    Same failure handling as the injection sweep: unsolved points become 1e-6
+    and are counted.
+    """
+    from pyrestoolbox.nodal import fbhp as nodal_fbhp
+
+    bhp_array = np.zeros((len(thp_values), len(wfr_values), len(gfr_values),
+                          len(alq_values), len(flo_rates)))
+    n_failed = 0
+    for ia, alq in enumerate(alq_values):
+        for ig, gfr in enumerate(gfr_values):
+            for iw, wfr in enumerate(wfr_values):
+                for it, thp in enumerate(thp_values):
+                    for iflo, flo in enumerate(flo_rates):
+                        try:
+                            if well_type == 'gas':
+                                bhp_val = nodal_fbhp(
+                                    thp=thp, completion=completion,
+                                    vlpmethod=vlpm, well_type='gas',
+                                    gas_pvt=gas_pvt,
+                                    qg_mmscfd=flo / 1000.0,
+                                    cgr=gfr * 1000.0,       # OGR stb/Mscf -> stb/MMscf
+                                    qw_bwpd=wfr * flo,      # WGR stb/Mscf * Mscf/d
+                                    oil_vis=oil_vis,
+                                    api=api, pr=pr, wsg=wsg, gsg=gsg)
+                            else:
+                                wct = wfr
+                                bhp_val = nodal_fbhp(
+                                    thp=thp, completion=completion,
+                                    vlpmethod=vlpm, well_type='oil',
+                                    oil_pvt=oil_pvt,
+                                    qt_stbpd=flo / (1.0 - wct) if wct > 0 else flo,
+                                    gor=gfr * 1000.0,
+                                    wc=wct, wsg=wsg, gsg=gsg,
+                                    pb=pb, rsb=rsb, sgsp=sgsp, api=api)
+                            bhp_array[it, iw, ig, ia, iflo] = bhp_val
+                        except (RuntimeError, ValueError, ZeroDivisionError):
+                            bhp_array[it, iw, ig, ia, iflo] = 1e-6
+                            n_failed += 1
+    return bhp_array, n_failed
+
+
 def make_vfpinj(
     table_num: int,
     completion,
@@ -221,11 +331,7 @@ def make_vfpinj(
             bhp (2D numpy array shape NTHP x NFLO),
             n_failed, eclipse_string
     """
-    from pyrestoolbox.nodal import fbhp as nodal_fbhp
-
-    # Validation
-    if not isinstance(table_num, int) or table_num < 1:
-        raise ValueError(f"table_num must be a positive integer, got {table_num}")
+    _validate_table_num(table_num)
 
     flo_type = flo_type.upper()
     if flo_type not in ('WAT', 'GAS', 'OIL'):
@@ -234,13 +340,10 @@ def make_vfpinj(
     vlpm = validate_methods(["vlpmethod"], [vlpmethod])
     is_gas = (flo_type == 'GAS')
 
-    # --- Metric input conversion ---
-    # Save original metric values for Eclipse string output
+    # Keep the caller's own metric values so the Eclipse string can echo them back
+    original = {'flo': list(flo_rates) if flo_rates is not None else None,
+                'thp': list(thp_values) if thp_values is not None else None}
     if metric:
-        metric_flo_rates = list(flo_rates) if flo_rates is not None else None
-        metric_thp_values = list(thp_values) if thp_values is not None else None
-
-        # Convert inputs to oilfield
         if flo_rates is not None:
             flo_rates = _rates_sm3d_to_field(flo_rates, is_gas)
         if thp_values is not None:
@@ -255,12 +358,10 @@ def make_vfpinj(
     if datum_depth <= 0:
         datum_depth = completion.total_tvd
 
-    # Defaults (in oilfield units)
+    # Axis defaults, in oilfield units
     if flo_rates is None:
-        if flo_type == 'GAS':
-            flo_rates = [1000, 5000, 10000, 20000, 50000]
-        else:
-            flo_rates = [100, 500, 1000, 2000, 5000, 10000]
+        flo_rates = [1000, 5000, 10000, 20000, 50000] if flo_type == 'GAS' \
+                    else [100, 500, 1000, 2000, 5000, 10000]
     if thp_values is None:
         thp_values = [100, 200, 500, 1000, 2000]
 
@@ -272,77 +373,35 @@ def make_vfpinj(
     if len(thp_values) < 1:
         raise ValueError("thp_values must contain at least 1 value")
 
-    # Compute BHP grid (in oilfield units)
-    nflo = len(flo_rates)
-    nthp = len(thp_values)
-    bhp_array = np.zeros((nthp, nflo))
-    n_failed = 0
-
-    for it, thp in enumerate(thp_values):
-        for iflo, flo in enumerate(flo_rates):
-            try:
-                if flo_type == 'GAS':
-                    bhp_val = nodal_fbhp(
-                        thp=thp, completion=completion,
-                        vlpmethod=vlpm, well_type='gas',
-                        gas_pvt=gas_pvt,
-                        qg_mmscfd=flo / 1000.0, cgr=0, qw_bwpd=0,
-                        wsg=wsg, gsg=gsg, injection=True)
-                elif flo_type == 'WAT':
-                    bhp_val = nodal_fbhp(
-                        thp=thp, completion=completion,
-                        vlpmethod=vlpm, well_type='oil',
-                        qt_stbpd=flo, gor=0, wc=1.0,
-                        wsg=wsg, gsg=gsg, injection=True,
-                        pb=0, rsb=0, sgsp=sgsp, api=api)
-                else:  # OIL
-                    bhp_val = nodal_fbhp(
-                        thp=thp, completion=completion,
-                        vlpmethod=vlpm, well_type='oil',
-                        oil_pvt=oil_pvt,
-                        qt_stbpd=flo, gor=0, wc=0,
-                        wsg=wsg, gsg=gsg, injection=True,
-                        pb=pb, rsb=rsb, sgsp=sgsp, api=api)
-
-                bhp_array[it, iflo] = bhp_val
-            except (RuntimeError, ValueError, ZeroDivisionError):
-                bhp_array[it, iflo] = 1e-6
-                n_failed += 1
+    bhp_array, n_failed = _sweep_vfpinj_bhp(
+        completion, vlpm, flo_type, thp_values, flo_rates,
+        gas_pvt, oil_pvt, gsg, wsg, sgsp, api, pb, rsb)
 
     if n_failed > 0:
-        warnings.warn(f"{n_failed} of {nthp * nflo} VFPINJ BHP calculations failed")
+        warnings.warn(f"{n_failed} of {len(thp_values) * len(flo_rates)} "
+                      "VFPINJ BHP calculations failed")
 
     # --- Metric output conversion ---
     if metric:
         bhp_array = bhp_array * PSI_TO_BAR
-        datum_depth_out = datum_depth * FT_TO_M
-
-        # Use original metric values for Eclipse string, or convert oilfield defaults
-        out_flo = metric_flo_rates if metric_flo_rates is not None \
-            else _rates_field_to_sm3d(flo_rates, is_gas)
-        out_thp = metric_thp_values if metric_thp_values is not None \
-            else [t * PSI_TO_BAR for t in thp_values]
-
-        eclipse_str = _format_vfpinj(table_num, datum_depth_out, flo_type,
-                                      out_flo, out_thp, bhp_array,
-                                      vlpmethod=vlpm, completion=completion,
-                                      gsg=gsg, wsg=wsg, unit_system='METRIC')
-        out_datum_depth = datum_depth_out
-        out_flo_rates = out_flo
-        out_thp_values = out_thp
+        out_datum_depth = datum_depth * FT_TO_M
+        out_flo_rates = _axis_out(original['flo'], flo_rates,
+                                  lambda v: _rates_field_to_sm3d(v, is_gas))
+        out_thp_values = _axis_out(original['thp'], thp_values,
+                                   lambda v: [t * PSI_TO_BAR for t in v])
+        unit_system = 'METRIC'
     else:
-        eclipse_str = _format_vfpinj(table_num, datum_depth, flo_type,
-                                      flo_rates, thp_values, bhp_array,
-                                      vlpmethod=vlpm, completion=completion,
-                                      gsg=gsg, wsg=wsg, unit_system='FIELD')
         out_datum_depth = datum_depth
         out_flo_rates = flo_rates
         out_thp_values = thp_values
+        unit_system = 'FIELD'
 
-    if export:
-        fname = filename if filename else f"VFPINJ_{table_num}.VFP"
-        with open(fname, 'w') as f:
-            f.write(eclipse_str)
+    eclipse_str = _format_vfpinj(table_num, out_datum_depth, flo_type,
+                                 out_flo_rates, out_thp_values, bhp_array,
+                                 vlpmethod=vlpm, completion=completion,
+                                 gsg=gsg, wsg=wsg, unit_system=unit_system)
+
+    _export_vfp(export, filename, f"VFPINJ_{table_num}.VFP", eclipse_str)
 
     return {
         "table_num": table_num,
@@ -354,6 +413,129 @@ def make_vfpinj(
         "n_failed": n_failed,
         "eclipse_string": eclipse_str,
     }
+
+
+@dataclass
+class _VfpProdAxes:
+    """The five VFPPROD axes plus the scalars that travel with them."""
+    flo: list
+    thp: list
+    wfr: list
+    gfr: list
+    alq: list
+    datum_depth: float
+    pr: float = 0.0
+    pb: float = 0.0
+    rsb: float = 0.0
+
+
+def _vfpprod_default_axes(is_gas, flo_rates, thp_values, wfr_values, gfr_values,
+                          alq_values):
+    """Fill in any axis the caller left unset, in oilfield units.
+
+    Kept apart from the unit conversion so the default ranges can be retuned
+    without touching conversion factors.
+    """
+    if flo_rates is None:
+        flo_rates = [1000, 5000, 10000, 20000, 50000, 100000] if is_gas \
+                    else [100, 500, 1000, 2000, 5000, 10000]
+    if thp_values is None:
+        thp_values = [100, 200, 500, 1000, 2000]
+    if wfr_values is None:
+        wfr_values = [0, 0.001, 0.005, 0.01] if is_gas else [0, 0.2, 0.5, 0.8]
+    if gfr_values is None:
+        gfr_values = [0, 0.01, 0.05, 0.1] if is_gas else [0.2, 0.5, 1.0, 2.0]
+    if alq_values is None:
+        alq_values = [0]
+    return flo_rates, thp_values, wfr_values, gfr_values, alq_values
+
+
+def _vfpprod_axes_to_oilfield(well_type, metric, completion, flo_rates, thp_values,
+                              wfr_values, gfr_values, alq_values, datum_depth,
+                              pr, pb, rsb):
+    """Axes in oilfield units with defaults applied and zero anchors inserted.
+
+    Also returns the caller's own values, so a METRIC Eclipse string can echo
+    exactly what was passed in rather than a round-tripped version of it.
+    """
+    is_gas = (well_type == 'gas')
+    original = {'flo': list(flo_rates) if flo_rates is not None else None,
+                'thp': list(thp_values) if thp_values is not None else None,
+                'wfr': list(wfr_values) if wfr_values is not None else None,
+                'gfr': list(gfr_values) if gfr_values is not None else None,
+                'pb': pb, 'rsb': rsb}
+
+    if metric:
+        if flo_rates is not None:
+            flo_rates = _rates_sm3d_to_field(flo_rates, is_gas)
+        if thp_values is not None:
+            thp_values = [t * BAR_TO_PSI for t in thp_values]
+        # Oil wells carry WFR as a water cut fraction, which needs no conversion
+        if wfr_values is not None and is_gas:
+            wfr_values = [w * SM3_PER_SM3_TO_STB_PER_MSCF for w in wfr_values]  # sm3/sm3 -> stb/Mscf
+        if gfr_values is not None:
+            if is_gas:
+                gfr_values = [g * SM3_PER_SM3_TO_STB_PER_MSCF for g in gfr_values]  # sm3/sm3 -> stb/Mscf
+            else:
+                gfr_values = [g * SM3_PER_SM3_TO_SCF_PER_STB / 1000.0 for g in gfr_values]  # sm3/sm3 -> Mscf/stb
+        if datum_depth > 0:
+            datum_depth = datum_depth * M_TO_FT
+        if pr > 0:
+            pr = pr * BAR_TO_PSI
+        if pb > 0:
+            pb = pb * BAR_TO_PSI
+        if rsb > 0:
+            rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
+
+    if datum_depth <= 0:
+        datum_depth = completion.total_tvd
+
+    flo_rates, thp_values, wfr_values, gfr_values, alq_values = _vfpprod_default_axes(
+        is_gas, flo_rates, thp_values, wfr_values, gfr_values, alq_values)
+
+    axes = _VfpProdAxes(flo=list(flo_rates), thp=list(thp_values),
+                        wfr=list(wfr_values), gfr=list(gfr_values),
+                        alq=list(alq_values), datum_depth=datum_depth,
+                        pr=pr, pb=pb, rsb=rsb)
+
+    # Anchor ratios at zero where physically meaningful. WFR: zero water is valid
+    # for both gas (WGR=0) and oil (WCT=0) wells. GFR: zero condensate (OGR=0) is
+    # valid for gas wells only.
+    if 0 not in axes.wfr:
+        axes.wfr.insert(0, 0)
+    if is_gas and 0 not in axes.gfr:
+        axes.gfr.insert(0, 0)
+
+    return axes, original
+
+
+def _vfpprod_axes_to_metric(axes, original, well_type):
+    """Axes back in the caller's METRIC units for the Eclipse string."""
+    is_gas = (well_type == 'gas')
+    if is_gas:
+        wfr_back = lambda v: [w * STB_PER_MSCF_TO_SM3_PER_SM3 for w in v]
+        gfr_back = lambda v: [g * STB_PER_MSCF_TO_SM3_PER_SM3 for g in v]
+    else:
+        wfr_back = list  # WCT is a fraction in both unit systems
+        gfr_back = lambda v: [g * 1000.0 * SCF_PER_STB_TO_SM3_PER_SM3 for g in v]  # Mscf/stb -> sm3/sm3
+
+    out = _VfpProdAxes(
+        flo=_axis_out(original['flo'], axes.flo,
+                      lambda v: _rates_field_to_sm3d(v, is_gas)),
+        thp=_axis_out(original['thp'], axes.thp,
+                      lambda v: [t * PSI_TO_BAR for t in v]),
+        wfr=_axis_out(original['wfr'], axes.wfr, wfr_back),
+        gfr=_axis_out(original['gfr'], axes.gfr, gfr_back),
+        alq=list(axes.alq),
+        datum_depth=axes.datum_depth * FT_TO_M,
+        pr=axes.pr, pb=original['pb'], rsb=original['rsb'])
+
+    # The zero anchor may have been inserted after the caller's values were saved
+    if 0 not in out.wfr:
+        out.wfr.insert(0, 0)
+    if is_gas and 0 not in out.gfr:
+        out.gfr.insert(0, 0)
+    return out
 
 
 def make_vfpprod(
@@ -425,218 +607,66 @@ def make_vfpprod(
             bhp (5D numpy array shape NTHP x NWFR x NGFR x NALQ x NFLO),
             n_failed, eclipse_string
     """
-    from pyrestoolbox.nodal import fbhp as nodal_fbhp
-
-    # Validation
-    if not isinstance(table_num, int) or table_num < 1:
-        raise ValueError(f"table_num must be a positive integer, got {table_num}")
+    _validate_table_num(table_num)
 
     well_type = well_type.lower()
     if well_type not in ('gas', 'oil'):
         raise ValueError(f"well_type must be 'gas' or 'oil', got '{well_type}'")
 
     vlpm = validate_methods(["vlpmethod"], [vlpmethod])
-    is_gas = (well_type == 'gas')
 
-    # --- Metric input conversion ---
-    # Save original metric values for Eclipse string output
-    if metric:
-        metric_flo_rates = list(flo_rates) if flo_rates is not None else None
-        metric_thp_values = list(thp_values) if thp_values is not None else None
-        metric_wfr_values = list(wfr_values) if wfr_values is not None else None
-        metric_gfr_values = list(gfr_values) if gfr_values is not None else None
-        metric_pb = pb
-        metric_rsb = rsb
+    ax, original = _vfpprod_axes_to_oilfield(
+        well_type, metric, completion, flo_rates, thp_values, wfr_values,
+        gfr_values, alq_values, datum_depth, pr, pb, rsb)
 
-        # Convert inputs to oilfield
-        if flo_rates is not None:
-            flo_rates = _rates_sm3d_to_field(flo_rates, is_gas)
-        if thp_values is not None:
-            thp_values = [t * BAR_TO_PSI for t in thp_values]
-        if wfr_values is not None:
-            if well_type == 'gas':
-                wfr_values = [w * SM3_PER_SM3_TO_STB_PER_MSCF for w in wfr_values]  # sm3/sm3 -> stb/Mscf
-            # Oil wells: WCT is fraction, no conversion
-        if gfr_values is not None:
-            if well_type == 'gas':
-                gfr_values = [g * SM3_PER_SM3_TO_STB_PER_MSCF for g in gfr_values]  # sm3/sm3 -> stb/Mscf
-            else:
-                gfr_values = [g * SM3_PER_SM3_TO_SCF_PER_STB / 1000.0 for g in gfr_values]  # sm3/sm3 -> Mscf/stb
-        if datum_depth > 0:
-            datum_depth = datum_depth * M_TO_FT
-        if pr > 0:
-            pr = pr * BAR_TO_PSI
-        if pb > 0:
-            pb = pb * BAR_TO_PSI
-        if rsb > 0:
-            rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
-
-    if datum_depth <= 0:
-        datum_depth = completion.total_tvd
-
-    # Defaults (in oilfield units)
-    if flo_rates is None:
-        flo_rates = [1000, 5000, 10000, 20000, 50000, 100000] if well_type == 'gas' \
-                    else [100, 500, 1000, 2000, 5000, 10000]
-    if thp_values is None:
-        thp_values = [100, 200, 500, 1000, 2000]
-    if wfr_values is None:
-        wfr_values = [0, 0.001, 0.005, 0.01] if well_type == 'gas' else [0, 0.2, 0.5, 0.8]
-    if gfr_values is None:
-        gfr_values = [0, 0.01, 0.05, 0.1] if well_type == 'gas' else [0.2, 0.5, 1.0, 2.0]
-    if alq_values is None:
-        alq_values = [0]
-
-    flo_rates = list(flo_rates)
-    thp_values = list(thp_values)
-    wfr_values = list(wfr_values)
-    gfr_values = list(gfr_values)
-    alq_values = list(alq_values)
-
-    # Anchor ratios at zero where physically meaningful
-    # WFR: zero water is valid for both gas (WGR=0) and oil (WCT=0) wells
-    if 0 not in wfr_values:
-        wfr_values.insert(0, 0)
-    # GFR: zero condensate (OGR=0) is valid for gas wells only
-    if well_type == 'gas' and 0 not in gfr_values:
-        gfr_values.insert(0, 0)
-
-    if len(flo_rates) < 2:
+    if len(ax.flo) < 2:
         raise ValueError("flo_rates must contain at least 2 values")
+    if well_type == 'oil' and any(w >= 1.0 for w in ax.wfr):
+        raise ValueError("WCT values must be less than 1.0 for oil production wells")
 
-    # Validate WCT range for oil wells
-    if well_type == 'oil':
-        if any(w >= 1.0 for w in wfr_values):
-            raise ValueError("WCT values must be less than 1.0 for oil production wells")
-
-    # Type labels
     if well_type == 'gas':
         flo_type, wfr_type, gfr_type = 'GAS', 'WGR', 'OGR'
     else:
         flo_type, wfr_type, gfr_type = 'OIL', 'WCT', 'GOR'
 
-    # Compute BHP grid (in oilfield units)
-    nflo = len(flo_rates)
-    nthp = len(thp_values)
-    nwfr = len(wfr_values)
-    ngfr = len(gfr_values)
-    nalq = len(alq_values)
-    total = nflo * nthp * nwfr * ngfr * nalq
-
-    bhp_array = np.zeros((nthp, nwfr, ngfr, nalq, nflo))
-    n_failed = 0
-
-    for ia, alq in enumerate(alq_values):
-        for ig, gfr in enumerate(gfr_values):
-            for iw, wfr in enumerate(wfr_values):
-                for it, thp in enumerate(thp_values):
-                    for iflo, flo in enumerate(flo_rates):
-                        try:
-                            if well_type == 'gas':
-                                qg_mmscfd = flo / 1000.0
-                                qw_bwpd = wfr * flo  # WGR(stb/Mscf) * rate(Mscf/d)
-                                cgr = gfr * 1000.0    # OGR(stb/Mscf) -> stb/MMscf
-                                bhp_val = nodal_fbhp(
-                                    thp=thp, completion=completion,
-                                    vlpmethod=vlpm, well_type='gas',
-                                    gas_pvt=gas_pvt,
-                                    qg_mmscfd=qg_mmscfd, cgr=cgr,
-                                    qw_bwpd=qw_bwpd, oil_vis=oil_vis,
-                                    api=api, pr=pr, wsg=wsg, gsg=gsg)
-                            else:
-                                wct = wfr
-                                gor_scf_stb = gfr * 1000.0
-                                qt_stbpd = flo / (1.0 - wct) if wct > 0 else flo
-                                bhp_val = nodal_fbhp(
-                                    thp=thp, completion=completion,
-                                    vlpmethod=vlpm, well_type='oil',
-                                    oil_pvt=oil_pvt,
-                                    qt_stbpd=qt_stbpd, gor=gor_scf_stb,
-                                    wc=wct, wsg=wsg, gsg=gsg,
-                                    pb=pb, rsb=rsb, sgsp=sgsp, api=api)
-
-                            bhp_array[it, iw, ig, ia, iflo] = bhp_val
-                        except (RuntimeError, ValueError, ZeroDivisionError):
-                            bhp_array[it, iw, ig, ia, iflo] = 1e-6
-                            n_failed += 1
+    bhp_array, n_failed = _sweep_vfpprod_bhp(
+        completion, vlpm, well_type, ax.thp, ax.wfr, ax.gfr, ax.alq, ax.flo,
+        gas_pvt, oil_pvt, gsg, wsg, sgsp, api, oil_vis, ax.pr, ax.pb, ax.rsb)
 
     if n_failed > 0:
+        total = (len(ax.flo) * len(ax.thp) * len(ax.wfr)
+                 * len(ax.gfr) * len(ax.alq))
         warnings.warn(f"{n_failed} of {total} VFPPROD BHP calculations failed")
 
-    # --- Metric output conversion ---
     if metric:
         bhp_array = bhp_array * PSI_TO_BAR
-        datum_depth_out = datum_depth * FT_TO_M
-
-        # Use original metric values for Eclipse string, or convert oilfield defaults
-        out_flo = metric_flo_rates if metric_flo_rates is not None \
-            else _rates_field_to_sm3d(flo_rates, is_gas)
-        out_thp = metric_thp_values if metric_thp_values is not None \
-            else [t * PSI_TO_BAR for t in thp_values]
-        if metric_wfr_values is not None:
-            out_wfr = metric_wfr_values
-        else:
-            if well_type == 'gas':
-                out_wfr = [w * STB_PER_MSCF_TO_SM3_PER_SM3 for w in wfr_values]
-            else:
-                out_wfr = list(wfr_values)  # WCT fraction, no conversion
-        if metric_gfr_values is not None:
-            out_gfr = metric_gfr_values
-        else:
-            if well_type == 'gas':
-                out_gfr = [g * STB_PER_MSCF_TO_SM3_PER_SM3 for g in gfr_values]
-            else:
-                out_gfr = [g * 1000.0 * SCF_PER_STB_TO_SM3_PER_SM3 for g in gfr_values]  # Mscf/stb -> sm3/sm3
-        # Anchor at zero may have been inserted - ensure zero stays in metric output
-        if 0 not in out_wfr:
-            out_wfr.insert(0, 0)
-        if well_type == 'gas' and 0 not in out_gfr:
-            out_gfr.insert(0, 0)
-
-        eclipse_str = _format_vfpprod(table_num, datum_depth_out, flo_type, wfr_type, gfr_type,
-                                       out_flo, out_thp, out_wfr, out_gfr,
-                                       alq_values, bhp_array,
-                                       vlpmethod=vlpm, well_type=well_type,
-                                       completion=completion,
-                                       gsg=gsg, wsg=wsg, api=api,
-                                       pb=metric_pb, rsb=metric_rsb,
-                                       unit_system='METRIC')
-        out_datum_depth = datum_depth_out
-        out_flo_rates = out_flo
-        out_thp_values = out_thp
-        out_wfr_values = out_wfr
-        out_gfr_values = out_gfr
+        out = _vfpprod_axes_to_metric(ax, original, well_type)
+        unit_system = 'METRIC'
     else:
-        eclipse_str = _format_vfpprod(table_num, datum_depth, flo_type, wfr_type, gfr_type,
-                                       flo_rates, thp_values, wfr_values, gfr_values,
-                                       alq_values, bhp_array,
-                                       vlpmethod=vlpm, well_type=well_type,
-                                       completion=completion,
-                                       gsg=gsg, wsg=wsg, api=api, pb=pb, rsb=rsb,
-                                       unit_system='FIELD')
-        out_datum_depth = datum_depth
-        out_flo_rates = flo_rates
-        out_thp_values = thp_values
-        out_wfr_values = wfr_values
-        out_gfr_values = gfr_values
+        out = ax
+        unit_system = 'FIELD'
 
-    if export:
-        fname = filename if filename else f"VFPPROD_{table_num}.VFP"
-        with open(fname, 'w') as f:
-            f.write(eclipse_str)
+    eclipse_str = _format_vfpprod(table_num, out.datum_depth, flo_type, wfr_type, gfr_type,
+                                  out.flo, out.thp, out.wfr, out.gfr, out.alq, bhp_array,
+                                  vlpmethod=vlpm, well_type=well_type,
+                                  completion=completion,
+                                  gsg=gsg, wsg=wsg, api=api, pb=out.pb, rsb=out.rsb,
+                                  unit_system=unit_system)
+
+    _export_vfp(export, filename, f"VFPPROD_{table_num}.VFP", eclipse_str)
 
     return {
         "table_num": table_num,
-        "datum_depth": out_datum_depth,
+        "datum_depth": out.datum_depth,
         "well_type": well_type,
         "flo_type": flo_type,
         "wfr_type": wfr_type,
         "gfr_type": gfr_type,
-        "flo_rates": out_flo_rates,
-        "thp_values": out_thp_values,
-        "wfr_values": out_wfr_values,
-        "gfr_values": out_gfr_values,
-        "alq_values": alq_values,
+        "flo_rates": out.flo,
+        "thp_values": out.thp,
+        "wfr_values": out.wfr,
+        "gfr_values": out.gfr,
+        "alq_values": out.alq,
         "bhp": bhp_array,
         "n_failed": n_failed,
         "eclipse_string": eclipse_str,

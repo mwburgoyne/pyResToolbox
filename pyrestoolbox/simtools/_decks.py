@@ -25,6 +25,7 @@ ECL/IX INCLUDE file checking/zipping.
 """
 
 from collections import Counter
+from dataclasses import dataclass
 import glob
 import zipfile
 from os.path import exists
@@ -219,6 +220,167 @@ def ix_extract_problem_cells(filename: str = "", silent: bool = False, non_inter
     return dfs
 
 
+@dataclass
+class _DeckScan:
+    """Result of crawling a deck's INCLUDE tree."""
+    files: list          # every file reached, deck first
+    parents: list        # the file each entry was referenced from
+    missing: list        # entries that do not exist on disk
+    missing_parents: list
+    higher_dir: bool     # any INCLUDE resolved above the deck directory
+
+
+def _select_deck_files(mask):
+    """Prompt the user to pick deck files matching mask from the current directory."""
+    input_files = []
+    for files in mask:
+        for file in glob.glob(files.upper()):  # Grab all files in the directory with this mask
+            input_files.append(file)
+        for file in glob.glob(files.lower()):  # In case lowercase extension used
+            input_files.append(file)
+    input_files = list(set(input_files))  # Upper/lower check can yield duplicates
+
+    if len(input_files) == 0:
+        raise FileNotFoundError('No '+', '.join(mask)+' files exist in this directory')
+
+    print(' ')
+    input_files.sort()
+
+    table = [[i, name] for i, name in enumerate(input_files)]
+    print(tabulate(table, headers=['Index', 'File Name']))
+    print(' ')
+    file_idx = input('Please choose index(s) of file to parse separated by commas (0 - '+str(len(input_files)-1)+') :')
+    file_idxs = [int(x) for x in file_idx.split(',')]
+
+    if not all(0 <= item < len(input_files) for item in file_idxs):
+        raise ValueError('Index entered outside range permitted')
+
+    return [input_files[x] for x in file_idxs]
+
+
+def _include_target(line):
+    """Filename named on an INCLUDE continuation line, or None.
+
+    Returns the quoted filename, or None when this line carries no name yet
+    (a bare INCLUDE keyword, so the name is on a following line). Raises nothing:
+    a malformed line is reported by the caller resetting its INCLUDE state.
+    """
+    line = line.split('--')[0]        # Drop trailing comments that give false negatives
+    line = line.split('#')[0]
+    line = line.replace('"', "'")     # Normalise double quotes to single
+    if '.' not in line and "'" not in line:
+        return None                   # Filename is not on this line
+    parts = line.split("'")
+    if len(parts) < 2:                # Malformed INCLUDE line
+        return ''
+    return parts[1].strip()
+
+
+def _crawl_deck_includes(files2scrape, console_summary=True):
+    """Walk a deck's INCLUDE tree breadth-first, to unlimited depth.
+
+    Each newly named file is appended to the work list, so nested INCLUDEs are
+    picked up without recursion. Files that cannot be opened are recorded as
+    missing along with the file that referenced them.
+    """
+    files = list(files2scrape)
+    parents = list(files2scrape)
+    seen = set(files2scrape)
+    missing = []
+    missing_parents = []
+    higher_dir = False
+
+    nscraped = 0
+    while nscraped < len(files):
+        current = files[nscraped]
+        if console_summary:
+            print('Scanning through: '+current)
+
+        try:
+            lines = list(open(current, 'r'))
+        except (FileNotFoundError, PermissionError, OSError):
+            if not exists(current) and current not in missing:
+                missing.append(current)
+                missing_parents.append(parents[nscraped])
+            nscraped += 1
+            continue
+
+        get_include = False
+        for line in lines:
+            line = line.strip()
+            if line[:3] == '--' or line[:1] == '#':   # Skip all comments
+                continue
+            if line[:4] == 'END':                     # Skip everything after END
+                break
+            if line.upper()[:7] == 'INCLUDE':
+                get_include = True
+            if not get_include:
+                continue
+
+            include_file = _include_target(line)
+            if include_file is None:                  # Name is on a later line
+                continue
+            get_include = False
+            if not include_file or include_file in seen:
+                continue
+            files.append(include_file)
+            seen.add(include_file)
+            parents.append(current)
+            if '..' in include_file:
+                higher_dir = True
+
+        nscraped += 1
+
+    return _DeckScan(files=files, parents=parents, missing=missing,
+                     missing_parents=missing_parents, higher_dir=higher_dir)
+
+
+def _warn_higher_dir(files, heading, advice, console_summary):
+    """Report INCLUDE files that sit above the deck directory."""
+    higher = [f for f in files if '..' in f]
+    if not higher or not console_summary:
+        return
+    print(heading)
+    for file in higher:
+        print(file)
+    print(advice)
+
+
+def _zip_deck_files(scan, console_summary, non_interactive):
+    """Zip every scraped file alongside the deck, named after the deck."""
+    if console_summary:
+        print('\n'+str(len(scan.files))+' files to zip')
+    if len(scan.missing) > 0:
+        if non_interactive:
+            raise RuntimeError(
+                f"Cannot zip: {len(scan.missing)} INCLUDE file(s) missing: {scan.missing}"
+            )
+        if console_summary:
+            cont = input('Continue to zip even with missing files? (Y/n): ')
+            if cont.upper() == 'N':
+                raise RuntimeError("Zip aborted by user due to missing files")
+
+    dotindex = ''.join(scan.files[0]).rindex('.')
+    zipname = scan.files[0][:dotindex]+'.zip'
+    with zipfile.ZipFile(zipname, 'w') as zipMe:
+        for f, file in enumerate(scan.files):
+            if console_summary:
+                print('Zipping '+str(f+1)+' of '+str(len(scan.files))+': '+file)
+            try:
+                zipMe.write(file, compress_type=zipfile.ZIP_DEFLATED)
+            except (FileNotFoundError, OSError):
+                if console_summary:
+                    print('\nSkipping '+file+', Not found\n')
+
+    if console_summary:
+        print('\n'+'Finished - Zip File Created: '+zipname)
+    if scan.higher_dir:
+        _warn_higher_dir(
+            scan.files,
+            '\n********** WARNING: Files in parent directory(s) not zipped **********',
+            '\nPlease add these manually to the zip file', console_summary)
+
+
 def zip_check_sim_deck(files2scrape = [], tozip = True, console_summary = True, non_interactive = True):
     """ Performs recursive ECL/IX deck zip/check
         Crawls through all INCLUDE files in a deck, including an unlimited number of subdirectories and nested INCLUDE references,
@@ -240,39 +402,6 @@ def zip_check_sim_deck(files2scrape = [], tozip = True, console_summary = True, 
                          Pass non_interactive=False for the legacy interactive prompts.
     """
 
-    def get_loc(mask):
-        input_files = []
-
-        for files in mask:
-
-            for file in glob.glob(files.upper()): # Grab a list of all the files in the directory with file mask
-                input_files.append(file)
-            for file in glob.glob(files.lower()): # In case lowercase extension used
-                input_files.append(file)
-        input_files = list(set(input_files)) # In case duplicated file names due to checking upper and lower case
-
-        if len(input_files) == 0:
-            raise FileNotFoundError('No '+', '.join(mask)+' files exist in this directory')
-
-        print(' ')
-
-        input_files.sort()
-
-        table = []
-        header=['Index', 'File Name']  # Print list of options to select from
-        for i in range(len(input_files)):
-            table.append([i,input_files[i]])
-        print(tabulate(table,headers=header))
-        print(' ')
-        file_idx = input('Please choose index(s) of file to parse separated by commas (0 - '+str(len(input_files)-1)+') :')
-        file_idxs = [int(x) for x in file_idx.split(',')]
-
-        if not all(item in [i for i in range(0, len(input_files))] for item in file_idxs):
-            raise ValueError('Index entered outside range permitted')
-
-        in_files =  [input_files[x] for x in file_idxs]
-        return in_files
-
     types = ('*.DATA', '*.afi')
     if len(files2scrape) == 0:
         if non_interactive:
@@ -280,138 +409,29 @@ def zip_check_sim_deck(files2scrape = [], tozip = True, console_summary = True, 
                 "files2scrape must be provided in non-interactive mode "
                 "(no input() prompt available)"
             )
-        files2scrape = get_loc(types)
+        files2scrape = _select_deck_files(types)
         tozip = True
         method = input('Zip or Check files? (Z/c): ')
-        if method.upper()=='C':
+        if method.upper() == 'C':
             tozip = False
 
-    files2scrape = [x for x in files2scrape]
-    parent_filenames = [x for x in files2scrape]
-    files2scrape_set = set(files2scrape)
-    missing_parents = []
-    # Start stepping through, looking for INCLUDE file statements
-    get_include = False
-    got_all = False
+    scan = _crawl_deck_includes(files2scrape, console_summary)
 
-    nscraped = 0
-    higher_dir = False
-    missing = []
-    while not got_all:
-        if console_summary:
-            print('Scanning through: '+files2scrape[nscraped])
-
-        # Load file into list
-        try:
-            lines = list(open(files2scrape[nscraped], 'r'))
-        except (FileNotFoundError, PermissionError, OSError):
-            if not exists(files2scrape[nscraped]):
-                if files2scrape[nscraped] not in missing:
-                    missing.append(files2scrape[nscraped])
-                    missing_parents.append(parent_filenames[nscraped])
-            nscraped += 1
-            if len(files2scrape) == nscraped:
-                got_all = True
-            continue
-
-        for line in lines:
-            line = line.strip() # Remove leading and trailing spaces
-            if line[:3]== '--' or line[:1]=='#': # Skip all comments
-                continue
-            if line[:4]== 'END': # Skip everything after an END command
-                break
-            if line.upper()[:7]=='INCLUDE':
-                get_include = True
-
-            if get_include:
-
-                # Remove any trailing comments that might give false negatives
-                line = line.split('--')[0]
-                line = line.split('#')[0]
-
-                line = line.replace('"',"'") # Remove double inverted commas, replace with single commas
-                if '.' not in line and "'" not in line: # Filename not in this line
-                    continue
-
-                parts = line.split("'")
-                if len(parts) < 2: # Malformed INCLUDE line
-                    get_include = False
-                    continue
-                include_file = parts[1].strip()
-                if include_file not in files2scrape_set:
-                    files2scrape.append(include_file)
-                    files2scrape_set.add(include_file)
-                    parent_filenames.append(files2scrape[nscraped])
-                    if '..' in include_file:
-                        higher_dir = True
-                get_include = False
-                continue
-
-        # Finished scraping a file - are there any left?
-        nscraped += 1
-        if len(files2scrape) == nscraped:
-            got_all = True
-            continue
-
-    if len(missing)>0:
-        if console_summary:
-            print('\n****** MISSING FILES ******\n')
-            for f, file in enumerate(missing):
-                print(file, 'from', missing_parents[f])
-
-    higher_files = []
-    if not tozip:
-        if len(missing) == 0:
-            if console_summary:
-                print('\nALL INCLUDE FILES FOUND\n')
-            for file in files2scrape:
-                if '..' in file:
-                    higher_files.append(file)
-            if len(higher_files) > 0:
-                if console_summary:
-                    print('\n********** WARNING: Some INCLUDE files in a parent directory **********')
-                    for file in higher_files:
-                            print(file)
-                    print('\nThese would need to be added manually to a zip file')
+    if len(scan.missing) > 0 and console_summary:
+        print('\n****** MISSING FILES ******\n')
+        for f, file in enumerate(scan.missing):
+            print(file, 'from', scan.missing_parents[f])
 
     if tozip:
+        _zip_deck_files(scan, console_summary, non_interactive)
+    elif len(scan.missing) == 0:
         if console_summary:
-            print('\n'+str(len(files2scrape))+' files to zip')
-        if len(missing)>0:
-            if non_interactive:
-                raise RuntimeError(
-                    f"Cannot zip: {len(missing)} INCLUDE file(s) missing: {missing}"
-                )
-            if console_summary:
-                cont = input('Continue to zip even with missing files? (Y/n): ')
-                if cont.upper() =='N':
-                    raise RuntimeError("Zip aborted by user due to missing files")
-        lista_files = files2scrape
-        dotindex = ''.join(lista_files[0]).rindex('.')
-        zipname = lista_files[0][:dotindex]+'.zip'
-        with zipfile.ZipFile(zipname, 'w') as zipMe:
-            for f, file in enumerate(lista_files):
-                if console_summary:
-                    print('Zipping '+str(f+1)+' of '+str(nscraped)+': '+file)
-                try:
-                    zipMe.write(file, compress_type=zipfile.ZIP_DEFLATED)
-                except (FileNotFoundError, OSError):
-                    if console_summary:
-                        print('\nSkipping '+file+', Not found\n' )
-
-        if console_summary:
-            print('\n'+'Finished - Zip File Created: '+zipname)
-        if higher_dir:
-            for file in lista_files:
-                if '..' in file:
-                    higher_files.append(file)
-            if console_summary:
-                print('\n********** WARNING: Files in parent directory(s) not zipped **********')
-                for file in higher_files:
-                    print(file)
-                print('\nPlease add these manually to the zip file')
+            print('\nALL INCLUDE FILES FOUND\n')
+        _warn_higher_dir(
+            scan.files,
+            '\n********** WARNING: Some INCLUDE files in a parent directory **********',
+            '\nThese would need to be added manually to a zip file', console_summary)
 
     if not console_summary:
-        return missing
-    else:
-        return
+        return scan.missing
+    return
