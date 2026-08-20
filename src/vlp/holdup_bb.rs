@@ -1,7 +1,7 @@
-/// Beggs & Brill flow pattern map, horizontal holdup, inclination correction,
-/// and two-phase friction.
-/// Direct port of nodal.py _bb_flow_pattern, _bb_horizontal_holdup,
-/// _bb_inclination_correction and _bb_two_phase_friction.
+//! Beggs & Brill flow pattern map, horizontal holdup, inclination correction,
+//! and two-phase friction.
+//! Direct port of nodal.py _bb_flow_pattern, _bb_horizontal_holdup,
+//! _bb_inclination_correction and _bb_two_phase_friction.
 
 use super::constants::*;
 use super::pvt_helpers::clamp;

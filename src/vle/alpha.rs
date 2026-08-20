@@ -1,10 +1,10 @@
 #![allow(dead_code)]
-/// Alpha functions for the Peng-Robinson EOS.
-///
-/// Three alpha functions:
-/// - alpha_water_soreide: S&W modified alpha for water/brine (Eq 9)
-/// - alpha_water_mc3: Mathias-Copeman 3-parameter alpha for pure water
-/// - alpha_standard_pr: Standard PR alpha for gases/hydrocarbons
+//! Alpha functions for the Peng-Robinson EOS.
+//!
+//! Three alpha functions:
+//! - alpha_water_soreide: S&W modified alpha for water/brine (Eq 9)
+//! - alpha_water_mc3: Mathias-Copeman 3-parameter alpha for pure water
+//! - alpha_standard_pr: Standard PR alpha for gases/hydrocarbons
 
 /// Soreide-Whitson modified alpha for water/brine (Equation 9).
 ///

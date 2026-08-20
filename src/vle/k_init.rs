@@ -1,8 +1,8 @@
-/// K-value initialization for VLE flash.
-///
-/// S&W-specific K-value correlations fitted to binary VLE results,
-/// replacing the standard Wilson correlation which gives K < 1 for
-/// many gas-water systems at moderate conditions.
+//! K-value initialization for VLE flash.
+//!
+//! S&W-specific K-value correlations fitted to binary VLE results,
+//! replacing the standard Wilson correlation which gives K < 1 for
+//! many gas-water systems at moderate conditions.
 
 use crate::vle::components::*;
 
@@ -159,7 +159,7 @@ mod tests {
         let omega = [0.3434, -0.219];
         let k = sw_kvalue_init(&comp, &tc, &pc, &omega, 300.0, 1e5);
         for &ki in &k {
-            assert!(ki >= 1e-10 && ki <= 1e10);
+            assert!((1e-10..=1e10).contains(&ki));
         }
     }
 }

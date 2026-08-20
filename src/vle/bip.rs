@@ -1,7 +1,7 @@
-/// Binary Interaction Parameter (BIP) calculations for the S&W VLE engine.
-///
-/// Provides kij_AQ (aqueous phase) and kij_NA (non-aqueous phase) BIP values
-/// for gas-water pairs, plus gas-gas BIPs from literature.
+//! Binary Interaction Parameter (BIP) calculations for the S&W VLE engine.
+//!
+//! Provides kij_AQ (aqueous phase) and kij_NA (non-aqueous phase) BIP values
+//! for gas-water pairs, plus gas-gas BIPs from literature.
 
 use crate::vle::components::*;
 
@@ -297,6 +297,7 @@ pub fn get_gas_gas_bip(idx_a: usize, idx_b: usize) -> f64 {
 /// where T_F is temperature in Fahrenheit and Tb is normal boiling point in K.
 ///
 /// Returns ks on log10 basis (per S&W Eq. 2).
+#[allow(dead_code)]  // Sechenov salting path, not currently reached
 pub fn sw_equation_8_ks(t_c: f64, tb_k: f64) -> f64 {
     let t_f = t_c * 9.0 / 5.0 + 32.0;
     0.13163 + 4.45e-4 * tb_k - 7.692e-4 * t_f
@@ -309,6 +310,7 @@ pub fn sw_equation_8_ks(t_c: f64, tb_k: f64) -> f64 {
 /// For CO2 and H2S in the full proposed framework, specialized models are used
 /// on the Python side. This Rust implementation provides the S&W Eq 8 fallback
 /// plus the N2 +0.02 offset.
+#[allow(dead_code)]  // Sechenov salting path, not currently reached
 pub fn get_sechenov_ks_sw(comp_idx: usize, t_k: f64) -> f64 {
     if comp_idx >= NUM_COMPONENTS || comp_idx == IDX_H2O {
         return 0.0;

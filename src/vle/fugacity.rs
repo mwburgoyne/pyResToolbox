@@ -1,7 +1,7 @@
-/// Fugacity coefficient calculations for the PR EOS.
-///
-/// Implements the standard PR fugacity coefficient formula and the fast
-/// vectorized version used in flash_tp iterations.
+//! Fugacity coefficient calculations for the PR EOS.
+//!
+//! Implements the standard PR fugacity coefficient formula and the fast
+//! vectorized version used in flash_tp iterations.
 
 use crate::vle::eos::solve_cubic_eos;
 

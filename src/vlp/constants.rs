@@ -1,6 +1,6 @@
-/// Named constants for the VLP module, mirroring the constants block at the
-/// top of pyrestoolbox/nodal/nodal.py. Keep the two files in sync - the
-/// Python module is the authoritative reference.
+//! Named constants for the VLP module, mirroring the constants block at the
+//! top of pyrestoolbox/nodal/nodal.py. Keep the two files in sync - the
+//! Python module is the authoritative reference.
 
 // ============================================================================
 //  Physical constants

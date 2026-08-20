@@ -151,7 +151,7 @@ pub fn dak_zfactor_full(
     n2_frac: f64,
 ) -> PyResult<f64> {
     let (tpc, ppc) = critical_properties::sutton_wa_internal(sg, co2_frac, h2s_frac, n2_frac)
-        .map_err(|e| PyValueError::new_err(e))?;
+        .map_err(PyValueError::new_err)?;
 
     let t_rankine = t_degf + DEGF2R;
     let pr = p_psia / ppc;
@@ -170,7 +170,7 @@ pub fn hall_yarborough_zfactor_full(
     n2_frac: f64,
 ) -> PyResult<f64> {
     let (tpc, ppc) = critical_properties::sutton_wa_internal(sg, co2_frac, h2s_frac, n2_frac)
-        .map_err(|e| PyValueError::new_err(e))?;
+        .map_err(PyValueError::new_err)?;
 
     let t_rankine = t_degf + DEGF2R;
     let pr = p_psia / ppc;
@@ -456,7 +456,7 @@ pub fn dak_zfactor_batch(
         (tc_user, pc_user)
     } else {
         critical_properties::sutton_wa_internal(sg, co2_frac, h2s_frac, n2_frac)
-            .map_err(|e| PyValueError::new_err(e))?
+            .map_err(PyValueError::new_err)?
     };
     let t_rankine = t_degf + DEGF2R;
     let tr = t_rankine / tpc;
@@ -487,7 +487,7 @@ pub fn hy_zfactor_batch(
         (tc_user, pc_user)
     } else {
         critical_properties::sutton_wa_internal(sg, co2_frac, h2s_frac, n2_frac)
-            .map_err(|e| PyValueError::new_err(e))?
+            .map_err(PyValueError::new_err)?
     };
     let t_rankine = t_degf + DEGF2R;
     let tr = t_rankine / tpc;

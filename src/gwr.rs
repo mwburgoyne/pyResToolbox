@@ -64,7 +64,6 @@ const BESSEL_THRESHOLD: f64 = 25.0;
 fn mpfr_besseli0e_asymp(x: &Float, prec: u32) -> Float {
     // mu = 4*0^2 = 0
     let one_over_x = Float::with_val(prec, 1) / x;
-    let one_over_8x = Float::with_val(prec, &one_over_x / 8u32);
 
     // Sum the asymptotic series: sum_{k=0}^K (-1)^k * a_k / x^k
     // a_0 = 1
@@ -462,9 +461,9 @@ fn gwr_single(
     for n in 1..=m {
         let binom_row = &coeffs.binom_table[n - 1];
         let mut s = new_float(prec);
-        for i in 0..=n {
+        for (i, binom) in binom_row.iter().enumerate().take(n + 1) {
             let idx = n + i - 1;
-            let term = Float::with_val(prec, &binom_row[i] * &fni[idx]);
+            let term = Float::with_val(prec, binom * &fni[idx]);
             if i & 1 == 1 {
                 s -= term;
             } else {

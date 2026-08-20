@@ -1,5 +1,5 @@
-/// Gray (1974) holdup and effective roughness, API 14B form.
-/// Direct port of nodal.py _gray_liquid_holdup and _gray_effective_roughness.
+//! Gray (1974) holdup and effective roughness, API 14B form.
+//! Direct port of nodal.py _gray_liquid_holdup and _gray_effective_roughness.
 
 use super::constants::*;
 use super::pvt_helpers::clamp;

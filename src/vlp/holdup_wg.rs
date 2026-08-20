@@ -1,5 +1,5 @@
-/// Woldesemayat-Ghajar drift-flux void fraction and LM friction gradient.
-/// Direct port of nodal.py _wg_void_fraction and _wg_friction_gradient_lm.
+//! Woldesemayat-Ghajar drift-flux void fraction and LM friction gradient.
+//! Direct port of nodal.py _wg_void_fraction and _wg_friction_gradient_lm.
 
 use super::constants::*;
 use super::pvt_helpers::clamp;

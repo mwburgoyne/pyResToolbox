@@ -43,12 +43,12 @@ const GL10_NODES: [f64; 10] = [
 const GL10_WEIGHTS: [f64; 10] = [
     0.0666713443086881,
     0.1494513491505806,
-    0.2190863625159820,
+    0.219086362515982,
     0.2692667193099963,
     0.2955242247147529,
     0.2955242247147529,
     0.2692667193099963,
-    0.2190863625159820,
+    0.219086362515982,
     0.1494513491505806,
     0.0666713443086881,
 ];
@@ -60,100 +60,145 @@ enum ZMethod {
     Bns,
 }
 
-/// Evaluate Z-factor at a single pressure using the selected method.
-/// All critical property computation is internal — no Python round-trips.
-fn eval_z(
-    p_psia: f64,
-    method: &ZMethod,
+/// Gas state at a fixed temperature and composition: everything the Z-factor
+/// and viscosity evaluators need, resolved once at the entry point.
+///
+/// These eleven values used to be threaded through eval_z, gl_integrate,
+/// p_over_z and solve_ponz2p_single one argument at a time, and repeated
+/// verbatim at every call site.
+struct GasState<'a> {
+    method: ZMethod,
     deg_r: f64,
-    _degf: f64,
-    // Sutton path params (precomputed)
+    sg: f64,
+    // Sutton path (precomputed)
     tpc_sut: f64,
     ppc_sut: f64,
-    // BNS path params (precomputed)
+    // BNS path (precomputed)
     tpc_bns: f64,
     ppc_bns: f64,
     co2: f64,
     h2s: f64,
     n2: f64,
     h2: f64,
-) -> f64 {
-    match method {
-        ZMethod::DakSut => {
-            let pr = p_psia / ppc_sut;
-            let tr = deg_r / tpc_sut;
-            zfactor::dak_core_pub(pr, tr)
-        }
-        ZMethod::HySut => {
-            let pr = p_psia / ppc_sut;
-            let tr = deg_r / tpc_sut;
-            zfactor::hy_core_pub(pr, tr)
-        }
-        ZMethod::Bns => {
-            zfactor::bns_zfactor_core_pub(
-                p_psia, deg_r, co2, h2s, n2, h2, tpc_bns, ppc_bns
-            )
-        }
-    }
+    lbc_params: &'a Option<gas_viscosity::LbcParams>,
 }
 
-/// Evaluate viscosity at a single pressure using the appropriate method.
-fn eval_ug(
-    p_psia: f64,
-    deg_r: f64,
-    sg: f64,
-    zee: f64,
-    method: &ZMethod,
-    lbc_params: &Option<gas_viscosity::LbcParams>,
-) -> f64 {
-    match method {
-        ZMethod::Bns => {
-            if let Some(ref params) = lbc_params {
-                gas_viscosity::lbc_viscosity_with_params(p_psia, deg_r, zee, params)
+impl GasState<'_> {
+    /// Z-factor at a single pressure. All critical property computation is
+    /// internal — no Python round-trips.
+    fn eval_z(&self, p_psia: f64) -> f64 {
+        match self.method {
+            ZMethod::DakSut => {
+                zfactor::dak_core_pub(p_psia / self.ppc_sut, self.deg_r / self.tpc_sut)
+            }
+            ZMethod::HySut => {
+                zfactor::hy_core_pub(p_psia / self.ppc_sut, self.deg_r / self.tpc_sut)
+            }
+            ZMethod::Bns => zfactor::bns_zfactor_core_pub(
+                p_psia, self.deg_r, self.co2, self.h2s, self.n2, self.h2,
+                self.tpc_bns, self.ppc_bns,
+            ),
+        }
+    }
+
+    /// Viscosity at a single pressure, using LBC only on the BNS path.
+    fn eval_ug(&self, p_psia: f64, zee: f64) -> f64 {
+        match self.method {
+            ZMethod::Bns => match self.lbc_params {
+                Some(params) => {
+                    gas_viscosity::lbc_viscosity_with_params(p_psia, self.deg_r, zee, params)
+                }
+                None => gas_viscosity::lge_viscosity(p_psia, self.deg_r, self.sg, zee),
+            },
+            _ => gas_viscosity::lge_viscosity(p_psia, self.deg_r, self.sg, zee),
+        }
+    }
+
+    /// p/Z(p) at a given pressure.
+    fn p_over_z(&self, p: f64) -> f64 {
+        p / self.eval_z(p)
+    }
+
+    /// Gauss-Legendre integration of 2p/(mu*Z) over [lo, hi] using n-point rule.
+    /// Everything stays in Rust — Z-factor, viscosity, quadrature.
+    fn gl_integrate(&self, lo: f64, hi: f64, nodes: &[f64], weights: &[f64]) -> f64 {
+        let p_mid = (lo + hi) * 0.5;
+        let p_half = (hi - lo) * 0.5;
+        let mut result = 0.0;
+
+        for (i, &node) in nodes.iter().enumerate() {
+            let p_eval = p_mid + p_half * node;
+            let zee = self.eval_z(p_eval);
+            let ug = self.eval_ug(p_eval, zee);
+            let mugz = ug * zee;
+            result += weights[i] * 2.0 * p_eval / mugz;
+        }
+
+        p_half * result
+    }
+
+    /// Solve P/Z -> P for a single target using Newton with bisection fallback.
+    fn solve_ponz2p_single(&self, target: f64, rtol: f64) -> Result<f64, String> {
+        // Initial guess: p = target (Z ~ 1 at low pressure)
+        let mut p = target;
+        let p_min = target * 0.1;
+        let p_max = target * 5.0;
+
+        // Newton iterations with finite-difference derivative
+        let max_newton = 30;
+        for _ in 0..max_newton {
+            if p < p_min || p > p_max {
+                break; // Out of bounds, fall back to bisection
+            }
+            let f_val = self.p_over_z(p) - target;
+            let rel_err = f_val.abs() / target;
+            if rel_err < rtol {
+                return Ok(p);
+            }
+            // Central difference for derivative
+            let dp = (p * 1e-6).max(0.01);
+            let f_plus = self.p_over_z(p + dp) - target;
+            let f_minus = self.p_over_z(p - dp) - target;
+            let deriv = (f_plus - f_minus) / (2.0 * dp);
+            if deriv.abs() < 1e-30 {
+                break; // Zero derivative, fall back to bisection
+            }
+            let step = f_val / deriv;
+            p -= step;
+        }
+
+        // Bisection fallback
+        let mut lo = p_min;
+        let mut hi = p_max;
+        let f_lo = self.p_over_z(lo) - target;
+        let f_hi = self.p_over_z(hi) - target;
+        if f_lo * f_hi > 0.0 {
+            return Err(two_phase_err(target));
+        }
+
+        for _ in 0..100 {
+            let mid = (lo + hi) * 0.5;
+            let f_mid = self.p_over_z(mid) - target;
+            let rel_err = f_mid.abs() / target;
+            if rel_err < rtol {
+                return Ok(mid);
+            }
+            if f_hi * f_mid < 0.0 {
+                lo = mid;
             } else {
-                gas_viscosity::lge_viscosity(p_psia, deg_r, sg, zee)
+                hi = mid;
             }
         }
-        _ => {
-            gas_viscosity::lge_viscosity(p_psia, deg_r, sg, zee)
-        }
+        Err(two_phase_err(target))
     }
 }
 
-/// Gauss-Legendre integration of 2p/(mu*Z) over [lo, hi] using n-point rule.
-/// Everything stays in Rust — Z-factor, viscosity, quadrature.
-fn gl_integrate(
-    lo: f64,
-    hi: f64,
-    nodes: &[f64],
-    weights: &[f64],
-    method: &ZMethod,
-    deg_r: f64,
-    degf: f64,
-    sg: f64,
-    tpc_sut: f64,
-    ppc_sut: f64,
-    tpc_bns: f64,
-    ppc_bns: f64,
-    co2: f64,
-    h2s: f64,
-    n2: f64,
-    h2: f64,
-    lbc_params: &Option<gas_viscosity::LbcParams>,
-) -> f64 {
-    let p_mid = (lo + hi) * 0.5;
-    let p_half = (hi - lo) * 0.5;
-    let mut result = 0.0;
-
-    for (i, &node) in nodes.iter().enumerate() {
-        let p_eval = p_mid + p_half * node;
-        let zee = eval_z(p_eval, method, deg_r, degf, tpc_sut, ppc_sut, tpc_bns, ppc_bns, co2, h2s, n2, h2);
-        let ug = eval_ug(p_eval, deg_r, sg, zee, method, lbc_params);
-        let mugz = ug * zee;
-        result += weights[i] * 2.0 * p_eval / mugz;
-    }
-
-    p_half * result
+fn two_phase_err(target: f64) -> String {
+    format!(
+        "gas_ponz2p: no single-phase solution exists for P/Z={:.4}. \
+         Target may fall in the two-phase region where P/Z is discontinuous.",
+        target
+    )
 }
 
 /// Full pseudopressure integration: gas_dmp entirely in Rust.
@@ -203,7 +248,7 @@ pub fn gas_dmp_rust(
                 (tc, pc)
             } else {
                 critical_properties::sutton_wa_internal(sg, co2, h2s, n2)
-                    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?
+                    .map_err(pyo3::exceptions::PyValueError::new_err)?
             }
         }
         ZMethod::Bns => (0.0, 0.0), // Not used
@@ -230,135 +275,24 @@ pub fn gas_dmp_rust(
         _ => None,
     };
 
+    let state = GasState {
+        method, deg_r, sg, tpc_sut, ppc_sut, tpc_bns, ppc_bns,
+        co2, h2s, n2, h2, lbc_params: &lbc_p,
+    };
+
     // Two-tier Gauss-Legendre integration
-    let result_7 = gl_integrate(
-        p1, p2, &GL7_NODES, &GL7_WEIGHTS,
-        &method, deg_r, degf, sg,
-        tpc_sut, ppc_sut, tpc_bns, ppc_bns,
-        co2, h2s, n2, h2, &lbc_p,
-    );
-    let result_10 = gl_integrate(
-        p1, p2, &GL10_NODES, &GL10_WEIGHTS,
-        &method, deg_r, degf, sg,
-        tpc_sut, ppc_sut, tpc_bns, ppc_bns,
-        co2, h2s, n2, h2, &lbc_p,
-    );
+    let result_7 = state.gl_integrate(p1, p2, &GL7_NODES, &GL7_WEIGHTS);
+    let result_10 = state.gl_integrate(p1, p2, &GL10_NODES, &GL10_WEIGHTS);
 
     if result_10.abs() < 1e-30 || (result_10 - result_7).abs() / result_10.abs() < 1e-5 {
         Ok(result_10)
     } else {
         // Split into two subintervals, integrate each with 10-point
         let p_mid = (p1 + p2) * 0.5;
-        let r_lo = gl_integrate(
-            p1, p_mid, &GL10_NODES, &GL10_WEIGHTS,
-            &method, deg_r, degf, sg,
-            tpc_sut, ppc_sut, tpc_bns, ppc_bns,
-            co2, h2s, n2, h2, &lbc_p,
-        );
-        let r_hi = gl_integrate(
-            p_mid, p2, &GL10_NODES, &GL10_WEIGHTS,
-            &method, deg_r, degf, sg,
-            tpc_sut, ppc_sut, tpc_bns, ppc_bns,
-            co2, h2s, n2, h2, &lbc_p,
-        );
+        let r_lo = state.gl_integrate(p1, p_mid, &GL10_NODES, &GL10_WEIGHTS);
+        let r_hi = state.gl_integrate(p_mid, p2, &GL10_NODES, &GL10_WEIGHTS);
         Ok(r_lo + r_hi)
     }
-}
-
-/// Compute p/Z(p) for a given pressure.
-fn p_over_z(
-    p: f64,
-    method: &ZMethod,
-    deg_r: f64,
-    degf: f64,
-    tpc_sut: f64,
-    ppc_sut: f64,
-    tpc_bns: f64,
-    ppc_bns: f64,
-    co2: f64,
-    h2s: f64,
-    n2: f64,
-    h2: f64,
-) -> f64 {
-    let z = eval_z(p, method, deg_r, degf, tpc_sut, ppc_sut, tpc_bns, ppc_bns, co2, h2s, n2, h2);
-    p / z
-}
-
-/// Solve P/Z -> P for a single target using Newton with bisection fallback.
-fn solve_ponz2p_single(
-    target: f64,
-    method: &ZMethod,
-    deg_r: f64,
-    degf: f64,
-    tpc_sut: f64,
-    ppc_sut: f64,
-    tpc_bns: f64,
-    ppc_bns: f64,
-    co2: f64,
-    h2s: f64,
-    n2: f64,
-    h2: f64,
-    rtol: f64,
-) -> Result<f64, String> {
-    // Initial guess: p = target (Z ~ 1 at low pressure)
-    let mut p = target;
-    let p_min = target * 0.1;
-    let p_max = target * 5.0;
-
-    // Newton iterations with finite-difference derivative
-    let max_newton = 30;
-    for _ in 0..max_newton {
-        if p < p_min || p > p_max {
-            break; // Out of bounds, fall back to bisection
-        }
-        let f_val = p_over_z(p, method, deg_r, degf, tpc_sut, ppc_sut, tpc_bns, ppc_bns, co2, h2s, n2, h2) - target;
-        let rel_err = f_val.abs() / target;
-        if rel_err < rtol {
-            return Ok(p);
-        }
-        // Central difference for derivative
-        let dp = (p * 1e-6).max(0.01);
-        let f_plus = p_over_z(p + dp, method, deg_r, degf, tpc_sut, ppc_sut, tpc_bns, ppc_bns, co2, h2s, n2, h2) - target;
-        let f_minus = p_over_z(p - dp, method, deg_r, degf, tpc_sut, ppc_sut, tpc_bns, ppc_bns, co2, h2s, n2, h2) - target;
-        let deriv = (f_plus - f_minus) / (2.0 * dp);
-        if deriv.abs() < 1e-30 {
-            break; // Zero derivative, fall back to bisection
-        }
-        let step = f_val / deriv;
-        p -= step;
-    }
-
-    // Bisection fallback
-    let mut lo = p_min;
-    let mut hi = p_max;
-    let f_lo = p_over_z(lo, method, deg_r, degf, tpc_sut, ppc_sut, tpc_bns, ppc_bns, co2, h2s, n2, h2) - target;
-    let f_hi = p_over_z(hi, method, deg_r, degf, tpc_sut, ppc_sut, tpc_bns, ppc_bns, co2, h2s, n2, h2) - target;
-    if f_lo * f_hi > 0.0 {
-        return Err(format!(
-            "gas_ponz2p: no single-phase solution exists for P/Z={:.4}. \
-             Target may fall in the two-phase region where P/Z is discontinuous.",
-            target
-        ));
-    }
-
-    for _ in 0..100 {
-        let mid = (lo + hi) * 0.5;
-        let f_mid = p_over_z(mid, method, deg_r, degf, tpc_sut, ppc_sut, tpc_bns, ppc_bns, co2, h2s, n2, h2) - target;
-        let rel_err = f_mid.abs() / target;
-        if rel_err < rtol {
-            return Ok(mid);
-        }
-        if f_hi * f_mid < 0.0 {
-            lo = mid;
-        } else {
-            hi = mid;
-        }
-    }
-    Err(format!(
-        "gas_ponz2p: no single-phase solution exists for P/Z={:.4}. \
-         Target may fall in the two-phase region where P/Z is discontinuous.",
-        target
-    ))
 }
 
 /// Batch P/Z -> P solver entirely in Rust.
@@ -400,7 +334,7 @@ pub fn gas_ponz2p_rust(
                 (tc, pc)
             } else {
                 critical_properties::sutton_wa_internal(sg, co2, h2s, n2)
-                    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?
+                    .map_err(pyo3::exceptions::PyValueError::new_err)?
             }
         }
         ZMethod::Bns => (0.0, 0.0),
@@ -418,13 +352,18 @@ pub fn gas_ponz2p_rust(
         _ => (0.0, 0.0),
     };
 
+    // P/Z needs no viscosity, so the LBC parameters stay unset here.
+    let no_lbc = None;
+    let state = GasState {
+        method, deg_r, sg, tpc_sut, ppc_sut, tpc_bns, ppc_bns,
+        co2, h2s, n2, h2, lbc_params: &no_lbc,
+    };
+
     let mut results = Vec::with_capacity(poverz.len());
     for &target in &poverz {
-        let p = solve_ponz2p_single(
-            target, &method, deg_r, degf,
-            tpc_sut, ppc_sut, tpc_bns, ppc_bns,
-            co2, h2s, n2, h2, rtol,
-        ).map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
+        let p = state
+            .solve_ponz2p_single(target, rtol)
+            .map_err(pyo3::exceptions::PyValueError::new_err)?;
         results.push(p);
     }
 

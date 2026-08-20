@@ -1,7 +1,7 @@
-/// Shared VLP segment march for all 4 methods (HB, WG, GRAY, BB) and both
-/// fluid types. Direct port of nodal.py _segment_march_gas and
-/// _segment_march_oil with per-method gradient callbacks, mirroring the
-/// Python scaffold design. nodal.py is the authoritative reference.
+//! Shared VLP segment march for all 4 methods (HB, WG, GRAY, BB) and both
+//! fluid types. Direct port of nodal.py _segment_march_gas and
+//! _segment_march_oil with per-method gradient callbacks, mirroring the
+//! Python scaffold design. nodal.py is the authoritative reference.
 
 use super::constants::*;
 use super::friction::serghides_fanning;

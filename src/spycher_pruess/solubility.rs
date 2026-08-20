@@ -226,9 +226,9 @@ impl SpState {
 
         // amix = sum_i sum_j y[i]*y[j]*aij[i][j]
         let mut amix = 0.0;
-        for i in 0..2 {
-            for j in 0..2 {
-                amix += self.y[i] * self.y[j] * aij[i][j];
+        for (i, row) in aij.iter().enumerate().take(2) {
+            for (j, a_ij) in row.iter().enumerate().take(2) {
+                amix += self.y[i] * self.y[j] * a_ij;
             }
         }
 
@@ -776,7 +776,7 @@ mod tests {
         let (x_co2, y_co2, y_h2o, rho_gas, gas_z, _converged) = co2_brine_solubility(100.0, 50.0, 0.0);
         assert!(x_co2 > 0.0 && x_co2 < 0.1, "xCO2 out of range: {}", x_co2);
         assert!(y_co2 > 0.9 && y_co2 <= 1.0, "yCO2 out of range: {}", y_co2);
-        assert!(y_h2o >= 0.0 && y_h2o < 0.1, "yH2O out of range: {}", y_h2o);
+        assert!((0.0..0.1).contains(&y_h2o), "yH2O out of range: {}", y_h2o);
         assert!(rho_gas > 0.0, "rhoGas must be positive: {}", rho_gas);
         assert!(gas_z > 0.0 && gas_z < 2.0, "gasZ out of range: {}", gas_z);
     }

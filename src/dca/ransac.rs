@@ -1,13 +1,13 @@
-/// RANSAC-based linear regression with OLS fallback.
-///
-/// Parameters:
-///   x, y        — data arrays (same length)
-///   n_iter       — number of RANSAC iterations
-///   threshold_sigma — inlier threshold in multiples of MAD-estimated sigma
-///   seed         — seed for deterministic PRNG
-///   through_origin — if true, fit y = slope*x (intercept forced to 0)
-///
-/// Returns (slope, intercept, inlier_mask).
+//! RANSAC-based linear regression with OLS fallback.
+//!
+//! Parameters:
+//!   x, y        — data arrays (same length)
+//!   n_iter       — number of RANSAC iterations
+//!   threshold_sigma — inlier threshold in multiples of MAD-estimated sigma
+//!   seed         — seed for deterministic PRNG
+//!   through_origin — if true, fit y = slope*x (intercept forced to 0)
+//!
+//! Returns (slope, intercept, inlier_mask).
 
 /// Simple Park-Miller LCG PRNG (state must be > 0).
 struct ParkMillerRng {

@@ -1,10 +1,10 @@
-/// VLE Flash Engine for Multi-Gas Phase Equilibria (Rust acceleration).
-///
-/// Implements the Soreide-Whitson Peng-Robinson EOS-based flash calculation
-/// with up to 16 components for gas-saturated brine.
-///
-/// Exports:
-///   flash_tp_rust — Single TP flash (AQ or NA mode)
+//! VLE Flash Engine for Multi-Gas Phase Equilibria (Rust acceleration).
+//!
+//! Implements the Soreide-Whitson Peng-Robinson EOS-based flash calculation
+//! with up to 16 components for gas-saturated brine.
+//!
+//! Exports:
+//!   flash_tp_rust — Single TP flash (AQ or NA mode)
 
 use pyo3::prelude::*;
 use pyo3::exceptions::PyValueError;

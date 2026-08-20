@@ -1,8 +1,8 @@
 #![allow(dead_code)]
-/// Component properties database for Soreide-Whitson VLE engine.
-///
-/// 16 components: H2O + 15 gas species.
-/// Critical properties from S&W 1992 Table 5; H2 from this work.
+//! Component properties database for Soreide-Whitson VLE engine.
+//!
+//! 16 components: H2O + 15 gas species.
+//! Critical properties from S&W 1992 Table 5; H2 from this work.
 
 /// Physical constants
 pub const R_GAS: f64 = 8.314462; // J/(mol·K)

@@ -1,9 +1,9 @@
 #![allow(dead_code)]
-/// Cubic EOS solver for the Peng-Robinson equation of state.
-///
-/// Z^3 - (1-B)Z^2 + (A-3B^2-2B)Z - (AB-B^2-B^3) = 0
-///
-/// Uses Halley-accelerated iteration (Michelsen-style) with analytic fallback.
+//! Cubic EOS solver for the Peng-Robinson equation of state.
+//!
+//! Z^3 - (1-B)Z^2 + (A-3B^2-2B)Z - (AB-B^2-B^3) = 0
+//!
+//! Uses Halley-accelerated iteration (Michelsen-style) with analytic fallback.
 
 const MAX_ITER: usize = 50;
 const TOL: f64 = 1e-10;

@@ -1,9 +1,9 @@
-/// Flash calculation engine: flash_tp.
-///
-/// Implements the Curtis Whitson (Feb 2026) dual-flash scheme:
-///   Flash 1: All gas-water BIPs = kij_AQ → take AQUEOUS phase (gas solubilities)
-///   Flash 2: All gas-water BIPs = kij_NA → take NON-AQUEOUS phase (water content)
-///   True K-values: K_i = y_i(Flash 2) / x_i(Flash 1)
+//! Flash calculation engine: flash_tp.
+//!
+//! Implements the Curtis Whitson (Feb 2026) dual-flash scheme:
+//!   Flash 1: All gas-water BIPs = kij_AQ → take AQUEOUS phase (gas solubilities)
+//!   Flash 2: All gas-water BIPs = kij_NA → take NON-AQUEOUS phase (water content)
+//!   True K-values: K_i = y_i(Flash 2) / x_i(Flash 1)
 
 use crate::vle::alpha::{alpha_standard_pr, alpha_water_mc3, alpha_water_soreide};
 use crate::vle::bip::{build_kij_matrix, Framework};
@@ -216,7 +216,7 @@ pub fn flash_tp(
 }
 
 /// Clip compositions to [1e-15, inf) and normalize.
-fn clip_and_normalize(comp: &mut Vec<f64>) {
+fn clip_and_normalize(comp: &mut [f64]) {
     for v in comp.iter_mut() {
         if *v < 1e-15 {
             *v = 1e-15;
@@ -253,7 +253,7 @@ mod tests {
         );
 
         assert!(converged, "Flash should converge");
-        assert!(v >= 0.0 && v <= 1.0, "V should be in [0,1], got {}", v);
+        assert!((0.0..=1.0).contains(&v), "V should be in [0,1], got {}", v);
         assert_eq!(x.len(), 2);
         assert_eq!(y.len(), 2);
 

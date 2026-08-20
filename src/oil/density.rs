@@ -1,7 +1,7 @@
-/// Oil density and formation volume factor via McCain method.
-///
-/// Port of oil.py Deno_standing_white_mccainhill (below Pb) and Deno_p_gt_pb
-/// (above Pb) plus Bo_mccain.
+//! Oil density and formation volume factor via McCain method.
+//!
+//! Port of oil.py Deno_standing_white_mccainhill (below Pb) and Deno_p_gt_pb
+//! (above Pb) plus Bo_mccain.
 
 const TSC: f64 = 60.0; // Standard temperature (deg F)
 
@@ -111,8 +111,8 @@ pub fn deno_above_pb(
     for n in 0..6 {
         let mut zn = 0.0;
         let mut var_pow = 1.0; // var[n]^0 = 1
-        for i in 0..3 {
-            zn += c[i][n] * var_pow;
+        for row in c.iter().take(3) {
+            zn += row[n] * var_pow;
             var_pow *= var[n];
         }
         zp += zn;

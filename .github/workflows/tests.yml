@@ -80,7 +80,7 @@ jobs:
       - name: Check cyclomatic complexity against baseline
         run: python3 .github/scripts/check_complexity.py
 
-  # ── Rust lint (deny-level clippy lints; warnings not yet ratcheted) ──
+  # ── Rust lint ratchet (clippy clean; any new warning fails) ─────────
   rust-lint:
     name: Clippy
     runs-on: ubuntu-latest
@@ -95,4 +95,4 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq m4
 
       - name: Clippy
-        run: cargo clippy --all-targets
+        run: cargo clippy --all-targets -- -D warnings

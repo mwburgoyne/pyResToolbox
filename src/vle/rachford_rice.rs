@@ -1,11 +1,11 @@
-/// Rachford-Rice solver using the method of Nielsen & Lia (2022).
-///
-/// Gracefully handles catastrophic numerical roundoff errors through
-/// a transformed variable approach.
-///
-/// Reference:
-///     M. Nielsen & H. Lia, "Generalized Rachford-Rice Algorithm",
-///     Fluid Phase Equilibria (2022)
+//! Rachford-Rice solver using the method of Nielsen & Lia (2022).
+//!
+//! Gracefully handles catastrophic numerical roundoff errors through
+//! a transformed variable approach.
+//!
+//! Reference:
+//!     M. Nielsen & H. Lia, "Generalized Rachford-Rice Algorithm",
+//!     Fluid Phase Equilibria (2022)
 
 /// Solve the Rachford-Rice equation.
 ///

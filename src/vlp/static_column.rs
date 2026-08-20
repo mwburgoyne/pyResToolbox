@@ -1,6 +1,6 @@
-/// Static column pressure helpers.
-/// Direct port of nodal.py _static_gas_column_pressure and
-/// _static_oil_column_pressure.
+//! Static column pressure helpers.
+//! Direct port of nodal.py _static_gas_column_pressure and
+//! _static_oil_column_pressure.
 
 use super::constants::{FW_GRAD, IN2_PER_FT2, MW_AIR, RHO_FW, R_GAS};
 use super::pvt_helpers::*;

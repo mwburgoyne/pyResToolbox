@@ -1,7 +1,7 @@
-/// Material balance objective: computes CV (std/mean) of OOIP estimates.
-/// Direct port of the pure-Python objective in matbal.oil_matbal, which
-/// computes its OOIP series through _ooip_series. Any change to that helper
-/// must be mirrored here or the Rust and Python regression paths diverge.
+//! Material balance objective: computes CV (std/mean) of OOIP estimates.
+//! Direct port of the pure-Python objective in matbal.oil_matbal, which
+//! computes its OOIP series through _ooip_series. Any change to that helper
+//! must be mirrored here or the Rust and Python regression paths diverge.
 
 pub fn matbal_objective(
     params: &[f64],

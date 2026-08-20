@@ -1,0 +1,7 @@
+# Reservoir-engineering kernels legitimately carry ~10 physical quantities
+# (composition, criticals, temperature, geometry), and grouping unrelated
+# scalars into a struct just to satisfy a count makes them harder to read, not
+# easier. 12 is the line: past that you are passing a record and should say so,
+# which is why pseudopressure.rs has GasState. Clippy's default of 7 is too low
+# for this crate.
+too-many-arguments-threshold = 12

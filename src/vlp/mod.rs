@@ -1,8 +1,14 @@
-/// VLP segment loop acceleration module.
-/// Exposes 8 pyfunction exports for the 4 VLP methods x 2 fluid types.
-/// All entry points route through the shared segment march in march.rs.
-/// A diverged march (pressure below 1 psia) maps to a Python RuntimeError
-/// with the same message as the pure-Python implementation in nodal.py.
+// The eight #[pyfunction] wrappers below take 16-20 arguments each because
+// that IS the Python signature: nodal.fbhp passes every flow and geometry
+// parameter positionally across the PyO3 boundary, which cannot take a Rust
+// struct. The forwarding bodies hold no logic, so there is nothing to diverge.
+#![allow(clippy::too_many_arguments)]
+
+//! VLP segment loop acceleration module.
+//! Exposes 8 pyfunction exports for the 4 VLP methods x 2 fluid types.
+//! All entry points route through the shared segment march in march.rs.
+//! A diverged march (pressure below 1 psia) maps to a Python RuntimeError
+//! with the same message as the pure-Python implementation in nodal.py.
 
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;

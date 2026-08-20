@@ -1,3 +1,8 @@
+// Currently unused: gwr.rs works in MPFR (rug) precision and calls its own
+// Bessel routines, so nothing reaches this f64 implementation. Kept as the
+// reference f64 version rather than deleted.
+#![allow(dead_code)]
+
 //! Modified Bessel functions I_0, I_1, K_0, K_1 for f64.
 //!
 //! Provides both standard and exponentially-scaled versions:

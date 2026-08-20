@@ -1,6 +1,6 @@
-/// Simplified PVT helpers for VLP segment loops.
-/// Direct port of the nodal.py simplified PVT helpers (_sutton_tc_pc,
-/// _z_factor, _gas_viscosity and friends).
+//! Simplified PVT helpers for VLP segment loops.
+//! Direct port of the nodal.py simplified PVT helpers (_sutton_tc_pc,
+//! _z_factor, _gas_viscosity and friends).
 
 use super::constants::{MW_AIR, R_GAS};
 

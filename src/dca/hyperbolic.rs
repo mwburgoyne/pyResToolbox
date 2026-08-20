@@ -30,12 +30,12 @@ pub fn fit_hyperbolic(t: &[f64], q: &[f64]) -> Option<(f64, f64, f64, f64)> {
         // Linearize: Y = q^(-b)
         let mut y_lin: Vec<f64> = Vec::with_capacity(n);
         let mut valid = true;
-        for i in 0..n {
-            if q[i] <= 0.0 {
+        for &qi in q.iter().take(n) {
+            if qi <= 0.0 {
                 valid = false;
                 break;
             }
-            y_lin.push(q[i].powf(-b));
+            y_lin.push(qi.powf(-b));
         }
         if !valid {
             continue;
@@ -119,12 +119,12 @@ pub fn fit_hyperbolic_cum(np_cum: &[f64], q: &[f64]) -> Option<(f64, f64, f64, f
         // Np = intercept + slope * X
         let mut x_lin: Vec<f64> = Vec::with_capacity(n);
         let mut valid = true;
-        for i in 0..n {
-            if q[i] <= 0.0 {
+        for &qi in q.iter().take(n) {
+            if qi <= 0.0 {
                 valid = false;
                 break;
             }
-            x_lin.push(q[i].powf(exp));
+            x_lin.push(qi.powf(exp));
         }
         if !valid {
             continue;
