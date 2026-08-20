@@ -62,3 +62,20 @@ jobs:
 
       - name: Run full test suite (Rust + parity)
         run: python3 -m pytest pyrestoolbox/tests/ -q
+
+  # ── Complexity ratchet (new code only; existing offenders baselined) ─
+  complexity:
+    name: Complexity ratchet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install radon
+        run: pip install radon
+
+      - name: Check cyclomatic complexity against baseline
+        run: python3 .github/scripts/check_complexity.py

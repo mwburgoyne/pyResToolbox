@@ -44,6 +44,7 @@ __all__ = [
 
 import math
 import warnings
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -310,6 +311,72 @@ def _validate_rates(qg_mmscfd=0.0, qt_stbpd=0.0, qw_bwpd=0.0):
         raise ValueError(f"Liquid rate qt_stbpd must be non-negative, got {qt_stbpd}")
     if qw_bwpd < 0:
         raise ValueError(f"Water rate qw_bwpd must be non-negative, got {qw_bwpd}")
+
+
+@dataclass
+class _FlowInputs:
+    """Flow conditions in oilfield units, with any PVT object already resolved."""
+    thp: float = 0.0
+    pr: float = 0.0
+    qg_mmscfd: float = 0.0
+    qt_stbpd: float = 0.0
+    cgr: float = 0.0
+    qw_bwpd: float = 0.0
+    gor: float = 0.0
+    pb: float = 0.0
+    rsb: float = 0.0
+    api: float = 45.0
+    sgsp: float = 0.65
+    gsg: float = 0.65
+    vis_frac: float = 1.0
+    rsb_frac: float = 1.0
+
+
+def _prepare_flow_inputs(well_type, metric, gas_pvt=None, oil_pvt=None, **kwargs):
+    """Convert METRIC flow inputs to oilfield units and fold in GasPVT/OilPVT.
+
+    fbhp, outflow_curve and operating_point each used to carry their own copy of
+    this, which is how vis_frac/rsb_frac ended up honoured in fbhp alone. One
+    copy means a new conversion or PVT attribute reaches all three.
+    """
+    f = _FlowInputs(**kwargs)
+
+    if metric:
+        f.thp = f.thp * BAR_TO_PSI
+        if f.pr > 0:
+            f.pr = f.pr * BAR_TO_PSI
+        if well_type == 'gas':
+            f.qg_mmscfd = f.qg_mmscfd * SM3_TO_MMSCF          # sm3/d -> MMscf/d
+            if f.cgr > 0:
+                f.cgr = f.cgr * SM3_PER_SM3_TO_STB_PER_MMSCF  # sm3/sm3 -> STB/MMscf
+            if f.qw_bwpd > 0:
+                f.qw_bwpd = f.qw_bwpd * SM3_TO_STB            # sm3/d -> STB/d
+        else:
+            if f.qt_stbpd > 0:
+                f.qt_stbpd = f.qt_stbpd * SM3_TO_STB          # sm3/d -> STB/d
+            if f.gor > 0:
+                f.gor = f.gor * SM3_PER_SM3_TO_SCF_PER_STB    # sm3/sm3 -> scf/STB
+            if f.pb > 0:
+                f.pb = f.pb * BAR_TO_PSI
+            if f.rsb > 0:
+                f.rsb = f.rsb * SM3_PER_SM3_TO_SCF_PER_STB
+
+    # Take gas SG from GasPVT when the caller left gsg at its default
+    if gas_pvt is not None and well_type == 'gas' and f.gsg == 0.65:
+        f.gsg = gas_pvt.sg
+
+    # OilPVT already holds oilfield units
+    if oil_pvt is not None and well_type == 'oil':
+        f.api = oil_pvt.api
+        f.sgsp = oil_pvt.sg_sp
+        f.pb = oil_pvt.pb
+        f.rsb = oil_pvt.rsb
+        f.vis_frac = oil_pvt.vis_frac
+        f.rsb_frac = oil_pvt.rsb_frac
+        if oil_pvt.sg_g > 0:
+            f.gsg = oil_pvt.sg_g
+
+    return f
 
 
 # ============================================================================
@@ -1733,71 +1800,39 @@ def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
             boundary, including THP at the top and BHP at the bottom). Defaults to False
             (scalar BHP return).
     """
-    if metric:
-        thp = thp * BAR_TO_PSI
-        if pr > 0:
-            pr = pr * BAR_TO_PSI
-        if well_type == 'gas':
-            qg_mmscfd = qg_mmscfd * SM3_TO_MMSCF  # sm3/d -> MMscf/d
-            if cgr > 0:
-                cgr = cgr * SM3_PER_SM3_TO_STB_PER_MMSCF  # sm3/sm3 -> STB/MMscf
-            if qw_bwpd > 0:
-                qw_bwpd = qw_bwpd * SM3_TO_STB  # sm3/d -> STB/d
-        else:
-            if qt_stbpd > 0:
-                qt_stbpd = qt_stbpd * SM3_TO_STB  # sm3/d -> STB/d
-            if gor > 0:
-                gor = gor * SM3_PER_SM3_TO_SCF_PER_STB  # sm3/sm3 -> scf/STB
-            if pb > 0:
-                pb = pb * BAR_TO_PSI
-            if rsb > 0:
-                rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
+    f = _prepare_flow_inputs(
+        well_type, metric, gas_pvt=gas_pvt, oil_pvt=oil_pvt,
+        thp=thp, pr=pr, qg_mmscfd=qg_mmscfd, qt_stbpd=qt_stbpd, cgr=cgr,
+        qw_bwpd=qw_bwpd, gor=gor, pb=pb, rsb=rsb, api=api, sgsp=sgsp, gsg=gsg)
 
-    validate_pe_inputs(p=thp)
+    validate_pe_inputs(p=f.thp)
     validate_choice(well_type, ('gas', 'oil'), 'well_type')
-    _validate_rates(qg_mmscfd=qg_mmscfd, qt_stbpd=qt_stbpd, qw_bwpd=qw_bwpd)
+    _validate_rates(qg_mmscfd=f.qg_mmscfd, qt_stbpd=f.qt_stbpd, qw_bwpd=f.qw_bwpd)
     vlpmethod = validate_methods(["vlpmethod"], [vlpmethod])
 
-    if well_type == 'gas' and qg_mmscfd < 0.001 and (qw_bwpd > 0 or cgr > 0):
+    if well_type == 'gas' and f.qg_mmscfd < 0.001 and (f.qw_bwpd > 0 or f.cgr > 0):
         warnings.warn(
-            f"Gas rate {qg_mmscfd:.6f} MMscf/d is below the 0.001 MMscf/d "
+            f"Gas rate {f.qg_mmscfd:.6f} MMscf/d is below the 0.001 MMscf/d "
             "threshold: VLP falls back to a static gas column, which ignores "
             "liquid loading from the specified water and/or condensate.",
             RuntimeWarning, stacklevel=2
         )
 
-    # Take gas SG from GasPVT when the caller left gsg at its default
-    if gas_pvt is not None and well_type == 'gas' and gsg == 0.65:
-        gsg = gas_pvt.sg
-
-    # Extract oil PVT parameters if provided (already in oilfield units from OilPVT)
-    vis_frac = 1.0
-    rsb_frac = 1.0
-    if oil_pvt is not None and well_type == 'oil':
-        api = oil_pvt.api
-        sgsp = oil_pvt.sg_sp
-        pb = oil_pvt.pb
-        rsb = oil_pvt.rsb
-        vis_frac = oil_pvt.vis_frac
-        rsb_frac = oil_pvt.rsb_frac
-        if oil_pvt.sg_g > 0:
-            gsg = oil_pvt.sg_g
-
     def _run_section(thp_in, tid, rough, length, tht_seg, bht_seg, theta):
         if well_type == 'gas':
             return _GAS_METHOD_DIC[vlpmethod.name](
-                thp=thp_in, api=api, gsg=gsg, tid=tid, rough=rough,
+                thp=thp_in, api=f.api, gsg=f.gsg, tid=tid, rough=rough,
                 length=length, tht=tht_seg, bht=bht_seg, wsg=wsg,
-                qg_mmscfd=qg_mmscfd, cgr=cgr, qw_bwpd=qw_bwpd,
-                oil_vis=oil_vis, injection=injection, pr=pr, theta=theta)
+                qg_mmscfd=f.qg_mmscfd, cgr=f.cgr, qw_bwpd=f.qw_bwpd,
+                oil_vis=oil_vis, injection=injection, pr=f.pr, theta=theta)
         else:
             return _OIL_METHOD_DIC[vlpmethod.name](
-                thp=thp_in, api=api, gsg=gsg, tid=tid, rough=rough,
+                thp=thp_in, api=f.api, gsg=f.gsg, tid=tid, rough=rough,
                 length=length, tht=tht_seg, bht=bht_seg, wsg=wsg,
-                qt_stbpd=qt_stbpd, gor=gor, wc=wc,
-                pb=pb, rsb=rsb, sgsp=sgsp,
-                rsb_scale=rsb_frac, injection=injection, theta=theta,
-                vis_frac=vis_frac, rsb_frac=rsb_frac)
+                qt_stbpd=f.qt_stbpd, gor=f.gor, wc=wc,
+                pb=f.pb, rsb=f.rsb, sgsp=f.sgsp,
+                rsb_scale=f.rsb_frac, injection=injection, theta=theta,
+                vis_frac=f.vis_frac, rsb_frac=f.rsb_frac)
 
     # Loop over wellbore segments
     # Temperature interpolated over TVD (not MD) since geothermal
@@ -1805,10 +1840,10 @@ def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
     total_tvd = completion.total_tvd
     tvd_traversed = 0.0
     md_traversed = 0.0
-    p_current = thp
+    p_current = f.thp
     md_profile = [0.0]
     tvd_profile = [0.0]
-    p_profile = [thp]
+    p_profile = [f.thp]
 
     for seg in completion.segments:
         frac_start = tvd_traversed / total_tvd if total_tvd > 0 else 0.0
@@ -1944,37 +1979,12 @@ def outflow_curve(thp: float, completion: 'Completion', vlpmethod: str = 'WG',
                 'bhp': list of flowing BHP values (psia; barsa if metric) at each rate
     """
     validate_choice(well_type, ('gas', 'oil'), 'well_type')
-    # Convert metric inputs to oilfield at the boundary
-    if metric:
-        thp = thp * BAR_TO_PSI
-        if pr > 0:
-            pr = pr * BAR_TO_PSI
-        if well_type == 'gas':
-            if cgr > 0:
-                cgr = cgr * SM3_PER_SM3_TO_STB_PER_MMSCF
-            if qw_bwpd > 0:
-                qw_bwpd = qw_bwpd * SM3_TO_STB
-        else:
-            if gor > 0:
-                gor = gor * SM3_PER_SM3_TO_SCF_PER_STB
-            if pb > 0:
-                pb = pb * BAR_TO_PSI
-            if rsb > 0:
-                rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
+    f = _prepare_flow_inputs(
+        well_type, metric, gas_pvt=gas_pvt, oil_pvt=oil_pvt,
+        thp=thp, pr=pr, cgr=cgr, qw_bwpd=qw_bwpd, gor=gor,
+        pb=pb, rsb=rsb, api=api, sgsp=sgsp, gsg=gsg)
 
-    _validate_rates(qw_bwpd=qw_bwpd)
-
-    # Take gas SG from GasPVT when the caller left gsg at its default
-    if gas_pvt is not None and well_type == 'gas' and gsg == 0.65:
-        gsg = gas_pvt.sg
-
-    if oil_pvt is not None and well_type == 'oil':
-        api = oil_pvt.api
-        sgsp = oil_pvt.sg_sp
-        pb = oil_pvt.pb
-        rsb = oil_pvt.rsb
-        if oil_pvt.sg_g > 0:
-            gsg = oil_pvt.sg_g
+    _validate_rates(qw_bwpd=f.qw_bwpd)
 
     if rates is None:
         if max_rate is None:
@@ -1995,17 +2005,17 @@ def outflow_curve(thp: float, completion: 'Completion', vlpmethod: str = 'WG',
         if well_type == 'gas':
             # Convert rate to MMscf/d for internal fbhp call
             rate_mmscfd = rate * SM3_TO_MMSCF if metric else rate
-            bhp_val = fbhp(thp=thp, completion=completion, vlpmethod=vlpmethod,
-                           well_type='gas', qg_mmscfd=rate_mmscfd, cgr=cgr,
-                           qw_bwpd=qw_bwpd, oil_vis=oil_vis, api=api, pr=pr,
-                           wsg=wsg, injection=injection, gsg=gsg)
+            bhp_val = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
+                           well_type='gas', qg_mmscfd=rate_mmscfd, cgr=f.cgr,
+                           qw_bwpd=f.qw_bwpd, oil_vis=oil_vis, api=f.api, pr=f.pr,
+                           wsg=wsg, injection=injection, gsg=f.gsg)
         else:
             # Convert rate to STB/d for internal fbhp call
             rate_stbpd = rate * SM3_TO_STB if metric else rate
-            bhp_val = fbhp(thp=thp, completion=completion, vlpmethod=vlpmethod,
-                           well_type='oil', qt_stbpd=rate_stbpd, gor=gor, wc=wc,
-                           wsg=wsg, injection=injection, gsg=gsg,
-                           pb=pb, rsb=rsb, sgsp=sgsp, api=api, oil_pvt=oil_pvt)
+            bhp_val = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
+                           well_type='oil', qt_stbpd=rate_stbpd, gor=f.gor, wc=wc,
+                           wsg=wsg, injection=injection, gsg=f.gsg,
+                           pb=f.pb, rsb=f.rsb, sgsp=f.sgsp, api=f.api, oil_pvt=oil_pvt)
         # bhp_val is in psia (fbhp called without metric=True)
         if metric:
             bhp_val = bhp_val * PSI_TO_BAR
@@ -2162,44 +2172,21 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
                 and result is a fallback (rate=0, bhp=pr).
     """
     validate_choice(well_type, ('gas', 'oil'), 'well_type')
-    # Convert metric inputs to oilfield at the boundary
-    if metric:
-        thp = thp * BAR_TO_PSI
-        if well_type == 'gas':
-            if cgr > 0:
-                cgr = cgr * SM3_PER_SM3_TO_STB_PER_MMSCF
-            if qw_bwpd > 0:
-                qw_bwpd = qw_bwpd * SM3_TO_STB
-        else:
-            if gor > 0:
-                gor = gor * SM3_PER_SM3_TO_SCF_PER_STB
-            if pb > 0:
-                pb = pb * BAR_TO_PSI
-            if rsb > 0:
-                rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
+    f = _prepare_flow_inputs(
+        well_type, metric, gas_pvt=gas_pvt, oil_pvt=oil_pvt,
+        thp=thp, cgr=cgr, qw_bwpd=qw_bwpd, gor=gor,
+        pb=pb, rsb=rsb, api=api, sgsp=sgsp, gsg=gsg)
 
-    _validate_rates(qw_bwpd=qw_bwpd)
+    _validate_rates(qw_bwpd=f.qw_bwpd)
 
     # Reservoir stores oilfield units internally (converted in constructor)
     pr = reservoir.pr
-
-    # Take gas SG from GasPVT when the caller left gsg at its default
-    if gas_pvt is not None and well_type == 'gas' and gsg == 0.65:
-        gsg = gas_pvt.sg
-
-    if oil_pvt is not None and well_type == 'oil':
-        api = oil_pvt.api
-        sgsp = oil_pvt.sg_sp
-        pb = oil_pvt.pb
-        rsb = oil_pvt.rsb
-        if oil_pvt.sg_g > 0:
-            gsg = oil_pvt.sg_g
 
     # Get IPR curve (in oilfield units — no metric flag)
     ipr = ipr_curve(reservoir=reservoir, well_type=well_type,
                     gas_pvt=gas_pvt, oil_pvt=oil_pvt,
                     n_points=n_points, wc=wc, wsg=wsg,
-                    bo=bo, uo=uo, gsg=gsg)
+                    bo=bo, uo=uo, gsg=f.gsg)
 
     # Find AOF (maximum rate at minimum pwf)
     aof = max(ipr['rate'])
@@ -2222,15 +2209,15 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
 
         # VLP BHP (convert gas rate to MMscf/d)
         if well_type == 'gas':
-            vlp_bhp = fbhp(thp=thp, completion=completion, vlpmethod=vlpmethod,
-                           well_type='gas', qg_mmscfd=rate / gas_scale, cgr=cgr,
-                           qw_bwpd=qw_bwpd, oil_vis=oil_vis, api=api, pr=pr,
-                           wsg=wsg, injection=injection, gsg=gsg)
+            vlp_bhp = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
+                           well_type='gas', qg_mmscfd=rate / gas_scale, cgr=f.cgr,
+                           qw_bwpd=f.qw_bwpd, oil_vis=oil_vis, api=f.api, pr=pr,
+                           wsg=wsg, injection=injection, gsg=f.gsg)
         else:
-            vlp_bhp = fbhp(thp=thp, completion=completion, vlpmethod=vlpmethod,
-                           well_type='oil', qt_stbpd=rate, gor=gor, wc=wc,
-                           wsg=wsg, injection=injection, gsg=gsg, pb=pb, rsb=rsb, sgsp=sgsp,
-                           api=api, oil_pvt=oil_pvt)
+            vlp_bhp = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
+                           well_type='oil', qt_stbpd=rate, gor=f.gor, wc=wc,
+                           wsg=wsg, injection=injection, gsg=f.gsg, pb=f.pb, rsb=f.rsb, sgsp=f.sgsp,
+                           api=f.api, oil_pvt=oil_pvt)
 
         # IPR BHP: interpolate from IPR curve
         ipr_rates = ipr['rate']
@@ -2272,15 +2259,15 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
 
     # Calculate operating BHP
     if well_type == 'gas' and op_rate > 0:
-        op_bhp = fbhp(thp=thp, completion=completion, vlpmethod=vlpmethod,
-                      well_type='gas', qg_mmscfd=op_rate / gas_scale, cgr=cgr,
-                      qw_bwpd=qw_bwpd, oil_vis=oil_vis, api=api, pr=pr,
-                      wsg=wsg, injection=injection, gsg=gsg)
+        op_bhp = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
+                      well_type='gas', qg_mmscfd=op_rate / gas_scale, cgr=f.cgr,
+                      qw_bwpd=f.qw_bwpd, oil_vis=oil_vis, api=f.api, pr=pr,
+                      wsg=wsg, injection=injection, gsg=f.gsg)
     elif well_type == 'oil' and op_rate > 0:
-        op_bhp = fbhp(thp=thp, completion=completion, vlpmethod=vlpmethod,
-                      well_type='oil', qt_stbpd=op_rate, gor=gor, wc=wc,
-                      wsg=wsg, injection=injection, gsg=gsg, pb=pb, rsb=rsb, sgsp=sgsp,
-                      api=api, oil_pvt=oil_pvt)
+        op_bhp = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
+                      well_type='oil', qt_stbpd=op_rate, gor=f.gor, wc=wc,
+                      wsg=wsg, injection=injection, gsg=f.gsg, pb=f.pb, rsb=f.rsb, sgsp=f.sgsp,
+                      api=f.api, oil_pvt=oil_pvt)
     else:
         op_bhp = pr
 
@@ -2288,11 +2275,11 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
     vlp_max = max_rate_search / gas_scale
     vlp_min = 0.1 if well_type == 'gas' else 1.0
     vlp_rates = list(np.linspace(vlp_min, vlp_max, n_points))
-    vlp = outflow_curve(thp=thp, completion=completion, vlpmethod=vlpmethod,
+    vlp = outflow_curve(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
                         well_type=well_type, rates=vlp_rates,
-                        cgr=cgr, qw_bwpd=qw_bwpd, oil_vis=oil_vis, api=api,
-                        pr=pr, gor=gor, wc=wc, wsg=wsg, injection=injection, gsg=gsg,
-                        pb=pb, rsb=rsb, sgsp=sgsp, oil_pvt=oil_pvt)
+                        cgr=f.cgr, qw_bwpd=f.qw_bwpd, oil_vis=oil_vis, api=f.api,
+                        pr=pr, gor=f.gor, wc=wc, wsg=wsg, injection=injection, gsg=f.gsg,
+                        pb=f.pb, rsb=f.rsb, sgsp=f.sgsp, oil_pvt=oil_pvt)
 
     # Convert operating rate to VLP units for return
     op_rate_out = op_rate / gas_scale if well_type == 'gas' else op_rate
