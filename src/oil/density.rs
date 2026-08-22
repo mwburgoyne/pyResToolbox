@@ -28,9 +28,7 @@ pub fn deno_below_pb(
     sg_o: f64,
     api: f64,
 ) -> f64 {
-    let rho_po: f64;
-
-    if sg_sp > 0.0 {
+    let rho_po: f64 = if sg_sp > 0.0 {
         // Iterative path (Eq 3.18b-3.18c)
         let a: [f64; 6] = [-49.8930, 85.0149, -3.70373, 0.0479818, 2.98914, -0.0356888];
         let mut rho_est = (52.8 - 0.01 * rs).max(20.0);
@@ -49,13 +47,13 @@ pub fn deno_below_pb(
             }
             rho_est = new_rho;
         }
-        rho_po = new_rho;
+        new_rho
     } else {
         // Non-iterative fallback using sg_g (Eq 3.17e)
         let rhoa = 38.52 * 10.0_f64.powf(-0.00326 * api)
             + (94.75 - 33.93 * api.log10()) * sg_g.log10();
-        rho_po = (rs * sg_g + 4600.0 * sg_o) / (73.71 + rs * sg_g / rhoa);
-    }
+        (rs * sg_g + 4600.0 * sg_o) / (73.71 + rs * sg_g / rhoa)
+    };
 
     // Pressure correction (Eq 3.19d)
     let p_k = p / 1000.0;
