@@ -411,6 +411,20 @@ class TestOilEquivalence:
         np.testing.assert_allclose(den_rust, den_python, rtol=RTOL_MEDIUM,
                                    err_msg="Oil density mismatch below Pb")
 
+    def test_oil_density_low_rsb(self):
+        """Both paths must agree at low Rsb, where the cofb polynomial diverges."""
+        import pyrestoolbox.oil as oil
+        for rsb in [0.0, 1e-3, 0.5, 1.0, 5.0]:
+            kwargs = dict(p=525, degf=177.8, rs=rsb, rsb=rsb, api=35,
+                          sg_sp=0.75, sg_g=0.75, pb=145, denomethod='SWMH')
+            den_rust = oil.oil_deno(**kwargs)
+            with force_python():
+                den_python = oil.oil_deno(**kwargs)
+            assert np.isfinite(den_rust), f"Rust density not finite at rsb={rsb}"
+            np.testing.assert_allclose(
+                den_rust, den_python, rtol=RTOL_MEDIUM,
+                err_msg=f"Oil density mismatch at rsb={rsb}")
+
     def test_oil_density_above_pb(self):
         import pyrestoolbox.oil as oil
         kwargs = dict(p=4000, degf=200, rs=500, rsb=500, api=35,
@@ -734,6 +748,24 @@ class TestBrineCO2Equivalence:
                                    err_msg="CO2 xCO2 mismatch")
         np.testing.assert_allclose(mix_rust.Rs, mix_python.Rs, rtol=RTOL_TIGHT,
                                    err_msg="CO2 Rs mismatch")
+
+
+    def test_co2_liquid_root_region(self):
+        """Both paths must agree where the CO2-rich phase settles on liquid CO2."""
+        from pyrestoolbox.brine import brine
+
+        for pres, temp in [(50, 12), (60, 20), (72.2, 32.35)]:
+            mix_rust = brine.CO2_Brine_Mixture(pres=pres, temp=temp, ppm=0, metric=True)
+            with force_python():
+                mix_python = brine.CO2_Brine_Mixture(pres=pres, temp=temp, ppm=0, metric=True)
+            assert mix_rust.CO2_sat == mix_python.CO2_sat, \
+                f"Root class differs at {pres} bar / {temp} degC"
+            np.testing.assert_allclose(
+                mix_rust.y[1], mix_python.y[1], rtol=RTOL_TIGHT,
+                err_msg=f"Gas water content mismatch at {pres} bar / {temp} degC")
+            np.testing.assert_allclose(
+                mix_rust.MolarVol, mix_python.MolarVol, rtol=RTOL_TIGHT,
+                err_msg=f"Molar volume mismatch at {pres} bar / {temp} degC")
 
 
 # =============================================================================

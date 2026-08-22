@@ -119,6 +119,13 @@ _SPIVEY_SC_MPA = 0.1013
 # Methane specific gravity
 _SG_METHANE = 0.5537
 
+# Maximum passes over the K-value/mixing-rule/cubic block in co2BrineSolubility.
+# The CO2-rich root class (gas or liquid CO2) selects the K_CO2 coefficients but
+# is only known after the cubic, so the block repeats until the assumption is
+# self-consistent. Near the root-selection boundary the two classes can
+# alternate, hence the bound.
+_CO2_SAT_MAX_PASSES = 5
+
 # Spycher-Pruess K-value coefficients (low-temperature, non-saturated CO2)
 _SP_K_CO2_LT = [1.189, 1.304e-2, -5.446e-5]
 _SP_K_H2O_LT = [-2.209, 3.097e-2, -1.098e-4, 2.048e-7]
@@ -906,6 +913,51 @@ class CO2_Brine_Mixture():
     #  DOI 10.1007/s11242-009-9425-y
     #============================================================================
     
+    def solve_root_class(self):
+    #=======================================================================
+    #  K-values, compositions, mixing rules and cubic under one root class
+    #=======================================================================
+        """Solve the CO2-rich phase until its root class is self-consistent.
+
+        K_CO2 needs to know whether that phase is gas or liquid CO2, but that is
+        only settled by the cubic, which raises self.repeat when the root class
+        changes. Repeat until the assumption the K-values were evaluated under is
+        the one the cubic returns. The flag is reset first: left set by an earlier
+        solve on this object (the cw_sat pre-pass half a bar above the target
+        pressure) it would otherwise skip the block and leave a stale molar volume
+        in the fugacity coefficients.
+        """
+        self.repeat = False
+        for _pass in range(_CO2_SAT_MAX_PASSES):
+            #==k-Parameters (y/x partitioning factors) Equations 5 and 6 =========
+            self.K_CO2()
+
+            #== First estimates of yCO2 and xCO2 =================================
+            if not self.low_temp:
+                yCO2 = 1 - self.est_yH2O() # Paper suggests using Psat/P, but this empirical fit appears more accurate
+                xCO2 = yCO2 / self.K[0]
+            else:
+                yCO2 = 1.0
+                xCO2 = 0.0
+
+            self.y = np.array([yCO2, 1.0-yCO2])
+            self.x = np.array([xCO2, 1.0-xCO2])
+
+            # Trigger mixing rules
+            self.aMix_RK()
+            self.bMix_RK()
+
+            #--Solve the Cubic Equation A-2 -------------------------------------
+            self.MolarVolume()
+
+            if not self.repeat:  # Root class matched the assumption - converged
+                return
+        warnings.warn(
+            f"CO2_Brine_Mixture: CO2-rich root class did not settle in "
+            f"{_CO2_SAT_MAX_PASSES} passes at {self.pBar:.2f} bar, "
+            f"{self.degC:.2f} degC; using the last solution"
+        )
+
     def co2BrineSolubility(self):
         """ Calculates CO2-brine mutual solubilities at self.pBar, self.degC
             and self.ppm (Spycher & Pruess 2010). Takes no arguments and
@@ -918,10 +970,11 @@ class CO2_Brine_Mixture():
         """
         if _RUST_AVAILABLE:
             try:
-                xco2, yco2, yh2o, rhogas, gasz, conv = _rust.co2_brine_solubility_rust(
+                xco2, yco2, yh2o, rhogas, gasz, conv, co2_sat = _rust.co2_brine_solubility_rust(
                     self.pBar, self.degC, self.ppm
                 )
                 self.converged = conv
+                self.CO2_sat = co2_sat  # Root class the solve settled on
                 self.x = np.array([xco2, 1.0 - xco2 - (self.xSalt if self.xSalt else 0.0)])
                 self.y = np.array([yco2, yh2o])
                 self.rhoGas = rhogas
@@ -986,33 +1039,9 @@ class CO2_Brine_Mixture():
         
         #==k-Parameters (y/x partitioning factors) Equations 5 and 6 ==========================
         self.K_H2O()
-        i =0
-        while not self.repeat:
-            i+=1
-            if i > 1:
-                break
-                
-            #==k-Parameters (y/x partitioning factors) Equations 5 and 6 ==========================
-            self.K_CO2()
-            
-            #== First estimates of yCO2 and xCO2 ================================================
-            if not self.low_temp:
-                yCO2 = 1 - self.est_yH2O() # Paper suggests using Psat/P, but this empirical fit appears more accurate
-                xCO2 = yCO2 / self.K[0]
-            else:
-                yCO2 = 1.0
-                xCO2 = 0.0
-            
-            self.y = np.array([yCO2, 1.0-yCO2])
-            self.x = np.array([xCO2, 1.0-xCO2])    
-            
-            # Trigger mixing rules
-            self.aMix_RK()
-            self.bMix_RK()
 
-            #--Solve the Cubic Equation A-2 --------------------------------------------
-            self.MolarVolume()
-        
+        self.solve_root_class()
+
         #--Calculate Fugacity Coefficients*Pressure---------------------------------------
         self.fugP()
         

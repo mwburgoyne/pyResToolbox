@@ -303,6 +303,21 @@ def _clamp(val, lo, hi):
     return max(lo, min(hi, val))
 
 
+def _validate_oil_correlation_range(well_type, f, degf_max):
+    """Raise if the oil marches would run outside a correlation's valid range.
+
+    The marches take Rs from Velarde at every segment, but its range test
+    depends only on api, sg_sp, Pb and temperature - none of which vary down
+    the string except temperature - so the hot end is checked once here rather
+    than per segment. This also covers the Rust marches, which cannot raise
+    from inside the segment loop and would return NaN instead.
+    """
+    if well_type != 'oil' or degf_max is None:
+        return
+    if f.pb > 0 and f.rsb > 0:
+        oil.check_velarde_range(f.api, degf_max, f.sgsp, f.pb, context='nodal VLP')
+
+
 def _validate_rates(qg_mmscfd=0.0, qt_stbpd=0.0, qw_bwpd=0.0):
     """Raise ValueError for negative flow rates at public entry points."""
     if qg_mmscfd < 0:
@@ -332,7 +347,8 @@ class _FlowInputs:
     rsb_frac: float = 1.0
 
 
-def _prepare_flow_inputs(well_type, metric, gas_pvt=None, oil_pvt=None, **kwargs):
+def _prepare_flow_inputs(well_type, metric, gas_pvt=None, oil_pvt=None,
+                         degf_max=None, **kwargs):
     """Convert METRIC flow inputs to oilfield units and fold in GasPVT/OilPVT.
 
     fbhp, outflow_curve and operating_point each used to carry their own copy of
@@ -375,6 +391,8 @@ def _prepare_flow_inputs(well_type, metric, gas_pvt=None, oil_pvt=None, **kwargs
         f.rsb_frac = oil_pvt.rsb_frac
         if oil_pvt.sg_g > 0:
             f.gsg = oil_pvt.sg_g
+
+    _validate_oil_correlation_range(well_type, f, degf_max)
 
     return f
 
@@ -1802,6 +1820,7 @@ def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
     """
     f = _prepare_flow_inputs(
         well_type, metric, gas_pvt=gas_pvt, oil_pvt=oil_pvt,
+        degf_max=max(completion.tht, completion.bht),
         thp=thp, pr=pr, qg_mmscfd=qg_mmscfd, qt_stbpd=qt_stbpd, cgr=cgr,
         qw_bwpd=qw_bwpd, gor=gor, pb=pb, rsb=rsb, api=api, sgsp=sgsp, gsg=gsg)
 
@@ -1981,6 +2000,7 @@ def outflow_curve(thp: float, completion: 'Completion', vlpmethod: str = 'WG',
     validate_choice(well_type, ('gas', 'oil'), 'well_type')
     f = _prepare_flow_inputs(
         well_type, metric, gas_pvt=gas_pvt, oil_pvt=oil_pvt,
+        degf_max=max(completion.tht, completion.bht),
         thp=thp, pr=pr, cgr=cgr, qw_bwpd=qw_bwpd, gor=gor,
         pb=pb, rsb=rsb, api=api, sgsp=sgsp, gsg=gsg)
 
@@ -2174,6 +2194,7 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
     validate_choice(well_type, ('gas', 'oil'), 'well_type')
     f = _prepare_flow_inputs(
         well_type, metric, gas_pvt=gas_pvt, oil_pvt=oil_pvt,
+        degf_max=max(completion.tht, completion.bht),
         thp=thp, cgr=cgr, qw_bwpd=qw_bwpd, gor=gor,
         pb=pb, rsb=rsb, api=api, sgsp=sgsp, gsg=gsg)
 

@@ -595,6 +595,121 @@ def test_oil_bt_increases_as_p_drops():
     assert bt_1000 > bt_2000, f"Bt at 1000 ({bt_1000}) should exceed Bt at 2000 ({bt_2000})"
 
 
+# =============================================================================
+# Low pressure / low GOR behaviour (dead oil, tables down to standard pressure)
+# =============================================================================
+
+def test_cofb_bounded_at_zero_rsb():
+    """cofb must stay physical at zero GOR - it is unbounded as rsb -> 0"""
+    from pyrestoolbox.oil._density import _cofb_mccain
+    for rsb in [0.0, 1e-6, 1e-3, 0.1, 1.0]:
+        cofb = _cofb_mccain(35, 0.75, 145, 525, rsb, 177.8)
+        assert np.isfinite(cofb), f"cofb not finite at rsb={rsb}: {cofb}"
+        assert 1e-7 < cofb < 1e-4, f"cofb={cofb:.3e} 1/psi unphysical at rsb={rsb}"
+
+def test_cofb_continuous_through_rsb_floor():
+    """cofb must not step across the Rsb floor"""
+    from pyrestoolbox.oil._density import _cofb_mccain
+    rsbs = [0.0, 0.25, 0.5, 0.9, 1.0, 1.1, 2.0, 5.0]
+    vals = [_cofb_mccain(35, 0.75, 145, 525, r, 177.8) for r in rsbs]
+    for i in range(1, len(vals)):
+        step = abs(vals[i] - vals[i - 1]) / vals[i - 1]
+        assert step < 0.5, f"cofb steps {step:.1%} between rsb {rsbs[i-1]} and {rsbs[i]}"
+
+def test_oil_deno_dead_oil_finite():
+    """Density of a dead oil above Pb must stay finite and lighter than water"""
+    for rs in [0.0, 1e-4, 1e-3, 1e-2, 0.1, 1.0]:
+        deno = oil.oil_deno(p=525, degf=177.8, rs=rs, rsb=rs, api=35,
+                            sg_sp=0.75, sg_g=0.75, pb=145)
+        assert np.isfinite(deno), f"Density not finite at rs={rs}"
+        assert 20 < deno < 62.4, f"Density {deno} lb/cuft unphysical at rs={rs}"
+
+def test_oil_bo_dead_oil_positive():
+    """Bo of a dead oil above Pb must stay near unity, not collapse to zero"""
+    sg_o = oil.oil_sg(35)
+    for rs in [0.0, 1e-4, 1e-3, 0.1, 1.0]:
+        bo = oil.oil_bo(p=525, pb=145, degf=177.8, rs=rs, rsb=rs, sg_o=sg_o,
+                        sg_sp=0.75, sg_g=0.75, bomethod='MCAIN')
+        assert 0.9 < bo < 1.5, f"Bo={bo} unphysical at rs={rs}"
+
+def test_oil_co_at_standard_pressure_positive():
+    """Co at p == pb == 14.696 psia must be positive, not a collapsed-stencil zero"""
+    co = oil.oil_co(p=14.696, api=35, degf=200, sg_sp=0.8, sg_g=0.8,
+                    pb=14.696, rsb=0)
+    assert np.isfinite(co) and co > 0, f"Co={co} at standard pressure"
+    assert 1e-6 < co < 1e-4, f"Co={co:.3e} 1/psi outside physical range"
+
+def test_make_bot_og_to_standard_pressure():
+    """Tables generated down to 14.696 psia must be finite and physical"""
+    cases = [
+        dict(pi=3000, api=35, degf=200, sg_g=0.75, pmax=5000, pb=2500),   # normal
+        dict(pi=300, api=35, degf=200, sg_g=0.75, pmax=400, pb=150),      # low GOR
+        dict(pi=100, api=35, degf=200, sg_g=0.75, pmax=200, pb=14.696),   # dead oil
+    ]
+    for kw in cases:
+        df = oil.make_bot_og(pmin=14.696, nrows=8, **kw)['bot']
+        numeric = df.select_dtypes('number')
+        assert np.isfinite(numeric.values).all(), f"Non-finite entries for {kw}"
+        assert (df['Co (1/psi)'] > 0).all(), f"Non-positive Co for {kw}"
+        assert (df['Bo (rb/stb)'] > 0.9).all(), f"Bo below 0.9 for {kw}"
+        assert (df['Deno (lb/cuft)'] < 62.4).all(), f"Oil denser than water for {kw}"
+
+def test_velarde_rs_out_of_range_raises():
+    """Velarde must refuse fluids whose a0 exceeds 1 instead of returning negative Rs"""
+    # api 45 / 200 degF / sg_sp 1.0 / pb 6000 gives a0 = 1.211; Rs was -421 scf/stb
+    # at 1000 psia and only turned positive above ~2400 psia.
+    try:
+        oil.oil_rs(api=45, degf=200, sg_sp=1.0, p=1000, pb=6000, rsb=4700,
+                   rsmethod='VELAR')
+    except ValueError as e:
+        assert 'out of range' in str(e) and 'a0=' in str(e)
+    else:
+        raise AssertionError("oil_rs accepted an out-of-range Velarde fluid")
+
+    # The alternative named in the message must actually work on the same fluid.
+    # VALMC is not offered: its own Pb ceiling (~4853 psia here) covers this corner.
+    rs = oil.oil_rs(api=45, degf=200, sg_sp=1.0, p=1000, pb=6000, rsb=4700,
+                    rsmethod='STAN')
+    assert 0 < rs < 4700, f"STAN returned Rs={rs} scf/stb"
+
+
+def test_velarde_rs_in_range_positive_and_monotonic():
+    """Below the a0 = 1 boundary Velarde Rs must rise monotonically from 0 to rsb"""
+    cases = [                       # a0 well under 1 in each
+        dict(api=35, degf=200, sg_sp=0.75, pb=2000, rsb=500),
+        dict(api=22, degf=120, sg_sp=0.65, pb=1000, rsb=250),
+        dict(api=45, degf=250, sg_sp=0.85, pb=3000, rsb=1200),
+    ]
+    for kw in cases:
+        rsb, pb = kw.pop('rsb'), kw['pb']
+        ps = np.linspace(14.696, pb, 40)
+        rs = np.array([oil.oil_rs(p=p, rsb=rsb, rsmethod='VELAR', **kw) for p in ps])
+        assert (rs >= 0).all(), f"Negative Rs for {kw}: min {rs.min():.1f}"
+        assert (np.diff(rs) >= -1e-9).all(), f"Rs not monotonic in p for {kw}"
+        assert abs(rs[-1] - rsb) < 1e-6 * rsb, f"Rs(pb) != rsb for {kw}"
+
+
+def test_velarde_range_boundary_is_a0():
+    """The guard must fire exactly at the a0 = 1 crossing, not before it"""
+    from pyrestoolbox.oil._correlations import velarde_a_coeffs
+    kw = dict(api=45, degf=200, sg_sp=1.0)
+    lo, hi = 100.0, 20000.0         # bisect the a0 = 1 crossing in pb
+    for _ in range(80):
+        mid = (lo + hi) / 2
+        if velarde_a_coeffs(pb=mid, **kw)[0] < 1:
+            lo = mid
+        else:
+            hi = mid
+    oil.oil_rs(p=1000, pb=lo, rsb=1000, rsmethod='VELAR', **kw)   # a0 just under 1
+    try:
+        oil.oil_rs(p=1000, pb=hi * 1.001, rsb=1000, rsmethod='VELAR', **kw)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"guard silent just above the a0 = 1 crossing (pb={hi:.0f} psia)")
+
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("OIL MODULE VALIDATION TESTS")

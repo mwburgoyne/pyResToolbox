@@ -66,7 +66,7 @@ from pyrestoolbox.classes import pb_method, rs_method, bo_method, co_method
 from ._utils import oil_sg, oil_api, check_sgs, oil_ja_sg, oil_twu_props
 from ._separator import sg_evolved_gas, sg_st_gas, sgg_wt_avg, oil_rs_st
 from ._density import oil_deno
-from ._correlations import oil_pbub, oil_rs_bub, oil_rs, oil_bo, oil_viso
+from ._correlations import oil_pbub, oil_rs_bub, oil_rs, oil_bo, oil_viso, check_velarde_range
 from ._compressibility import oil_co, oil_bt
 from ._rate import oil_rate_radial, oil_rate_linear
 from ._harmonize import oil_harmonize, oil_harmonize_pb_rsb

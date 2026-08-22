@@ -106,6 +106,38 @@ def test_co2_brine_saturated_compressibility():
     assert mix.Cf_sat is not None, "Cf_sat should be calculated when cw_sat=True"
     assert mix.Cf_sat > 0, f"Saturated compressibility should be positive, got {mix.Cf_sat}"
 
+def test_co2_brine_cw_sat_no_state_leak():
+    """cw_sat pre-pass must not leave stale state behind in the real solve.
+
+    The cw_sat=True path solves once at pBar + 0.5 first. That pre-pass can flip
+    the CO2-rich root class and leave the repeat flag set, which used to make the
+    real solve skip its K-value/mixing-rule/cubic block and reuse a stale molar
+    volume (74.65 instead of 167.73 cm3/mol at 72 bar / 32.35 degC).
+    """
+    plain = brine.CO2_Brine_Mixture(pres=72.0, temp=32.35, ppm=0, metric=True)
+    with_cw = brine.CO2_Brine_Mixture(pres=72.0, temp=32.35, ppm=0, metric=True,
+                                      cw_sat=True)
+    assert abs(with_cw.MolarVol / plain.MolarVol - 1) < 1e-9, \
+        f"MolarVol differs: cw_sat={with_cw.MolarVol}, plain={plain.MolarVol}"
+    assert abs(with_cw.y[1] / plain.y[1] - 1) < 1e-9, \
+        f"Gas water content differs: cw_sat={with_cw.y[1]}, plain={plain.y[1]}"
+    assert abs(with_cw.x[0] / plain.x[0] - 1) < 1e-9, \
+        f"xCO2 differs: cw_sat={with_cw.x[0]}, plain={plain.x[0]}"
+
+def test_co2_brine_liquid_root_kvalues_consistent():
+    """Below 31 degC and above CO2 Psat the liquid-CO2 K-value set must be used.
+
+    K_CO2 is evaluated before the cubic that decides the root class, so the block
+    has to repeat once the cubic reports liquid CO2. Without that repeat the
+    liquid K0 set (Spycher & Pruess 2010 Table 2, footnote b) is unreachable.
+    """
+    mix = brine.CO2_Brine_Mixture(pres=50, temp=12, ppm=0, metric=True)
+    assert mix.CO2_sat is True, "Liquid CO2 expected at 50 bar / 12 degC"
+    assert mix.MolarVol < 100, \
+        f"Liquid CO2 molar volume expected, got {mix.MolarVol} cm3/gmol"
+    assert 0 < mix.y[1] < 0.01, f"Gas water content {mix.y[1]} outside range"
+    assert 0 < mix.x[0] < 0.05, f"xCO2 {mix.x[0]} outside range"
+
 def test_co2_brine_converged_flag():
     """Converged flag should be True for well-behaved inputs"""
     mix = brine.CO2_Brine_Mixture(pres=200, temp=80, ppm=0, metric=True)

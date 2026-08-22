@@ -15,7 +15,7 @@ if _RUST_AVAILABLE:
     from pyrestoolbox import _native as _rust
 
 from ._constants import (
-    _API_NUMER, _API_DENOM, _COFB_C, _COFB_A0, _COFB_A1, _COFB_A2,
+    _API_NUMER, _API_DENOM, _COFB_C, _COFB_A0, _COFB_A1, _COFB_A2, _COFB_RSB_MIN,
     _SWMH_RHOPO_INIT, _SWMH_RHOPO_RS, _SWMH_RHOA,
     _SWMH_MASS_NUMER_OIL, _SWMH_MASS_DENOM,
     _SWMH_SG_RHOA_A, _SWMH_SG_RHOA_B, _SWMH_SG_RHOA_C, _SWMH_SG_RHOA_D,
@@ -26,7 +26,12 @@ from ._utils import check_sgs, oil_sg
 
 
 def _cofb_mccain(api, sg_sp, pb, p, rsb, degf):
-    """McCain Eq 3.13 cofb polynomial for undersaturated oil compressibility."""
+    """McCain Eq 3.13 cofb polynomial for undersaturated oil compressibility.
+
+    Rsb is floored at _COFB_RSB_MIN: the polynomial is unbounded as rsb -> 0 and
+    infinite at zero GOR, which is an ordinary state for a dead oil.
+    """
+    rsb = max(rsb, _COFB_RSB_MIN)
     var = [
         np.log(api), np.log(sg_sp), np.log(pb),
         np.log(p / pb), np.log(rsb), np.log(degf),
@@ -64,6 +69,13 @@ def oil_deno(
         denomethod: A string or deno_method Enum class that specifies one of following calculation choices;
                    SWMH: Standing, Witte, McCain-Hill (1995) - Default
         metric: If True, input/output in Eclipse METRIC units (barsa, degC, sm3/sm3, kg/m3). Defaults to False (FIELD)
+
+        Low pressure: valid down to standard pressure (14.696 psia). At that
+        floor with rs = 0 the SWMH temperature term does the anchoring on its
+        own - 35 API at 200 degF returns 49.37 lb/cuft against 49.69 for the
+        stock-tank density thermally expanded from 60 degF, so no separate
+        atmospheric pin is applied. Pressures below 14.696 psia are outside the
+        correlation and are not clamped.
     """
     if metric:
         p = p * BAR_TO_PSI

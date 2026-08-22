@@ -4,10 +4,16 @@
 //! (above Pb) plus Bo_mccain.
 
 const TSC: f64 = 60.0; // Standard temperature (deg F)
+const COFB_RSB_MIN: f64 = 1.0; // Lower Rsb bound for the cofb polynomial (scf/stb)
 
 // ─── Below-Pb density: Standing-Witte-McCain-Hill (1995) ────────────
 
 /// Iterative pseudo-liquid density calculation.
+///
+/// Valid down to standard pressure (14.696 psia): at that floor with rs = 0 the
+/// temperature term anchors the result to the thermally expanded stock-tank
+/// density on its own (49.37 vs 49.69 lb/cuft at 35 API, 200 degF), so no
+/// atmospheric pin is applied. Below 14.696 psia is outside the correlation.
 ///
 /// When `sg_sp > 0`, uses the iterative Eq 3.18b/3.18c approach.
 /// When `sg_sp <= 0`, falls back to the apparent-density approach using `sg_g` and `api`.
@@ -101,7 +107,10 @@ pub fn deno_above_pb(
     let ln_pb = if pb > 0.0 { pb.ln() } else { 0.0 };
     let p_over_pb = if pb > 0.0 { p / pb } else { 1.0 };
     let ln_p_ratio = if p_over_pb > 0.0 { p_over_pb.ln() } else { 0.0 };
-    let ln_rsb = if rsb > 0.0 { rsb.ln() } else { 0.0 };
+    // cofb is unbounded as rsb -> 0 (9.4e-06 1/psi at 1 scf/stb, 3.3e-05 at 0.1,
+    // infinite at zero GOR), so evaluate the ln(rsb) term at a floor of
+    // COFB_RSB_MIN. Must match _COFB_RSB_MIN in pyrestoolbox/oil/_constants.py.
+    let ln_rsb = rsb.max(COFB_RSB_MIN).ln();
     let ln_degf = if degf > 0.0 { degf.ln() } else { 0.0 };
 
     let var: [f64; 6] = [ln_api, ln_sgsp, ln_pb, ln_p_ratio, ln_rsb, ln_degf];

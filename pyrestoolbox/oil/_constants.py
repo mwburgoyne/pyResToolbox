@@ -102,6 +102,11 @@ _COFB_C = [
 _COFB_A0 = 2.434     # Intercept in ln(cofb) polynomial
 _COFB_A1 = 0.475     # Linear coefficient
 _COFB_A2 = 0.048     # Quadratic coefficient
+# Lower Rsb bound for the cofb polynomial. cofb is unbounded as rsb -> 0
+# (9.4e-06 1/psi at 1 scf/stb, 3.3e-05 at 0.1, inf at 0), so the ln(rsb) term is
+# evaluated at this floor for lower GOR. Mirrors the rsb <= 1 convention already
+# used by pbub_valko_mccain. Must match _COFB_RSB_MIN in src/oil/density.rs.
+_COFB_RSB_MIN = 1.0  # scf/stb
 
 # sg_evolved_gas — McCain & Hill (1995, SPE 30773)
 _SGEVOL_THRESHOLD = 314.7  # Pressure threshold between high/low correlations

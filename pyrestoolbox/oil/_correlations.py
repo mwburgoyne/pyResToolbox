@@ -27,6 +27,46 @@ from ._utils import check_sgs, get_real_part, oil_api
 from ._density import oil_deno, _cofb_mccain
 
 
+def velarde_a_coeffs(api, degf, sg_sp, pb):
+    """Velarde, Blasingame & McCain (1997) Eq 3 coefficients a0, a1, a2.
+
+    Isolated because a0 also serves as the correlation's range test - see
+    check_velarde_range.
+    """
+    return [
+        x[0] * sg_sp ** x[1] * api ** x[2] * degf ** x[3] * (pb - psc) ** x[4]
+        for x in (_VEL_RS_A, _VEL_RS_B, _VEL_RS_C)
+    ]
+
+
+def check_velarde_range(api, degf, sg_sp, pb, context="oil_rs"):
+    """Raise if the Velarde Rs correlation cannot represent this fluid.
+
+    Rsr = a0*pr**a1 + (1-a0)*pr**a2 is a weighted pair of power laws that is
+    only a blend while 0 <= a0 <= 1. a0 grows with Pb, separator gas gravity
+    and API (exponents 1.056, 1.673 and 0.930), and once it passes 1 the second
+    term turns negative and, being the lower power, dominates as pr falls - so
+    Rs goes negative over the lower part of the pressure range and only recovers
+    near Pb, where Rsr is pinned to 1 by construction. A 72,900-case sweep over
+    sg_sp 0.55-1.10, API 10-58, 70-330 degF and Pb 100-8000 psia found the
+    condition exact: every a0 > 1 case is non-physical and no a0 <= 1 case is.
+
+    There is no valid continuation to return - clamping Rsr at zero fabricates a
+    dead oil over most of the range - so this raises, matching oil_rs_bub's
+    treatment of a Pb beyond the Valko-McCain inversion.
+    """
+    a0 = velarde_a_coeffs(api, degf, sg_sp, pb)[0]
+    if a0 > 1:
+        raise ValueError(
+            f"{context}: the Velarde, Blasingame & McCain Rs correlation is out of "
+            f"range for api={api:.1f}, degf={degf:.1f}, sg_sp={sg_sp:.3f}, "
+            f"pb={pb:.1f} psia (leading coefficient a0={a0:.3f} exceeds 1), and "
+            "would return negative Rs below Pb. This corner is rich separator gas "
+            "with light oil at high Pb. Use rsmethod='STAN' instead - Valko-McCain "
+            "has its own Pb ceiling that covers most of the same corner."
+        )
+
+
 def oil_pbub(
     api: float,
     degf: float,
@@ -224,7 +264,9 @@ def oil_rs_bub(
                 f"oil_rs_bub: requested pb={pb:.1f} psia exceeds the maximum Pb "
                 f"(~{pb_max:.0f} psia) representable by the Valko-McCain correlation "
                 f"for api={api}, sg_sp={sg_sp}, degf={degf}. "
-                "Use a different rsmethod (e.g. VELAR) or revise the fluid properties."
+                "Use rsmethod='STAN' or revise the fluid properties. Velarde is "
+                "usually no help here - it goes out of range over much of the same "
+                "high-Pb, rich-separator-gas corner."
             )
         rsb = float(np.exp(min(branch)))
 
@@ -297,6 +339,10 @@ def oil_rs(
                    VALMC: Valko-McCain Correlation (2003) - https://www.sciencedirect.com/science/article/abs/pii/S0920410502003194
                    VELAR: Velarde, Blasingame & McCain (1997) - Default
         metric: If True, input/output in Eclipse METRIC units (barsa, degC, sm3/sm3). Defaults to False (FIELD)
+
+        Raises ValueError with rsmethod='VELAR' when the fluid is outside the
+        Velarde range (rich separator gas with light oil at high Pb), where the
+        correlation returns negative Rs below Pb. See check_velarde_range.
     """
     if metric:
         degf = degc_to_degf(degf)
@@ -351,15 +397,8 @@ def oil_rs(
         # Skip the correlation; the 0/0 in pr would otherwise return NaN silently.
         if pb - psc <= 0:
             return 0.0
-        xs = [_VEL_RS_A, _VEL_RS_B, _VEL_RS_C]
-        a = [
-            x[0]
-            * sg_sp ** x[1]
-            * api ** x[2]
-            * degf ** x[3]
-            * (pb - psc) ** x[4]
-            for x in xs
-        ]
+        check_velarde_range(api, degf, sg_sp, pb)
+        a = velarde_a_coeffs(api, degf, sg_sp, pb)
         pr = (p - psc) / (pb - psc)
         rsr = a[0] * pr ** a[1] + (1 - a[0]) * pr ** a[2] # Eq 3 from Velarde & Blasingame
         rs = rsb * rsr

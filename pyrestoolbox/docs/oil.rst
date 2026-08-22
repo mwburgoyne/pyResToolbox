@@ -44,7 +44,7 @@ pyResToolBox uses class objects to track calculation options through the functio
      - Method for calculating solution gas-oil ratio. Defaults to 'VELAR'
        Options are:
 
-       + 'VELAR': Velarde, Blasingame & McCain (1999)
+       + 'VELAR': Velarde, Blasingame & McCain (1999). Raises ValueError for high-Pb rich-separator-gas fluids (see ``oil_rs``)
        + 'STAN': Standing Correlation (1947)
        + 'VALMC': Valko-McCain Correlation (2003) - Only for oil_rs_bub (Rs at Pb)
    * - comethod
@@ -483,6 +483,8 @@ pyrestoolbox.oil.oil_rs
     oil_rs(api, degf, sg_sp, p, pb =0, rsb =0, rsmethod='VELAR', pbmethod='VALMC', metric = False) -> float
 
 Returns solution gas oil ratio (scf/stb, or sm3/sm3 if metric=True) calculated with different correlations. Either pb, rsb or both need to be specified. If one is missing, the other will be calculated from correlation
+
+With ``rsmethod='VELAR'`` this raises ``ValueError`` when the fluid falls outside the Velarde correlation's range. The correlation's leading coefficient grows with Pb, separator gas gravity and API, and once it passes 1 the correlation returns negative Rs over the lower part of the pressure range. The affected corner is rich separator gas with a light oil at a high bubble point, and the boundary falls as temperature rises: Pb above about 5900 psia at 100 degF or 4600 psia at 300 degF for sg_sp 1.0 with 45 API, and above about 9500 psia at 100 degF or 7300 psia at 300 degF for sg_sp 0.85 with 35 API. Use ``rsmethod='STAN'`` for those fluids - ``'VALMC'`` usually refuses the same corner, because its bubble point inversion has a ceiling that overlaps it.
 
 .. list-table:: Inputs
    :widths: 10 15 40

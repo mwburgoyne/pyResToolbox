@@ -54,4 +54,6 @@ benchmark_*.py
 zstar_*
 pyresToolbox_rust_acceleration_instructions.md
 pyrestoolbox-mcp-email.txt
+DEFECTS-FOUND-*.md
+PORT-SPEC-*.md
 *.zip

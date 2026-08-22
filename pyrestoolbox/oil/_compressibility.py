@@ -226,9 +226,15 @@ def oil_co(
         elif p <= pb and p_hi > pb:
             p_hi = p  # backward difference on the saturated branch
 
+        # Both clamps can fire together at p == pb == psc (a dead oil tabulated
+        # down to standard pressure): p_lo is held at psc and p_hi at pb, so no
+        # stencil is left. Step forward into the undersaturated branch instead -
+        # Bo is continuous at Pb, so this is the compressibility of the same oil
+        # just above Pb, not a fabricated zero.
         span = p_hi - p_lo
         if span < 1e-10:
-            span = dp  # fallback for degenerate cases
+            p_hi = p + dp
+            span = dp
 
         dbodp = (calc_bo_at_p(p_hi) - calc_bo_at_p(p_lo)) / span
         bo = calc_bo_at_p(p)

@@ -4,7 +4,6 @@
   "pyrestoolbox/brine/_lib_vle_engine.py::SWMultiComponentFlash.calc_equilibrium": 24,
   "pyrestoolbox/brine/_lib_vle_engine.py::calc_gas_brine_equilibrium": 29,
   "pyrestoolbox/brine/brine.py::CO2_Brine_Mixture.__init__": 18,
-  "pyrestoolbox/brine/brine.py::CO2_Brine_Mixture.co2BrineSolubility": 18,
   "pyrestoolbox/brine/brine.py::SoreideWhitson.__init__": 28,
   "pyrestoolbox/brine/brine.py::SoreideWhitson._calc_properties": 19,
   "pyrestoolbox/brine/brine.py::brine_props": 19,

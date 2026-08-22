@@ -902,6 +902,24 @@ def test_fbhp_oil_vis_frac():
         f"Higher vis_frac should increase BHP: base={bhp_base}, high={bhp_high}"
 
 
+def test_vlp_oil_velarde_out_of_range_raises():
+    """A rich-gas high-Pb oil must be refused before the march, not marched with
+    a negative Rs. The Rust marches cannot raise from inside the segment loop -
+    they return NaN - so the guard sits in _prepare_flow_inputs and this test
+    must hold on both paths."""
+    params = dict(_OIL_PARAMS, pb=6000, rsb=4700, sgsp=1.0, api=45)
+    for method in ('HB', 'WG', 'GRAY', 'BB'):
+        with pytest.raises(ValueError, match='out of range'):
+            fbhp(vlpmethod=method, **params)
+
+
+def test_vlp_oil_velarde_in_range_unaffected():
+    """The guard must not touch ordinary oil VLPs."""
+    for method in ('HB', 'WG', 'GRAY', 'BB'):
+        bhp = fbhp(vlpmethod=method, **_OIL_PARAMS)
+        assert bhp > 200, f"{method} BHP {bhp} should exceed THP 200"
+
+
 if __name__ == '__main__':
     import traceback
     tests = [(k, v) for k, v in list(globals().items()) if k.startswith('test_') and callable(v)]

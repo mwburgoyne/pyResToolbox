@@ -18,6 +18,9 @@ const CEL2KEL: f64 = 273.15;      // degK at 0 degC
 const CONMOLA: f64 = 1000.0 / MWWAT; // Moles in 1000 kg water (molality conversion)
 const BAR2PSI: f64 = 14.5037738;
 const EPS: f64 = 1e-8;
+// Maximum passes over the K-value/mixing-rule/cubic block. Must match
+// _CO2_SAT_MAX_PASSES in pyrestoolbox/brine/brine.py.
+const CO2_SAT_MAX_PASSES: usize = 5;
 
 // ---- Helper: polynomial evaluator  sum(x[i] * t^i) --------------------
 #[inline]
@@ -567,13 +570,13 @@ fn cardano_all_roots(c2: f64, c1: f64, c0: f64) -> Vec<f64> {
 // Main entry point: co2_brine_solubility
 //
 // Inputs:  p_bar (bar), deg_c (Celsius), ppm (weight NaCl per 1e6 weight brine)
-// Returns: (x_co2, y_co2, y_h2o, rho_gas [g/cm3], gas_z)
+// Returns: (x_co2, y_co2, y_h2o, rho_gas [g/cm3], gas_z, converged, co2_sat)
 // =========================================================================
 pub fn co2_brine_solubility(
     p_bar: f64,
     deg_c: f64,
     ppm: f64,
-) -> (f64, f64, f64, f64, f64, bool) {
+) -> (f64, f64, f64, f64, f64, bool, bool) {
     let mut s = SpState::new(p_bar, deg_c, ppm);
 
     // Clamp pressure floor
@@ -621,11 +624,14 @@ pub fn co2_brine_solubility(
     // K_H2O first (outside the repeat loop)
     s.k_h2o();
 
-    // The "repeat" loop from the Python code: body always executes exactly once.
-    // cubicSolver tracks whether co2_sat state changed (the `repeat` flag), but
-    // the Python while-loop structure causes the body to run only once regardless.
-    // If co2_sat changed, the flag is noted but does not cause re-execution.
-    {
+    // k_co2 needs to know whether the CO2-rich phase is gas or liquid CO2, but
+    // that is only settled by the cubic below, which reports a root-class change
+    // through molar_volume(). Repeat the block until the assumption it was
+    // evaluated under is the one the cubic returns. Mirrors co2BrineSolubility
+    // in brine.py; CO2_SAT_MAX_PASSES must match _CO2_SAT_MAX_PASSES there. On
+    // exhaustion the last solution is used, as on the Python path (which also
+    // warns - this path cannot).
+    for _pass in 0..CO2_SAT_MAX_PASSES {
         // K_CO2
         s.k_co2();
 
@@ -645,7 +651,10 @@ pub fn co2_brine_solubility(
         s.b_mix_rk();
 
         // Solve cubic for molar volume (may update co2_sat state)
-        let _repeat = s.molar_volume();
+        let repeat = s.molar_volume();
+        if !repeat {
+            break; // Root class matched the assumption - converged
+        }
     }
 
     // Fugacity coefficients * pressure
@@ -738,7 +747,7 @@ pub fn co2_brine_solubility(
     let rho_gas = mw_gas / s.molar_vol;
     let gas_z = s.molar_vol * s.p_rt;
 
-    (s.x[0], s.y[0], s.y[1], rho_gas, gas_z, converged)
+    (s.x[0], s.y[0], s.y[1], rho_gas, gas_z, converged, s.co2_sat)
 }
 
 // =========================================================================
@@ -773,7 +782,7 @@ mod tests {
     #[test]
     fn test_low_temp_basic() {
         // 100 bar, 50 degC, 0 ppm -- should produce reasonable xCO2
-        let (x_co2, y_co2, y_h2o, rho_gas, gas_z, _converged) = co2_brine_solubility(100.0, 50.0, 0.0);
+        let (x_co2, y_co2, y_h2o, rho_gas, gas_z, _converged, _co2_sat) = co2_brine_solubility(100.0, 50.0, 0.0);
         assert!(x_co2 > 0.0 && x_co2 < 0.1, "xCO2 out of range: {}", x_co2);
         assert!(y_co2 > 0.9 && y_co2 <= 1.0, "yCO2 out of range: {}", y_co2);
         assert!((0.0..0.1).contains(&y_h2o), "yH2O out of range: {}", y_h2o);
@@ -784,7 +793,7 @@ mod tests {
     #[test]
     fn test_high_temp() {
         // 200 bar, 150 degC, 30000 ppm
-        let (x_co2, y_co2, y_h2o, rho_gas, gas_z, _converged) = co2_brine_solubility(200.0, 150.0, 30000.0);
+        let (x_co2, y_co2, y_h2o, rho_gas, gas_z, _converged, _co2_sat) = co2_brine_solubility(200.0, 150.0, 30000.0);
         assert!(x_co2 > 0.0 && x_co2 < 0.1, "xCO2 out of range: {}", x_co2);
         assert!(y_co2 > 0.5 && y_co2 <= 1.0, "yCO2 out of range: {}", y_co2);
         assert!(y_h2o > 0.0, "yH2O should be > 0 at high temp: {}", y_h2o);
@@ -795,7 +804,7 @@ mod tests {
     #[test]
     fn test_scaled_range() {
         // 150 bar, 105 degC, 10000 ppm -- falls in blended range
-        let (x_co2, y_co2, y_h2o, rho_gas, gas_z, _converged) = co2_brine_solubility(150.0, 105.0, 10000.0);
+        let (x_co2, y_co2, y_h2o, rho_gas, gas_z, _converged, _co2_sat) = co2_brine_solubility(150.0, 105.0, 10000.0);
         assert!(x_co2 > 0.0 && x_co2 < 0.1, "xCO2 out of range: {}", x_co2);
         assert!(y_co2 > 0.5, "yCO2 should be dominant: {}", y_co2);
         assert!(y_h2o >= 0.0, "yH2O must be non-negative: {}", y_h2o);

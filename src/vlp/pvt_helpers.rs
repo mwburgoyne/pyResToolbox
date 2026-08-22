@@ -107,6 +107,12 @@ pub fn standing_rs(gsg: f64, press_psia: f64, temp_f: f64, api: f64) -> f64 {
 }
 
 /// Velarde (1997) solution GOR vs pressure (scf/STB).
+///
+/// No range check here: `a1 > 1` makes this return negative Rs below Pb (rich
+/// separator gas with light oil at high Pb). The march cannot raise from inside
+/// the loop, so `check_velarde_range` gates it once in `_prepare_flow_inputs`
+/// before any fbhp call reaches this crate. Keep that guard if a new entry point
+/// is added.
 pub fn velarde_rs(sgsp: f64, api: f64, temp_f: f64, pb: f64, rsb: f64, press_psia: f64) -> f64 {
     if press_psia >= pb {
         return rsb;
