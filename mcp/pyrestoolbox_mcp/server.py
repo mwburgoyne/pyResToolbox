@@ -46,6 +46,13 @@ mcp = FastMCP(
         "recommend_methods(...) if unsure which correlation method suits a "
         "fluid. All inputs default to oilfield units (psia, deg F, ft, mD, "
         "cP); pass metric=True for Eclipse METRIC units where supported. "
+        "IMPORTANT: parameter NAMES keep their oilfield spelling under "
+        "metric=True. `degf` then takes deg C, `p`/`pr`/`pwf` take barsa, and "
+        "lengths take m; the docstring unit notation `(deg F | deg C)` gives "
+        "the field value first and the metric value second. Passing a "
+        "Fahrenheit value to `degf` with metric=True converts it twice and "
+        "returns a wrong answer silently. Standard volumes are always at "
+        "60 deg F and 14.696 psia, so metric sm3 is on that basis. "
         "Full module documentation is available as docs:// resources."
     ),
 )
@@ -104,6 +111,11 @@ def describe(name: str) -> str:
 
     name is 'module.function', e.g. 'gas.gas_z' or 'dca.fit_decline'.
     Also see the docs://<module> resources for worked examples.
+
+    Units live in the docstring, not the signature, which is why annotations
+    are stripped below. A parameter documented `(deg F | deg C)` takes the
+    first under the default and the second when metric=True; the parameter
+    name itself never changes.
     """
     _, obj = _resolve(name)
     target = obj.__init__ if inspect.isclass(obj) else obj
@@ -128,6 +140,10 @@ def call(name: str, arguments: dict = {}) -> dict:
 
     name is 'module.function', e.g. 'gas.gas_z'. arguments is a JSON object
     of keyword arguments, e.g. {"p": 2000, "sg": 0.75, "degf": 200}.
+    That example is oilfield units. With {"metric": true} the same keys take
+    metric values, so `degf` would be deg C and `p` barsa; the names do not
+    change. Call describe(name) first and read its unit notation: `(deg F |
+    deg C)` means field first, metric second.
     Correlation methods are strings (e.g. "zmethod": "DAK"); an invalid
     method string returns an error listing the valid options. Gas and brine
     functions accept lists for pressure-like inputs; oil functions are

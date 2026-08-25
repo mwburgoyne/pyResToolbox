@@ -347,12 +347,12 @@ def gas_rate_radial(
 ) -> np.ndarray:
     """ Returns gas rate for radial flow (mscf/day) using Darcy pseudo steady state equation & gas pseudopressure
         k: Permeability (mD)
-        h: Net flow height (ft)
-        pr: Reservoir pressure (psia)
-        pwf: BHFP (psia)
-        r_w: Wellbore Radius (ft)
-        r_ext: External Reservoir Radius (ft)
-        degf: Reservoir Temperature (deg F)
+        h: Net flow height (ft | m)
+        pr: Reservoir pressure (psia | barsa)
+        pwf: BHFP (psia | barsa)
+        r_w: Wellbore Radius (ft | m)
+        r_ext: External Reservoir Radius (ft | m)
+        degf: Reservoir Temperature (deg F | deg C)
         zmethod: Method for calculating Z-Factor
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
@@ -433,10 +433,10 @@ def gas_rate_linear(
 ) -> np.ndarray:
     """ Returns gas rate for linear flow (mscf/day) using Darcy steady state equation & gas pseudopressure
         k: Permeability (mD)
-        pr: Reservoir pressure (psia)
-        pwf: BHFP (psia)
-        area: Net cross sectional area perpendicular to direction of flow (ft2).
-        length: Length over which flow takes place (ft)
+        pr: Reservoir pressure (psia | barsa)
+        pwf: BHFP (psia | barsa)
+        area: Net cross sectional area perpendicular to direction of flow (ft2 | m2).
+        length: Length over which flow takes place (ft | m)
         zmethod: Method for calculating Z-Factor
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
@@ -448,7 +448,7 @@ def gas_rate_linear(
                'BNS' for Burgoyne, Nielsen and Stanko method (2025). If h2 > 0, then 'BNS' will be used
                Defaults to 'PMC' if not specified
                 sg: Gas SG relative to air, Defaults to 0.75 if not specified
-        degf: Reservoir Temperature (deg F).
+        degf: Reservoir Temperature (deg F | deg C).
         co2: Molar fraction of CO2. Defaults to zero if not specified
         h2s: Molar fraction of H2S. Defaults to zero if not specified
         n2: Molar fraction of Nitrogen. Defaults to zero if not specified
@@ -1111,9 +1111,9 @@ def gas_ug(
         Uses Lee, Gonzalez & Eakin (1966) Correlation using equations 2.14-2.17 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
         Except if 'BNS' Z-Factor method chosen, in which case tuned LBC viscosity model will be used instead
 
-          p: Gas pressure (psia)
+          p: Gas pressure (psia | barsa)
           sg: Gas SG relative to air
-          degf: Reservoir Temperature (deg F).
+          degf: Reservoir Temperature (deg F | deg C).
           zmethod: Method for calculating Z-Factor
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                    'HY' Hall & Yarborough (1973)
@@ -1129,7 +1129,7 @@ def gas_ug(
           n2: Molar fraction of Nitrogen. Defaults to zero if undefined
           h2: Molar fraction of Hydrogen. Defaults to zero if undefined
           tc: Critical gas temperature (deg R). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
-          pc: Critical gas pressure (psia). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
+          pc: Critical gas pressure (psia | barsa). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
           zee: Gas Z-Factor. If undefined, will trigger Z-Factor calculation.
           ugz: Boolean flag that if True returns ugZ instead of ug
           metric: If True, input/output in Eclipse METRIC units (barsa, degC). Defaults to False (FIELD)
@@ -1430,15 +1430,15 @@ def gas_cg(
     """ Returns gas compressibility (1/psi) using the 'DAK' Dranchuk & Abou-Kassem (1975) Z-Factor &
         Critical property correlation values if not explicitly specified
         If h2 > 0, will use the 'BNS' Z-Factor method
-        p: Gas pressure (psia)
+        p: Gas pressure (psia | barsa)
         sg: Gas SG relative to air
-        degf: Gas Temperature (deg F)
+        degf: Gas Temperature (deg F | deg C)
         co2: Molar fraction of CO2. Defaults to zero if undefined
         h2s: Molar fraction of H2S. Defaults to zero if undefined
         n2: Molar fraction of Nitrogen. Defaults to zero if undefined
         h2: Molar fraction of Hydrogen. Defaults to zero if undefined
         tc: Critical gas temperature (deg R). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
-        pc: Critical gas pressure (psia). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
+        pc: Critical gas pressure (psia | barsa). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
         zmethod: Method for calculating Z-Factor
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                    'HY' Hall & Yarborough (1973)
@@ -1488,9 +1488,9 @@ def gas_bg(
     metric: bool = False,
 ) -> np.ndarray:
     """ Returns Bg (gas formation volume factor) for natural gas (rcf/scf)
-        p: Gas pressure (psia)
+        p: Gas pressure (psia | barsa)
         sg: Gas SG relative to air
-        degf: Reservoir Temperature (deg F)
+        degf: Reservoir Temperature (deg F | deg C)
         zmethod: Method for calculating Z-Factor
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
@@ -1536,9 +1536,9 @@ def gas_den(
     metric: bool = False,
 ) -> np.ndarray:
     """ Returns gas density for natural gas (lb/cuft)
-          p: Gas pressure (psia)
+          p: Gas pressure (psia | barsa)
           sg: Gas SG relative to air
-          degf: Reservoir Temperature (deg F)
+          degf: Reservoir Temperature (deg F | deg C)
           zmethod: Method for calculating Z-Factor
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                    'HY' Hall & Yarborough (1973)
@@ -1598,9 +1598,9 @@ def gas_ponz2p(
 ) -> np.ndarray:
     """ Returns pressure corresponding to a P/Z value for natural gas (psia)
         Calculated through iterative solution method
-        poverz: Gas pressure / Z-Factor (psia)
+        poverz: Gas pressure / Z-Factor (psia | barsa)
         sg: Gas SG relative to air
-        degf: Reservoir Temperature (deg F).
+        degf: Reservoir Temperature (deg F | deg C).
         zmethod: Method for calculating Z-Factor
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
@@ -1616,7 +1616,7 @@ def gas_ponz2p(
           n2: Molar fraction of Nitrogen. Defaults to zero if undefined
           h2: Molar fraction of Hydrogen. Defaults to zero if undefined
           tc: Critical gas temperature (deg R). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
-          pc: Critical gas pressure (psia). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
+          pc: Critical gas pressure (psia | barsa). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
           rtol: Relative solution tolerance. Will iterate until abs[(p - poverz * Z)/p] < rtol
           metric: If True, input/output in Eclipse METRIC units (barsa, degC). Defaults to False (FIELD)
     """
@@ -1703,9 +1703,9 @@ def gas_grad2sg(
         Calculated through iterative solution method. Bisection bounds span pure H2 (SG ~0.070) to 3.0 to
         accommodate H2-blend and CO2-rich compositions; results outside this range will fail.
 
-        grad: Observed gas gradient (psi/ft)
-        p: Pressure at observation (psia)
-        degf: Reservoir Temperature (deg F). Defaults to False if undefined
+        grad: Observed gas gradient (psi/ft | bar/m)
+        p: Pressure at observation (psia | barsa)
+        degf: Reservoir Temperature (deg F | deg C). Defaults to False if undefined
         zmethod: Method for calculating Z-Factor
                  'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
                  'HY' Hall & Yarborough (1973)
@@ -1721,7 +1721,7 @@ def gas_grad2sg(
           n2: Molar fraction of Nitrogen. Defaults to zero if undefined
           h2: Molar fraction of Hydrogen. Defaults to zero if undefined
           tc: Critical gas temperature (deg R). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
-          pc: Critical gas pressure (psia). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
+          pc: Critical gas pressure (psia | barsa). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
           rtol: Relative solution tolerance. Will iterate until abs[(grad - calculation)/grad] < rtol
           metric: If True, input/output in Eclipse METRIC units (bar/m, barsa, degC). Defaults to False (FIELD)
     """
@@ -1770,9 +1770,9 @@ def gas_dmp(
 ) -> float:
     """ Numerical integration of real-gas pseudopressure between two pressures
         Returns integral over range between p1 to p2 (psi**2/cP)
-        p1: Starting (lower) pressure (psia)
-        p2: Ending (upper) pressure (psia)
-        degf: Gas Temperature (deg F)
+        p1: Starting (lower) pressure (psia | barsa)
+        p2: Ending (upper) pressure (psia | barsa)
+        degf: Gas Temperature (deg F | deg C)
         sg: Specific gravity of  gas (relative to air)
         zmethod: Method for calculating Z-Factor
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
