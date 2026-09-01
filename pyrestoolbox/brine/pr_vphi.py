@@ -107,12 +107,12 @@ _SW_NAME = {'NC4H10': 'nC4H10'}
 # measurements only by `fit_pr_vshift.py`. Regenerate with that script if any
 # calibration point changes; the values below are pinned in validation.py.
 VSHIFT = {
-    'CH4':  -0.109632,
-    'CO2':  -0.037913,
-    'H2S':  -0.078975,
-    'N2':   -0.176510,
-    'H2':   -0.177625,
-    'C2H6': -0.073142,
+    'CH4':  -0.111430,
+    'CO2':  -0.038965,
+    'H2S':  -0.079740,
+    'N2':   -0.176768,
+    'H2':   -0.178503,
+    'C2H6': -0.073843,
     # C3H8 added 2026-07-25. NOT fitted to a densimetric data set, because none
     # exists for propane in water. Set from the only two direct 298 K
     # determinations available, Moore (1982) 70.7 and Zhou & Battino (2001)
@@ -120,7 +120,7 @@ VSHIFT = {
     # is their mean, giving V_phi = 72.85 at 298 K. Those two disagree by 6.1%,
     # which is the honest uncertainty on this gas and is far wider than for any
     # other. It replaces a fallback that sat BELOW both of them (66.99).
-    'C3H8': -0.112963,
+    'C3H8': -0.113326,
     # NC4H10 added 2026-07-25 from Moore (1982) Table I, 76.6 +/- 0.1 cm3/mol
     # (2 runs; his stated overall imprecision is +/-1.5). Two oddities that
     # should not be smoothed over: the shift is POSITIVE, alone among the
@@ -128,7 +128,7 @@ VSHIFT = {
     # run +18.4, +17.8, then +5.9). Adopted because it is the only direct
     # measurement of this quantity, but it is a single lab and two runs, and
     # C4 sits outside the five-gas validated scope.
-    'NC4H10': +0.110924,
+    'NC4H10': +0.110920,
 }
 
 # Gases whose shift rests on 298 K data alone, so their temperature behaviour is
@@ -213,10 +213,12 @@ def V2_inf_raw(gas, T, P, m_nacl=0.0):
     # Switched from finite differences 2026-07-31; the difference evaluation
     # agrees to 4e-5 cm3/mol, its truncation error.
     v = v_water_liquid(T, P, m_nacl)
-    # Pinned to the 'mc3' kij_AQ set, which is what the VSHIFT values below were
-    # fitted against. This must not follow the library's default framework: the
-    # shift and the kij are one calibration and cannot be mixed across sets.
-    kij = _SW.get_kij_aq(_SW_NAME.get(gas, gas), T, m_nacl, framework='mc3')
+    # Pinned to the 'default' kij_AQ set (the published S&W-refresh
+    # recommendation), which is what the VSHIFT values below are fitted
+    # against since 2026-09-01. The pin stays explicit even while it matches
+    # the library default: the shift and the kij are one calibration and must
+    # not silently follow a future default move.
+    kij = _SW.get_kij_aq(_SW_NAME.get(gas, gas), T, m_nacl, framework='default')
     a1, b1 = _ab('H2O', T, m_nacl)
     a2, b2 = _ab(gas, T)
     a12 = np.sqrt(a1 * a2) * (1.0 - kij)

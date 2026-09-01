@@ -570,11 +570,11 @@ def test_doc_sw_co2_freshwater_cw_sat():
     """brine.rst: SoreideWhitson pure CO2 freshwater with Cf_sat"""
     mix = brine.SoreideWhitson(pres=175, temp=85, ppm=0, y_CO2=1.0, metric=True, cw_sat=True)
     assert abs(mix.Rs_total - 24.906989289860665) / 24.906989289860665 < RTOL
-    # Re-pinned 2026-08-19 (was 0.00015823417319616538, and
-    # 0.00016012590421810821 before the 2026-07-25 V_phi route change): published
-    # framework is now the default. Cf_sat is a difference of two densities, so
-    # it amplifies whatever moves the density.
-    assert abs(mix.Cf_sat - 0.0001619153778313409) / 0.0001619153778313409 < RTOL
+    # Re-pinned 2026-09-01 for the default-framework VSHIFT refit (was
+    # 0.0001619153778313409 under the mc3-calibrated shifts, 2026-08-19;
+    # 0.00015823417319616538 and 0.00016012590421810821 before that). Cf_sat is
+    # a difference of two densities, so it amplifies whatever moves the density.
+    assert abs(mix.Cf_sat - 0.00016187484271371722) / 0.00016187484271371722 < RTOL
     assert isinstance(mix.water_content, dict)
     assert abs(mix.water_content['stb_mmscf'] - 1.9211146471984861) / 1.9211146471984861 < RTOL
 
