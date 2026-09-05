@@ -709,9 +709,12 @@ exactly. The PR
 route needs one fitted number per gas against 35 coefficients per gas for the
 correlation, matches or beats it on five of six gases against the calibration
 densimetry, and reproduces an H2S temperature trend the correlation misses.
-The delivered shifts are CH4 -0.109632, CO2 -0.037913, H2S -0.078975,
-N2 -0.176510, H2 -0.177625, C2H6 -0.073142, C3H8 -0.112963 and
-nC4H10 +0.110924.
+The delivered shifts are CH4 -0.111430, CO2 -0.038965, H2S -0.079740,
+N2 -0.176768, H2 -0.178503, C2H6 -0.073843, C3H8 -0.113326 and
+nC4H10 +0.110920. They are fitted against the ``'default'`` kij_AQ set and the
+route pins that framework internally (refitted in 3.7.7; the values before it
+went with the ``'mc3'`` set the route pinned until then). A shift and the kij
+set it was fitted against are one calibration, so the two are never mixed.
 
 Three ceilings should not be conflated: the arithmetic stops at 623.15 K, the
 volume shift stops being fitted at 473.15 K, and **accuracy is claimed only to
@@ -726,7 +729,7 @@ gas-generic dimensionless fraction is applied,
 ``g(m) = -1.7061 m/(1 + 0.12371 m)`` percent, giving -1.52% at 1 mol/kg and
 -5.27% at 5 mol/kg (for CO2, -0.5 to -2.4 cm3/mol over the working range). It
 is fixed entirely from Tiepel and Gubbins (1972) KCl dilatometry, their molar
-concentrations converted to molality at 25 degC (from 3.7.6; the 3.7.4 fit
+concentrations converted to molality at 25 degC (from 3.7.7; the 3.7.4 fit
 treated them as molal: -1.56% / -5.85%), with no
 parameter fitted to any brine-density data; the magnitude is known to about a
 factor of two. Freshwater results are unchanged exactly; gas-saturated brine
