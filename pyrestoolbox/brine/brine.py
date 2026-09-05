@@ -1626,6 +1626,11 @@ class SoreideWhitson:
         _p_val = pres if not metric else pres * BAR2PSI
         _t_val = temp if not metric else temp * 1.8 + 32
         validate_pe_inputs(p=_p_val, degf=_t_val)
+        # Each dry-gas fraction must sit in [0, 1] on its own: a negative value
+        # can hide behind the sum check and reach the flash as a negative feed.
+        for _name, _y in (('y_CO2', y_CO2), ('y_H2S', y_H2S), ('y_N2', y_N2), ('y_H2', y_H2)):
+            if not (0.0 <= float(_y) <= 1.0):
+                raise ValueError(f"{_name} must be between 0 and 1, got {_y}")
         non_hc = y_CO2 + y_H2S + y_N2 + y_H2
         if non_hc > 1.0:
             raise ValueError(f"Sum of non-HC gas fractions ({non_hc}) exceeds 1.0")

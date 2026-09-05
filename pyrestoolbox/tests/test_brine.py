@@ -341,6 +341,20 @@ def test_soreide_whitson_bad_gas_fractions():
         pass
 
 
+def test_soreide_whitson_rejects_out_of_range_fraction():
+    """Each dry-gas fraction is guarded on its own (input-guard parity with the
+    brine_gas reference code): a negative fraction must not pass because the
+    sum of the four still lands inside [0, 1]."""
+    import pytest
+    with pytest.raises(ValueError, match='y_H2S must be between 0 and 1'):
+        brine.SoreideWhitson(pres=200, temp=80, y_CO2=0.9, y_H2S=-0.5, metric=True)
+    with pytest.raises(ValueError, match='y_N2 must be between 0 and 1'):
+        brine.SoreideWhitson(pres=200, temp=80, y_N2=1.2, metric=True)
+    # The boundary values are legal.
+    brine.SoreideWhitson(pres=200, temp=80, y_CO2=1.0, metric=True)
+    brine.SoreideWhitson(pres=200, temp=80, y_CO2=0.0, metric=True)
+
+
 def test_garcia_density_no_singularity_at_xco2_one():
     """Garcia mixing rule (Eq 18) should produce finite density as xCO2 -> 1.
 
