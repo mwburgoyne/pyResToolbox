@@ -632,11 +632,11 @@ Pure CO2 case at 5000 psia x 275 deg F and 3% NaCl brine:
     >>> from pyrestoolbox import brine
     >>> mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=1.0, metric=False)
     >>> mix.bDen  # Returns [Gas Saturated, Gas-Free Brine, Freshwater]
-    [0.9738595754362946, 0.968164592979362, 0.9476497407774847]
+    [0.9730093241255896, 0.968164592979362, 0.9476497407774847]
     >>> mix.Rs  # Returns per-gas Rs dict (scf/stb)
     {'CO2': 151.30103411561777}
     >>> mix.bw  # Returns [Gas Saturated, Gas-Free, Freshwater]
-    [1.099911782644371, 1.0543023174291248, 1.0542033190822462]
+    [1.1008729259876717, 1.0543023174291248, 1.0542033190822462]
 
 Pure CH4 case (SG=0.554) at 5000 psia x 275 deg F and 3% NaCl brine:
 
@@ -658,7 +658,7 @@ Mixed gas (10% CO2, 5% H2S, SG=0.7) at 200 Bar x 80 degC and 10,000 ppm NaCl:
     >>> mix.Rs_total  # Total dissolved gas (sm3/sm3)
     8.611222366730054
     >>> mix.bDen
-    [0.9854888113586086, 0.9871360082710434, 0.9804911502375318]
+    [0.9853891217810185, 0.9871360082710434, 0.9804911502375318]
 
 Pure CO2 fresh water at 175 Bar x 85 degC with saturated compressibility:
 
@@ -668,7 +668,7 @@ Pure CO2 fresh water at 175 Bar x 85 degC with saturated compressibility:
     >>> mix.Rs_total  # sm3 dissolved CO2 / sm3 Brine
     24.906989289860665
     >>> mix.Cf_sat
-    0.0001619153778313409
+    0.00015991643962614776
     >>> mix.water_content
     {'y_H2O': 0.013968581961446491, 'stb_mmscf': 1.9211146471984861, 'lb_mmscf': 672.5672073622544}
 
@@ -709,7 +709,7 @@ exactly. The PR
 route needs one fitted number per gas against 35 coefficients per gas for the
 correlation, matches or beats it on five of six gases against the calibration
 densimetry, and reproduces an H2S temperature trend the correlation misses.
-The delivered shifts are CH4 -0.111430, CO2 -0.038965, H2S -0.079416,
+The delivered shifts are CH4 -0.111430, CO2 -0.070103, H2S -0.079416,
 N2 -0.176768, H2 -0.178503, C2H6 -0.073843, C3H8 -0.113326 and
 nC4H10 +0.110920. They are fitted against the ``'default'`` kij_AQ set and the
 route pins that framework internally (refitted in 3.7.7; the values before it

@@ -108,7 +108,7 @@ _SW_NAME = {'NC4H10': 'nC4H10'}
 # calibration point changes; the values below are pinned in validation.py.
 VSHIFT = {
     'CH4':  -0.111430,
-    'CO2':  -0.038965,
+    'CO2':  -0.070103,
     'H2S':  -0.079416,
     'N2':   -0.176768,
     'H2':   -0.178503,

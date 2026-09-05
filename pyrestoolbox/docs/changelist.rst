@@ -1,5 +1,7 @@
 Changelist in 3.7.8 (unreleased):
 
+- **BRINE DENSITY: the CO2 volume shift refitted with McBride-Wright et al. (2015) in its calibration** (``brine.pr_vphi``): 98 CO2-water densities at 275-449 K and up to 100 MPa, reduced to apparent molar volumes against IAPWS-95, join the Hnedkovsky and Moore dilatometry (n = 109, 275-473 K). The shift moves from -0.038965 to -0.070103. V_phi rises by 2.3% at 350 K and 20 MPa (36.2128 to 37.043 cm3/mol), so dissolved CO2 densifies brine a little less: gas-saturated brine density falls by up to 0.09% at CO2 saturation (bDen 0.97386 to 0.97301 for the pure-CO2 field example) and Cf_sat by 1.2%. Salt-free CO2-brine validation moves from +0.20 to +0.15 percentage points mean at 0.77 mol/kg and from +0.03 to -0.01 at 2.50 mol/kg (Calabrese 2022).
+
 - **BRINE DENSITY: the H2S volume shift refitted with Barbero, McCurdy and Tremaine (1982) added to its calibration** (``brine.pr_vphi``): three infinite-dilution vibrating-tube volumes at 10, 25 and 40 degC (34.04, 34.92, 35.60 cm3/mol) join Hnedkovsky and Murphy-Gaines; the shift moves from -0.079740 to -0.079416, 0.009 cm3/mol (0.025%) on V_phi, below any printed precision in delivered densities.
 
 Changelist in 3.7.7:

@@ -540,14 +540,14 @@ def test_doc_sw_pure_co2_field():
     """brine.rst: SoreideWhitson pure CO2 field units"""
     mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=1.0, metric=False)
     assert isinstance(mix.bDen, list) and len(mix.bDen) == 3
-    # Re-pinned 2026-08-19 (was 0.9732266498107526 before the 2026-07-25 V_phi
-    # route change): published framework is now the default.
-    assert abs(mix.bDen[0] - 0.9738595754362946) / 0.9738595754362946 < RTOL
+    # Re-pinned 2026-09-06 for the CO2 shift refit with McBride-Wright (2015)
+    # in calibration (was 0.9738595754362946 from 2026-08-19).
+    assert abs(mix.bDen[0] - 0.9730093241255896) / 0.9730093241255896 < RTOL
     assert abs(mix.Rs['CO2'] - 151.30103411561777) / 151.30103411561777 < RTOL
     # Re-pinned 2026-08-19 (was 1.0964191153239935, and 1.096613263262556
     # before the 2026-07-25 V_phi route change): published framework is now the
     # default. bw is the reciprocal of the density shift above.
-    assert abs(mix.bw[0] - 1.099911782644371) / 1.099911782644371 < RTOL
+    assert abs(mix.bw[0] - 1.1008729259876717) / 1.1008729259876717 < RTOL
 
 def test_doc_sw_pure_ch4_field():
     """brine.rst: SoreideWhitson pure CH4 field units"""
@@ -560,21 +560,19 @@ def test_doc_sw_mixed_gas_metric():
     """brine.rst: SoreideWhitson mixed gas metric"""
     mix = brine.SoreideWhitson(pres=200, temp=80, ppm=10000, y_CO2=0.1, y_H2S=0.05, sg=0.7, metric=True)
     assert abs(mix.Rs_total - 8.611222366730054) / 8.611222366730054 < RTOL
-    # Re-pinned 2026-08-19 (was 0.9854282627804675, and 0.9855934589486185
-    # before the 2026-07-25 V_phi route change): published framework is now the
-    # default. This case carries H2S.
-    assert abs(mix.bDen[0] - 0.9854888113586086) / 0.9854888113586086 < RTOL
+    # Re-pinned 2026-09-06 for the CO2 shift refit (was 0.9854888113586086 from
+    # 2026-08-19). This case carries H2S.
+    assert abs(mix.bDen[0] - 0.9853891217810185) / 0.9853891217810185 < RTOL
     assert 'CO2' in mix.gas_comp and 'H2S' in mix.gas_comp and 'CH4' in mix.gas_comp
 
 def test_doc_sw_co2_freshwater_cw_sat():
     """brine.rst: SoreideWhitson pure CO2 freshwater with Cf_sat"""
     mix = brine.SoreideWhitson(pres=175, temp=85, ppm=0, y_CO2=1.0, metric=True, cw_sat=True)
     assert abs(mix.Rs_total - 24.906989289860665) / 24.906989289860665 < RTOL
-    # Re-pinned 2026-09-01 for the default-framework VSHIFT refit (was
-    # 0.0001619153778313409 under the mc3-calibrated shifts, 2026-08-19;
-    # 0.00015823417319616538 and 0.00016012590421810821 before that). Cf_sat is
-    # a difference of two densities, so it amplifies whatever moves the density.
-    assert abs(mix.Cf_sat - 0.00016187484271371722) / 0.00016187484271371722 < RTOL
+    # Re-pinned 2026-09-06 for the CO2 shift refit (was 0.00016187484271371722
+    # from 2026-09-01). Cf_sat is a difference of two densities, so it amplifies
+    # whatever moves the density.
+    assert abs(mix.Cf_sat - 0.00015991643962614776) / 0.00015991643962614776 < RTOL
     assert isinstance(mix.water_content, dict)
     assert abs(mix.water_content['stb_mmscf'] - 1.9211146471984861) / 1.9211146471984861 < RTOL
 
