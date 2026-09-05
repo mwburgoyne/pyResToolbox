@@ -709,7 +709,7 @@ exactly. The PR
 route needs one fitted number per gas against 35 coefficients per gas for the
 correlation, matches or beats it on five of six gases against the calibration
 densimetry, and reproduces an H2S temperature trend the correlation misses.
-The delivered shifts are CH4 -0.111430, CO2 -0.038965, H2S -0.079740,
+The delivered shifts are CH4 -0.111430, CO2 -0.038965, H2S -0.079416,
 N2 -0.176768, H2 -0.178503, C2H6 -0.073843, C3H8 -0.113326 and
 nC4H10 +0.110920. They are fitted against the ``'default'`` kij_AQ set and the
 route pins that framework internally (refitted in 3.7.7; the values before it

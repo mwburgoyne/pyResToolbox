@@ -1,3 +1,7 @@
+Changelist in 3.7.8 (unreleased):
+
+- **BRINE DENSITY: the H2S volume shift refitted with Barbero, McCurdy and Tremaine (1982) added to its calibration** (``brine.pr_vphi``): three infinite-dilution vibrating-tube volumes at 10, 25 and 40 degC (34.04, 34.92, 35.60 cm3/mol) join Hnedkovsky and Murphy-Gaines; the shift moves from -0.079740 to -0.079416, 0.009 cm3/mol (0.025%) on V_phi, below any printed precision in delivered densities.
+
 Changelist in 3.7.7:
 
 - **BRINE DENSITY: the dissolved-gas volume shifts refitted under the published ``'default'`` framework** (``brine.pr_vphi.VSHIFT``). A volume shift and the S&W kij_AQ set it was fitted against are one calibration and cannot be mixed, so the module pinned ``framework='mc3'``. The reference calibration has moved to the published recommendation, the ``'default'`` embedded delta-kij framework, and the shifts move with it: CH4 -0.111430 (was -0.109632), CO2 -0.038965 (-0.037913), H2S -0.079740 (-0.078975), N2 -0.176768 (-0.176510), H2 -0.178503 (-0.177625) and C2H6 -0.073843 (-0.073142), with the two literature-anchored gases re-derived on the same basis at C3H8 -0.113326 and nC4H10 +0.110920. The pin stays explicit at ``'default'`` so that a later move of the library default cannot silently cross the shifts with a kij set they were not fitted against. V_phi moves by up to 0.14% (CH4 at 350 K and 20 MPa, 39.4072 to 39.4624 cm3/mol), gas-saturated brine density by under 0.002%, and Cf_sat, being a difference of two densities, by 0.025%.
