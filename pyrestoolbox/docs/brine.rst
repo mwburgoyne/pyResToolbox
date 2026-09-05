@@ -723,9 +723,11 @@ the equation of state unaided.
 **Salinity shift on V_phi** (new in 3.7.3; relative form from 3.7.4). A
 gas-generic dimensionless fraction is applied,
 ``V_eff = V_phi(T,P) * (1 + g(m))`` with
-``g(m) = -1.7009 m/(1 + 0.090684 m)`` percent, giving -1.56% at 1 mol/kg and
--5.85% at 5 mol/kg (for CO2, -0.5 to -2.7 cm3/mol over the working range). It
-is fixed entirely from Tiepel and Gubbins (1972) KCl dilatometry with no
+``g(m) = -1.7061 m/(1 + 0.12371 m)`` percent, giving -1.52% at 1 mol/kg and
+-5.27% at 5 mol/kg (for CO2, -0.5 to -2.4 cm3/mol over the working range). It
+is fixed entirely from Tiepel and Gubbins (1972) KCl dilatometry, their molar
+concentrations converted to molality at 25 degC (from 3.7.6; the 3.7.4 fit
+treated them as molal: -1.56% / -5.85%), with no
 parameter fitted to any brine-density data; the magnitude is known to about a
 factor of two. Freshwater results are unchanged exactly; gas-saturated brine
 densities move by up to a few hundredths of a percent. Pass
