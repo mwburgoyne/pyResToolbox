@@ -11,8 +11,6 @@ These are the scripts that are often copy/pasted from previous work - sometimes 
 in a trail of slightly different versions over the years. Some attempt has been made here to make this
 implementation flexible enough such that it can be relied on as-is going forward.
 
-Note: Version 2.x refactors functions into different modules, requiring separate imports.
-
 Usage: ``from pyrestoolbox import <module>`` then ``<module>.function(...)``.
 All inputs use oilfield units (psia, degF, ft, mD, cP) unless otherwise noted.
 

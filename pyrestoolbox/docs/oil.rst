@@ -46,7 +46,7 @@ pyResToolBox uses class objects to track calculation options through the functio
 
        + 'VELAR': Velarde, Blasingame & McCain (1999). Raises ValueError for high-Pb rich-separator-gas fluids (see ``oil_rs``)
        + 'STAN': Standing Correlation (1947)
-       + 'VALMC': Valko-McCain Correlation (2003) - Only for oil_rs_bub (Rs at Pb)
+       + 'VALMC': Valko-McCain Correlation (2003)
    * - comethod
      - co_method
      - Method for calculating undersaturated oil compressibility. Defaults to 'EXPLT'.

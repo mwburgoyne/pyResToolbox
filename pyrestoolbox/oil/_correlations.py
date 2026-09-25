@@ -456,7 +456,7 @@ def oil_bo(
     """ Returns oil formation volume factor (rb/stb | rm3/sm3) calculated with different correlations
 
         p: Pressure (psia | barsa)
-        pb: Bubble point pressure (psia | barsa). Defaults to 1E6, and not used for densities below Pb. A valid value is required for density calculations above Pb
+        pb: Bubble point pressure (psia | barsa). Required; above Pb, Bo follows the undersaturated compressibility
         degf: Reservoir Temperature (deg F | deg C)
         rs: Oil solution gas volume (scf/stb | sm3/sm3)
         rsb: Oil solution gas volume (scf/stb | sm3/sm3) at Pb

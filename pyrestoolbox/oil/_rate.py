@@ -69,7 +69,7 @@ def oil_rate_radial(
     """ Returns liquid rate for radial flow (stb/day | sm3/day) using Darcy pseudo steady state equation
         k: Effective Permeability to flow (mD)
         h: Net flow height (ft | m)
-        Pr: Reservoir pressure (psia | barsa)
+        pr: Reservoir pressure (psia | barsa)
         pwf: BHFP (psia | barsa)
         r_w: Wellbore Radius (ft | m)
         r_ext: External Reservoir Radius (ft | m)
@@ -147,7 +147,7 @@ def oil_rate_linear(
 ) -> np.ndarray:
     """ Returns liquid rate for linear flow (stb/day | sm3/day) using Darcy steady state equation
         k: Permeability (mD)
-        Pr: Reservoir pressure (psia | barsa)
+        pr: Reservoir pressure (psia | barsa)
         pwf: BHFP (psia | barsa)
         area: Net cross sectional area perpendicular to direction of flow (ft2 | m2).
         length: Length over which flow takes place (ft | m)

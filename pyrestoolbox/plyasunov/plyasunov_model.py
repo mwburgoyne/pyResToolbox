@@ -16,16 +16,20 @@ Recovery of V2_inf:
 Units:
     T in K, P in MPa, rho1* in kg/m3, V2_inf in cm3/mol, kappa_T in 1/MPa
 
-References:
-    Plyasunov, A.V. (2019). "Values of the apparent molar volumes V_phi and
-    the osmotic coefficients phi of NaCl(aq) at infinite dilution...Part I:
-    Aqueous solutions of H2, N2, and CH4." Fluid Phase Equilibria, 496, 43-51.
+References (series "Correlation and prediction of thermodynamic properties
+of dilute solutes in water up to high T and P", Fluid Phase Equilibria):
+    Plyasunov, A.V., Korzhinskaya, V.S., O'Connell, J.P. (2019). I. Simple
+    fluids He, Ne, Ar, Kr, Xe, Rn, H2, N2, ... 498, 9-22.
+    doi:10.1016/j.fluid.2019.06.012 (superseded for H2, N2, CH4 by Part IV)
 
-    Plyasunov, A.V. (2020). "...Part II: CO2, C2H6, C3H8, n-C4H10."
-    Fluid Phase Equilibria, 523, 112757.
+    Plyasunov, A.V., Korzhinskaya, V.S. (2020). II. Normal fluids CO2, C2H4,
+    C2H6, C3H8, n-C4H10, i-C4H10, ... 521, 112690. doi:10.1016/j.fluid.2020.112690
 
-    Plyasunov, A.V. (2021). "...Part III: H2S."
-    Fluid Phase Equilibria, 530, 112883.
+    Plyasunov, A.V., Korzhinskaya, V.S. (2021). III. Polar and aromatic solutes
+    H2S, C6H6, ... 529, 112872. doi:10.1016/j.fluid.2020.112872
+
+    Plyasunov, A.V., Korzhinskaya, V.S. (2021). IV. Simple fluids He, Ne, Ar,
+    Kr, Xe, Rn, H2, N2, O2, CO, ... 536, 112982. doi:10.1016/j.fluid.2021.112982
 """
 
 import functools

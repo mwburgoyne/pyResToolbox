@@ -1177,7 +1177,7 @@ def gas_ug(
           h2s: Molar fraction of H2S. Defaults to zero if undefined
           n2: Molar fraction of Nitrogen. Defaults to zero if undefined
           h2: Molar fraction of Hydrogen. Defaults to zero if undefined
-          tc: Critical gas temperature (deg R). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
+          tc: Critical gas temperature (deg R | K). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
           pc: Critical gas pressure (psia | barsa). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
           zee: Gas Z-Factor. If undefined, will trigger Z-Factor calculation.
           ugz: Boolean flag that if True returns ugZ instead of ug
@@ -1487,7 +1487,7 @@ def gas_cg(
         h2s: Molar fraction of H2S. Defaults to zero if undefined
         n2: Molar fraction of Nitrogen. Defaults to zero if undefined
         h2: Molar fraction of Hydrogen. Defaults to zero if undefined
-        tc: Critical gas temperature (deg R). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
+        tc: Critical gas temperature (deg R | K). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
         pc: Critical gas pressure (psia | barsa). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
         zmethod: Method for calculating Z-Factor
                    'DAK' Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
@@ -1568,7 +1568,12 @@ def gas_bg(
     return process_output(zee * degR / (p * (tsc + degF2R) / psc), is_list)
 
 def gas_sg(hc_mw: float, co2: float, h2s: float, n2: float, h2: float)  -> float:
-    """ Returns sg of gas mixture """
+    """ Returns the specific gravity (relative to air) of a gas mixture from its
+        hydrocarbon molecular weight and inert fractions.
+
+        hc_mw: Molecular weight of the hydrocarbon fraction (lb/lbmol)
+        co2, h2s, n2, h2: Mole fractions of CO2, H2S, N2 and H2 (0-1)
+    """
     return (hc_mw * (1 - co2 - h2s-  n2 - h2) + (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2)) / MW_AIR
 
 def gas_den(
@@ -1665,7 +1670,7 @@ def gas_ponz2p(
           h2s: Molar fraction of H2S. Defaults to zero if undefined
           n2: Molar fraction of Nitrogen. Defaults to zero if undefined
           h2: Molar fraction of Hydrogen. Defaults to zero if undefined
-          tc: Critical gas temperature (deg R). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
+          tc: Critical gas temperature (deg R | K). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
           pc: Critical gas pressure (psia | barsa). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
           rtol: Relative solution tolerance. Will iterate until abs[(p - poverz * Z)/p] < rtol
           metric: If True, input/output in Eclipse METRIC units (barsa, degC). Defaults to False (FIELD)
@@ -1769,7 +1774,7 @@ def gas_grad2sg(
           h2s: Molar fraction of H2S. Defaults to zero if undefined
           n2: Molar fraction of Nitrogen. Defaults to zero if undefined
           h2: Molar fraction of Hydrogen. Defaults to zero if undefined
-          tc: Critical gas temperature (deg R). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
+          tc: Critical gas temperature (deg R | K). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
           pc: Critical gas pressure (psia | barsa). Calculates using cmethod if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
           rtol: Relative solution tolerance. Will iterate until abs[(grad - calculation)/grad] < rtol
           metric: If True, input/output in Eclipse METRIC units (bar/m, barsa, degC). Defaults to False (FIELD)

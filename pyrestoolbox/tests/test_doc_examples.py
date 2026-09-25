@@ -1731,3 +1731,10 @@ def test_readme_make_bot_og_printed_outputs():
                      ('uo (cP)', 0.36663121233374113), ('Co (1/psi)', 2.0042955593519084e-05)):
         assert abs(df[col].iloc[i] - val) / val < RTOL, col
     assert abs(r2['rsb_scale'] - 1.0362710951888936) / 1.0362710951888936 < RTOL
+
+
+def test_doc_darcy_gas():
+    """gas.rst: darcy_gas radial from a gas_dmp pseudopressure difference"""
+    dmp = gas.gas_dmp(p1=1000, p2=3000, degf=200, sg=0.75)
+    result = gas.darcy_gas(delta_mp=dmp, k=10, h=50, degf=200, l1=0.3, l2=1500, S=0, D=0, radial=True)
+    assert abs(result - 35059.14281619598) / 35059.14281619598 < RTOL

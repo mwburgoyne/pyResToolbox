@@ -76,7 +76,7 @@ def check_sgs(
 def oil_ja_sg(mw: float, ja: float) -> float:
     """ Returns liquid hydrocarbon specific gravity using Jacoby Aromaticity Factor relationship
         mw: Molecular weight of the liquid (g/gmole or lb/lb-mol)
-        Ja: Varies between 0 (Paraffins) - 1 (Aromatic)
+        ja: Varies between 0 (Paraffins) - 1 (Aromatic)
     """
     ja = min(1, ja)
     ja = max(0, ja)

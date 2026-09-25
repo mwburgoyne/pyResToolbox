@@ -141,6 +141,8 @@ Function List
      - `pyrestoolbox.gas.gas_sg`_
    * - Gas Flow Rate Linear
      - `pyrestoolbox.gas.gas_rate_linear`_
+   * - Darcy Gas Rate from Pseudopressure
+     - `pyrestoolbox.gas.darcy_gas`_
    * - Gas Hydrate Prediction
      - `pyrestoolbox.gas.gas_hydrate`_
    * - Forchheimer HVF Coefficient (β)
@@ -1317,6 +1319,58 @@ Using a GasPVT object:
     >>> gas.gas_rate_linear(k=0.1, area=50, length=200, pr=2000, pwf=250, degf=180, gas_pvt=gpvt)
     1.3057674900081304
 
+
+pyrestoolbox.gas.darcy_gas
+==========================
+
+.. code-block:: python
+
+    darcy_gas(delta_mp, k, h, degf, l1, l2, S, D, radial) -> float or np.array
+
+Returns the Darcy gas rate (Mscf/day) from a pseudopressure difference. This is the flow equation ``gas_rate_radial`` and ``gas_rate_linear`` call after integrating pseudopressure with ``gas_dmp``; call it directly to reuse one pseudopressure difference across several geometries. Oilfield units only (no ``metric`` argument). For radial flow with ``D > 0`` the non-Darcy rate is solved as the positive root of the rate quadratic.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - delta_mp
+     - float or np.array
+     - Pseudopressure difference (psi2/cP), e.g. from ``gas_dmp``
+   * - k
+     - float or np.array
+     - Permeability (mD)
+   * - h
+     - float or np.array
+     - Net height (ft). Use 1 for linear flow, where the area is carried in ``l1``
+   * - degf
+     - float
+     - Reservoir temperature (deg F)
+   * - l1
+     - float
+     - Wellbore radius r_w (ft) if radial, else flow area (ft2)
+   * - l2
+     - float
+     - External radius r_ext (ft) if radial, else flow length (ft)
+   * - S
+     - float
+     - Skin (dimensionless). Ignored for linear flow
+   * - D
+     - float
+     - Non-Darcy coefficient (day/Mscf). Ignored for linear flow
+   * - radial
+     - bool
+     - True for radial geometry, False for linear
+
+Examples:
+
+.. code-block:: python
+
+    >>> dmp = gas.gas_dmp(p1=1000, p2=3000, degf=200, sg=0.75)
+    >>> gas.darcy_gas(delta_mp=dmp, k=10, h=50, degf=200, l1=0.3, l2=1500, S=0, D=0, radial=True)
+    35059.14281619598
 
 pyrestoolbox.gas.gas_hydrate
 ============================

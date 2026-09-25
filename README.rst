@@ -9,7 +9,7 @@ A collection of Reservoir Engineering Utilities
 This set of functions focuses on those that the author uses often while crafting programming solutions.
 These are the scripts that are often copy/pasted from previous work - sometimes slightly modified - resulting in a trail of slightly different versions over the years. Some attempt has been made here to make this implementation flexible enough such that it can be relied on as-is going forward.
 
-Note: Version 3.0 consolidates simulation-oriented functions under the simtools module, adds nodal analysis (VLP/IPR), VFP table generation, relative permeability curve fitting, and Eclipse METRIC unit support across all modules. Version 3.0.4 adds decline curve analysis, material balance, method recommendations, and sensitivity analysis.
+Modules: gas, oil, brine, nodal (VLP/IPR, VFP tables), simtools (black-oil, PVTW, rel-perm, aquifer and deck tools), dca (decline curves), matbal (material balance), layer, library, recommend and sensitivity. Every module accepts Eclipse METRIC units with ``metric=True``; the full documentation ships inside the package, and ``pyrestoolbox.docs_dir()`` returns its location for offline reading.
 
 Includes functions to perform calculations including;
 

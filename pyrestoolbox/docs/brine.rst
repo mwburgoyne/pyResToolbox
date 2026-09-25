@@ -180,7 +180,7 @@ pyrestoolbox.brine.CO2_Brine_Mixture
    * - CO2 Corrected Brine Viscosity
      - Calabrese et al. (2019) Eq. 25, a temperature-dependent increment fitted to 415 measured brine points. **Changed in 3.7.2**, superseding Islam-Carlson (2012), which carries no temperature dependence and overstates the effect by 3.5x at 366 K and 9.4x at 423 K.
 
-**Known limit near the CO2 critical point**: the CO2-rich phase water content (``.y[1]``) and density (``.rhoGas``) are unreliable between about 31 and 38 degC at 73-100 bar, where they can step sharply with pressure. The low-temperature Redlich-Kwong parameterisation has its own pseudo-critical temperature of 311 K, 7 K above CO2's real 304.13 K, so a spurious two-root region survives above the true critical point and the published root-selection criterion steps between branches inside it. The step is intrinsic to using this cubic there (gating the root selection on the real CO2 phase boundary only relocates it), so it is documented rather than patched. Brine density, brine viscosity and CO2 solubility (``.x``, ``.Rs_sat``) are continuous through it and unaffected.
+**Known limit near the CO2 critical point**: the CO2-rich phase water content (``.y[1]``) and density (``.rhoGas``) are unreliable between about 31 and 38 degC at 73-100 bar, where they can step sharply with pressure. The low-temperature Redlich-Kwong parameterisation has its own pseudo-critical temperature of 311 K, 7 K above CO2's real 304.13 K, so a spurious two-root region survives above the true critical point and the published root-selection criterion steps between branches inside it. The step is intrinsic to using this cubic there (gating the root selection on the real CO2 phase boundary only relocates it), so it is documented rather than patched. Brine density, brine viscosity and CO2 solubility (``.x``, ``.Rs``) are continuous through it and unaffected.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -497,7 +497,7 @@ based on the gas specific gravity using constrained exponential decay to match t
    * - Brine Salinity Correction
      - Spivey et al. (modified), per "Petroleum Reservoir Fluid Property Correlations", (McCain, Spivey & Lenn: Chapter 4)
    * - Gas-Corrected Brine Density
-     - Mass and volume balance (an identity, not a fitted mixing rule) with apparent molar volumes from the Soreide-Whitson modified PR route plus one volume shift per gas. **Changed in 3.7.2**; the Plyasunov (2019-2021) correlation is retained as ``vphi_route='plyasunov'``. A literature-anchored salinity shift is applied to V_phi from 3.7.3 (relative form from 3.7.4), disabled with ``salt_effect=False``.
+     - Mass and volume balance (an identity, not a fitted mixing rule) with apparent molar volumes from the Soreide-Whitson modified PR route plus one volume shift per gas. **Changed in 3.7.2**; the Plyasunov (2019-2021) correlation is retained as ``vphi_route='plyasunov'``. A literature-anchored salinity shift is applied to V_phi from 3.7.3 (relative form from 3.7.4), disabled by passing ``salt_effect=False`` to ``brine.vphi_route.V_phi`` (it is not a ``SoreideWhitson`` argument).
    * - Gas-free Brine Viscosity
      - IAPWS-2008 water x ion-additive Jones-Dole salt ratio x Kestin measured pressure factor. **Changed in 3.7.3**; Mao-Duan (2009) remains available. See the ``brine_viscosity`` section above.
    * - Gas-Corrected Brine Viscosity

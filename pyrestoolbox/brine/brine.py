@@ -484,8 +484,8 @@ class CO2_Brine_Mixture():
     """ Calculates CO2 saturated Brine mutual solubilities and brine properties
     
             Inputs:
-                pres: Pressure (Bar / psia)
-                temp: Temperature (deg C / deg F)
+                pres: Pressure (psia | barsa if metric=True)
+                temp: Temperature (deg F | deg C if metric=True)
                 ppm: NaCL equivalent weight concentration in brine in parts NaCl per million parts of brine (default zero, Wt% = 100 * ppm / 1E6 )
                 metric: Boolean operator that determines units assumed for input, and return calculated (default False)
                 cw_sat: Boolean operator that determines whether to calculate saturated brine compressibility, doubling calculations required (default False)
@@ -1570,8 +1570,8 @@ class SoreideWhitson:
         ValueError.
 
         Inputs:
-            pres: Pressure (Bar / psia)
-            temp: Temperature (deg C / deg F)
+            pres: Pressure (psia | barsa if metric=True)
+            temp: Temperature (deg F | deg C if metric=True)
             ppm: NaCl equivalent weight concentration in ppm (default 0)
             y_CO2: Mole fraction CO2 in dry gas (default 0)
             y_H2S: Mole fraction H2S in dry gas (default 0)
