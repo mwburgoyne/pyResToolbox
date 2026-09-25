@@ -870,14 +870,12 @@ def test_bns_user_tc_pc_overrides_hc_only():
 def test_gaspvt_user_tc_pc_stored():
     """GasPVT stores user-supplied tc/pc verbatim when both > 0."""
     pvt = gas.GasPVT(sg=0.75, zmethod='DAK', cmethod='SUT', tc=380.0, pc=670.0)
-    assert pvt._user_tc_pc is True
     assert pvt.tc == 380.0
     assert pvt.pc == 670.0
 
 def test_gaspvt_default_tc_pc_from_correlation():
-    """When tc/pc not supplied, GasPVT stores correlation-derived values and flag is False."""
+    """When tc/pc not supplied, GasPVT stores correlation-derived values."""
     pvt = gas.GasPVT(sg=0.75, zmethod='DAK', cmethod='SUT')
-    assert pvt._user_tc_pc is False
     assert pvt.tc > 0 and pvt.pc > 0
 
 def test_gaspvt_user_tc_pc_metric_converted():
@@ -1184,3 +1182,19 @@ def test_sg_inconsistent_with_inerts_raises():
     assert 0.8 < _gas.gas_z(p=3000, sg=0.6, degf=150, co2=0.05) < 1.0   # legitimate
     grad = _gas.gas_den(3000, 0.8, 150, n2=0.6) / 144
     assert abs(_gas.gas_grad2sg(grad, 3000, 150, n2=0.6) - 0.8) < 1e-6
+
+
+def test_gaspvt_single_sided_tc_honoured_by_every_method():
+    """GasPVT stored a lone tc override but z()/viscosity()/bg() dropped it (sweep 2026-09-25)."""
+    from pyrestoolbox import gas as _gas
+    g = _gas.GasPVT(sg=0.7, tc=420)
+    assert abs(g.z(2000, 150) - _gas.gas_z(2000, 0.7, 150, tc=420)) < 1e-12
+
+
+def test_gas_thermal_validates_pressure_and_temperature():
+    import pytest as _pytest
+    from pyrestoolbox import gas as _gas
+    with _pytest.raises(ValueError):
+        _gas.gas_thermal(-100, 0.7, 150)
+    with _pytest.raises(ValueError):
+        _gas.gas_thermal(1000, 0.7, -500)

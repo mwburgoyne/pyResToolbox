@@ -1297,6 +1297,7 @@ def gas_thermal(
         against the reference and should be treated with caution.
     """
     p, degf, tc_in, pc_in = _metric_to_field_pvt(p, degf, tc, pc, metric)
+    validate_pe_inputs(p=p, degf=degf)
     psias, is_list = np.asarray(p, dtype=float).reshape(-1), isinstance(p, (list, tuple, np.ndarray))
     degR = degf + degF2R
 
@@ -2102,10 +2103,10 @@ class GasPVT:
         cmethod: Method for calculating critical properties. Defaults to 'PMC'
         tc: Critical gas temperature (deg R, or K if metric=True). Defaults to 0 = compute from cmethod.
             For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants).
-            Both tc and pc must be > 0 to take effect.
+            May be given without pc (and vice versa); the other comes from cmethod.
         pc: Critical gas pressure (psia, or barsa if metric=True). Defaults to 0 = compute from cmethod.
             For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants).
-            Both tc and pc must be > 0 to take effect.
+            May be given without tc (and vice versa); the other comes from cmethod.
         metric: If True, methods accept/return Eclipse METRIC units (barsa, degC, kg/m3). Defaults to False
 
         BNS coupling: if either zmethod or cmethod is BNS, both are forced to BNS for
@@ -2126,10 +2127,9 @@ class GasPVT:
                 tc = tc * 1.8  # K -> deg R
             if pc > 0:
                 pc = pc * BAR_TO_PSI
-        self._user_tc_pc = tc > 0 and pc > 0
         self.zmethod, self.cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
-        # self.tc/self.pc reflect the effective critical properties used by methods:
-        # user-supplied values when both tc/pc > 0, otherwise cmethod correlation output.
+        # self.tc/self.pc are the effective critical properties every method uses:
+        # a user-supplied value where given (either or both), else cmethod output.
         # For SUT/PMC these are mixture pseudo-critical values; for BNS they are the
         # inert-free hydrocarbon pseudo-critical values.
         self.tc, self.pc = gas_tc_pc(sg, co2, h2s, n2, h2, self.cmethod.name, tc, pc)
@@ -2144,8 +2144,7 @@ class GasPVT:
     def z(self, p, degf):
         """ Returns Z-factor at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
         p, degf = self._convert_inputs(p, degf)
-        tc = self.tc if self._user_tc_pc else 0
-        pc = self.pc if self._user_tc_pc else 0
+        tc, pc = self.tc, self.pc
         return gas_z(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
                      cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
                      n2=self.n2, h2=self.h2, tc=tc, pc=pc)
@@ -2153,8 +2152,7 @@ class GasPVT:
     def viscosity(self, p, degf):
         """ Returns gas viscosity (cP) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
         p, degf = self._convert_inputs(p, degf)
-        tc = self.tc if self._user_tc_pc else 0
-        pc = self.pc if self._user_tc_pc else 0
+        tc, pc = self.tc, self.pc
         return gas_ug(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
                       cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
                       n2=self.n2, h2=self.h2, tc=tc, pc=pc)
@@ -2162,8 +2160,7 @@ class GasPVT:
     def density(self, p, degf):
         """ Returns gas density (lb/cuft | kg/m3) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
         p, degf = self._convert_inputs(p, degf)
-        tc = self.tc if self._user_tc_pc else 0
-        pc = self.pc if self._user_tc_pc else 0
+        tc, pc = self.tc, self.pc
         result = gas_den(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
                          cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
                          n2=self.n2, h2=self.h2, tc=tc, pc=pc)
@@ -2174,8 +2171,7 @@ class GasPVT:
     def bg(self, p, degf):
         """ Returns gas FVF Bg (rcf/scf | rm3/sm3) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
         p, degf = self._convert_inputs(p, degf)
-        tc = self.tc if self._user_tc_pc else 0
-        pc = self.pc if self._user_tc_pc else 0
+        tc, pc = self.tc, self.pc
         return gas_bg(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
                       cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
                       n2=self.n2, h2=self.h2, tc=tc, pc=pc)
