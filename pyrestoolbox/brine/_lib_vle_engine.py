@@ -2304,6 +2304,47 @@ class SWMultiComponentFlash:
 # =============================================================================
 # Main Multi-Component API
 # =============================================================================
+def _flash_with_feed_retries(flash, T_K, P_Pa, gas_vec, salinity_method):
+    """Two-phase gas-brine flash, retrying with increasing water in the feed.
+
+    Returns the first result that is two-phase and converged on both sides;
+    if none is, returns the last one with two_phase=False and a warning.
+    """
+    # The y_* inputs are the dry EQUILIBRIUM VAPOR composition. A
+    # water-dominated feed strips the more-soluble gases into the liquid,
+    # so the equilibrium vapor drifts off the requested composition (a
+    # 95/5 water/gas feed depletes dry-basis CO2 from 0.73 to ~0.65 for
+    # CH4+CO2 at 50 MPa, biasing x_CO2 ~10% low). A gas-excess feed pins
+    # the vapor at the requested composition; single-gas results are
+    # feed-independent (unique tie-line). Near the water boiling curve a
+    # two-phase solution only exists for water-rich feeds (feed water must
+    # lie between the liquid and vapor water mole fractions), so retry
+    # with increasing water fraction until both flashes are two-phase.
+    result = None
+    for w_frac in (0.5, 0.9, 0.95, 0.98):
+        z = np.concatenate(([w_frac], (1.0 - w_frac) * gas_vec))
+        result = flash.calc_equilibrium(T_K, P_Pa, z,
+                                        salinity_method=salinity_method)
+        V_aq = result.get('V_aq', np.nan)
+        V_na = result.get('V_na', np.nan)
+        if (result.get('converged_aq', False)
+                and result.get('converged_na', False)
+                and 1e-6 < V_aq < 1 - 1e-6
+                and 1e-6 < V_na < 1 - 1e-6
+                and result['x_aq'][0] > 0.5):
+            break
+    else:
+        # Every feed came back single-phase or unconverged, so x_aq/y_na are
+        # the flash feed itself, not an equilibrium. Say so.
+        warnings.warn(
+            f"SoreideWhitson: no two-phase gas-brine split found at {P_Pa / 1e5:.1f} bar, "
+            f"{T_K - 273.15:.1f} degC; the returned compositions are the flash feed, "
+            f"not an equilibrium (outside the model's two-phase region).",
+            RuntimeWarning, stacklevel=3)
+        result['two_phase'] = False
+    return result
+
+
 def calc_gas_brine_equilibrium(
     salinity_wt_pct: float,
     temperature_F: float,
@@ -2406,29 +2447,7 @@ def calc_gas_brine_equilibrium(
                                        framework=framework,
                                        salinity_method=salinity_method)
 
-        # The y_* inputs are the dry EQUILIBRIUM VAPOR composition. A
-        # water-dominated feed strips the more-soluble gases into the liquid,
-        # so the equilibrium vapor drifts off the requested composition (a
-        # 95/5 water/gas feed depletes dry-basis CO2 from 0.73 to ~0.65 for
-        # CH4+CO2 at 50 MPa, biasing x_CO2 ~10% low). A gas-excess feed pins
-        # the vapor at the requested composition; single-gas results are
-        # feed-independent (unique tie-line). Near the water boiling curve a
-        # two-phase solution only exists for water-rich feeds (feed water must
-        # lie between the liquid and vapor water mole fractions), so retry
-        # with increasing water fraction until both flashes are two-phase.
-        result = None
-        for w_frac in (0.5, 0.9, 0.95, 0.98):
-            z = np.concatenate(([w_frac], (1.0 - w_frac) * gas_vec))
-            result = flash.calc_equilibrium(T_K, P_Pa, z,
-                                            salinity_method=salinity_method)
-            V_aq = result.get('V_aq', np.nan)
-            V_na = result.get('V_na', np.nan)
-            if (result.get('converged_aq', False)
-                    and result.get('converged_na', False)
-                    and 1e-6 < V_aq < 1 - 1e-6
-                    and 1e-6 < V_na < 1 - 1e-6
-                    and result['x_aq'][0] > 0.5):
-                break
+        result = _flash_with_feed_retries(flash, T_K, P_Pa, gas_vec, salinity_method)
 
         x_gas = {}
         for i, name in enumerate(comp_names):

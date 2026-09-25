@@ -257,7 +257,13 @@ impl SpState {
     fn cubic_solver(&mut self, e2: f64, e1: f64, e0: f64) -> f64 {
         let roots = halley_all_roots(e2, e1, e0);
 
-        if roots.len() > 1 {
+        if roots.len() > 1 && !self.low_temp {
+            // Above 99 degC the CO2-rich phase is supercritical CO2 + steam; the
+            // small root is liquid water, and taking it collapses the
+            // back-substitution onto yH2O = 1 (mirrors Python cubicSolver)
+            self.co2_sat = false;
+            roots.iter().cloned().fold(f64::NEG_INFINITY, f64::max)
+        } else if roots.len() > 1 {
             let vgas = roots.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
             let vliq = roots.iter().cloned().fold(f64::INFINITY, f64::min);
 
@@ -738,6 +744,11 @@ pub fn co2_brine_solubility(
             iter_num += 1;
         }
         if err > EPS {
+            converged = false;
+        }
+        // Trivial fixed point (pure-water "gas", no dissolved CO2) is not a
+        // phase equilibrium (mirrors Python)
+        if s.y[1] >= 1.0 - 2.0 * EPS || s.x[0] <= 2.0 * EPS {
             converged = false;
         }
     }

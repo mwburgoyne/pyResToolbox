@@ -8,6 +8,7 @@ Or standalone: PYTHONPATH=/home/mark/projects python3 tests/test_brine.py
 import sys
 import os
 import numpy as np
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 import pyrestoolbox.brine as brine
@@ -553,3 +554,35 @@ def test_dissolved_gas_viscosity_coefficients():
     assert abs((1.0 + _H2S_A * 0.03) - 1.051) < 1e-9
 
     assert abs(_CH4_K - 1.52860547e-03) < 1e-10
+
+
+# --- sweep 2026-09-25: CO2_Brine_Mixture near water Psat, SW no-split, input guards ---
+
+def test_co2_brine_below_water_psat_raises():
+    with pytest.raises(ValueError, match="below the water saturation pressure"):
+        brine.CO2_Brine_Mixture(pres=50, temp=270, ppm=0, metric=True)
+
+
+def test_co2_brine_just_above_water_psat_is_not_trivial():
+    """290-300 degC a few bar above Psat returned x = 1e-8 (Py) or Rs 6.5e10 (Rust), flagged converged."""
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        xs = [brine.CO2_Brine_Mixture(pres=p, temp=300, ppm=0, metric=True) for p in (90, 100, 110)]
+    x = [m.x[0] for m in xs]
+    assert all(m.converged for m in xs)
+    assert 1e-3 < x[0] < x[1] < x[2] < 1e-2
+
+
+def test_soreide_whitson_warns_when_no_two_phase_split():
+    with pytest.warns(RuntimeWarning, match="no two-phase gas-brine split"):
+        brine.SoreideWhitson(pres=900, temp=340, y_CO2=1, metric=True)
+
+
+def test_brine_input_guards():
+    with pytest.raises(ValueError, match="ppm"):
+        brine.CO2_Brine_Mixture(pres=200, temp=60, ppm=999999 * 2, metric=True)
+    with pytest.raises(ValueError, match="ppm"):
+        brine.CO2_Brine_Mixture(pres=200, temp=60, ppm=-5, metric=True)
+    with pytest.raises(ValueError, match="ch4_sat"):
+        brine.brine_props(p=3000, degf=200, wt=3, ch4_sat=2)

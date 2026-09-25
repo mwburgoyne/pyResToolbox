@@ -130,6 +130,14 @@ _CO2_SAT_MAX_PASSES = 5
 _SP_K_CO2_LT = [1.189, 1.304e-2, -5.446e-5]
 _SP_K_H2O_LT = [-2.209, 3.097e-2, -1.098e-4, 2.048e-7]
 
+def _check_salt_and_ch4_sat(wt, ch4_sat):
+    """brine_props composition guards: salt wt% in [0, 100), ch4_sat in [0, 1]."""
+    if wt < 0 or wt >= 100:
+        raise ValueError(f"Salt weight percent must be >= 0 and < 100, got {wt}")
+    if not 0 <= ch4_sat <= 1:
+        raise ValueError(f"ch4_sat is a degree of saturation and must be in [0, 1], got {ch4_sat}")
+
+
 def brine_props(p: float = None, degf: float = None, wt: float = None, ch4_sat: float=0,
                 metric: bool = False, *, pres: float = None, temp: float = None, ppm: float = None) -> Tuple:
     """ Calculates Brine properties from modified Spivey Correlation per McCain Petroleum Reservoir Fluid Properties pg 160
@@ -158,8 +166,7 @@ def brine_props(p: float = None, degf: float = None, wt: float = None, ch4_sat: 
         p = p * BAR_TO_PSI
         degf = degc_to_degf(degf)
     validate_pe_inputs(p=p, degf=degf)
-    if wt < 0 or wt >= 100:
-        raise ValueError(f"Salt weight percent must be >= 0 and < 100, got {wt}")
+    _check_salt_and_ch4_sat(wt, ch4_sat)
 
     Eq41 = _Eq41
 
@@ -451,6 +458,27 @@ BBL2CUFT = 5.614583333 # cuft in a bbl
 #                               to adjust the pure brine viscosity for xCO2 calculated from Spycher & Pruess
 #===================================================================================================================
 
+def _water_psat_sp2010(degc):
+    """Water saturation pressure (bar), Spycher & Pruess (2010) P0 fit above 100 degC."""
+    return (-1.9906e-1 + 2.0471e-3 * degc + 1.0152e-4 * degc**2
+            - 1.4234e-6 * degc**3 + 1.4168e-8 * degc**4)
+
+
+def _check_co2_brine_state(p_bar, deg_c, ppm):
+    """CO2_Brine_Mixture input guards: salinity range, and no state below water Psat.
+
+    Above 100 degC the model's reference pressure P0 is the water saturation
+    pressure; below it there is no aqueous phase to saturate.
+    """
+    if not 0 <= ppm < 1e6:
+        raise ValueError(f"ppm must be >= 0 and < 1,000,000, got {ppm}")
+    if deg_c > 100 and p_bar < _water_psat_sp2010(deg_c):
+        raise ValueError(
+            f"CO2_Brine_Mixture: {p_bar:.2f} bar is below the water saturation pressure "
+            f"{_water_psat_sp2010(deg_c):.2f} bar at {deg_c:.1f} degC; no aqueous phase "
+            f"exists there")
+
+
 class CO2_Brine_Mixture():
     """ Calculates CO2 saturated Brine mutual solubilities and brine properties
     
@@ -560,7 +588,9 @@ class CO2_Brine_Mixture():
             self.pBar = pres / BAR2PSI      # Pressure (psia -> Bar)
             self.degC = (temp - 32)/1.8   # Temperature (degF -> deg C)
         self.tKel = self.degC + CEL2KEL
-        
+
+        _check_co2_brine_state(self.pBar, self.degC, ppm)
+
         # Calculate maximum salt concentration
         self.ppm_sat = round(262180 + 72 * self.degC + 1.06 * self.degC**2,0)  # Eq 9.1 from Whitson Phase Monograph
         
@@ -768,7 +798,16 @@ class CO2_Brine_Mixture():
             Z = np.array([x for x in Z if np.isreal(x)])  # Keep only real results
             roots = np.real(Z)
 
-        if len(roots) > 1: # Evaluate which root to use per Eqs 25 and 26 in Spycher & Pruess (2003)
+        if len(roots) > 1 and not self.low_temp:
+            # Above 99 degC the CO2-rich phase is supercritical CO2 + steam; the
+            # small root is liquid water, and taking it collapses the
+            # back-substitution onto yH2O = 1 (S&P 2010 App. A: the liquid root
+            # applies only below the critical point of CO2)
+            result = max(roots)
+            if self.CO2_sat:
+                self.CO2_sat = False
+                self.repeat = True
+        elif len(roots) > 1: # Evaluate which root to use per Eqs 25 and 26 in Spycher & Pruess (2003)
             vgas, vliq = max(roots), min(roots)
 
             w1 = self.pBar*(vgas - vliq)
@@ -958,6 +997,24 @@ class CO2_Brine_Mixture():
             f"{self.degC:.2f} degC; using the last solution"
         )
 
+    def _flag_high_t_convergence(self, err, iternum):
+        """Set converged=False, with a warning, if the high-T loop did not
+        converge or settled on its trivial fixed point (a pure-water "gas" with
+        no dissolved CO2), which is not a phase equilibrium."""
+        import warnings
+        if err > EPS:
+            self.converged = False
+            warnings.warn(
+                f"Spycher CO2-brine iteration did not converge in {iternum} iterations "
+                f"(relative error={err:.2e}). Results may be inaccurate.",
+                RuntimeWarning, stacklevel=3)
+        if self.y[1] >= 1 - 2 * EPS or self.x[0] <= 2 * EPS:
+            self.converged = False
+            warnings.warn(
+                f"Spycher CO2-brine iteration collapsed to the trivial solution "
+                f"(yH2O = 1, xCO2 = 0) at {self.pBar:.2f} bar, {self.degC:.1f} degC; "
+                f"results are not a phase equilibrium.", RuntimeWarning, stacklevel=3)
+
     def co2BrineSolubility(self):
         """ Calculates CO2-brine mutual solubilities at self.pBar, self.degC
             and self.ppm (Spycher & Pruess 2010). Takes no arguments and
@@ -974,6 +1031,12 @@ class CO2_Brine_Mixture():
                     self.pBar, self.degC, self.ppm
                 )
                 self.converged = conv
+                if not conv:
+                    import warnings
+                    warnings.warn(
+                        f"Spycher CO2-brine iteration did not converge, or collapsed to the "
+                        f"trivial solution, at {self.pBar:.2f} bar, {self.degC:.1f} degC. "
+                        f"Results may be inaccurate.", RuntimeWarning, stacklevel=2)
                 self.CO2_sat = co2_sat  # Root class the solve settled on
                 self.x = np.array([xco2, 1.0 - xco2 - (self.xSalt if self.xSalt else 0.0)])
                 self.y = np.array([yco2, yh2o])
@@ -1014,7 +1077,7 @@ class CO2_Brine_Mixture():
         if self.degC <= 100:          # Reference pressures delineated by 100 deg C cutoff. 
             self.P0 = 1.0              # Reference Pressure (1 bar at < 100 degC)
         else:                     # Ref Pressure (Water saturation pressure Bar at >= 100 degC)
-            self.P0 = self.FT(self.degC, [-1.9906e-1, 2.0471e-3, 1.0152e-4, -1.4234e-6, 1.4168e-8]) 
+            self.P0 = _water_psat_sp2010(self.degC)
     
         self.pRT0 = (self.pBar - self.P0) / (RGASCON * self.tKel)
         self.pRT = self.pBar / (RGASCON * self.tKel)
@@ -1113,14 +1176,7 @@ class CO2_Brine_Mixture():
 
                 iternum += 1
 
-            if err > EPS:
-                self.converged = False
-                import warnings
-                warnings.warn(
-                    f"Spycher CO2-brine iteration did not converge in {iternum} iterations "
-                    f"(relative error={err:.2e}). Results may be inaccurate.",
-                    RuntimeWarning, stacklevel=2
-                )
+            self._flag_high_t_convergence(err, iternum)
 
         #=======================================================================
         #  Re-Compute the CO2/H2O Gas Phase Density
