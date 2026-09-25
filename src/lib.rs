@@ -12,6 +12,7 @@ mod spycher_pruess;
 mod vle;
 mod bessel;
 mod gwr;
+mod brine_visc;
 
 /// Smoke test function called during import-time probe.
 #[pyfunction]
@@ -67,6 +68,10 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(vlp::gray_fbhp_oil_rust, m)?)?;
     m.add_function(wrap_pyfunction!(vlp::bb_fbhp_gas_rust, m)?)?;
     m.add_function(wrap_pyfunction!(vlp::bb_fbhp_oil_rust, m)?)?;
+    m.add_function(wrap_pyfunction!(vlp::vlp_water_viscosity_rust, m)?)?;
+
+    // Gas-free NaCl brine viscosity (VLP water phase; parity testing)
+    m.add_function(wrap_pyfunction!(brine_visc::brine_viscosity_nacl_rust, m)?)?;
 
     // DCA hyperbolic grid search
     m.add_function(wrap_pyfunction!(dca::fit_hyperbolic_rust, m)?)?;

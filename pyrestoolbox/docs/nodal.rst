@@ -462,7 +462,7 @@ Returns flowing bottom hole pressure (psia, or barsa if metric=True) using the s
      - Water cut (fraction 0-1). Oil wells only
    * - wsg
      - float
-     - Water specific gravity. Defaults to 1.07
+     - Water specific gravity. Defaults to 1.07. Also sets the water-phase viscosity: converted to NaCl salinity with McCain's gamma_w = 1 + 0.695e-6 x ppm (clamped to 0-260,000 ppm; wsg <= 1 is fresh water), then the gas-free brine viscosity ``brine_props`` reports (IAPWS-2008 water, Jones-Dole salt ratio, Kestin pressure factor) at each segment's pressure and temperature
    * - injection
      - bool
      - True for injection wells. Defaults to False
@@ -502,7 +502,7 @@ Gas well:
     >>> from pyrestoolbox import nodal
     >>> c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    961.6837134610927
+    961.594453485463
 
 Oil well:
 
@@ -510,7 +510,7 @@ Oil well:
 
     >>> c = nodal.Completion(tid=2.441, length=8000, tht=100, bht=180)
     >>> nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil', qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65, pb=2500, rsb=500, sgsp=0.65, api=35)
-    1894.1104855607562
+    1901.8236509686349
 
 Oil well using OilPVT object:
 
@@ -519,7 +519,7 @@ Oil well using OilPVT object:
     >>> from pyrestoolbox import oil
     >>> opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     >>> nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil', oil_pvt=opvt, qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65)
-    1895.1011980305584
+    1902.8150784867205
 
 Deviated well using WellSegment:
 
@@ -528,7 +528,7 @@ Deviated well using WellSegment:
     >>> segs = [nodal.WellSegment(md=5000, id=2.441, deviation=0), nodal.WellSegment(md=5000, id=2.441, deviation=45)]
     >>> c_dev = nodal.Completion(segments=segs, tht=100, bht=200)
     >>> nodal.fbhp(thp=500, completion=c_dev, vlpmethod='HB', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    933.2375466817515
+    932.8973511781188
 
 .. note::
 
@@ -825,10 +825,10 @@ Oil well operating point:
     >>> r = nodal.Reservoir(pr=3000, degf=180, k=50, h=30, re=1000, rw=0.35)
     >>> opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     >>> result = nodal.operating_point(thp=200, completion=c, reservoir=r, vlpmethod='HB', well_type='oil', oil_pvt=opvt, gor=800, wc=0.3, gsg=0.65)
-    >>> round(result['rate'], 1)   # total liquid, STB/d (oil 1650.7 at 30% water cut)
-    2358.1
+    >>> round(result['rate'], 1)   # total liquid, STB/d (oil 1643.9 at 30% water cut)
+    2348.5
     >>> round(result['bhp'], 1)
-    2008.6
+    2013.1
 
 
 Calculation Methods and Class Objects
@@ -861,20 +861,20 @@ Examples:
     >>> from pyrestoolbox import nodal
     >>> c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    961.6837134610927
+    961.594453485463
 
 Comparing all four VLP methods for the same gas well:
 
 .. code-block:: python
 
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    961.6837134610927
+    961.594453485463
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='WG', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    1172.8626065704736
+    1127.2904240222729
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='GRAY', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    1066.6990456110436
+    1066.755704999179
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='BB', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    1224.493443200605
+    1224.730727621603
 
 
 VLP Method Suitability for Deviated and Horizontal Wells

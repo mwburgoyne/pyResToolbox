@@ -100,14 +100,38 @@ pub fn gas_viscosity(sg: f64, temp_f: f64, press_psia: f64, z: f64, _tc: f64, _p
     (1e-4 * k_val * exp_arg.exp()).max(1e-6)
 }
 
-/// Simplified water viscosity (cP).
-pub fn water_viscosity(press_psia: f64, temp_f: f64, _salinity: f64) -> f64 {
-    let t = if temp_f < 32.0 { 32.0 } else { temp_f };
-    let a_coeff = -3.79418 + 604.129 / (139.18 + t);
-    let mut mu_w = 10.0_f64.powf(a_coeff);
-    // salinity correction omitted (VLP helpers pass 0)
-    mu_w *= 1.0 + 5e-4 * (press_psia - 14.7) / 1000.0;
-    mu_w.max(0.01)
+/// McCain (1990) water-gravity slope: gamma_w = 1 + 0.695e-6 * Cs, Cs NaCl ppm
+/// (Properties of Petroleum Fluids, 2nd ed.; also Whitson & Brule, SPE
+/// Monograph 20).
+const MCCAIN_SG_PER_PPM: f64 = 0.695e-6;
+/// Upper clamp on the inferred NaCl concentration, ppm (near halite saturation).
+const NACL_PPM_MAX: f64 = 260_000.0;
+/// NaCl molar mass, g/mol (as brine_props).
+const MW_NACL: f64 = 58.4428;
+/// psia -> MPa, the factor brine_props uses.
+const PSI_TO_MPA: f64 = 0.00689476;
+/// IF97 Region 1 bounds the brine viscosity chain is evaluated within.
+const IF97_T_MIN_K: f64 = 273.15;
+const IF97_T_MAX_K: f64 = 623.15;
+const IF97_P_MAX_MPA: f64 = 100.0;
+
+/// NaCl molality (mol/kg water) implied by a water specific gravity, from
+/// McCain's gamma_w = 1 + 0.695e-6 * ppm, ppm clamped to [0, 260000].
+/// wsg <= 1 is fresh water. Port of nodal.py _nacl_molality_from_wsg.
+pub fn nacl_molality_from_wsg(wsg: f64) -> f64 {
+    let ppm = ((wsg - 1.0) / MCCAIN_SG_PER_PPM).clamp(0.0, NACL_PPM_MAX);
+    let wt = ppm / 1e4;
+    1000.0 * (wt / 100.0) / (MW_NACL * (1.0 - wt / 100.0))
+}
+
+/// Gas-free NaCl brine viscosity (cP) at segment conditions: the library's
+/// brine chain (IAPWS-2008 x Jones-Dole x Kestin pressure factor), with T held
+/// in 273.15-623.15 K and P capped at 100 MPa (IF97 Region 1).
+/// Port of nodal.py _water_viscosity.
+pub fn water_viscosity(press_psia: f64, temp_f: f64, molality: f64) -> f64 {
+    let t_k = ((temp_f - 32.0) / 1.8 + 273.15).clamp(IF97_T_MIN_K, IF97_T_MAX_K);
+    let p_mpa = (press_psia * PSI_TO_MPA).min(IF97_P_MAX_MPA);
+    crate::brine_visc::brine_viscosity_nacl(t_k, p_mpa, molality)
 }
 
 /// Standing (1947) solution GOR estimate (scf/STB).

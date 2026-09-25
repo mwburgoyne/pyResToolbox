@@ -114,7 +114,7 @@ def test_call_builds_completion_and_matches_doc_example():
     r = srv.call('nodal.fbhp', {'thp': 500, 'completion': _COMPLETION, 'vlpmethod': 'HB',
                                 'well_type': 'gas', 'qg_mscfd': 5000, 'gsg': 0.65,
                                 'cgr': 10, 'qw_bwpd': 10, 'api': 45, 'oil_vis': 1.0})
-    assert abs(r['result'] - 961.6837134610927) / 961.6837134610927 < RTOL
+    assert abs(r['result'] - 961.594453485463) / 961.594453485463 < RTOL
 
 
 def test_call_builds_segments_reservoir_and_gas_pvt():
@@ -123,7 +123,7 @@ def test_call_builds_segments_reservoir_and_gas_pvt():
     r = srv.call('nodal.fbhp', {'thp': 500, 'completion': segs, 'vlpmethod': 'HB', 'well_type': 'gas',
                                 'qg_mscfd': 5000, 'gsg': 0.65, 'cgr': 10, 'qw_bwpd': 10,
                                 'api': 45, 'oil_vis': 1.0})
-    assert abs(r['result'] - 933.2375466817515) < 0.01
+    assert abs(r['result'] - 932.8973511781188) < 0.01
     op = srv.call('nodal.operating_point', {'thp': 500, 'completion': _COMPLETION,
                                             'reservoir': _RESERVOIR, 'vlpmethod': 'HB',
                                             'well_type': 'gas', 'gsg': 0.65})['result']

@@ -347,6 +347,7 @@ fn segment_march_gas(
 
     let mflow_g = RHO_AIR_STC * gsg * qg_mmscfd * 1e6 / SEC_PER_DAY;
     let mflow_w = wsg * RHO_FW * qw_bwpd * FT3_PER_BBL / SEC_PER_DAY;
+    let m_nacl = nacl_molality_from_wsg(wsg);
 
     let mut p_psia = thp;
 
@@ -380,7 +381,11 @@ fn segment_march_gas(
             let lambda_l = if v_m > 1e-10 { v_sl / v_m } else { 0.0 };
             let rho_ns = rho_l * lambda_l + rho_g * (1.0 - lambda_l);
 
-            let water_visc = water_viscosity(p_avg, temp_f, 0.0);
+            let water_visc = if qw_bwpd > 0.0 {
+                water_viscosity(p_avg, temp_f, m_nacl)
+            } else {
+                0.0
+            };
             let mu_l = if ql_loc > 0.0 {
                 (qo_loc * oil_vis_loc + qw_bwpd * water_visc) / ql_loc
             } else {
@@ -436,6 +441,7 @@ fn segment_march_oil(
     let qw = qt_stbpd * wc;
     let osg = 141.5 / (api + 131.5);
     let rsb_for_calc = rsb / rsb_scale;
+    let m_nacl = nacl_molality_from_wsg(wsg);
 
     let diam_ft = tid / 12.0;
     let rough_ft = rough / 12.0;
@@ -493,7 +499,11 @@ fn segment_march_oil(
             let lambda_l = if v_m > 1e-10 { v_sl / v_m } else { 0.0 };
             let rho_ns = rho_l * lambda_l + rho_g * (1.0 - lambda_l);
 
-            let water_visc = water_viscosity(p_avg, temp_f, 0.0);
+            let water_visc = if qw > 0.0 {
+                water_viscosity(p_avg, temp_f, m_nacl)
+            } else {
+                0.0
+            };
             let mu_l = if ql > 0.0 {
                 (qo * oil_vis_seg + qw * water_visc) / ql
             } else {

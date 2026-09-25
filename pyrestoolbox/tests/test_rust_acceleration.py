@@ -614,6 +614,73 @@ def test_nodal_oil_parity_deviated(vlpmethod, thp, qt):
 
 
 # =============================================================================
+# Water phase of the VLP marches: gas-free NaCl brine viscosity chain
+# =============================================================================
+# The Rust port of brine.viscosity_route.brine_viscosity (IAPWS-2008 x
+# Jones-Dole x Kestin pressure factor, NaCl) and the nodal wrapper that feeds
+# it from wsg must match Python to 1e-9 relative; the marches that use it must
+# too, since nothing else in them differs between the two paths.
+
+RTOL_PARITY = 1e-9
+
+
+@rust_required
+def test_brine_viscosity_nacl_parity_grid():
+    from pyrestoolbox import _native
+    from pyrestoolbox.brine.viscosity_route import brine_viscosity
+    worst = 0.0
+    for degf in np.linspace(32.0, 400.0, 12):
+        t_k = (degf - 32.0) / 1.8 + 273.15
+        for psia in np.linspace(14.7, 14500.0, 12):
+            p_mpa = psia * 0.00689476
+            for wt in (0.0, 1e-7, 1.0, 5.0, 10.0, 17.5, 25.0):
+                m = 1000 * (wt / 100) / (58.4428 * (1 - wt / 100))
+                py = brine_viscosity(t_k, p_mpa, m=m)
+                rs = _native.brine_viscosity_nacl_rust(t_k, p_mpa, m)
+                worst = max(worst, abs(rs / py - 1.0))
+    assert worst < RTOL_PARITY, f"brine viscosity parity {worst:.3e}"
+
+
+@rust_required
+def test_vlp_water_viscosity_parity_grid():
+    """Nodal wrapper incl. wsg -> molality and the IF97 clamps (P > 100 MPa)."""
+    from pyrestoolbox import _native
+    from pyrestoolbox.nodal import nodal
+    worst = 0.0
+    for degf in np.linspace(20.0, 700.0, 12):
+        for psia in np.linspace(14.7, 16000.0, 12):
+            for wsg in (0.95, 1.0, 1.03, 1.07, 1.12, 1.2, 1.25):
+                m = nodal._nacl_molality_from_wsg(wsg)
+                py = nodal._water_viscosity(psia, degf, m)
+                rs = _native.vlp_water_viscosity_rust(psia, degf, wsg)
+                worst = max(worst, abs(rs / py - 1.0))
+    assert worst < RTOL_PARITY, f"VLP water viscosity parity {worst:.3e}"
+
+
+@rust_required
+@pytest.mark.parametrize('vlpmethod', ['HB', 'WG', 'GRAY', 'BB'])
+@pytest.mark.parametrize('wsg', [1.0, 1.07, 1.2])
+def test_nodal_water_phase_parity(vlpmethod, wsg):
+    """Gas and oil marches carrying water: Rust == Python to 1e-9."""
+    from pyrestoolbox.nodal import nodal
+    comp = nodal.Completion(tid=2.441, length=10000, tht=100, bht=300)
+    cases = [
+        dict(well_type='gas', thp=500, qg_mmscfd=5.0, gsg=0.65, cgr=10,
+             qw_bwpd=300, api=45, oil_vis=1.0),
+        dict(well_type='oil', thp=200, qt_stbpd=2000, gor=800, wc=0.6,
+             gsg=0.65, pb=2500, rsb=500, sgsp=0.65, api=35),
+    ]
+    for kw in cases:
+        kw = dict(kw, completion=comp, vlpmethod=vlpmethod, wsg=wsg)
+        result_rust = nodal.fbhp(**kw)
+        with force_python():
+            result_python = nodal.fbhp(**kw)
+        np.testing.assert_allclose(
+            result_rust, result_python, rtol=RTOL_PARITY,
+            err_msg=f"{vlpmethod} {kw['well_type']} wsg={wsg} parity drift")
+
+
+# =============================================================================
 # Parity harness: broader brine SoreideWhitson grid
 # =============================================================================
 

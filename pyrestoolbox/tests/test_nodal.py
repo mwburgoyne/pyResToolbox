@@ -920,6 +920,49 @@ def test_vlp_oil_velarde_in_range_unaffected():
         assert bhp > 200, f"{method} BHP {bhp} should exceed THP 200"
 
 
+
+# ============================================================================
+#  Water phase viscosity: the library's gas-free brine chain
+# ============================================================================
+
+def test_water_viscosity_equals_brine_props_gas_free():
+    """nodal water viscosity == brine_props' gas-free viscosity at the
+    McCain salinity implied by wsg (gamma_w = 1 + 0.695e-6 * ppm)."""
+    from pyrestoolbox.nodal import nodal as _nodal
+    from pyrestoolbox.brine import brine_props
+    for p, degf, wsg in [(14.7, 100.0, 1.0), (1500.0, 150.0, 1.03),
+                         (3000.0, 200.0, 1.07), (6000.0, 250.0, 1.12),
+                         (10000.0, 300.0, 1.18)]:
+        ppm = (wsg - 1.0) / 0.695e-6
+        ref = brine_props(p=p, degf=degf, wt=ppm / 1e4, ch4_sat=0)[2]
+        got = _nodal._water_viscosity(p, degf, _nodal._nacl_molality_from_wsg(wsg))
+        assert abs(got / ref - 1.0) < 1e-12, (p, degf, wsg, got, ref)
+
+
+def test_water_viscosity_magnitude():
+    """Fresh water at 100 degF, 1 atm is ~0.68 cP (the pre-3.7.8 helper gave
+    0.054 cP by evaluating a natural-log degC fit as log10 in degF)."""
+    from pyrestoolbox.nodal import nodal as _nodal
+    mu = _nodal._water_viscosity(14.7, 100.0, 0.0)
+    assert 0.67 < mu < 0.69, mu
+    # Salt raises it; heat lowers it
+    m = _nodal._nacl_molality_from_wsg(1.07)
+    assert _nodal._water_viscosity(14.7, 100.0, m) > mu
+    assert _nodal._water_viscosity(14.7, 300.0, 0.0) < 0.2
+
+
+def test_nacl_molality_from_wsg():
+    from pyrestoolbox.nodal import nodal as _nodal
+    assert _nodal._nacl_molality_from_wsg(1.0) == 0.0
+    assert _nodal._nacl_molality_from_wsg(0.98) == 0.0
+    # 1.07 -> 100,719 ppm -> 10.07 wt% -> 1.916 mol/kg
+    assert abs(_nodal._nacl_molality_from_wsg(1.07) - 1.9164037) < 1e-6
+    # Clamped at 260,000 ppm
+    assert _nodal._nacl_molality_from_wsg(1.5) == _nodal._nacl_molality_from_wsg(1.19)
+    # Out-of-region segment conditions are clamped rather than raising
+    assert _nodal._water_viscosity(16000.0, 700.0, 1.0) > 0.0
+
+
 if __name__ == '__main__':
     import traceback
     tests = [(k, v) for k, v in list(globals().items()) if k.startswith('test_') and callable(v)]
@@ -1010,5 +1053,5 @@ def test_bb_injection_uses_downhill_holdup():
     from pyrestoolbox import nodal
     c = nodal.Completion(tid=2.441, length=9000, tht=80, bht=200)
     kw = dict(thp=2000, completion=c, vlpmethod='BB', well_type='gas', qg_mscfd=1000, qw_bwpd=200, gsg=0.7)
-    assert abs(nodal.fbhp(**kw) - 4375.1) < 0.2                      # producer unchanged
-    assert abs(nodal.fbhp(injection=True, **kw) - 3178.0) < 0.2     # was 4353.5 with the uphill set
+    assert abs(nodal.fbhp(**kw) - 4377.5) < 0.2                      # producer unchanged by the fix
+    assert abs(nodal.fbhp(injection=True, **kw) - 3174.3) < 0.2     # 4355.9 with the uphill set

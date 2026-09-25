@@ -63,6 +63,7 @@ from pyrestoolbox.constants import (BAR_TO_PSI, PSI_TO_BAR, degc_to_degf, degf_t
                                     STB_TO_SM3, SM3_TO_STB)
 import pyrestoolbox.gas as gas
 import pyrestoolbox.oil as oil
+from pyrestoolbox.brine.viscosity_route import brine_viscosity as _brine_viscosity
 from pyrestoolbox._accelerator import RUST_AVAILABLE as _RUST_AVAILABLE, rust_accelerated
 from pyrestoolbox.oil._density import _cofb_mccain
 from pyrestoolbox.oil._constants import _PF_UOB_MAX
@@ -839,16 +840,41 @@ def _gas_viscosity(sg, temp_f, press_psia, z=None, tc=None, pc=None):
     return max(1e-4 * k_val * math.exp(exp_arg), 1e-6)
 
 
-def _water_viscosity(press_psia, temp_f, salinity=0.0):
-    """Simplified water viscosity (cP)."""
-    if temp_f < 32:
-        temp_f = 32.0
-    a_coeff = -3.79418 + 604.129 / (139.18 + temp_f)
-    mu_w = 10.0 ** a_coeff
-    if salinity > 0:
-        mu_w *= (1.0 + 0.02 * salinity)
-    mu_w *= (1.0 + 5e-4 * (press_psia - 14.7) / 1000.0)
-    return max(mu_w, 0.01)
+# McCain (1990) water-gravity slope: gamma_w = 1 + 0.695e-6 * Cs, Cs NaCl ppm
+# (Properties of Petroleum Fluids, 2nd ed.; also Whitson & Brule, SPE
+# Monograph 20).
+_MCCAIN_SG_PER_PPM = 0.695e-6
+_NACL_PPM_MAX = 260000.0          # clamp on inferred NaCl, ppm (near halite saturation)
+_MW_NACL = 58.4428                # g/mol, as brine_props
+_PSI_TO_MPA = 0.00689476          # psia -> MPa, the factor brine_props uses
+_IF97_T_MIN_K = 273.15            # IF97 Region 1 bounds for the brine chain
+_IF97_T_MAX_K = 623.15
+_IF97_P_MAX_MPA = 100.0
+
+
+def _nacl_molality_from_wsg(wsg):
+    """NaCl molality (mol/kg water) implied by water specific gravity.
+
+    McCain's gamma_w = 1 + 0.695e-6 * ppm, ppm clamped to [0, 260000];
+    wsg <= 1 is fresh water. The molality expression is brine_props'.
+    """
+    ppm = min(max((wsg - 1.0) / _MCCAIN_SG_PER_PPM, 0.0), _NACL_PPM_MAX)
+    wt = ppm / 1e4
+    return 1000 * (wt / 100) / (_MW_NACL * (1 - (wt / 100)))
+
+
+def _water_viscosity(press_psia, temp_f, molality):
+    """Gas-free NaCl brine viscosity (cP) at segment conditions.
+
+    The library's brine chain (brine.viscosity_route.brine_viscosity:
+    IAPWS-2008 water x Jones-Dole salt ratio x Kestin pressure factor), the
+    same gas-free viscosity brine_props reports. T is held within
+    273.15-623.15 K and P capped at 100 MPa (IF97 Region 1) so a march never
+    raises on an out-of-region segment.
+    """
+    t_k = min(max((temp_f - 32) / 1.8 + 273.15, _IF97_T_MIN_K), _IF97_T_MAX_K)
+    p_mpa = min(press_psia * _PSI_TO_MPA, _IF97_P_MAX_MPA)
+    return _brine_viscosity(t_k, p_mpa, m=molality)
 
 
 # ============================================================================
@@ -1408,6 +1434,7 @@ def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
 
     mflow_g = _RHO_AIR_STC * gsg * qg_mmscfd * 1e6 / _SEC_PER_DAY
     mflow_w = wsg * _RHO_FW * qw_bwpd * _FT3_PER_BBL / _SEC_PER_DAY
+    m_nacl = _nacl_molality_from_wsg(wsg)
 
     p_psia = thp
 
@@ -1442,7 +1469,8 @@ def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
             lambda_l = v_sl / v_m if v_m > 1e-10 else 0.0
             rho_ns = rho_l * lambda_l + rho_g * (1.0 - lambda_l)
 
-            water_visc = _water_viscosity(p_avg, temp_f)
+            water_visc = (_water_viscosity(p_avg, temp_f, m_nacl)
+                          if qw_bwpd > 0 else 0.0)
             mu_l = ((qo_loc * oil_vis_loc + qw_bwpd * water_visc) / ql_loc
                     if ql_loc > 0 else oil_vis_loc)
 
@@ -1506,6 +1534,7 @@ def _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
     qw = qt_stbpd * wc
     osg = 141.5 / (api + 131.5)
     rsb_for_calc = rsb / rsb_scale
+    m_nacl = _nacl_molality_from_wsg(wsg)
 
     diam_ft = tid / 12.0
     rough_ft = rough / 12.0
@@ -1560,7 +1589,8 @@ def _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
             lambda_l = v_sl / v_m if v_m > 1e-10 else 0.0
             rho_ns = rho_l * lambda_l + rho_g * (1.0 - lambda_l)
 
-            water_visc = _water_viscosity(p_avg, temp_f)
+            water_visc = (_water_viscosity(p_avg, temp_f, m_nacl)
+                          if qw > 0 else 0.0)
             mu_l = ((qo * oil_vis_seg + qw * water_visc) / ql
                     if ql > 0 else oil_vis_seg)
 
@@ -1891,7 +1921,9 @@ def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
             wc: Water cut (fraction 0-1)
 
         Common parameters:
-            wsg: Water specific gravity. Defaults to 1.07
+            wsg: Water specific gravity. Defaults to 1.07. Also sets the water
+                 viscosity: NaCl ppm = (wsg - 1)/0.695e-6 (McCain), then the
+                 gas-free brine viscosity brine_props reports, per segment.
             injection: True for injection wells. Defaults to False
             gsg: Gas specific gravity (relative to air). Defaults to 0.65
             pb: Bubble point pressure (psia | barsa). Required for oil wells

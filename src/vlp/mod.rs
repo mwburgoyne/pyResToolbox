@@ -23,6 +23,13 @@ pub mod holdup_bb;
 pub mod march;
 pub mod static_column;
 
+/// Water-phase viscosity used by the marches (cP), for parity testing
+/// against nodal.py _water_viscosity(p, T, _nacl_molality_from_wsg(wsg)).
+#[pyfunction]
+pub fn vlp_water_viscosity_rust(press_psia: f64, temp_f: f64, wsg: f64) -> f64 {
+    pvt_helpers::water_viscosity(press_psia, temp_f, pvt_helpers::nacl_molality_from_wsg(wsg))
+}
+
 /// HB gas VLP segment loop.
 #[pyfunction]
 #[pyo3(signature = (thp, api, gsg, tid, rough, length, tht, bht, wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, tc=None, pc=None))]
