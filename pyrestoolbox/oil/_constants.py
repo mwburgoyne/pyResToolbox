@@ -65,6 +65,16 @@ _PF_POLY = (-1.0146, 1.3322, -0.4876, -1.15036)  # log10(uob) polynomial coeffs
 _PF_P_COEFF = 1.3449e-3   # Pressure coefficient
 _PF_UOB_MAX = 3.546       # Upper uob (cP) of the fitted data, Table 3 p. 254; the cubic collapses beyond ~5 cP
 
+# Standing (1981) undersaturated viscosity, a fit to Beal's (1946) chart, used
+# above _PF_UOB_MAX: uo = uob + 0.001 (p - pb)(0.024 uob^1.6 + 0.038 uob^0.56).
+# Constants from standard compilations (Standing 1981, "Volumetric and Phase
+# Behavior of Oil Field Hydrocarbon Systems"); the Whitson-Brule monograph cites
+# the Norsk Hydro manual preferring Standing to Vazquez-Beggs, which rises
+# unphysically at high pressure.
+_STAN_UO_K = 0.001
+_STAN_UO_A, _STAN_UO_AEXP = 0.024, 1.6
+_STAN_UO_B, _STAN_UO_BEXP = 0.038, 0.56
+
 # Standing-Witte-McCain-Hill (1995) density — Eqs 3.17-3.19
 _SWMH_RHOPO_INIT = 52.8   # Initial pseudo-liquid density constant
 _SWMH_RHOPO_RS = -0.01    # Rs coefficient in initial estimate (rho = 52.8 - 0.01*Rs)

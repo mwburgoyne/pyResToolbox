@@ -65,6 +65,7 @@ import pyrestoolbox.gas as gas
 import pyrestoolbox.oil as oil
 from pyrestoolbox._accelerator import RUST_AVAILABLE as _RUST_AVAILABLE, rust_accelerated
 from pyrestoolbox.oil._density import _cofb_mccain
+from pyrestoolbox.oil._constants import _PF_UOB_MAX
 if _RUST_AVAILABLE:
     from pyrestoolbox import _native as _rust
 
@@ -915,10 +916,14 @@ def _oil_viscosity_full(sgsp, api, temp_f, rsb, pb, press_psia, vis_frac=1.0, rs
         ab = 10.715 * (rsb + 100.0) ** (-0.515)
         bb = 5.44 * (rsb + 150.0) ** (-0.338)
         mu_orb = ab * mu_od ** bb
-        log_mu = _log10(mu_orb)
-        aa = (-1.0146 + 1.3322 * log_mu - 0.4876 * log_mu ** 2 -
-              1.15036 * log_mu ** 3)
-        mu_or = mu_orb + 0.0013449 * (press_psia - pb) * 10.0 ** aa
+        if mu_orb > _PF_UOB_MAX:   # Standing (1981) beyond Petrosky-Farshad's data
+            mu_or = mu_orb + 0.001 * (press_psia - pb) * (0.024 * mu_orb ** 1.6
+                                                          + 0.038 * mu_orb ** 0.56)
+        else:
+            log_mu = _log10(mu_orb)
+            aa = (-1.0146 + 1.3322 * log_mu - 0.4876 * log_mu ** 2 -
+                  1.15036 * log_mu ** 3)
+            mu_or = mu_orb + 0.0013449 * (press_psia - pb) * 10.0 ** aa
 
     return max(mu_or, 0.001) * vis_frac
 

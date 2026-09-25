@@ -4,6 +4,10 @@
 
 use super::constants::{MW_AIR, R_GAS};
 
+/// Petrosky & Farshad (1995) undersaturated viscosity data limit, uob (cP);
+/// Standing (1981) above it. Mirrors Python oil._constants._PF_UOB_MAX.
+const PF_UOB_MAX: f64 = 3.546;
+
 /// rho(p)/rho(pb) = exp(cofb (p - pb)) above Pb, else 1 (McCain Eq 3.20),
 /// matching oil_deno above Pb. pb or rsb of zero carry no bubble point.
 /// Mirrors Python nodal._undersaturated_compression.
@@ -186,10 +190,16 @@ pub fn oil_viscosity_full(
         let ab = 10.715 * (rsb + 100.0).powf(-0.515);
         let bb = 5.44 * (rsb + 150.0).powf(-0.338);
         let mu_orb = ab * mu_od.powf(bb);
-        let log_mu = log10_safe(mu_orb);
-        let aa = -1.0146 + 1.3322 * log_mu - 0.4876 * log_mu.powi(2)
-            - 1.15036 * log_mu.powi(3);
-        mu_or = mu_orb + 0.0013449 * (press_psia - pb) * 10.0_f64.powf(aa);
+        mu_or = if mu_orb > PF_UOB_MAX {
+            // Standing (1981) beyond Petrosky-Farshad's data (mirrors Python)
+            mu_orb + 0.001 * (press_psia - pb)
+                * (0.024 * mu_orb.powf(1.6) + 0.038 * mu_orb.powf(0.56))
+        } else {
+            let log_mu = log10_safe(mu_orb);
+            let aa = -1.0146 + 1.3322 * log_mu - 0.4876 * log_mu.powi(2)
+                - 1.15036 * log_mu.powi(3);
+            mu_orb + 0.0013449 * (press_psia - pb) * 10.0_f64.powf(aa)
+        };
     }
 
     mu_or.max(0.001) * vis_frac

@@ -20,6 +20,7 @@ from ._constants import (
     _BR_Z0, _BR_Z_API, _BR_T_EXP, _BR_A_MULT, _BR_A_EXP, _BR_A_OFFSET,
     _BR_B_MULT, _BR_B_EXP, _BR_B_OFFSET,
     _PF_POLY, _PF_P_COEFF, _PF_UOB_MAX,
+    _STAN_UO_K, _STAN_UO_A, _STAN_UO_AEXP, _STAN_UO_B, _STAN_UO_BEXP,
     _BO_STAN_A, _BO_STAN_B, _BO_STAN_C, _BO_STAN_EXP,
     _BO_MC_WDEN, _BO_MC_RS_COEFF,
 )
@@ -570,11 +571,10 @@ def oil_viso(p: float, api: float, degf: float, pb: float, rs: float, metric: bo
         if uob <= 0:
             uob = 0.01  # Safety floor
         if uob > _PF_UOB_MAX:
-            warnings.warn(
-                f"Petrosky-Farshad undersaturated viscosity: bubble-point viscosity "
-                f"{uob:.2f} cP is above the correlation's data range (<= {_PF_UOB_MAX} cP, "
-                f"SPE 29468 Table 3); its pressure term collapses for heavier oils, so "
-                f"viscosity above Pb will barely rise with pressure", stacklevel=3)
+            # Beyond Petrosky-Farshad's data (uob <= 3.546 cP) its cubic collapses;
+            # use Standing (1981), which extrapolates consistently for heavy oil
+            return uob + _STAN_UO_K * (p - pb) * (_STAN_UO_A * uob ** _STAN_UO_AEXP
+                                                  + _STAN_UO_B * uob ** _STAN_UO_BEXP)
         loguob = np.log10(uob)  # Eq 3.24b defines X in terms of log10(uob)
         A = (
             _PF_POLY[0]
