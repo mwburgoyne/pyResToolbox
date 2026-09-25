@@ -39,6 +39,16 @@ from pyrestoolbox.constants import (
 )
 from pyrestoolbox.validate import validate_methods
 
+# BHP written for grid points the VLP march cannot solve. Production: the
+# Eclipse/VFPi "forbidden region" convention (Eclipse Reference Manual, VFPPROD,
+# record 7 units note) is an artificially high BHP so the simulator never
+# operates the well at that (rate, THP) combination. Injection: the march fails
+# when friction drives the pressure below atmospheric, i.e. the rate cannot be
+# delivered at that THP; a BHP below anything attainable keeps the simulator
+# out of that region in the same sense.
+_VFP_FAIL_BHP_PROD = 1.0e10   # psia
+_VFP_FAIL_BHP_INJ = 1.0e-6    # psia
+
 
 def _vfp_units(unit_system, flo_type):
     """Shared unit labels for VFPINJ / VFPPROD comment headers."""
@@ -195,12 +205,14 @@ def _sweep_vfpinj_bhp(completion, vlpm, flo_type, thp_values, flo_rates,
                       gas_pvt, oil_pvt, gsg, wsg, sgsp, api, pb, rsb):
     """BHP grid (NTHP x NFLO) in oilfield units, injection sense.
 
-    Points the VLP march cannot solve are set to 1e-6 and counted, so a partly
-    converged table is still usable rather than raising the whole call away.
+    Points the VLP march cannot solve are set to _VFP_FAIL_BHP_INJ, flagged in
+    the returned boolean mask and counted, so a partly converged table is still
+    usable rather than raising the whole call away.
     """
     from pyrestoolbox.nodal import fbhp as nodal_fbhp
 
     bhp_array = np.zeros((len(thp_values), len(flo_rates)))
+    failed = np.zeros(bhp_array.shape, dtype=bool)
     n_failed = 0
     for it, thp in enumerate(thp_values):
         for iflo, flo in enumerate(flo_rates):
@@ -229,9 +241,10 @@ def _sweep_vfpinj_bhp(completion, vlpm, flo_type, thp_values, flo_rates,
                         pb=pb, rsb=rsb, sgsp=sgsp, api=api)
                 bhp_array[it, iflo] = bhp_val
             except (RuntimeError, ValueError, ZeroDivisionError):
-                bhp_array[it, iflo] = 1e-6
+                bhp_array[it, iflo] = _VFP_FAIL_BHP_INJ
+                failed[it, iflo] = True
                 n_failed += 1
-    return bhp_array, n_failed
+    return bhp_array, n_failed, failed
 
 
 def _sweep_vfpprod_bhp(completion, vlpm, well_type, thp_values, wfr_values,
@@ -239,13 +252,15 @@ def _sweep_vfpprod_bhp(completion, vlpm, well_type, thp_values, wfr_values,
                        gsg, wsg, sgsp, api, oil_vis, pr, pb, rsb):
     """BHP grid (NTHP x NWFR x NGFR x NALQ x NFLO) in oilfield units.
 
-    Same failure handling as the injection sweep: unsolved points become 1e-6
-    and are counted.
+    Same failure handling as the injection sweep, with the production sentinel
+    _VFP_FAIL_BHP_PROD (artificially high BHP, the Eclipse forbidden-region
+    convention).
     """
     from pyrestoolbox.nodal import fbhp as nodal_fbhp
 
     bhp_array = np.zeros((len(thp_values), len(wfr_values), len(gfr_values),
                           len(alq_values), len(flo_rates)))
+    failed = np.zeros(bhp_array.shape, dtype=bool)
     n_failed = 0
     for ia, alq in enumerate(alq_values):
         for ig, gfr in enumerate(gfr_values):
@@ -275,9 +290,10 @@ def _sweep_vfpprod_bhp(completion, vlpm, well_type, thp_values, wfr_values,
                                     pb=pb, rsb=rsb, sgsp=sgsp, api=api)
                             bhp_array[it, iw, ig, ia, iflo] = bhp_val
                         except (RuntimeError, ValueError, ZeroDivisionError):
-                            bhp_array[it, iw, ig, ia, iflo] = 1e-6
+                            bhp_array[it, iw, ig, ia, iflo] = _VFP_FAIL_BHP_PROD
+                            failed[it, iw, ig, ia, iflo] = True
                             n_failed += 1
-    return bhp_array, n_failed
+    return bhp_array, n_failed, failed
 
 
 def make_vfpinj(
@@ -373,13 +389,17 @@ def make_vfpinj(
     if len(thp_values) < 1:
         raise ValueError("thp_values must contain at least 1 value")
 
-    bhp_array, n_failed = _sweep_vfpinj_bhp(
+    bhp_array, n_failed, failed = _sweep_vfpinj_bhp(
         completion, vlpm, flo_type, thp_values, flo_rates,
         gas_pvt, oil_pvt, gsg, wsg, sgsp, api, pb, rsb)
 
     if n_failed > 0:
-        warnings.warn(f"{n_failed} of {len(thp_values) * len(flo_rates)} "
-                      "VFPINJ BHP calculations failed")
+        warnings.warn(
+            f"{n_failed} of {len(thp_values) * len(flo_rates)} VFPINJ BHP "
+            f"calculations failed (rate not deliverable at that THP); written as "
+            f"{_VFP_FAIL_BHP_INJ:g} psia and flagged in result['failed']. "
+            "Trim flo_rates or raise thp_values so the table covers only "
+            "attainable conditions.")
 
     # --- Metric output conversion ---
     if metric:
@@ -411,6 +431,7 @@ def make_vfpinj(
         "thp_values": out_thp_values,
         "bhp": bhp_array,
         "n_failed": n_failed,
+        "failed": failed,
         "eclipse_string": eclipse_str,
     }
 
@@ -629,14 +650,18 @@ def make_vfpprod(
     else:
         flo_type, wfr_type, gfr_type = 'OIL', 'WCT', 'GOR'
 
-    bhp_array, n_failed = _sweep_vfpprod_bhp(
+    bhp_array, n_failed, failed = _sweep_vfpprod_bhp(
         completion, vlpm, well_type, ax.thp, ax.wfr, ax.gfr, ax.alq, ax.flo,
         gas_pvt, oil_pvt, gsg, wsg, sgsp, api, oil_vis, ax.pr, ax.pb, ax.rsb)
 
     if n_failed > 0:
         total = (len(ax.flo) * len(ax.thp) * len(ax.wfr)
                  * len(ax.gfr) * len(ax.alq))
-        warnings.warn(f"{n_failed} of {total} VFPPROD BHP calculations failed")
+        warnings.warn(
+            f"{n_failed} of {total} VFPPROD BHP calculations failed; written as "
+            f"{_VFP_FAIL_BHP_PROD:g} psia (Eclipse forbidden-region convention) and "
+            "flagged in result['failed']. Eclipse warns on 1.0E10 and recommends "
+            "replacing it with a value slightly above reservoir pressure.")
 
     if metric:
         bhp_array = bhp_array * PSI_TO_BAR
@@ -669,5 +694,6 @@ def make_vfpprod(
         "alq_values": out.alq,
         "bhp": bhp_array,
         "n_failed": n_failed,
+        "failed": failed,
         "eclipse_string": eclipse_str,
     }

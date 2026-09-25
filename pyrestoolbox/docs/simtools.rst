@@ -957,6 +957,9 @@ Generates an Eclipse VFPINJ keyword table for injection wells. Computes BHP as a
    * - 'n_failed'
      - int
      - Number of failed VLP calculations
+   * - 'failed'
+     - np.ndarray (bool)
+     - Mask with the shape of 'bhp'; True where the VLP march could not solve the point and a sentinel BHP was written (1.0E10 psia for VFPPROD, the Eclipse forbidden-region convention; 1.0E-6 psia for VFPINJ, meaning the rate is not deliverable at that THP). Trim the axes so no point is flagged before using the table.
    * - 'eclipse_string'
      - str
      - Eclipse VFPINJ keyword text
@@ -1109,6 +1112,9 @@ For oil wells: FLO=OIL (stb/d, or sm3/d if metric), WFR=WCT (fraction 0-1), GFR=
    * - 'n_failed'
      - int
      - Number of failed VLP calculations
+   * - 'failed'
+     - np.ndarray (bool)
+     - Mask with the shape of 'bhp'; True where the VLP march could not solve the point and a sentinel BHP was written (1.0E10 psia for VFPPROD, the Eclipse forbidden-region convention; 1.0E-6 psia for VFPINJ, meaning the rate is not deliverable at that THP). Trim the axes so no point is flagged before using the table.
    * - 'eclipse_string'
      - str
      - Eclipse VFPPROD keyword text

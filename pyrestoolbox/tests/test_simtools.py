@@ -663,3 +663,16 @@ def test_pvto_highest_rs_stem_has_undersaturated_row():
 def test_include_target_quoted_and_unquoted(line, expected):
     from pyrestoolbox.simtools._decks import _include_target
     assert _include_target(line) == expected
+
+
+def test_vfpinj_failed_points_flagged_in_mask():
+    """Unsolved VFP points were written as 1e-6 with only a warning (sweep 2026-09-25)."""
+    import warnings
+    from pyrestoolbox import nodal
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        res = simtools.make_vfpinj(1, nodal.Completion(tid=2.992, length=8000, tht=80, bht=200),
+                                   flo_type='GAS')
+    assert res['failed'].shape == res['bhp'].shape
+    assert res['failed'].sum() == res['n_failed'] > 0
+    assert np.all(res['bhp'][res['failed']] == 1e-6)
