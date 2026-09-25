@@ -278,7 +278,7 @@ def _metric_to_field_pvt(p, degf, tc, pc, metric):
 # Optional Rust acceleration
 from pyrestoolbox._accelerator import RUST_AVAILABLE, _rust_module
 
-def _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s):
+def _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s, h2):
     """Compute pseudopressure difference and flow direction for gas rate calculations.
 
     Handles scalar and array inputs for pr and pwf.
@@ -294,7 +294,7 @@ def _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s)
             gas_dmp(
                 p1=pwf, p2=pr, degf=degf, sg=sg,
                 zmethod=zmethod, cmethod=cmethod, tc=tc, pc=pc,
-                n2=n2, co2=co2, h2s=h2s,
+                n2=n2, co2=co2, h2s=h2s, h2=h2,
             )
         )
     else:
@@ -303,7 +303,7 @@ def _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s)
             delta_mp = np.absolute(np.array([
                 gas_dmp(p1=p, p2=pwf, degf=degf, sg=sg,
                         zmethod=zmethod, cmethod=cmethod, tc=tc, pc=pc,
-                        n2=n2, co2=co2, h2s=h2s)
+                        n2=n2, co2=co2, h2s=h2s, h2=h2)
                 for p in pr
             ]))
         else:  # Multiple BHFP's
@@ -311,7 +311,7 @@ def _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s)
             delta_mp = np.absolute(np.array([
                 gas_dmp(p1=pr, p2=bhfp, degf=degf, sg=sg,
                         zmethod=zmethod, cmethod=cmethod, tc=tc, pc=pc,
-                        n2=n2, co2=co2, h2s=h2s)
+                        n2=n2, co2=co2, h2s=h2s, h2=h2)
                 for bhfp in pwf
             ]))
     return direction, delta_mp
@@ -404,7 +404,7 @@ def gas_rate_radial(
     validate_pe_inputs(p=pwf)
     if gas_pvt is None:
         zmethod, cmethod, tc, pc = _prepare_gas_rate_inputs(degf, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, pc)
-    direction, delta_mp = _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s)
+    direction, delta_mp = _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s, h2)
 
     qg = darcy_gas(delta_mp, k, h, degf, r_w, r_ext, S, D, radial=True)
     result = direction * qg
@@ -482,7 +482,7 @@ def gas_rate_linear(
     validate_pe_inputs(p=pwf)
     if gas_pvt is None:
         zmethod, cmethod, tc, pc = _prepare_gas_rate_inputs(degf, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, pc)
-    direction, delta_mp = _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s)
+    direction, delta_mp = _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s, h2)
 
     qg = darcy_gas(delta_mp, k, 1, degf, area, length, 0, 0, radial=False)
     result = direction * qg

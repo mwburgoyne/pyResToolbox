@@ -1163,3 +1163,13 @@ if __name__ == '__main__':
 
     print("=" * 70)
     sys.exit(1 if failed > 0 else 0)
+
+
+def test_gas_rate_radial_carries_h2_into_pseudopressure():
+    """gas_rate_radial/linear passed every inert except h2 to gas_dmp (sweep 2026-09-25)."""
+    from pyrestoolbox import gas as _gas
+    kw = dict(pr=3000, pwf=1500, degf=180, k=10, h=50, r_w=0.3, r_ext=1500)
+    dmp = abs(_gas.gas_dmp(p1=1500, p2=3000, degf=180, sg=0.4, h2=0.3))
+    expected = _gas.darcy_gas(dmp, 10, 50, 180, 0.3, 1500, 0, 0, radial=True)
+    assert abs(_gas.gas_rate_radial(sg=0.4, h2=0.3, **kw) / expected - 1) < 1e-10
+    assert abs(_gas.gas_rate_radial(gas_pvt=_gas.GasPVT(sg=0.4, h2=0.3), **kw) / expected - 1) < 1e-10
