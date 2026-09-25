@@ -1173,3 +1173,14 @@ def test_gas_rate_radial_carries_h2_into_pseudopressure():
     expected = _gas.darcy_gas(dmp, 10, 50, 180, 0.3, 1500, 0, 0, radial=True)
     assert abs(_gas.gas_rate_radial(sg=0.4, h2=0.3, **kw) / expected - 1) < 1e-10
     assert abs(_gas.gas_rate_radial(gas_pvt=_gas.GasPVT(sg=0.4, h2=0.3), **kw) / expected - 1) < 1e-10
+
+
+def test_sg_inconsistent_with_inerts_raises():
+    """sg at or below the inerts' own contribution implies a negative HC sg (sweep 2026-09-25)."""
+    import pytest as _pytest
+    from pyrestoolbox import gas as _gas
+    with _pytest.raises(ValueError, match="not consistent with the stated inert"):
+        _gas.gas_z(p=3000, sg=0.0696, degf=150, n2=0.6)
+    assert 0.8 < _gas.gas_z(p=3000, sg=0.6, degf=150, co2=0.05) < 1.0   # legitimate
+    grad = _gas.gas_den(3000, 0.8, 150, n2=0.6) / 144
+    assert abs(_gas.gas_grad2sg(grad, 3000, 150, n2=0.6) - 0.8) < 1e-6

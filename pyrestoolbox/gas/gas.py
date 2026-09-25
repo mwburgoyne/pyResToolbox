@@ -94,6 +94,11 @@ _GL10_NODES, _GL10_WEIGHTS = np.polynomial.legendre.leggauss(10)
 # gas_grad2sg bisection bounds. Lower = pure H2 SG (physical minimum for
 # H2-blend support); upper = 3.0 covers pure CO2 (SG ~1.53) with margin.
 _GRAD2SG_SG_LO = MW_H2 / MW_AIR
+
+
+def _inert_sg(co2, h2s, n2, h2):
+    """Specific gravity contributed by the non-hydrocarbon fractions alone."""
+    return (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2) / MW_AIR
 _GRAD2SG_SG_HI = 3.0
 
 # =============================================================================
@@ -570,7 +575,18 @@ def gas_tc_pc(
         if metric:
             return (tc / 1.8, pc * PSI_TO_BAR)  # deg R -> K, psia -> barsa
         return (tc, pc)
-    
+
+    # A mixture sg at or below what the inerts alone contribute implies a
+    # non-positive hydrocarbon sg: SUT/PMC then return negative Tc (Z ~ -1e8)
+    # and BNS silently clamps the hydrocarbon to methane.
+    inert_sg = _inert_sg(co2, h2s, n2, h2)
+    if (co2 + h2s + n2 + h2) < 1.0 - 1e-6 and sg <= inert_sg:
+        raise ValueError(
+            f"Gas sg={sg} is not consistent with the stated inert fractions: the inerts "
+            f"alone contribute sg {inert_sg:.4f}, leaving a non-positive hydrocarbon sg. "
+            f"sg is the whole-mixture gravity, inerts included."
+        )
+
     _, cmethod = _h2_method_override(h2, 'DAK', cmethod)
     cmethod = validate_methods(["cmethod"], [cmethod])
 
@@ -1751,7 +1767,9 @@ def gas_grad2sg(
     zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
 
     args = (grad, p, zmethod, cmethod, tc, pc, co2, h2s, n2, h2)
-    return bisect_solve(args, grad_err, _GRAD2SG_SG_LO, _GRAD2SG_SG_HI, rtol)
+    # Keep the bracket above the sg the inerts alone contribute (see gas_tc_pc)
+    sg_lo = max(_GRAD2SG_SG_LO, _inert_sg(co2, h2s, n2, h2) * (1 + 1e-6) + 1e-9)
+    return bisect_solve(args, grad_err, sg_lo, _GRAD2SG_SG_HI, rtol)
 
 def gas_dmp(
     p1: float,
