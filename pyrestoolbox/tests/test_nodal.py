@@ -935,3 +935,17 @@ if __name__ == '__main__':
             print(f"        {e}")
             traceback.print_exc()
     print(f"\n{passed} passed, {failed} failed out of {passed + failed}")
+
+
+def test_fthp_roundtrip_metric():
+    """fthp(metric=True) converts rates and ratios, not just pressures (sweep 2026-09-25)."""
+    from pyrestoolbox import nodal
+    c = nodal.Completion(tid=62.0, length=2400, tht=30, bht=90, metric=True)
+    gas_kw = dict(completion=c, vlpmethod='WG', well_type='gas', qg_mmscfd=141584,
+                  cgr=2.8e-4, qw_bwpd=10, gsg=0.7, metric=True)
+    bhp = nodal.fbhp(thp=70, **gas_kw)
+    assert abs(nodal.fthp(bhp=bhp, **gas_kw) - 70) < 1e-3
+    oil_kw = dict(completion=c, vlpmethod='BB', well_type='oil', qt_stbpd=300, gor=150,
+                  wc=0.2, api=35, pb=200, rsb=150, sgsp=0.75, metric=True)
+    bhp = nodal.fbhp(thp=20, **oil_kw)
+    assert abs(nodal.fthp(bhp=bhp, **oil_kw) - 20) < 1e-3

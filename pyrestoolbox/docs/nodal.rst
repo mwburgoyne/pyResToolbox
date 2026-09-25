@@ -117,7 +117,7 @@ Wellbore completion description for VLP calculations. Can be constructed in two 
 
 **Legacy mode** (positional arguments): Defines a simple vertical wellbore with optional casing section below the tubing shoe (when ``mpd > length`` and ``cid > 0``).
 
-**Segment mode** (``segments`` keyword): Accepts a list of ``WellSegment`` objects for arbitrary multi-segment wellbore definitions with deviation support. Temperature is interpolated linearly over the total measured depth. In segment mode, ``metric`` only converts ``tht`` and ``bht``; segment dimensions are handled by each ``WellSegment``'s own ``metric`` flag.
+**Segment mode** (``segments`` keyword): Accepts a list of ``WellSegment`` objects for arbitrary multi-segment wellbore definitions with deviation support. Temperature is interpolated linearly over true vertical depth (the geothermal gradient acts on TVD, so a deviated segment spans a smaller temperature interval than a vertical one of the same MD). In segment mode, ``metric`` only converts ``tht`` and ``bht``; segment dimensions are handled by each ``WellSegment``'s own ``metric`` flag.
 
 .. list-table:: Legacy Mode Inputs
    :widths: 10 15 40
@@ -558,11 +558,11 @@ pyrestoolbox.nodal.fthp
 
 .. code-block:: python
 
-    fthp(bhp, completion, vlpmethod='WG', well_type='gas', ..., thp_min=None, thp_max=20000.0, tol=1e-3) -> float
+    fthp(bhp, completion, vlpmethod='WG', well_type='gas', ..., thp_min=None, thp_max=None, tol=1e-3) -> float
 
-Inverse of ``fbhp``. Solves for the tubing head pressure that produces the target flowing bottom-hole pressure, for the given flow parameters and VLP correlation. Internally wraps ``bisect_solve`` around ``fbhp`` between ``thp_min`` and ``thp_max``. ``thp_min=None`` resolves to 14.7 psia (1.01325 barsa if metric=True).
+Inverse of ``fbhp``. Solves for the tubing head pressure that produces the target flowing bottom-hole pressure, for the given flow parameters and VLP correlation. Internally wraps ``bisect_solve`` around ``fbhp`` between ``thp_min`` and ``thp_max``. ``thp_min=None`` resolves to 14.7 psia (1.01325 barsa if metric=True); ``thp_max=None`` resolves to 20,000 psia (1378.95 barsa if metric=True). ``tol`` is the absolute THP tolerance in psia (barsa if metric=True).
 
-All flow / well / unit kwargs accepted by ``fbhp`` (``qg_mmscfd``, ``qt_stbpd``, ``gor``, ``wc``, ``api``, ``pb``, ``rsb``, ``metric`` ...) are accepted here identically. ``metric=True`` switches bhp inputs and the return to ``barsa``.
+All flow / well / unit kwargs accepted by ``fbhp`` (``qg_mmscfd``, ``qt_stbpd``, ``gor``, ``wc``, ``api``, ``pb``, ``rsb``, ``metric`` ...) are accepted here identically. ``metric=True`` switches every pressure, rate and ratio input and the return to Eclipse METRIC units, exactly as in ``fbhp``.
 
 .. code-block:: python
 
@@ -663,7 +663,7 @@ For oil wells with OilPVT: uses Darcy above Pb, Vogel below Pb. Without OilPVT: 
 
 .. warning::
 
-   **Gas rate unit mismatch between IPR and VLP:** Gas IPR rates from ``ipr_curve()`` are returned in **Mscf/d**, while VLP rates from ``outflow_curve()`` and the operating rate from ``operating_point()`` are in **MMscf/d**. When plotting IPR and VLP curves on the same axis, divide IPR rates by 1000. The ``operating_point()`` function handles this conversion internally.
+   **Gas rate unit mismatch between IPR and VLP:** Gas IPR rates from ``ipr_curve()`` are returned in **Mscf/d**, while VLP rates from ``outflow_curve()`` and the operating rate from ``operating_point()`` are in **MMscf/d**. When plotting IPR and VLP curves on the same axis, divide IPR rates by 1000. ``operating_point()`` applies the factor when it intersects the two curves and returns its operating ``rate`` in MMscf/d, but the ``ipr`` dictionary it returns is the unmodified ``ipr_curve()`` output and stays in Mscf/d.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -907,7 +907,7 @@ The deviation support in pyResToolbox applies a ``sin(theta)`` correction to the
 
 - For wells with deviation > 30 degrees, prefer **BB** or **WG**. Both have explicit inclination modelling in their holdup / void-fraction formulations.
 - For near-horizontal wells (deviation > 70 degrees), **BB** is the most widely validated choice. Flow-pattern transitions change fundamentally in horizontal pipe (stratified flow becomes dominant), and the Beggs & Brill flow-pattern map was designed to capture this.
-- For vertical and near-vertical wells (deviation < 30 degrees), all four methods are appropriate. HB and Gray were specifically developed for this regime and may give more accurate results than BB for gas and gas-condensate wells.
+- For vertical and near-vertical gas and gas-condensate wells (deviation < 30 degrees), all four methods are appropriate. HB and Gray were specifically developed for this regime and may give more accurate results than BB. Gray (API 14B) is a gas-well method: it is accepted for ``well_type='oil'`` for completeness but has no basis for oil or water-dominated flow, so prefer HB, BB or WG for oil wells.
 - When in doubt, run multiple methods and compare. Large disagreement between BB/WG and HB/Gray at high angles is expected and indicates that the inclination-insensitive correlations are outside their validation envelope.
 - These correlations should not be used as a substitute for a calibrated mechanistic multiphase model when accurate pressure predictions are required for field development decisions in deviated or horizontal wells.
 

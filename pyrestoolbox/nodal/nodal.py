@@ -1914,45 +1914,57 @@ def fthp(bhp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
          wsg: float = 1.07, injection: bool = False,
          gsg: float = 0.65, pb: float = 0, rsb: float = 0, sgsp: float = 0.65,
          metric: bool = False, thp_min: Optional[float] = None,
-         thp_max: float = 20000.0, tol: float = 1e-3) -> float:
+         thp_max: Optional[float] = None, tol: float = 1e-3) -> float:
     """ Solves for tubing head pressure (psia | barsa) that produces the specified BHP
         under the given VLP correlation. Inverse of fbhp.
 
         bhp: Target flowing bottom hole pressure (psia | barsa)
         completion, vlpmethod, well_type, gas/oil flow parameters: same as fbhp()
+            (same units as fbhp: MMscf/d | sm3/d, STB/d | sm3/d, scf/STB | sm3/sm3 ...)
         thp_min: Lower bracket for THP search (psia | barsa). Defaults to
-            atmospheric (14.7 psia) when not supplied
-        thp_max: Upper bracket for THP search (psia). Default 20,000 psi
-        tol: Absolute convergence tolerance on THP (psia). Default 1e-3
-        metric: If True, bhp and return are in barsa. Default False.
+            atmospheric (14.7 psia / 1.01325 barsa) when not supplied
+        thp_max: Upper bracket for THP search (psia | barsa). Defaults to
+            20,000 psia (1378.95 barsa) when not supplied
+        tol: Absolute convergence tolerance on THP (psia | barsa). Default 1e-3
+        metric: If True, inputs and return are in Eclipse METRIC units. Default False.
     """
+    # Same conversion path as fbhp/outflow_curve/operating_point, so every
+    # rate/ratio/pressure reaches the internal fbhp call in oilfield units
+    f = _prepare_flow_inputs(
+        well_type, metric, gas_pvt=gas_pvt, oil_pvt=oil_pvt,
+        degf_max=max(completion.tht, completion.bht),
+        thp=0.0, pr=pr, qg_mmscfd=qg_mmscfd, qt_stbpd=qt_stbpd, cgr=cgr,
+        qw_bwpd=qw_bwpd, gor=gor, pb=pb, rsb=rsb, api=api, sgsp=sgsp, gsg=gsg)
+
     if metric:
         bhp_oilfield = bhp * BAR_TO_PSI
         thp_min_oilfield = 14.7 if thp_min is None else thp_min * BAR_TO_PSI
-        thp_max_oilfield = thp_max * BAR_TO_PSI if thp_max != 20000.0 else thp_max
+        thp_max_oilfield = 20000.0 if thp_max is None else thp_max * BAR_TO_PSI
+        tol_oilfield = tol * BAR_TO_PSI
     else:
         bhp_oilfield = bhp
         thp_min_oilfield = 14.7 if thp_min is None else thp_min
-        thp_max_oilfield = thp_max
+        thp_max_oilfield = 20000.0 if thp_max is None else thp_max
+        tol_oilfield = tol
 
     validate_pe_inputs(p=bhp_oilfield)
     validate_choice(well_type, ('gas', 'oil'), 'well_type')
-    _validate_rates(qg_mmscfd=qg_mmscfd, qt_stbpd=qt_stbpd, qw_bwpd=qw_bwpd)
+    _validate_rates(qg_mmscfd=f.qg_mmscfd, qt_stbpd=f.qt_stbpd, qw_bwpd=f.qw_bwpd)
     vlpmethod = validate_methods(["vlpmethod"], [vlpmethod])
 
     def _err(_args, thp_trial):
         calculated_bhp = fbhp(thp=thp_trial, completion=completion, vlpmethod=vlpmethod,
                               well_type=well_type, gas_pvt=gas_pvt, oil_pvt=oil_pvt,
-                              qg_mmscfd=qg_mmscfd, cgr=cgr, qw_bwpd=qw_bwpd,
-                              oil_vis=oil_vis, api=api, pr=pr,
-                              qt_stbpd=qt_stbpd, gor=gor, wc=wc,
+                              qg_mmscfd=f.qg_mmscfd, cgr=f.cgr, qw_bwpd=f.qw_bwpd,
+                              oil_vis=oil_vis, api=f.api, pr=f.pr,
+                              qt_stbpd=f.qt_stbpd, gor=f.gor, wc=wc,
                               wsg=wsg, injection=injection,
-                              gsg=gsg, pb=pb, rsb=rsb, sgsp=sgsp,
+                              gsg=f.gsg, pb=f.pb, rsb=f.rsb, sgsp=f.sgsp,
                               metric=False)
         return calculated_bhp - bhp_oilfield
 
     try:
-        thp_solved = bisect_solve(None, _err, thp_min_oilfield, thp_max_oilfield, tol)
+        thp_solved = bisect_solve(None, _err, thp_min_oilfield, thp_max_oilfield, tol_oilfield)
     except (RuntimeError, ValueError) as exc:
         raise RuntimeError(
             f"fthp could not bracket THP in [{thp_min_oilfield}, {thp_max_oilfield}] psi "
