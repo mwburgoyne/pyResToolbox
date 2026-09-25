@@ -462,7 +462,7 @@ pyrestoolbox.simtools.rel_perm_table
      - Description
    * -
      - pd.DataFrame
-     - Relative permeability table with saturation and kr columns
+     - Relative permeability table with saturation, kr and capillary pressure columns. The Pc column (``Pcow``, ``Pcog`` or ``Pcgw``) is zero; ECLIPSE and OPM Flow require all four columns on every row
 
 Examples:
 

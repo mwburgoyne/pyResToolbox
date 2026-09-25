@@ -137,6 +137,9 @@ def _apply_kr_model(sn, krfamily, n_exp, L, E, T, a_jer, b_jer):
     else:
         raise ValueError(f"Unknown kr family: {fname}")
 
+_PC_COLUMN = {"SWOF": "Pcow", "SGOF": "Pcog", "SGWFN": "Pcgw"}
+
+
 def _build_kr_table(rows, krfamily, grid_lo, grid_hi, anchors, sat_col,
                     curves, export, keyword):
     """Shared builder for SWOF / SGOF / SGWFN tables.
@@ -169,10 +172,14 @@ def _build_kr_table(rows, krfamily, grid_lo, grid_hi, anchors, sat_col,
             s_norm = 1 - s_norm
         kr_df[col_name] = krmax * _apply_kr_model(
             s_norm, krfamily, n_exp, L, E, T, a_jer, b_jer)
+    # Fourth column: capillary pressure, zero. ECLIPSE requires every row of
+    # SWOF/SGOF/SGWFN to carry all four entries (Pc may not be omitted).
+    pc_col = _PC_COLUMN[keyword]
+    kr_df[pc_col] = 0.0
 
     if export:
         df = kr_df.set_index(sat_col)
-        headings = ["-- " + sat_col] + [c[0] for c in curves]
+        headings = ["-- " + sat_col] + [c[0] for c in curves] + [pc_col]
         fileout = keyword + "\n" + tabulate(df, headings) + "\n/"
         with open(keyword + ".INC", "w") as text_file:
             text_file.write(fileout)

@@ -259,21 +259,24 @@ def _select_deck_files(mask):
 
 
 def _include_target(line):
-    """Filename named on an INCLUDE continuation line, or None.
+    """Filename named on an INCLUDE line or its continuation, or None.
 
-    Returns the quoted filename, or None when this line carries no name yet
-    (a bare INCLUDE keyword, so the name is on a following line). Raises nothing:
-    a malformed line is reported by the caller resetting its INCLUDE state.
+    Returns the filename, quoted or unquoted (the ECLIPSE manual's INCLUDE
+    Example 1 is unquoted), '' for an unbalanced quote, or None when the line
+    carries no name yet (a bare INCLUDE keyword, so the name is on a following
+    line). A quoted name may contain '/', so quotes are resolved before the
+    record terminator is stripped.
     """
     line = line.split('--')[0]        # Drop trailing comments that give false negatives
     line = line.split('#')[0]
-    line = line.replace('"', "'")     # Normalise double quotes to single
-    if '.' not in line and "'" not in line:
-        return None                   # Filename is not on this line
-    parts = line.split("'")
-    if len(parts) < 2:                # Malformed INCLUDE line
-        return ''
-    return parts[1].strip()
+    line = line.replace('"', "'").strip()   # Normalise double quotes to single
+    if line.upper().startswith('INCLUDE'):
+        line = line[7:].strip()
+    if "'" in line:
+        parts = line.split("'")
+        return parts[1].strip() if len(parts) >= 3 else ''
+    line = line.split('/')[0].strip() # Unquoted: '/' can only be the terminator
+    return line.split()[0] if line else None
 
 
 def _crawl_deck_includes(files2scrape, console_summary=True):
@@ -308,9 +311,9 @@ def _crawl_deck_includes(files2scrape, console_summary=True):
         get_include = False
         for line in lines:
             line = line.strip()
-            if line[:3] == '--' or line[:1] == '#':   # Skip all comments
+            if line.startswith('--') or line.startswith('#'):   # Skip all comments
                 continue
-            if line[:4] == 'END':                     # Skip everything after END
+            if line.split()[:1] == ['END']:                        # Skip everything after END
                 break
             if line.upper()[:7] == 'INCLUDE':
                 get_include = True

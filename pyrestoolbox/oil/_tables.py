@@ -138,10 +138,14 @@ def _build_bot_tables(pressures, pb, rsb, rsb_frac, rsb_max, sg_o, sg_g, sg_sp,
     # misalign the three arrays and silently shift PVTO stems.
     usat_p, usat_bo, usat_uo = [], [], []
     if pvto:
+        # ECLIPSE and OPM Flow require undersaturated rows on the highest-Rs
+        # stem, whose bubble point is the table top. Extend every stem one
+        # table step above pmax so that stem has one and all stems stay alike.
+        p_ext = [2 * pressures[-1] - pressures[-2]]
         for i, p in enumerate(pressures):
             if i == 0:
                 continue
-            p_stem = pressures[i:]
+            p_stem = list(pressures[i:]) + p_ext
             try:
                 bo_stem = [
                     oil_bo(

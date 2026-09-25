@@ -625,3 +625,41 @@ if __name__ == '__main__':
     print(f"Results: {passed} passed, {failed} failed out of {passed + failed}")
     print("=" * 70)
     sys.exit(1 if failed > 0 else 0)
+
+
+# =============================================================================
+# Simulator include-file validity (sweep 2026-09-25)
+# =============================================================================
+
+@pytest.mark.parametrize("krtable,pc_col", [("SWOF", "Pcow"), ("SGOF", "Pcog"), ("SGWFN", "Pcgw")])
+def test_kr_tables_carry_zero_pc_column(krtable, pc_col, tmp_path, monkeypatch):
+    """SWOF/SGOF/SGWFN rows need all four columns; Pc may not be omitted."""
+    monkeypatch.chdir(tmp_path)
+    df = simtools.rel_perm_table(rows=10, krtable=krtable, krfamily='COR',
+                                 swc=0.2, swcr=0.2, sorw=0.2, sgcr=0.05, sorg=0.2,
+                                 no=2, nw=3, ng=2, export=True)
+    assert pc_col in df.columns and (df[pc_col] == 0.0).all()
+    rows = [ln.split() for ln in (tmp_path / f"{krtable}.INC").read_text().splitlines()
+            if ln.strip() and ln.strip()[0].isdigit()]
+    assert rows and all(len(r) == 4 for r in rows)
+
+
+def test_pvto_highest_rs_stem_has_undersaturated_row():
+    """The highest-Rs PVTO stem must carry at least one undersaturated row."""
+    res = simtools.make_bot_og(pi=4000, api=38, degf=175, sg_g=0.68, pmax=5000, pb=3900,
+                          pvto=True, export=False)
+    usat_p = res['usat'][0]
+    assert all(len(stem) >= 2 for stem in usat_p)
+    assert usat_p[-1][-1] > 5000
+
+
+@pytest.mark.parametrize("line,expected", [
+    ("INCLUDE", None),
+    ("  CASE1.PVI /", "CASE1.PVI"),
+    ("'INCLUDE/grid.inc' /", "INCLUDE/grid.inc"),
+    ("INCLUDE \"a/b.inc\" / -- comment", "a/b.inc"),
+    ("'unbalanced.inc", ""),
+])
+def test_include_target_quoted_and_unquoted(line, expected):
+    from pyrestoolbox.simtools._decks import _include_target
+    assert _include_target(line) == expected
