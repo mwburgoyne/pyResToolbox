@@ -1,4 +1,4 @@
-Changelist in 3.8.1 (unreleased):
+Changelist in 3.8.1:
 
 - **NODAL: condensate that drops out in the tubing is treated as a saturated light liquid, not a dead oil.** The gas VLP marches gave dropped-out condensate the Beggs-Robinson dead-oil viscosity (Rs = 0), which is 2-5 times too viscous for a liquid in equilibrium with gas (up to about 16 cP at low temperature) and made the Woldesemayat-Ghajar BHP with dropout exceed the no-dropout value. The dropped liquid now takes the Beggs-Robinson live-oil viscosity at the Standing (1947) solution GOR at local pressure and temperature, with the bubble point at the local pressure (0.25-1.6 cP for 45-55 API condensate), in Python and Rust. Only gas wells with ``pr`` supplied (condensate dropout on) are affected; for 5 MMscf/d with CGR 10, 10 bbl/d water and 3000 psia reservoir pressure (6000 ft tubing), BHP moves from 877.6 to 850.4 psia for WG and from 635.6 to 652.9 psia for HB (its holdup correlation runs through the liquid viscosity number), with Gray and BB within 0.4%. With dropout on, WG BHP is now below the no-dropout value, as it should be with less liquid in the tubing.
 
