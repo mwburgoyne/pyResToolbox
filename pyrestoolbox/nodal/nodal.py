@@ -64,6 +64,7 @@ from pyrestoolbox.constants import (BAR_TO_PSI, PSI_TO_BAR, degc_to_degf, degf_t
 import pyrestoolbox.gas as gas
 import pyrestoolbox.oil as oil
 from pyrestoolbox._accelerator import RUST_AVAILABLE as _RUST_AVAILABLE, rust_accelerated
+from pyrestoolbox.oil._density import _cofb_mccain
 if _RUST_AVAILABLE:
     from pyrestoolbox import _native as _rust
 
@@ -265,6 +266,7 @@ _GRAY_ND_COEF = 205.0           # Diameter number coefficient in A
 
 _GRAY_ROUGH_K = 28.5            # Effective roughness coefficient
 _GRAY_R_THRESH = 0.007          # R threshold for roughness interpolation
+_GRAY_SP_LIQ_FRAC = 1e-6        # v_sg/v_m below this is single-phase liquid (dry roughness)
 _GRAY_ROUGH_FLOOR = 2.77e-5     # Minimum effective roughness (ft)
 
 # ============================================================================
@@ -1028,7 +1030,8 @@ def _static_oil_column_pressure(thp, length, tht, bht, wc, wsg,
             rs = _velarde_rs(sgsp, api, temp_local, pb, rsb_for_calc, p) * rsb_scale
             rho_oil = _oil_density_mccain(rs, sgsp, sgsto, p, temp_local)
         else:
-            rho_oil = _oil_density_mccain(rsb, sgsp, sgsto, pb, temp_local)
+            rho_oil = (_oil_density_mccain(rsb, sgsp, sgsto, pb, temp_local)
+                       * _undersaturated_compression(api, sgsp, pb, p, rsb, temp_local))
         oil_sg_local = rho_oil / _RHO_FW
         mix_sg = (1.0 - wc) * oil_sg_local + wc * wsg
         p += _FW_GRAD * mix_sg * d_len * sin_theta
@@ -1078,16 +1081,10 @@ def _hb_gradient_gas(s):
 
     yl = _clamp(si * ylonsi, 0.0, 1.0)
 
-    # Minimum holdup from mass fraction
-    rho_g_sg = s['rho_g'] / 62.37
-    mflow_lpd = s['mflow_l'] * _SEC_PER_DAY
-    mflow_gpd = s['mflow_g'] * _SEC_PER_DAY
-    mflow_total_pd = mflow_lpd + mflow_gpd
-    mass_frac_liq = mflow_lpd / mflow_total_pd if mflow_total_pd > 0 else 0.0
-    min_l = (mass_frac_liq * rho_g_sg / (rho_g_sg + s['lsg_loc'])
-             if (rho_g_sg + s['lsg_loc']) > 0 else 0.0)
-    if yl < min_l:
-        yl = min_l
+    # Modified HB (Brill & Mukherjee 1999, s4.2.1): holdup is never below the
+    # no-slip holdup. The former mass-fraction floor x*rho_g/(rho_g+rho_l) is
+    # always below lambda_l and let HB holdup fall to zero in wet-gas flow.
+    yl = max(yl, s['lambda_l'])
 
     # Orkiszewski bubble flow correction
     vm = ugas + ul
@@ -1104,7 +1101,7 @@ def _hb_gradient_gas(s):
                 yl = _clamp(yl, 0.0, 1.0)
 
     # Reynolds and friction (mass-flow basis)
-    mflow_pd = mflow_total_pd
+    mflow_pd = (s['mflow_l'] + s['mflow_g']) * _SEC_PER_DAY
     nre = _HB_RE_K * (mflow_pd / _SEC_PER_DAY) / (s['diam_ft'] *
           mul ** yl * s['mu_g'] ** (1.0 - yl))
     if nre < 2100:
@@ -1306,6 +1303,17 @@ def _gray_liquid_holdup(v_sl, v_sg, rho_l, rho_g, sigma, diam, lambda_l):
     return _clamp(1.0 - fg, lambda_l, 1.0)
 
 
+def _undersaturated_compression(api, sgsp, pb, p, rsb, degf):
+    """Factor rho(p)/rho(pb) = exp(cofb (p - pb)) above Pb, else 1 (McCain Eq 3.20).
+
+    Matches oil_deno's PGTPB branch. pb or rsb of zero (VFPINJ water and gas
+    defaults) carry no bubble point, so no correction applies.
+    """
+    if p <= pb or pb <= 0 or rsb <= 0:
+        return 1.0
+    return math.exp(_cofb_mccain(api, sgsp, pb, p, rsb, degf) * (p - pb))
+
+
 def _gray_effective_roughness(rough_dry, sigma, rho_ns, v_sl, v_sg):
     """Gray (1974) effective (wet film) roughness in ft, API 14B form.
 
@@ -1314,8 +1322,8 @@ def _gray_effective_roughness(rough_dry, sigma, rho_ns, v_sl, v_sg):
     roughness. Result floored at 2.77e-5 ft.
     """
     v_m = v_sl + v_sg
-    if v_m < 1e-10 or rho_ns <= 0 or sigma <= 0 or v_sg < 1e-10:
-        return rough_dry
+    if v_m < 1e-10 or rho_ns <= 0 or sigma <= 0 or v_sg < _GRAY_SP_LIQ_FRAC * v_m:
+        return rough_dry   # includes single-phase liquid: no wet film to roughen
     r = v_sl / v_sg
     ke0 = _GRAY_ROUGH_K * sigma / (_DYNCM_PER_LBM_S2 * rho_ns * v_m * v_m)
     if r >= _GRAY_R_THRESH:
@@ -1425,7 +1433,7 @@ def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                 'mflow_o': mflow_o, 'mflow_w': mflow_w,
                 'mflow_total': mflow_total,
                 'qo_loc': qo_loc, 'ql_loc': ql_loc, 'qw_bwpd': qw_bwpd,
-                'oil_vis_loc': oil_vis_loc, 'lsg_loc': lsg_loc,
+                'oil_vis_loc': oil_vis_loc,
                 'osg': osg, 'gsg': gsg, 'tid': tid, 'rough': rough,
                 'rs_est': rs_est, 'tc': tc, 'pc': pc,
                 'qg_mmscfd': qg_mmscfd, 'api': api,
@@ -1495,13 +1503,18 @@ def _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
                                               vis_frac, rsb_frac)
             rho_oil = _oil_density_mccain(rs_local, sgsp, osg,
                                            min(p_avg, pb), temp_f)
+            rho_oil *= _undersaturated_compression(api, sgsp, pb, p_avg, rsb, temp_f)
 
             zee = _z_factor(gsg, temp_f, p_avg, tc=tc, pc=pc)
             mu_g = _gas_viscosity(gsg, temp_f, p_avg, z=zee, tc=tc, pc=pc)
 
             rho_g = _MW_AIR * gsg * p_avg / (zee * _R_GAS * temp_r)
 
-            mflow_o = osg * _RHO_FW * qo * _FT3_PER_BBL / _SEC_PER_DAY
+            # Live oil carries its dissolved gas: stock-tank mass plus rs_local
+            # of separator gas, the same basis as the SWMH live-oil density it
+            # is divided by. Without it the in-situ oil rate was the dead-oil one.
+            mflow_o = (osg * _RHO_FW * qo * _FT3_PER_BBL
+                       + _RHO_AIR_STC * sgsp * rs_local * qo) / _SEC_PER_DAY
             mflow_w = wsg * _RHO_FW * qw * _FT3_PER_BBL / _SEC_PER_DAY
             mflow_g = _RHO_AIR_STC * gsg * qg_mmscfd * 1e6 / _SEC_PER_DAY
             mflow_l = mflow_o + mflow_w
@@ -1510,7 +1523,6 @@ def _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
             ql = qo + qw
             rho_w = wsg * _RHO_FW
             rho_l = (qo * rho_oil + qw * rho_w) / ql if ql > 0 else rho_oil
-            lsg = (qo * osg + qw * wsg) / ql if ql > 0 else osg
 
             v_sg = (mflow_g / max(rho_g, 1e-10)) / area
             v_sl = (mflow_l / max(rho_l, 1e-10)) / area
@@ -1538,7 +1550,7 @@ def _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
                 'mflow_o': mflow_o, 'mflow_w': mflow_w,
                 'mflow_total': mflow_total,
                 'qo_loc': qo, 'ql_loc': ql, 'qw_bwpd': qw,
-                'oil_vis_loc': oil_vis_seg, 'lsg_loc': lsg,
+                'oil_vis_loc': oil_vis_seg,
                 'osg': osg, 'gsg': gsg, 'tid': tid, 'rough': rough,
                 'rs_est': rs_local, 'tc': tc, 'pc': pc,
                 'qg_mmscfd': qg_mmscfd, 'api': api,
@@ -2099,6 +2111,43 @@ def outflow_curve(thp: float, completion: 'Completion', vlpmethod: str = 'WG',
 #  Public API: ipr_curve
 # ============================================================================
 
+def _oil_ipr_rates(pwf_list, pr, degf, k, h, re, rw, S, oil_pvt, bo, uo, wc):
+    """Oil-well inflow (STB/d, oilfield) at each pwf, as total liquid at wc.
+
+    Darcy above Pb and Vogel below it when oil_pvt gives a bubble point, simple
+    Darcy otherwise. The oil inflow is divided by (1 - wc) so the rate is total
+    liquid at the stated water cut, the quantity fbhp takes as qt_stbpd.
+    """
+    if oil_pvt is not None:
+        pb = oil_pvt.pb
+        rs_pr = oil_pvt.rs(pr, degf)
+        bo_pr = oil_pvt.bo(pr, degf, rs=rs_pr)
+        uo_pr = oil_pvt.viscosity(pr, degf, rs=rs_pr)
+    else:
+        pb = 1e6  # No bubble point specified - all Darcy
+        bo_pr = bo
+        uo_pr = uo
+
+    J = _DARCY_K * k * h / (uo_pr * bo_pr * (np.log(re / rw) + S - _DIETZ_CORR))
+
+    rates = []
+    for pwf in pwf_list:
+        if oil_pvt is not None and pr > pb:
+            # Undersaturated: Darcy from Pr to Pb, Vogel below Pb
+            q = J * (pr - max(pwf, pb))
+            if pwf < pb:
+                qsat_max = J * pb / _VOGEL_AOF_DENOM
+                q += qsat_max * (1 - _VOGEL_LIN * (pwf / pb) - _VOGEL_QUAD * (pwf / pb) ** 2)
+        elif oil_pvt is not None:
+            # Saturated: Vogel
+            qsat_max = J * pr / _VOGEL_AOF_DENOM
+            q = qsat_max * (1 - _VOGEL_LIN * (pwf / pr) - _VOGEL_QUAD * (pwf / pr) ** 2)
+        else:
+            q = J * (pr - pwf)   # Simple Darcy (no Pb info)
+        rates.append(q / (1.0 - wc))
+    return rates
+
+
 def ipr_curve(reservoir: 'Reservoir', well_type: str = 'gas',
               gas_pvt=None, oil_pvt=None,
               n_points: int = 20, min_pwf: Optional[float] = None,
@@ -2113,14 +2162,20 @@ def ipr_curve(reservoir: 'Reservoir', well_type: str = 'gas',
         oil_pvt: OilPVT object (optional for oil wells)
         n_points: Number of pressure points
         min_pwf: Minimum flowing BHP (psia | barsa). Defaults to 14.7 psia (1.01325 barsa)
-        wc: Water cut (fraction 0-1). For oil wells
-        wsg: Water specific gravity
+        wc: Water cut (fraction 0-1). For oil wells: the oil inflow (Darcy / Vogel)
+            is divided by (1 - wc) so 'rate' is total liquid at that water cut, the
+            same quantity fbhp/operating_point take as qt_stbpd. Must be < 1
+        wsg: Water specific gravity (accepted for signature compatibility; not used
+            by the IPR)
         bo: Oil FVF (rb/stb | rm3/sm3). Used for oil/water wells if oil_pvt not provided
         uo: Oil viscosity (cP). Used for oil/water wells if oil_pvt not provided
         gsg: Gas specific gravity. Used if gas_pvt not provided
         metric: If True, inputs/outputs in Eclipse METRIC units. Default False.
     """
     validate_choice(well_type, ('gas', 'oil', 'water'), 'well_type')
+    if well_type == 'oil' and not 0.0 <= wc < 1.0:
+        raise ValueError(f"wc must be in [0, 1) for oil wells, got {wc} "
+                         "(use well_type='water' for a water-only inflow)")
     if min_pwf is None:
         min_pwf = 1.01325 if metric else 14.7
     if metric:
@@ -2154,38 +2209,7 @@ def ipr_curve(reservoir: 'Reservoir', well_type: str = 'gas',
             rate_list.append(float(qg))  # Mscf/d in oilfield
 
     elif well_type == 'oil':
-        # Darcy above Pb, Vogel below Pb
-        if oil_pvt is not None:
-            pb = oil_pvt.pb
-            rsb = oil_pvt.rsb
-            rs_pr = oil_pvt.rs(pr, degf)
-            bo_pr = oil_pvt.bo(pr, degf, rs=rs_pr)
-            uo_pr = oil_pvt.viscosity(pr, degf, rs=rs_pr)
-        else:
-            pb = 1e6  # No bubble point specified - all Darcy
-            bo_pr = bo
-            uo_pr = uo
-
-        J = _DARCY_K * k * h / (uo_pr * bo_pr * (np.log(re / rw) + S - _DIETZ_CORR))
-
-        for pwf in pwf_list:
-            if oil_pvt is not None and pr > pb:
-                # Undersaturated: Darcy from Pr to Pb, Vogel below Pb
-                q_darcy = J * (pr - max(pwf, pb))
-                if pwf < pb:
-                    qsat_max = J * pb / _VOGEL_AOF_DENOM
-                    q_vogel = qsat_max * (1 - _VOGEL_LIN * (pwf / pb) - _VOGEL_QUAD * (pwf / pb) ** 2)
-                    rate_list.append(q_darcy + q_vogel)
-                else:
-                    rate_list.append(q_darcy)
-            elif oil_pvt is not None and pr <= pb:
-                # Saturated: Vogel
-                qsat_max = J * pr / _VOGEL_AOF_DENOM
-                q = qsat_max * (1 - _VOGEL_LIN * (pwf / pr) - _VOGEL_QUAD * (pwf / pr) ** 2)
-                rate_list.append(q)
-            else:
-                # Simple Darcy (no Pb info)
-                rate_list.append(J * (pr - pwf))
+        rate_list = _oil_ipr_rates(pwf_list, pr, degf, k, h, re, rw, S, oil_pvt, bo, uo, wc)
 
     elif well_type == 'water':
         # Water injectivity

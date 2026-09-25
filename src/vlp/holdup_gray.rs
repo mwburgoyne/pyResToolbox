@@ -53,8 +53,8 @@ pub fn gray_effective_roughness(
     rough_dry: f64, sigma: f64, rho_ns: f64, v_sl: f64, v_sg: f64,
 ) -> f64 {
     let v_m = v_sl + v_sg;
-    if v_m < 1e-10 || rho_ns <= 0.0 || sigma <= 0.0 || v_sg < 1e-10 {
-        return rough_dry;
+    if v_m < 1e-10 || rho_ns <= 0.0 || sigma <= 0.0 || v_sg < GRAY_SP_LIQ_FRAC * v_m {
+        return rough_dry; // includes single-phase liquid: no wet film to roughen
     }
     let r = v_sl / v_sg;
     let ke0 = GRAY_ROUGH_K * sigma / (DYNCM_PER_LBM_S2 * rho_ns * v_m * v_m);

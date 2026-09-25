@@ -145,6 +145,7 @@ pub const GRAY_ND_COEF: f64 = 205.0; // Diameter number coefficient in A
 
 pub const GRAY_ROUGH_K: f64 = 28.5; // Effective roughness coefficient
 pub const GRAY_R_THRESH: f64 = 0.007; // R threshold for roughness interpolation
+pub const GRAY_SP_LIQ_FRAC: f64 = 1e-6; // v_sg/v_m below this is single-phase liquid (dry roughness)
 pub const GRAY_ROUGH_FLOOR: f64 = 2.77e-5; // Minimum effective roughness (ft)
 
 // ============================================================================

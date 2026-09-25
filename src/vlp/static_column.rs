@@ -44,6 +44,7 @@ pub fn static_oil_column_pressure(
             oil_density_mccain(rs, sgsp, sgsto, p, temp_local)
         } else {
             oil_density_mccain(rsb, sgsp, sgsto, pb, temp_local)
+                * undersaturated_compression(api, sgsp, pb, p, rsb, temp_local)
         };
         let oil_sg_local = rho_oil / RHO_FW;
         let mix_sg = (1.0 - wc) * oil_sg_local + wc * wsg;

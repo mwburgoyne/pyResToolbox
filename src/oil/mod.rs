@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 
-mod density;
+pub(crate) mod density;
 
 /// Oil density via Standing-Witte-McCain-Hill method (lb/ft3).
 ///

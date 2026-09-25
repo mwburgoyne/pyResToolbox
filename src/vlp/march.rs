@@ -41,7 +41,6 @@ pub struct SegmentState {
     pub mflow_l: f64, // Liquid mass flow (lbm/s)
     pub mflow_total: f64, // Total mass flow (lbm/s)
     pub ql_loc: f64,  // Local liquid rate (STB/d)
-    pub lsg_loc: f64, // Local liquid specific gravity
     pub tid: f64,     // Pipe internal diameter (inches)
     pub rough: f64,   // Pipe roughness (inches)
 }
@@ -140,24 +139,9 @@ fn hb_gradient(s: &SegmentState) -> f64 {
 
     let mut yl = clamp(si * ylonsi, 0.0, 1.0);
 
-    // Minimum holdup from mass fraction
-    let rho_g_sg = s.rho_g / 62.37;
-    let mflow_lpd = s.mflow_l * SEC_PER_DAY;
-    let mflow_gpd = s.mflow_g * SEC_PER_DAY;
-    let mflow_total_pd = mflow_lpd + mflow_gpd;
-    let mass_frac_liq = if mflow_total_pd > 0.0 {
-        mflow_lpd / mflow_total_pd
-    } else {
-        0.0
-    };
-    let min_l = if (rho_g_sg + s.lsg_loc) > 0.0 {
-        mass_frac_liq * rho_g_sg / (rho_g_sg + s.lsg_loc)
-    } else {
-        0.0
-    };
-    if yl < min_l {
-        yl = min_l;
-    }
+    // Modified HB (Brill & Mukherjee 1999, s4.2.1): holdup never below the
+    // no-slip holdup (mirrors Python _hb_gradient_gas)
+    yl = yl.max(s.lambda_l);
 
     // Orkiszewski bubble flow correction
     let vm = ugas + ul;
@@ -178,7 +162,7 @@ fn hb_gradient(s: &SegmentState) -> f64 {
     }
 
     // Reynolds and friction (mass-flow basis)
-    let mflow_pd = mflow_total_pd;
+    let mflow_pd = (s.mflow_l + s.mflow_g) * SEC_PER_DAY;
     let mut nre =
         HB_RE_K * (mflow_pd / SEC_PER_DAY) / (s.diam_ft * mul.powf(yl) * s.mu_g.powf(1.0 - yl));
     if nre < 2100.0 {
@@ -411,7 +395,7 @@ fn segment_march_gas(
             let s = SegmentState {
                 p_avg, mu_g, rho_g, rho_l, rho_ns, v_sg, v_sl, v_m, lambda_l,
                 sigma, mu_l, diam_ft, rough_ft, area, injection, theta,
-                mflow_g, mflow_l, mflow_total, ql_loc, lsg_loc, tid, rough,
+                mflow_g, mflow_l, mflow_total, ql_loc, tid, rough,
             };
 
             let dpdz = gradient(&s);
@@ -476,14 +460,17 @@ fn segment_march_oil(
 
             let oil_vis_seg =
                 oil_viscosity_full(sgsp, api, temp_f, rsb, pb, p_avg, vis_frac, rsb_frac);
-            let rho_oil = oil_density_mccain(rs_local, sgsp, osg, p_avg.min(pb), temp_f);
+            let rho_oil = oil_density_mccain(rs_local, sgsp, osg, p_avg.min(pb), temp_f)
+                * undersaturated_compression(api, sgsp, pb, p_avg, rsb, temp_f);
 
             let zee = z_factor(gsg, temp_f, p_avg, tc, pc);
             let mu_g = gas_viscosity(gsg, temp_f, p_avg, zee, tc, pc);
 
             let rho_g = MW_AIR * gsg * p_avg / (zee * R_GAS * temp_r);
 
-            let mflow_o = osg * RHO_FW * qo * FT3_PER_BBL / SEC_PER_DAY;
+            // Live oil carries its dissolved gas (mirrors Python _segment_march_oil)
+            let mflow_o = (osg * RHO_FW * qo * FT3_PER_BBL + RHO_AIR_STC * sgsp * rs_local * qo)
+                / SEC_PER_DAY;
             let mflow_w = wsg * RHO_FW * qw * FT3_PER_BBL / SEC_PER_DAY;
             let mflow_g = RHO_AIR_STC * gsg * qg_mmscfd * 1e6 / SEC_PER_DAY;
             let mflow_l = mflow_o + mflow_w;
@@ -497,11 +484,6 @@ fn segment_march_oil(
                 (qo * rho_oil + qw * rho_w) / ql
             } else {
                 rho_oil
-            };
-            let lsg = if ql > 0.0 {
-                (qo * osg + qw * wsg) / ql
-            } else {
-                osg
             };
 
             let v_sg = (mflow_g / rho_g.max(1e-10)) / area;
@@ -526,7 +508,7 @@ fn segment_march_oil(
                 p_avg, mu_g, rho_g, rho_l, rho_ns, v_sg, v_sl, v_m, lambda_l,
                 sigma, mu_l, diam_ft, rough_ft, area, injection, theta,
                 mflow_g, mflow_l, mflow_total,
-                ql_loc: ql, lsg_loc: lsg, tid, rough,
+                ql_loc: ql, tid, rough,
             };
 
             let dpdz = gradient(&s);

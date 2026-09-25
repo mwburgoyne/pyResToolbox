@@ -499,7 +499,7 @@ Gas well:
     >>> from pyrestoolbox import nodal
     >>> c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    962.1287441454741
+    961.6837134610927
 
 Oil well:
 
@@ -507,7 +507,7 @@ Oil well:
 
     >>> c = nodal.Completion(tid=2.441, length=8000, tht=100, bht=180)
     >>> nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil', qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65, pb=2500, rsb=500, sgsp=0.65, api=35)
-    1783.6902402593976
+    1894.1104855607562
 
 Oil well using OilPVT object:
 
@@ -516,7 +516,7 @@ Oil well using OilPVT object:
     >>> from pyrestoolbox import oil
     >>> opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     >>> nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil', oil_pvt=opvt, qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65)
-    1784.4602074684308
+    1895.1011980305584
 
 Deviated well using WellSegment:
 
@@ -525,7 +525,7 @@ Deviated well using WellSegment:
     >>> segs = [nodal.WellSegment(md=5000, id=2.441, deviation=0), nodal.WellSegment(md=5000, id=2.441, deviation=45)]
     >>> c_dev = nodal.Completion(segments=segs, tht=100, bht=200)
     >>> nodal.fbhp(thp=500, completion=c_dev, vlpmethod='HB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    933.6848384590953
+    933.2375466817515
 
 .. note::
 
@@ -822,10 +822,10 @@ Oil well operating point:
     >>> r = nodal.Reservoir(pr=3000, degf=180, k=50, h=30, re=1000, rw=0.35)
     >>> opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     >>> result = nodal.operating_point(thp=200, completion=c, reservoir=r, vlpmethod='HB', well_type='oil', oil_pvt=opvt, gor=800, wc=0.3, gsg=0.65)
-    >>> round(result['rate'], 1)
-    1969.8
+    >>> round(result['rate'], 1)   # total liquid, STB/d (oil 1650.7 at 30% water cut)
+    2358.1
     >>> round(result['bhp'], 1)
-    1774.3
+    2008.6
 
 
 Calculation Methods and Class Objects
@@ -858,14 +858,14 @@ Examples:
     >>> from pyrestoolbox import nodal
     >>> c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    962.1287441454741
+    961.6837134610927
 
 Comparing all four VLP methods for the same gas well:
 
 .. code-block:: python
 
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    962.1287441454741
+    961.6837134610927
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='WG', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
     1172.8626065704736
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='GRAY', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)

@@ -71,22 +71,10 @@ pub fn deno_below_pb(
 
 // ─── Above-Pb density: compressibility correction (Eq 3.20) ────────
 
-/// Oil density above bubble point via exponential compressibility correction.
-///
-/// Uses density at Pb from `deno_below_pb` and the cofb polynomial from
-/// McCain Eq 3.13 (compressibility at current pressure).
-pub fn deno_above_pb(
-    p: f64,
-    degf: f64,
-    rsb: f64,
-    sg_g: f64,
-    sg_sp: f64,
-    pb: f64,
-    sg_o: f64,
-    api: f64,
-) -> f64 {
-    let rho_rb = deno_below_pb(pb, degf, rsb, sg_g, sg_sp, sg_o, api);
-
+/// McCain Eq 3.13 cofb: average undersaturated oil compressibility (1/psi)
+/// from Pb to p. Shared by `deno_above_pb` and the VLP oil march so both use
+/// one polynomial (mirrors Python `_cofb_mccain`).
+pub(crate) fn cofb_mccain(api: f64, sg_sp: f64, sg_g: f64, pb: f64, p: f64, rsb: f64, degf: f64) -> f64 {
     // cofb from McCain Eq 3.13 — polynomial in transformed variables
     let c: [[f64; 6]; 3] = [
         [3.011, -0.0835, 3.51, 0.327, -1.918, 2.52],
@@ -126,7 +114,27 @@ pub fn deno_above_pb(
     }
 
     let ln_cofb_p = 2.434 + 0.475 * zp + 0.048 * zp * zp - (1.0e6_f64).ln();
-    let cofb_p = ln_cofb_p.exp();
+    ln_cofb_p.exp()
+}
+
+
+/// Oil density above bubble point via exponential compressibility correction.
+///
+/// Uses density at Pb from `deno_below_pb` and the cofb polynomial from
+/// McCain Eq 3.13 (compressibility at current pressure).
+pub fn deno_above_pb(
+    p: f64,
+    degf: f64,
+    rsb: f64,
+    sg_g: f64,
+    sg_sp: f64,
+    pb: f64,
+    sg_o: f64,
+    api: f64,
+) -> f64 {
+    let rho_rb = deno_below_pb(pb, degf, rsb, sg_g, sg_sp, sg_o, api);
+
+    let cofb_p = cofb_mccain(api, sg_sp, sg_g, pb, p, rsb, degf);
 
     rho_rb * (cofb_p * (p - pb)).exp() // Eq 3.20
 }

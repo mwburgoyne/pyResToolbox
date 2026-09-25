@@ -4,6 +4,16 @@
 
 use super::constants::{MW_AIR, R_GAS};
 
+/// rho(p)/rho(pb) = exp(cofb (p - pb)) above Pb, else 1 (McCain Eq 3.20),
+/// matching oil_deno above Pb. pb or rsb of zero carry no bubble point.
+/// Mirrors Python nodal._undersaturated_compression.
+pub fn undersaturated_compression(api: f64, sgsp: f64, pb: f64, p: f64, rsb: f64, degf: f64) -> f64 {
+    if p <= pb || pb <= 0.0 || rsb <= 0.0 {
+        return 1.0;
+    }
+    (crate::oil::density::cofb_mccain(api, sgsp, 0.0, pb, p, rsb, degf) * (p - pb)).exp()
+}
+
 const LN10: f64 = std::f64::consts::LN_10;
 
 #[inline]

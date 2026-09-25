@@ -960,3 +960,21 @@ def test_fbhp_gas_pvt_impurities_reach_the_vlp():
     assert abs(sweet - nodal.fbhp(gsg=0.8, **kw)) < 1e-9
     assert nodal.fbhp(gas_pvt=gas.GasPVT(sg=0.8, n2=0.3), **kw) < sweet - 50
     assert nodal.fbhp(gas_pvt=gas.GasPVT(sg=0.8, co2=0.1, h2s=0.2), **kw) > sweet + 20
+
+
+def test_gray_single_phase_liquid_uses_dry_roughness():
+    """Gray applied wet-film roughness to water-only flow, +147 psi vs the others (sweep 2026-09-25)."""
+    from pyrestoolbox import nodal
+    c = nodal.Completion(tid=2.441, length=9000, tht=100, bht=220)
+    kw = dict(thp=200, completion=c, well_type='oil', qt_stbpd=2000, gor=0, wc=1.0,
+              gsg=0.7, pb=0, rsb=0, sgsp=0.7, api=35)
+    assert abs(nodal.fbhp(vlpmethod='GRAY', **kw) / nodal.fbhp(vlpmethod='BB', **kw) - 1) < 1e-4
+
+
+def test_ipr_curve_oil_rate_is_total_liquid_at_water_cut():
+    """ipr_curve ignored wc while operating_point treated its rate as total liquid."""
+    from pyrestoolbox import nodal
+    r = nodal.Reservoir(pr=3000, degf=180, k=50, h=30, re=1000, rw=0.35)
+    dry = nodal.ipr_curve(r, well_type='oil', n_points=4, wc=0, bo=1.2, uo=1.0)['rate']
+    wet = nodal.ipr_curve(r, well_type='oil', n_points=4, wc=0.5, bo=1.2, uo=1.0)['rate']
+    assert all(abs(w - 2 * d) < 1e-9 for d, w in zip(dry, wet))
