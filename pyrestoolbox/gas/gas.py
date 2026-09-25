@@ -97,6 +97,16 @@ _Z_EXIT_RESIDUAL = 1e-4  # DAK residual above this at exit means no single-phase
 _GRAD2SG_SG_LO = MW_H2 / MW_AIR
 
 
+def _rust_cmethod(cmethod):
+    """Critical-property method name to hand the Rust batch paths.
+
+    Rust implements SUT and BNS. For SUT and PMC the caller has already
+    resolved the mixture tc/pc, which Rust takes as final for DAK/HY, so PMC
+    runs there as 'SUT' with PMC's tc/pc (identical to 5e-16).
+    """
+    return 'BNS' if cmethod.name in ('BNS', 'BUR') else 'SUT'
+
+
 def _inert_sg(co2, h2s, n2, h2):
     """Specific gravity contributed by the non-hydrocarbon fractions alone."""
     return (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2) / MW_AIR
@@ -1685,12 +1695,11 @@ def gas_ponz2p(
     # Effective tc/pc is honoured by the Rust path: mixture override for
     # DAK/HY+SUT, HC-only override for BNS.
     zname = zmethod.name
-    cname = cmethod.name
-    if RUST_AVAILABLE and cname in ('SUT', 'BNS'):
+    if RUST_AVAILABLE:
         try:
             p_list = _rust_module.gas_ponz2p_rust(
                 [float(v) for v in poverz], degf, sg,
-                zname, cname,
+                zname, _rust_cmethod(cmethod),
                 co2, h2s, n2, h2, float(tc), float(pc), rtol,
             )
             result = process_output(np.array(p_list), is_list)
@@ -1857,20 +1866,17 @@ def gas_dmp(
     # Effective tc/pc is honoured by the Rust path: mixture override for
     # DAK/HY+SUT, HC-only override for BNS.
     if RUST_AVAILABLE:
-        zname = zmethod.name
-        cname = cmethod.name
-        if cname in ('SUT', 'BNS'):
-            try:
-                result = _rust_module.gas_dmp_rust(
-                    float(p1), float(p2), degf, sg,
-                    zname, cname,
-                    co2, h2s, n2, h2, float(tc), float(pc),
-                )
-                if metric:
-                    return result * PSI2CP_TO_BAR2CP
-                return result
-            except ValueError:
-                pass  # Fall through to Python for unsupported method combos
+        try:
+            result = _rust_module.gas_dmp_rust(
+                float(p1), float(p2), degf, sg,
+                zmethod.name, _rust_cmethod(cmethod),
+                co2, h2s, n2, h2, float(tc), float(pc),
+            )
+            if metric:
+                return result * PSI2CP_TO_BAR2CP
+            return result
+        except ValueError:
+            pass  # Fall through to Python for unsupported method combos
 
     def _gl_integrate(lo, hi, nodes, weights):
         """Batch Gauss-Legendre integration of 2p/(mu*Z) over [lo, hi]."""
