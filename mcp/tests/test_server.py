@@ -106,6 +106,55 @@ def test_call_rejects_private():
         srv.call('gas._resolve_methods', {})
 
 
+_COMPLETION = {'tid': 2.441, 'length': 10000, 'tht': 100, 'bht': 200}
+_RESERVOIR = {'pr': 3000, 'degf': 200, 'k': 10, 'h': 50, 're': 1500, 'rw': 0.35, 'S': 2, 'D': 0.001}
+
+
+def test_call_builds_completion_and_matches_doc_example():
+    r = srv.call('nodal.fbhp', {'thp': 500, 'completion': _COMPLETION, 'vlpmethod': 'HB',
+                                'well_type': 'gas', 'qg_mscfd': 5000, 'gsg': 0.65,
+                                'cgr': 10, 'qw_bwpd': 10, 'api': 45, 'oil_vis': 1.0})
+    assert abs(r['result'] - 961.6837134610927) / 961.6837134610927 < RTOL
+
+
+def test_call_builds_segments_reservoir_and_gas_pvt():
+    segs = {'segments': [{'md': 5000, 'id': 2.441}, {'md': 5000, 'id': 2.441, 'deviation': 45}],
+            'tht': 100, 'bht': 200}
+    r = srv.call('nodal.fbhp', {'thp': 500, 'completion': segs, 'vlpmethod': 'HB', 'well_type': 'gas',
+                                'qg_mscfd': 5000, 'gsg': 0.65, 'cgr': 10, 'qw_bwpd': 10,
+                                'api': 45, 'oil_vis': 1.0})
+    assert abs(r['result'] - 933.2375466817515) < 0.01
+    op = srv.call('nodal.operating_point', {'thp': 500, 'completion': _COMPLETION,
+                                            'reservoir': _RESERVOIR, 'vlpmethod': 'HB',
+                                            'well_type': 'gas', 'gsg': 0.65})['result']
+    assert abs(op['rate'] - 10578.1) < 0.2
+    assert srv.call('nodal.fthp', {'bhp': 1000, 'completion': _COMPLETION, 'well_type': 'gas',
+                                   'qg_mscfd': 5000, 'gas_pvt': {'sg': 0.7, 'co2': 0.1}})['result'] > 14.7
+
+
+def test_call_forecast_from_fit_result_and_ratio():
+    t = list(range(1, 25))
+    q = [1000 * 2.718281828 ** (-0.05 * x) for x in t]
+    fit = srv.call('dca.fit_decline', {'t': t, 'q': q, 'method': 'exponential'})['result']
+    ratio = {'method': 'linear', 'a': 2.0, 'b': 0.0, 'domain': 'time'}
+    fc = srv.call('dca.forecast', {'result': fit, 't_end': 60, 'dt': 30, 'ratios': {'gor': ratio}})['result']
+    assert all(abs(c - 2 * Q) < 1e-6 * Q for c, Q in zip(fc['secondary']['gor']['cum'], fc['Qcum']))
+    assert srv.call('dca.ratio_forecast', {'result': ratio, 'x': 10})['result'] == 2.0
+
+
+def test_call_sensitivity_with_function_name_and_nested_objects():
+    r = srv.call('sensitivity.sweep', {'func': 'nodal.fbhp', 'vary_param': 'thp', 'vary_values': [300, 500],
+                                       'base_kwargs': {'thp': 500, 'completion': _COMPLETION,
+                                                       'well_type': 'gas', 'qg_mscfd': 5000}})['result']
+    assert r['results'][1] > r['results'][0]
+
+
+def test_call_bad_object_keyword_names_the_class():
+    with pytest.raises(ValueError, match="Could not build nodal.Completion for 'completion'"):
+        srv.call('nodal.fbhp', {'thp': 500, 'completion': {'tid': 2.441, 'lenght': 10000},
+                                'well_type': 'gas', 'qg_mscfd': 5000})
+
+
 # ----------------------------------------------------------- composite tools
 
 def test_recommend_methods_h2_mandatory_bns():

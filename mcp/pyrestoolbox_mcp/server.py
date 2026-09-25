@@ -53,6 +53,10 @@ mcp = FastMCP(
         "Fahrenheit value to `degf` with metric=True converts it twice and "
         "returns a wrong answer silently. Standard volumes are always at "
         "60 deg F and 14.696 psia, so metric sm3 is on that basis. "
+        "Gas rates are Mscf/d everywhere (sm3/d with metric=True). "
+        "Functions that take objects (Completion, Reservoir, GasPVT, OilPVT, "
+        "decline results) accept them through call() as JSON objects of their "
+        "constructor keywords; see the call tool description. "
         "Full module documentation is available as docs:// resources."
     ),
 )
@@ -147,8 +151,23 @@ def call(name: str, arguments: dict = {}) -> dict:
     Correlation methods are strings (e.g. "zmethod": "DAK"); an invalid
     method string returns an error listing the valid options. Gas and brine
     functions accept lists for pressure-like inputs; oil functions are
-    scalar-only. Classes cannot be called here - use the one-shot wrapper
-    tools (co2_brine_props, sw_brine_props, fit_and_forecast) instead.
+    scalar-only. Gas rates are Mscf/d (sm3/d with metric=True).
+
+    Object arguments are passed as JSON objects of their constructor keywords
+    and built here (describe the class for its keywords):
+      completion -> nodal.Completion   (a "segments" list of objects -> WellSegment)
+      reservoir  -> nodal.Reservoir
+      gas_pvt    -> gas.GasPVT
+      oil_pvt    -> oil.OilPVT
+      result     -> dca.DeclineResult (forecast) or dca.RatioResult (ratio_forecast);
+                    pass the object a fit_decline / fit_ratio call returned
+      ratios     -> {name: RatioResult object}
+      func       -> a 'module.function' name (sensitivity.sweep / tornado); objects
+                    inside base_kwargs are built by the same rules
+    e.g. call('nodal.fbhp', {"thp": 500, "well_type": "gas", "qg_mscfd": 5000,
+    "completion": {"tid": 2.441, "length": 10000, "tht": 100, "bht": 200}}).
+    Classes themselves cannot be called here; one-shot wrappers
+    (co2_brine_props, sw_brine_props, fit_and_forecast) cover the common cases.
     """
     _, obj = _resolve(name)
     if inspect.isclass(obj):
@@ -159,8 +178,73 @@ def call(name: str, arguments: dict = {}) -> dict:
         )
     if not callable(obj):
         raise ValueError(f"{name} is not callable (it is {type(obj).__name__})")
-    result = obj(**arguments)
+    result = obj(**_build_objects(obj, arguments))
     return {"result": to_jsonable(result)}
+
+
+def _library_class(dotted: str):
+    module, cls = dotted.split(".")
+    return getattr(_get_module(module), cls)
+
+
+# Keyword -> library class built from a JSON object. The library names these
+# parameters consistently, so one table covers every function that takes them.
+_OBJECT_PARAMS = {
+    "completion": "nodal.Completion",
+    "reservoir": "nodal.Reservoir",
+    "gas_pvt": "gas.GasPVT",
+    "oil_pvt": "oil.OilPVT",
+}
+
+
+def _build_objects(fn, arguments: dict) -> dict:
+    """Turn JSON objects in `arguments` into the library objects fn expects.
+
+    Raises ValueError naming the parameter and class when construction fails,
+    so an agent learns which keywords to fix instead of an AttributeError from
+    deep inside the library.
+    """
+    try:
+        annotations = {k: str(v.annotation) for k, v in inspect.signature(fn).parameters.items()}
+    except (TypeError, ValueError):
+        annotations = {}
+    out = {}
+    for key, value in arguments.items():
+        out[key] = _build_one(key, value, annotations.get(key, ""))
+    return out
+
+
+def _build_one(key, value, annotation):
+    if key == "func" and isinstance(value, str):
+        _, fn = _resolve(value)
+        return fn
+    if key == "base_kwargs" and isinstance(value, dict):
+        return {k: _build_one(k, v, "") for k, v in value.items()}
+    if not isinstance(value, dict):
+        return value
+    if key == "ratios":
+        return {name: _construct("dca.RatioResult", key, spec) for name, spec in value.items()}
+    if key == "result":
+        dotted = "dca.RatioResult" if "RatioResult" in annotation else "dca.DeclineResult"
+        return _construct(dotted, key, value)
+    if key in _OBJECT_PARAMS:
+        if key == "completion" and isinstance(value.get("segments"), list):
+            value = dict(value, segments=[
+                _construct("nodal.WellSegment", "completion.segments", seg)
+                if isinstance(seg, dict) else seg for seg in value["segments"]])
+        return _construct(_OBJECT_PARAMS[key], key, value)
+    return value
+
+
+def _construct(dotted, key, spec):
+    cls = _library_class(dotted)
+    try:
+        return cls(**spec)
+    except TypeError as exc:
+        raise ValueError(
+            f"Could not build {dotted} for '{key}' from {sorted(spec)}: {exc}. "
+            f"Use describe({dotted!r}) for its keywords."
+        ) from exc
 
 
 @mcp.tool()

@@ -79,8 +79,16 @@ PYTHONPATH=<repo>:<repo>/mcp python3 -m pytest mcp/tests/ -q
 - Units default to oilfield (psia, deg F, ft, mD, cP); pass `metric: true`
   where the function supports it. The plyasunov module is SI (K, MPa).
 - The oil module is scalar-only; gas and brine functions accept lists.
-- Stateful classes (`GasPVT`, `CO2_Brine_Mixture`, `SoreideWhitson`,
-  `DeclineResult`) are not exposed through `call` - the one-shot wrapper
-  tools cover the common workflows.
+- Gas rates are Mscf/d everywhere (sm3/d with `metric: true`).
+- Functions that take objects are callable through `call` with those objects
+  written as JSON objects of their constructor keywords: `completion`
+  (`nodal.Completion`, with an optional `segments` list of `WellSegment`
+  objects), `reservoir`, `gas_pvt`, `oil_pvt`, `result` (the object a
+  `fit_decline` or `fit_ratio` call returned), `ratios`, and `func` as a
+  `'module.function'` name for `sensitivity.sweep`/`tornado`. For example
+  `call('nodal.fbhp', {"thp": 500, "well_type": "gas", "qg_mscfd": 5000,
+  "completion": {"tid": 2.441, "length": 10000, "tht": 100, "bht": 200}})`.
+  Classes themselves are not called directly; the one-shot wrapper tools
+  cover the common stateful workflows.
 - File-writing simtools functions keep their `export=False` defaults, so
   calls return table text rather than touching disk.
