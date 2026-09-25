@@ -57,7 +57,7 @@ Examples:
 
     >>> from pyrestoolbox import layer
     >>> layer.lorenz2b(0.75, lrnz_method = 'LANG')
-    16.139518537603912
+    16.139495254539547
     
     >>> layer.lorenz2b(0.75)
     7.978108090962671
@@ -100,7 +100,7 @@ Examples:
 
 .. code-block:: python
 
-    >>> layer.lorenzfromb(16.139518537603912, lrnz_method = 'LANG')
+    >>> layer.lorenzfromb(16.139495254539547, lrnz_method = 'LANG')
     0.750000182307895
     
     >>> layer.lorenzfromb(7.978108090962671)

@@ -133,7 +133,7 @@ Examples:
     >>> t.entries[0].param
     'sg'
     >>> t.entries[0].sensitivity
-    0.0886413428394408
+    0.08864075121672557
     >>> t.entries[1].param
     'degf'
     >>> t.entries[2].param

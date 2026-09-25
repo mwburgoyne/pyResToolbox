@@ -257,7 +257,7 @@ Usage example for 5000 psia x 275 deg F and 3% NaCl brine:
     >>> from pyrestoolbox import brine
     >>> mix = brine.CO2_Brine_Mixture(pres = 5000, temp = 275, ppm = 30000, metric = False)
     >>> mix.bw  # Returns [CO2 Saturated, Pure Brine, Freshwater]
-    [1.1091672843736888, 1.054302417027164, 1.0542033928155845]
+    [1.1090908985270322, 1.054302417027164, 1.0542033928155845]
     >>> mix.x  # Returns molar fractions in aqueous phase [xCO2, xH2O]
     array([0.02431225, 0.95743209])
     
@@ -646,7 +646,7 @@ Pure CH4 case (SG=0.554) at 5000 psia x 275 deg F and 3% NaCl brine:
     >>> mix.Rs
     {'CH4': 22.142528744136207}
     >>> mix.bDen
-    [0.964025696752258, 0.968164592979362, 0.9476497407774847]
+    [0.9640205266484241, 0.968164592979362, 0.9476497407774847]
 
 Mixed gas (10% CO2, 5% H2S, SG=0.7) at 200 Bar x 80 degC and 10,000 ppm NaCl:
 

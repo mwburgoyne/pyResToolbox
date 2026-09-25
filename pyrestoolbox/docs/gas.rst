@@ -60,7 +60,7 @@ Calculating gas Z-Factor of pure methane using DAK and PMC for critical properti
 
     >>> from pyrestoolbox import gas
     >>> gas.gas_z(p=2350, sg=0.68, degf = 180, zmethod='DAK', cmethod='PMC')
-    0.8785399927100872
+    0.8785390925376578
 
 .. note::
 
@@ -306,7 +306,7 @@ Examples:
     0.9138558878125714
 
     >>> gas.gas_z(p=1000, sg=0.75, degf=160, n2 = 0.02, co2 = 0.17, zmethod='HY')
-    0.9142136711443208
+    0.9141985338249619
 
     >>> gas.gas_z(p=[1000, 2000], sg=0.75, degf=160, cmethod='SUT', n2 = 0.02, co2 = 0.17)
     array([0.91900003, 0.87160514])
@@ -616,7 +616,7 @@ Examples:
 .. code-block:: python
 
     >>> gas.gas_den (p=2000, sg=0.75, degf=150, zmethod ='HY', cmethod ='SUT', n2 = 0.02, co2 = 0.15, h2s = 0.02)
-    7.736656004563576
+    7.7365671662831526
     
 
 pyrestoolbox.gas.gas_thermal
@@ -1307,7 +1307,7 @@ Examples:
     1.3057674900081304
 
     >>> gas.gas_rate_linear(k=0.1, area=50, length=200, pr=[2000, 1000, 500], pwf=250, degf=180, sg = 0.8)
-    array([1.30576749, 0.33536124, 0.06793513])
+    array([1.30576749, 0.33536124, 0.06793847])
 
 Using a GasPVT object:
 

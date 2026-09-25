@@ -263,13 +263,11 @@ Or creating black oil table information for oil
     >>>
     >>> plt.tight_layout()
     >>> plt.show()
-    Iteratively solving for Rsb fraction to use in order to harmonize user specified Pb and Rsb
-
-    Stock Tank Oil Density: 52.09203539823009 lb/cuft
-    Stock Tank Gas Density: 0.052046870460837856 lb/cuft
-    Reservoir Water Density: 61.40223160167964 lb/cuft
+    Stock Tank Oil Density: 52.06448672566371 lb/cuft
+    Stock Tank Gas Density: 0.05204687045843109 lb/cuft
+    Reservoir Water Density: 61.37100825498743 lb/cuft
     Reservoir Water Compressibility: 2.930237693350768e-06 1/psi
-    Reservoir Water Viscosity: 0.3640686136171888 cP
+    Reservoir Water Viscosity: 0.36386395924173587 cP
 
 .. image:: https://raw.githubusercontent.com/mwburgoyne/pyResToolbox/main/pyrestoolbox/docs/img/bot.png
     :alt: Black Oil Properties
@@ -348,17 +346,17 @@ With ability to generate Live Oil PVTO style table data as well
     >>> ..
     >>> plt.show()
     Pb (psia): 4500
-    Bob (rb/stb): 1.6072798403441817
-    Rsb (mscf/stb): 1.2863705330979234
-    Rsb Scaling Required: 0.9713981737449556
-    Visob (cP): 0.3422139569449832
-    Cob (1/psi): 5.711273668114706e-05
+    Bob (rb/stb): 1.5372158966466267
+    Rsb (mscf/stb): 1.137900924344287
+    Rsb Scaling Required: 1.0362710951888936
+    Visob (cP): 0.36663121233374113
+    Cob (1/psi): 2.0042955593519084e-05
 
-    Stock Tank Oil Density: 52.05522123893805 lb/cuft
-    Stock Tank Gas Density: 0.052025361717109773 lb/cuft
-    Reservoir Water Density: 61.40223160167964 lb/cuft
+    Stock Tank Oil Density: 52.06448672566371 lb/cuft
+    Stock Tank Gas Density: 0.05204687045843109 lb/cuft
+    Reservoir Water Density: 61.37100825498743 lb/cuft
     Reservoir Water Compressibility: 2.930237693350768e-06 1/psi
-    Reservoir Water Viscosity: 0.3640686136171888 cP
+    Reservoir Water Viscosity: 0.36386395924173587 cP
 
 .. image:: https://raw.githubusercontent.com/mwburgoyne/pyResToolbox/main/pyrestoolbox/docs/img/bot_PVTO.png
     :alt: Live Oil Properties

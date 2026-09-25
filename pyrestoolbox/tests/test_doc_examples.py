@@ -19,7 +19,7 @@ import pyrestoolbox.nodal as nodal
 import pyrestoolbox.simtools as simtools
 import pyrestoolbox.library as library
 
-RTOL = 1e-4  # Relative tolerance for floating point comparisons
+RTOL = 1e-6  # Relative tolerance for floating point comparisons
 
 # =============================================================================
 # Gas Module Documentation Examples (docs/gas.rst)
@@ -29,7 +29,7 @@ def test_doc_gas_z_dak_pmc():
     """gas.rst: gas_z with DAK/PMC for sg=0.68"""
     result = gas.gas_z(p=2350, sg=0.68, degf=180, zmethod='DAK', cmethod='PMC')
     assert isinstance(result, float)
-    assert abs(result - 0.8785399927100872) / 0.8785399927100872 < RTOL
+    assert abs(result - 0.8785390925376578) / 0.8785390925376578 < RTOL
 
 def test_doc_gas_z_bur_co2():
     """gas.rst: gas_z for pure CO2 with BUR method"""
@@ -72,7 +72,7 @@ def test_doc_gas_z_hy():
     """gas.rst: gas_z with HY method"""
     result = gas.gas_z(p=1000, sg=0.75, degf=160, n2=0.02, co2=0.17, zmethod='HY')
     assert isinstance(result, float)
-    assert abs(result - 0.9142136711443208) / 0.9142136711443208 < RTOL
+    assert abs(result - 0.9141985338249619) / 0.9141985338249619 < RTOL
 
 def test_doc_gas_z_sut_array():
     """gas.rst: gas_z array with SUT"""
@@ -124,7 +124,7 @@ def test_doc_gas_den():
     """gas.rst: gas_den with impurities"""
     result = gas.gas_den(p=2000, sg=0.75, degf=150, zmethod='HY', cmethod='SUT', n2=0.02, co2=0.15, h2s=0.02)
     assert isinstance(result, float)
-    assert abs(result - 7.736656004563576) / 7.736656004563576 < RTOL
+    assert abs(result - 7.7365671662831526) / 7.7365671662831526 < RTOL
 
 def test_doc_gas_thermal_field():
     """gas.rst: gas_thermal field units with CO2"""
@@ -269,7 +269,7 @@ def test_doc_gas_rate_linear_array():
     """gas.rst: gas_rate_linear array"""
     result = gas.gas_rate_linear(k=0.1, area=50, length=200, pr=[2000, 1000, 500], pwf=250, degf=180, sg=0.8)
     assert isinstance(result, np.ndarray)
-    expected = np.array([1.3057674900081304, 0.33536123924681194, 0.06793513])
+    expected = np.array([1.3057674900081304, 0.33536123924681194, 0.06793847327634946])
     np.testing.assert_allclose(result, expected, rtol=RTOL)
 
 # =============================================================================
@@ -519,7 +519,7 @@ def test_doc_co2_brine_field():
     mix = brine.CO2_Brine_Mixture(pres=5000, temp=275, ppm=30000, metric=False)
     assert isinstance(mix.bw, list)
     assert len(mix.bw) == 3
-    assert abs(float(mix.bw[0]) - 1.1091672843736888) / 1.1091672843736888 < RTOL
+    assert abs(float(mix.bw[0]) - 1.1090908985270322) / 1.1090908985270322 < RTOL
     assert isinstance(mix.x, np.ndarray)
     assert abs(mix.x[0] - 0.02431225) / 0.02431225 < RTOL
 
@@ -554,7 +554,7 @@ def test_doc_sw_pure_ch4_field():
     mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=0, sg=0.554, metric=False)
     assert abs(mix.Rs['CH4'] - 22.142528744136207) / 22.142528744136207 < RTOL
     # Re-pinned 2026-08-19 (was 0.9642344204009531).
-    assert abs(mix.bDen[0] - 0.964025696752258) / 0.964025696752258 < RTOL
+    assert abs(mix.bDen[0] - 0.9640205266484241) / 0.9640205266484241 < RTOL
 
 def test_doc_sw_mixed_gas_metric():
     """brine.rst: SoreideWhitson mixed gas metric"""
@@ -583,7 +583,7 @@ def test_doc_sw_co2_freshwater_cw_sat():
 def test_doc_lorenz2b_lang():
     """layer.rst: lorenz2b with Langmuir"""
     result = layer.lorenz2b(0.75, lrnz_method='LANG')
-    assert abs(result - 16.139518537603912) / 16.139518537603912 < RTOL
+    assert abs(result - 16.139495254539547) / 16.139495254539547 < RTOL
 
 def test_doc_lorenz2b_exp():
     """layer.rst: lorenz2b with Exponential default"""
@@ -592,7 +592,7 @@ def test_doc_lorenz2b_exp():
 
 def test_doc_lorenzfromb_lang():
     """layer.rst: lorenzfromb with Langmuir"""
-    result = layer.lorenzfromb(16.139518537603912, lrnz_method='LANG')
+    result = layer.lorenzfromb(16.139495254539547, lrnz_method='LANG')
     assert abs(result - 0.750000182307895) / 0.750000182307895 < RTOL
 
 def test_doc_lorenzfromb_exp():
@@ -1564,7 +1564,7 @@ def test_doc_sensitivity_tornado():
     )
     assert abs(t.base_result - 0.8886670011404194) / 0.8886670011404194 < RTOL
     assert t.entries[0].param == 'sg'
-    assert abs(t.entries[0].sensitivity - 0.0886413428394408) / 0.0886413428394408 < RTOL
+    assert abs(t.entries[0].sensitivity - 0.08864075121672557) / 0.08864075121672557 < RTOL
     assert t.entries[1].param == 'degf'
     assert t.entries[2].param == 'p'
 
@@ -1707,3 +1707,27 @@ def test_readme_gas_matbal():
                           Gp=[0, 5, 12, 22, 35], degf=200, sg=0.65)
     assert abs(r.ogip - 87.60264634235122) / 87.60264634235122 < RTOL
     assert abs(r.r_squared - 0.9734793606102145) / 0.9734793606102145 < RTOL
+
+
+def test_readme_make_bot_og_printed_outputs():
+    """README.rst: make_bot_og examples (black-oil table and PVTO). These printed
+    values were stale and unpinned until 2026-09-25."""
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        r = simtools.make_bot_og(pi=4000, api=38, degf=175, sg_g=0.68, pmax=5000, pb=3900,
+                                 rsb=2300, nrows=50)
+        r2 = simtools.make_bot_og(pvto=True, pi=4000, api=38, degf=175, sg_g=0.68,
+                                  pmax=5500, pb=4500, nrows=25, export=False)
+    for res in (r, r2):
+        assert abs(res['deno'] - 52.06448672566371) / 52.06448672566371 < RTOL
+        assert abs(res['deng'] - 0.05204687045843109) / 0.05204687045843109 < RTOL
+        assert abs(res['denw'] - 61.37100825498743) / 61.37100825498743 < RTOL
+        assert abs(res['cw'] - 2.930237693350768e-06) / 2.930237693350768e-06 < RTOL
+        assert abs(res['uw'] - 0.36386395924173587) / 0.36386395924173587 < RTOL
+    df = r2['bot']
+    i = df['Pressure (psia)'].tolist().index(4500)
+    for col, val in (('Bo (rb/stb)', 1.5372158966466267), ('Rs (mscf/stb)', 1.137900924344287),
+                     ('uo (cP)', 0.36663121233374113), ('Co (1/psi)', 2.0042955593519084e-05)):
+        assert abs(df[col].iloc[i] - val) / val < RTOL, col
+    assert abs(r2['rsb_scale'] - 1.0362710951888936) / 1.0362710951888936 < RTOL
