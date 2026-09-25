@@ -1471,6 +1471,20 @@ from pyrestoolbox.brine._lib_vle_engine import VALID_FRAMEWORKS as _VALID_FRAMEW
 from pyrestoolbox.brine._lib_vle_engine import normalise_framework as _normalise_framework
 
 
+def _validate_dry_gas_fractions(**fractions):
+    """Raise unless each non-HC dry-gas fraction is in [0, 1] and they sum to <= 1.
+
+    Each fraction is checked on its own: a negative value can hide behind the
+    sum check and reach the flash as a negative feed.
+    """
+    for name, y in fractions.items():
+        if not (0.0 <= float(y) <= 1.0):
+            raise ValueError(f"{name} must be between 0 and 1, got {y}")
+    non_hc = sum(fractions.values())
+    if non_hc > 1.0:
+        raise ValueError(f"Sum of non-HC gas fractions ({non_hc}) exceeds 1.0")
+
+
 class SoreideWhitson:
     """ Soreide-Whitson VLE model for multicomponent gas solubility in water/brine,
         using by default the refreshed BIP relationships of Burgoyne & Nielsen (2026),
@@ -1626,14 +1640,7 @@ class SoreideWhitson:
         _p_val = pres if not metric else pres * BAR2PSI
         _t_val = temp if not metric else temp * 1.8 + 32
         validate_pe_inputs(p=_p_val, degf=_t_val)
-        # Each dry-gas fraction must sit in [0, 1] on its own: a negative value
-        # can hide behind the sum check and reach the flash as a negative feed.
-        for _name, _y in (('y_CO2', y_CO2), ('y_H2S', y_H2S), ('y_N2', y_N2), ('y_H2', y_H2)):
-            if not (0.0 <= float(_y) <= 1.0):
-                raise ValueError(f"{_name} must be between 0 and 1, got {_y}")
-        non_hc = y_CO2 + y_H2S + y_N2 + y_H2
-        if non_hc > 1.0:
-            raise ValueError(f"Sum of non-HC gas fractions ({non_hc}) exceeds 1.0")
+        _validate_dry_gas_fractions(y_CO2=y_CO2, y_H2S=y_H2S, y_N2=y_N2, y_H2=y_H2)
 
         self.metric = metric
         self.ppm = ppm
