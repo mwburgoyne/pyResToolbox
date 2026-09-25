@@ -313,6 +313,22 @@ def oil_rs_bub(
         return rsbub * SCF_PER_STB_TO_SM3_PER_SM3  # scf/stb -> sm3/sm3
     return rsbub
 
+def _rsb_at_pb(api, degf, pb, sg_sp, sg_g, pbmethod):
+    """Rsb of the fluid whose bubble point is pb, under pbmethod.
+
+    A fluid has one Pb-Rsb relation, owned by pbmethod in both directions:
+    oil_pbub maps Rsb to Pb with it, and this is its inverse. rsmethod only
+    shapes Rs(p) below Pb. Before 3.7.8 the pb-only paths inverted with
+    rsmethod (Velarde by default) while Rsb-only paths used pbmethod (VALMC),
+    so Pb -> Rsb -> Pb did not round-trip (-4.7% at 35 API, 200 degF).
+    Pass pbmethod='VELAR' for the former pb-only behaviour.
+    """
+    return get_real_part(oil_rs_bub(
+        api=api, degf=degf, pb=pb, sg_sp=sg_sp, sg_g=sg_g,
+        rsmethod=getattr(pbmethod, 'name', pbmethod),
+    ))
+
+
 def oil_rs(
     api: float,
     degf: float,
@@ -370,14 +386,7 @@ def oil_rs(
             api=api, degf=degf, rsb=rsb, sg_sp=sg_sp, pbmethod=pbmethod
         )
     if rsb <= 0:  # Calculate rsb
-        rsb = oil_rs_bub(
-            api=api,
-            degf=degf,
-            pb=pb,
-            sg_sp=sg_sp,
-            rsmethod=rsmethod,
-        )
-        rsb = get_real_part(rsb)
+        rsb = _rsb_at_pb(api, degf, pb, sg_sp, 0, pbmethod)
 
     if p >= pb:
         if metric:

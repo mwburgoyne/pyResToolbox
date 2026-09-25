@@ -13,7 +13,7 @@ from pyrestoolbox.shared_fns import validate_pe_inputs
 
 from ._utils import check_sgs, oil_sg
 from ._density import _cofb_mccain
-from ._correlations import oil_pbub, oil_rs_bub, oil_rs, oil_bo
+from ._correlations import oil_pbub, oil_rs, oil_bo, _rsb_at_pb
 
 
 def _perrine_co_sat(p, api, degf, sg_sp, sg_g, pb, rsb, zmethod, cmethod,
@@ -136,13 +136,7 @@ def oil_co(
             api=api, degf=degf, rsb=rsb, sg_sp=sg_sp, pbmethod=pbmethod
         )
     if rsb <= 0:  # Calculate rsb
-        rsb = oil_rs_bub(
-            api=api,
-            degf=degf,
-            pb=pb,
-            sg_sp=sg_sp,
-            rsmethod=rsmethod,
-        )
+        rsb = _rsb_at_pb(api, degf, pb, sg_sp, 0, pbmethod)
 
     # Analytical cofb compressibility (McCain Eq 3.13) — smooth across Pb.
     # When undersaturated_only=True, uses the cofb polynomial at all pressures
@@ -356,13 +350,7 @@ def oil_bt(
             api=api, degf=degf, rsb=rsb, sg_sp=sg_sp, pbmethod=pbmethod
         )
     if rsb <= 0:
-        rsb = oil_rs_bub(
-            api=api,
-            degf=degf,
-            pb=pb,
-            sg_sp=sg_sp,
-            rsmethod=rsmethod,
-        )
+        rsb = _rsb_at_pb(api, degf, pb, sg_sp, 0, pbmethod)
 
     if rsi <= 0:
         rsi = rsb

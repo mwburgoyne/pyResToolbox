@@ -342,13 +342,13 @@ def test_doc_oil_rs_with_pb_only():
     """oil.rst: oil_rs with pb only"""
     result = oil.oil_rs(api=43, degf=185, sg_sp=0.72, p=3000, pb=5180)
     assert isinstance(result, float)
-    assert abs(result - 804.2857187814161) / 804.2857187814161 < RTOL
+    assert abs(result - 1009.3659245027709) / 1009.3659245027709 < RTOL
 
 def test_doc_oil_rs_stan():
     """oil.rst: oil_rs with Standing method"""
     result = oil.oil_rs(api=43, degf=185, sg_sp=0.72, p=3000, pb=5180, rsmethod='STAN')
     assert isinstance(result, float)
-    assert abs(result - 952.6859841975829) / 952.6859841975829 < RTOL
+    assert abs(result - 1222.433183517944) / 1222.433183517944 < RTOL
 
 def test_doc_oil_co_above_pb():
     """oil.rst: oil_co above bubble point"""
@@ -455,7 +455,7 @@ def test_doc_oil_harmonize_pb_only():
     """oil.rst: oil_harmonize with pb only — calculate rsb"""
     pb, rsb, frac, vf = oil.oil_harmonize(pb=3500, degf=175, api=38, sg_g=0.68)
     assert pb == 3500
-    assert abs(rsb - 790) < 1  # Rsb={rsb:.0f} => ~790
+    assert abs(rsb - 863.2858730417738) < 1  # Rsb ~863 scf/stb (VALMC inverse at pb)
     assert frac == 1.0
     assert vf == 1.0
 
@@ -474,8 +474,8 @@ def test_doc_oilpvt_from_harmonize_pb_only():
     opvt = oil.OilPVT.from_harmonize(degf=200, api=35, sg_g=0.75, pb=3000)
     rs_val = opvt.rs(2000, 200)
     vis_val = opvt.viscosity(2000, 200)
-    assert abs(rs_val - 446.2641527532) / 446.2641527532 < RTOL
-    assert abs(vis_val - 0.6000045445) / 0.6000045445 < RTOL
+    assert abs(rs_val - 477.43697613289464) / 477.43697613289464 < RTOL
+    assert abs(vis_val - 0.5794890274515275) / 0.5794890274515275 < RTOL
 
 def test_doc_oilpvt_from_harmonize_full():
     """nodal.rst: OilPVT.from_harmonize with Pb, Rsb, and viscosity target"""
@@ -722,8 +722,8 @@ def test_doc_oil_rate_linear_with_pvt():
 def test_doc_oilpvt_auto_harmonize_pb_only():
     """oil.rst: OilPVT auto-harmonization with pb only"""
     opvt = oil.OilPVT(api=35, sg_sp=0.75, pb=3000, degf=200)
-    assert abs(opvt.rsb - 655.9348987842939) / 655.9348987842939 < RTOL
-    assert abs(opvt.rs(2000, 200) - 448.8232454688821) / 448.8232454688821 < RTOL
+    assert abs(opvt.rsb - 701.1669681383416) / 701.1669681383416 < RTOL
+    assert abs(opvt.rs(2000, 200) - 479.77327451045835) / 479.77327451045835 < RTOL
 
 def test_doc_oilpvt_auto_harmonize_both():
     """oil.rst: OilPVT auto-harmonization with pb and rsb"""

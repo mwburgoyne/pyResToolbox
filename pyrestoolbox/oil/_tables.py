@@ -7,7 +7,7 @@ stays light.
 
 from pyrestoolbox.constants import psc, tsc, CUFTperBBL, WDEN
 
-from ._correlations import oil_rs_bub, oil_rs, oil_bo, oil_viso
+from ._correlations import oil_rs, oil_bo, oil_viso, _rsb_at_pb
 from ._density import oil_deno
 from ._compressibility import oil_co
 from ._harmonize import oil_harmonize
@@ -32,10 +32,7 @@ def _resolve_pb_rsb(pb, rsb, degf, api, sg_sp, sg_g, pvto, pmax,
     rsb_max = rsb
 
     if pvto and pmax > pb:
-        rsb_max = oil_rs_bub(
-            degf=degf, api=api, sg_sp=sg_sp, sg_g=sg_g,
-            pb=pmax, rsmethod=rsmethod,
-        )
+        rsb_max = _rsb_at_pb(api, degf, pmax, sg_sp, sg_g, pbmethod)
         rs_at_pbi = oil_rs(
             api=api, degf=degf, sg_sp=sg_sp, p=pb, pb=pmax,
             rsb=rsb_max, rsmethod=rsmethod, pbmethod=pbmethod,

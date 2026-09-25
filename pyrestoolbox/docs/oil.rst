@@ -543,10 +543,10 @@ Examples:
     1010.0669567201218
 
     >>> oil.oil_rs(api=43, degf=185, sg_sp=0.72, p=3000, pb =5180)
-    804.2857187814161
+    1009.3659245027709
 
     >>> oil.oil_rs(api=43, degf=185, sg_sp=0.72, p=3000, pb =5180, rsmethod ='STAN')
-    952.6859841975829
+    1222.433183517944
 
 pyrestoolbox.oil.oil_co
 =======================
@@ -951,7 +951,7 @@ pyrestoolbox.oil.oil_harmonize
 
     oil_harmonize(pb=0, rsb=0, degf=0, api=0, sg_sp=0, sg_g=0, uo_target=0, p_uo=0, rsmethod='VELAR', pbmethod='VALMC', metric=False) -> tuple
 
-Resolves consistent Pb, Rsb, rsb_frac, and vis_frac from user inputs. If only one of Pb or Rsb is specified, the other is calculated using the selected correlation. If both are specified, an iterative procedure finds an ``rsb_frac`` scaling factor that allows the correlations to honor both values simultaneously. If ``uo_target`` and ``p_uo`` are specified, computes a ``vis_frac`` scaling factor to match the target viscosity.
+Resolves consistent Pb, Rsb, rsb_frac, and vis_frac from user inputs. A fluid has one Pb-Rsb relation, and ``pbmethod`` owns it in both directions: with only Pb given, Rsb is ``pbmethod``'s inverse at Pb; with only Rsb given, Pb is ``pbmethod``'s forward value, so the two round-trip exactly. ``rsmethod`` shapes Rs(p) below Pb only. (Before 3.7.8 the Pb-only path inverted ``rsmethod`` instead, 5-14% apart from VALMC for typical oils; ``pbmethod='VELAR'`` reproduces it.) If both are specified, ``rsb_frac`` is the ratio of the given Rsb to ``pbmethod``'s Rsb at the given Pb, the scaling that lets the correlations honor both. If ``uo_target`` and ``p_uo`` are specified, computes a ``vis_frac`` scaling factor to match the target viscosity.
 
 Returns tuple of ``(pb, rsb, rsb_frac, vis_frac)`` where rsb_frac is 1.0 when only one value was specified, and vis_frac is 1.0 when no target viscosity is specified. Pb is in psia (or barsa if metric=True), Rsb in scf/stb (or sm3/sm3 if metric=True).
 
@@ -1692,9 +1692,9 @@ Auto-harmonization (rsb calculated from pb):
 
     >>> opvt = oil.OilPVT(api=35, sg_sp=0.75, pb=3000, degf=200)
     >>> opvt.rsb
-    655.9348987842939
+    701.1669681383416
     >>> opvt.rs(2000, 200)
-    448.8232454688821
+    479.77327451045835
 
 Auto-harmonization with both pb and rsb (rsb_frac computed):
 

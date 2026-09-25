@@ -11,7 +11,7 @@ from pyrestoolbox.validate import validate_methods
 from pyrestoolbox.shared_fns import validate_pe_inputs
 
 from ._utils import check_sgs
-from ._correlations import oil_pbub, oil_rs_bub, oil_rs, oil_viso
+from ._correlations import oil_pbub, oil_rs, oil_viso, _rsb_at_pb
 
 
 def oil_harmonize(
@@ -36,6 +36,10 @@ def oil_harmonize(
     - If only pb is specified (rsb=0): calculates rsb from pb
     - If only rsb is specified (pb=0): calculates pb from rsb
     - If both are specified: finds rsb_frac scaling factor that honors both values
+
+    The Pb-Rsb relation is pbmethod's, in both directions, so Pb -> Rsb -> Pb
+    round-trips exactly; rsmethod only shapes Rs(p) below Pb. (Before 3.7.8 the
+    pb-only path inverted rsmethod instead; pbmethod='VELAR' reproduces it.)
     - If uo_target and p_uo are specified: computes vis_frac = uo_target / uo_corr
 
     pb: Bubble point pressure (psia | barsa). Default 0 (unknown)
@@ -46,8 +50,8 @@ def oil_harmonize(
     sg_g: Weighted average surface gas specific gravity
     uo_target: Target oil viscosity (cP) at pressure p_uo. Default 0 (no viscosity tuning)
     p_uo: Pressure at which uo_target was measured (psia | barsa). Required if uo_target > 0
-    rsmethod: Rs calculation method. Default VELAR
-    pbmethod: Pb calculation method. Default VALMC
+    rsmethod: Shape of Rs(p) below Pb. Default VELAR
+    pbmethod: Pb-Rsb relation, used in both directions. Default VALMC
     metric: If True, input/output in Eclipse METRIC units (barsa, degC, sm3/sm3). Defaults to False (FIELD)
 
     Returns tuple of (pb, rsb, rsb_frac, vis_frac) where:
@@ -80,10 +84,7 @@ def oil_harmonize(
 
     # Calculate rsb from pb
     if rsb_i <= 0 and pb_i > 0:
-        rsb = oil_rs_bub(
-            degf=degf, api=api, sg_sp=sg_sp, sg_g=sg_g,
-            pb=pb, rsmethod=rsmethod,
-        )
+        rsb = _rsb_at_pb(api, degf, pb, sg_sp, sg_g, pbmethod)
 
     # Calculate pb from rsb
     if pb_i <= 0 and rsb_i > 0:
@@ -97,10 +98,7 @@ def oil_harmonize(
     # raises with a message naming the ceiling (the old fixed-point loop
     # diverged there and raised a misleading "Need valid values" error).
     if pb_i > 0 and rsb_i > 0:
-        rsb_on_pb = oil_rs_bub(
-            degf=degf, api=api, sg_sp=sg_sp, sg_g=sg_g,
-            pb=pb, rsmethod=pbmethod.name,
-        )
+        rsb_on_pb = _rsb_at_pb(api, degf, pb, sg_sp, sg_g, pbmethod)
         rsb_frac = rsb_i / rsb_on_pb
 
     # Compute vis_frac if target viscosity specified

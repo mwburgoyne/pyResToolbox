@@ -408,8 +408,9 @@ def _resolve_pvt(p_field, degf_field, pb_field, rsb_field, api, sg_g, sg_sp,
     if pb_field <= 0:
         pb_field = oil.oil_pbub(api, degf_field, rsb_field, sg_g=sg_g, sg_sp=sg_sp)
     if rsb_field <= 0:
+        # Inverse of the oil_pbub (VALMC) relation above, so Pb and Rsb agree
         rsb_field = oil.oil_rs_bub(api, degf_field, pb_field, sg_g=sg_g, sg_sp=sg_sp,
-                                    rsmethod=rsmethod)
+                                    rsmethod='VALMC')
 
     Rs_arr = np.zeros(n)
     Bo_arr = np.zeros(n)
