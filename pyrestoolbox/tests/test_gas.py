@@ -932,7 +932,9 @@ def test_gas_hvf_beta_jones():
 def test_gas_hvf_beta_tck():
     """Tek-Coats-Katz (1962) with porosity."""
     beta = gas.gas_hvf_beta(100.0, method='TCK', phi=0.25)
-    assert abs(beta - 1.88e10 / (100.0 ** 1.47 * 0.25 ** 0.53)) / beta < 1e-12
+    assert abs(beta - 5.5e9 / (100.0 ** 1.25 * 0.25 ** 0.75)) / beta < 1e-12
+    # Paper p. 802 reads 6.2e7 1/ft off its Fig. 2 at 100 md, phi 0.18
+    assert abs(gas.gas_hvf_beta(100.0, method='TCK', phi=0.18) / 6.2e7 - 1) < 0.02
 
 def test_gas_hvf_beta_tck_requires_phi():
     with pytest.raises(ValueError, match="TCK requires"):

@@ -1611,7 +1611,7 @@ Returns the Forchheimer high-velocity-flow (inertial) coefficient β, used in no
      - β = 6.15e10 · k⁻¹·⁵⁵
      - Jones, S.C. (1987) SPE-16949
    * - ``'TCK'``
-     - β = 1.88e10 / (k¹·⁴⁷ · φ⁰·⁵³)
+     - β = 5.5e9 / (k¹·²⁵ · φ⁰·⁷⁵)
      - Tek, Coats, Katz (1962) JPT Jul, pp.799-806. Requires ``phi``.
 
 .. list-table:: Inputs
@@ -1643,7 +1643,7 @@ Examples:
     >>> gas.gas_hvf_beta(100.0, method='JONES')
     48851186.4355433
     >>> gas.gas_hvf_beta(100.0, method='TCK', phi=0.25)
-    45003847.531218514
+    49193495.50499537
     >>> gas.gas_hvf_beta(100.0, metric=True)              # 1/m
     282387103.1505296
 
@@ -1738,7 +1738,7 @@ Using damaged-zone β (krg < 1) and the TCK correlation:
     ...                             mug=0.025, sg=0.7, krg=0.7,
     ...                             beta_method='TCK', phi=0.22)
     >>> round(r['S_hvf'], 4)
-    0.1534
+    0.1594
 
 Metric units (sm3/D, m) - same well, same skin:
 

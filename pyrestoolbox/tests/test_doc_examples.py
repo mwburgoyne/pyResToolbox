@@ -855,7 +855,7 @@ def test_doc_gas_hvf_beta_jones():
 
 def test_doc_gas_hvf_beta_tck():
     """gas.rst: gas_hvf_beta Tek-Coats-Katz 1962"""
-    assert abs(gas.gas_hvf_beta(100.0, method='TCK', phi=0.25) - 45003847.531218514) / 45003847.531218514 < 1e-6
+    assert abs(gas.gas_hvf_beta(100.0, method='TCK', phi=0.25) - 49193495.50499537) / 49193495.50499537 < 1e-6
 
 def test_doc_gas_hvf_beta_metric():
     """gas.rst: gas_hvf_beta metric (1/m)"""
@@ -873,7 +873,7 @@ def test_doc_gas_non_darcy_skin_damaged_tck():
     r = gas.gas_non_darcy_skin(qg=10000, k=100, h_perf=100, rw=0.33,
                                 mug=0.025, sg=0.7, krg=0.7,
                                 beta_method='TCK', phi=0.22)
-    assert round(r['S_hvf'], 4) == 0.1534
+    assert round(r['S_hvf'], 4) == 0.1594
 
 def test_doc_gas_non_darcy_skin_metric():
     """gas.rst: gas_non_darcy_skin metric example (same well as field)"""

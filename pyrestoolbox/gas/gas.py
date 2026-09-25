@@ -222,10 +222,12 @@ _JONES_N = 1.55
 
 # Tek, M.R., Coats, K.H., Katz, D.L. (1962) "The Effect of Turbulence on
 # Flow of Natural Gas through Porous Reservoirs," JPT July 1962, pp.799-806:
-#   β[1/ft] = _TCK_A / (k^_TCK_NK * φ^_TCK_NPHI), k in md, φ fraction
-_TCK_A = 1.88e10
-_TCK_NK = 1.47
-_TCK_NPHI = 0.53
+#   β[1/ft] = _TCK_A / (k^_TCK_NK * φ^_TCK_NPHI), k in md, φ fraction (p. 800;
+#   the paper's own worked values, 6.2e7 1/ft at 100 md and φ 0.18, confirm it).
+#   Before 3.7.8 this held 1.88e10 / (k^1.47 φ^0.53), a different, unsourced form.
+_TCK_A = 5.5e9
+_TCK_NK = 1.25
+_TCK_NPHI = 0.75
 
 # Non-Darcy coefficient in field units -- Jones (1987) SPE-16949; also
 # derivable from Odeh, Moreland & Schueler (1975) "Characterization of a
@@ -1966,7 +1968,7 @@ def gas_hvf_beta(k: float, method: str = 'FK', phi: float = 0.0, *, metric: bool
                    β[1/ft] = 6.15e10 * k^-1.55, k in md.
         'TCK' -- Tek, Coats, Katz (1962) "The Effect of Turbulence on Flow of
                  Natural Gas through Porous Reservoirs," JPT July 1962,
-                 pp.799-806: β[1/ft] = 1.88e10 / (k^1.47 * φ^0.53).
+                 pp.799-806, p. 800: β[1/ft] = 5.5e9 / (k^1.25 * φ^0.75).
                  Requires phi > 0.
 
         k: Permeability (md). To evaluate β at a damaged-zone permeability,
