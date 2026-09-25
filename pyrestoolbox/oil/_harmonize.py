@@ -38,7 +38,7 @@ def oil_harmonize(
     - If both are specified: finds rsb_frac scaling factor that honors both values
 
     The Pb-Rsb relation is pbmethod's, in both directions, so Pb -> Rsb -> Pb
-    round-trips exactly; rsmethod only shapes Rs(p) below Pb. (Before 3.7.8 the
+    round-trips exactly; rsmethod only shapes Rs(p) below Pb. (Before 3.8.0 the
     pb-only path inverted rsmethod instead; pbmethod='VELAR' reproduces it.)
     - If uo_target and p_uo are specified: computes vis_frac = uo_target / uo_corr
 

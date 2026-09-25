@@ -128,7 +128,7 @@ def oil_pbub(
     ) -> float:  # 1.63 in 'Oil & Gas Properties & Correlations' - http://dx.doi.org/10.1016/B978-0-12-803437-8.00001-4
         a = _STAN_T_COEFF * degf - _STAN_API_COEFF * api
         # Standing (1947) gives Pb in psia (Whitson & Brule Eq 3.78; Ahmed Eq 1.63).
-        # Before 3.7.8 psc was added on the suspicion of psig. The -1.4 offset
+        # Before 3.8.0 psc was added on the suspicion of psig. The -1.4 offset
         # makes the form negative for tiny Rsb; a dead oil's Pb is atmospheric.
         return max(
             _STAN_DENOM * ((rsb / sg_g) ** _STAN_SG_EXP * 10 ** a - _STAN_OFFSET), psc
@@ -319,7 +319,7 @@ def _rsb_at_pb(api, degf, pb, sg_sp, sg_g, pbmethod):
 
     A fluid has one Pb-Rsb relation, owned by pbmethod in both directions:
     oil_pbub maps Rsb to Pb with it, and this is its inverse. rsmethod only
-    shapes Rs(p) below Pb. Before 3.7.8 the pb-only paths inverted with
+    shapes Rs(p) below Pb. Before 3.8.0 the pb-only paths inverted with
     rsmethod (Velarde by default) while Rsb-only paths used pbmethod (VALMC),
     so Pb -> Rsb -> Pb did not round-trip (-4.7% at 35 API, 200 degF).
     Pass pbmethod='VELAR' for the former pb-only behaviour.

@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 use crate::critical_properties;
 
 /// lb/ft3 per g/cm3 (62.42796): LGE takes rho_g in g/cm3. Was 62.367, the 60 degF
-/// water density, before 3.7.8. Mirrors Python gas._LBFT3_PER_GCC.
+/// water density, before 3.8.0. Mirrors Python gas._LBFT3_PER_GCC.
 const LBFT3_PER_GCC: f64 = 62.428;
 
 // Constants matching pyrestoolbox/constants/constants.py

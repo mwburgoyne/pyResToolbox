@@ -940,7 +940,7 @@ def test_water_viscosity_equals_brine_props_gas_free():
 
 
 def test_water_viscosity_magnitude():
-    """Fresh water at 100 degF, 1 atm is ~0.68 cP (the pre-3.7.8 helper gave
+    """Fresh water at 100 degF, 1 atm is ~0.68 cP (the pre-3.8.0 helper gave
     0.054 cP by evaluating a natural-log degC fit as log10 in degF)."""
     from pyrestoolbox.nodal import nodal as _nodal
     mu = _nodal._water_viscosity(14.7, 100.0, 0.0)
@@ -1024,7 +1024,7 @@ def test_ipr_curve_oil_rate_is_total_liquid_at_water_cut():
 
 
 def test_qg_mmscfd_deprecated_alias():
-    """Gas rates are Mscf/d from 3.7.8; qg_mmscfd converts with a DeprecationWarning."""
+    """Gas rates are Mscf/d from 3.8.0; qg_mmscfd converts with a DeprecationWarning."""
     import warnings
     from pyrestoolbox import nodal
     c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)

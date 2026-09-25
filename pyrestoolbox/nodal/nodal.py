@@ -339,7 +339,7 @@ def _validate_rates(qg_mmscfd=0.0, qt_stbpd=0.0, qw_bwpd=0.0):
 def _gas_rate_mscfd(qg_mscfd, qg_mmscfd, metric):
     """Public gas rate in Mscf/d (sm3/d if metric), honouring the deprecated alias.
 
-    Gas rates are Mscf/d throughout the library since 3.7.8 (Eclipse FIELD
+    Gas rates are Mscf/d throughout the library since 3.8.0 (Eclipse FIELD
     units, and what ipr_curve, gas_rate_* and the VFP tables already used).
     qg_mmscfd was MMscf/d in oilfield and already sm3/d under metric.
     """
@@ -2123,7 +2123,7 @@ def outflow_curve(thp: float, completion: 'Completion', vlpmethod: str = 'WG',
         vlpmethod: VLP method - 'HB' (Hagedorn-Brown), 'WG' (Woldesemayat-Ghajar), 'GRAY', or 'BB' (Beggs & Brill)
         well_type: 'gas' or 'oil'
         rates: List of rates to evaluate (Mscf/d | sm3/d for gas, STB/d | sm3/d for oil). If None, auto-generated.
-            Gas rates were MMscf/d before 3.7.8
+            Gas rates were MMscf/d before 3.8.0
         n_points: Number of rate points if rates is None. Default 20.
         n_rates: Deprecated alias for n_points (kept for backward compatibility; takes precedence if both given).
         max_rate: Maximum rate for auto-generation
@@ -2335,7 +2335,7 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
         metric: If True, inputs/outputs in Eclipse METRIC units. Default False.
 
         Returns:
-            rate: Operating rate (Mscf/d | sm3/d for gas, STB/d | sm3/d for oil; gas was MMscf/d before 3.7.8)
+            rate: Operating rate (Mscf/d | sm3/d for gas, STB/d | sm3/d for oil; gas was MMscf/d before 3.8.0)
             bhp: Operating BHP (psia | barsa)
             vlp: VLP outflow curve dict
             ipr: IPR inflow curve dict

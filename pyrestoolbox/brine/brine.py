@@ -435,7 +435,7 @@ TSTND = 288.706        # Standard Temperature (Kelvin)
 VMCO2S = 23690.5       # Molar Volume of CO2 at STP [cm3/gmol]
 RHOCO2S = 0.00185771   # Density CO2 at STP [gm/cm3]
 KGM3_PER_GCC = 1000.0  # g/cm3 -> kg/m3. Every density it multiplies is absolute g/cm3 (IF97/Spivey);
-                       # it was 998.98 (60 degF water density) before 3.7.8, which left Rs 0.102% low
+                       # it was 998.98 (60 degF water density) before 3.8.0, which left Rs 0.102% low
 KGMOL2SM3 = 23.545     # sm3 CO2 per kg-mol at 60 deg F and 1 atm (from PhazeComp run to get definitive value, where zCO2 = 0.99388)
 BBL2CUFT = 5.614583333 # cuft in a bbl
 

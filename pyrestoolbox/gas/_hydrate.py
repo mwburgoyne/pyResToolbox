@@ -43,7 +43,7 @@ _HFP_P_HI = 15000.0   # Upper search bound (psia)
 # pressure in kPa, P0 distilled-water dissociation pressure at 273.15 K in kPa.
 # The P0 factor is omitted (P0 = 1000 kPa), which the paper says has "limited
 # effect on the results". Coefficients C1-C5 from Table 3 (p. 76). Before
-# 3.7.8 this held an unsourced pressure-free cubic that under-predicted
+# 3.8.0 this held an unsourced pressure-free cubic that under-predicted
 # suppression by 26-43% at 25-50 wt% (overdosing).
 _OSTERGAARD = {
     inhibitor.MEOH: (0.478, 7.17e-3, -1.44e-5, 2.947e-2, 0.596),

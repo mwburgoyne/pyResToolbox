@@ -168,7 +168,7 @@ _DAK_LEADING = 0.27  # Leading coefficient in DAK reduced density equation
 _HY_COEFFS = (0.06125, -1.2, 14.76, -9.76, 4.58, 90.7, -242.2, 42.4, 2.18, 2.82)
 
 # --- Lee, Gonzalez & Eakin (1966) ---
-_LBFT3_PER_GCC = 62.428  # lb/ft3 per g/cm3 (62.42796); not the 62.367 60 degF water density used before 3.7.8
+_LBFT3_PER_GCC = 62.428  # lb/ft3 per g/cm3 (62.42796); not the 62.367 60 degF water density used before 3.8.0
 # Eqs 2.14-2.17, 'Petroleum Reservoir Fluid Property Correlations', McCain et al.
 _LGE = (3.448, 986.4, 0.01009,    # b coefficients (Eq 2.16)
         2.447, 0.2224,              # c coefficients (Eq 2.17)
@@ -224,7 +224,7 @@ _JONES_N = 1.55
 # Flow of Natural Gas through Porous Reservoirs," JPT July 1962, pp.799-806:
 #   β[1/ft] = _TCK_A / (k^_TCK_NK * φ^_TCK_NPHI), k in md, φ fraction (p. 800;
 #   the paper's own worked values, 6.2e7 1/ft at 100 md and φ 0.18, confirm it).
-#   Before 3.7.8 this held 1.88e10 / (k^1.47 φ^0.53), a different, unsourced form.
+#   Before 3.8.0 this held 1.88e10 / (k^1.47 φ^0.53), a different, unsourced form.
 _TCK_A = 5.5e9
 _TCK_NK = 1.25
 _TCK_NPHI = 0.75

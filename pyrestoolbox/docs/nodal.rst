@@ -432,7 +432,7 @@ Returns flowing bottom hole pressure (psia, or barsa if metric=True) using the s
      - Oil PVT object. If provided for oil wells, extracts api, sgsp, pb, rsb
    * - qg_mscfd
      - float
-     - Gas rate (Mscf/d, or sm3/d if metric=True). Gas wells only. Gas rates are Mscf/d throughout the library from 3.7.8
+     - Gas rate (Mscf/d, or sm3/d if metric=True). Gas wells only. Gas rates are Mscf/d throughout the library from 3.8.0
    * - qg_mmscfd
      - float
      - Deprecated alias for the gas rate in MMscf/d (sm3/d if metric=True); converted to ``qg_mscfd`` with a ``DeprecationWarning``. Do not pass both
@@ -634,7 +634,7 @@ Returns VLP outflow curve as a dictionary with keys ``'rate'`` (also aliased as 
      - Description
    * - 'rate' (alias 'rates')
      - list
-     - Rate values (Mscf/d for gas, STB/d for oil; sm3/d if metric). Gas was MMscf/d before 3.7.8
+     - Rate values (Mscf/d for gas, STB/d for oil; sm3/d if metric). Gas was MMscf/d before 3.8.0
    * - 'bhp'
      - list
      - Flowing BHP at each rate (psia, or barsa if metric=True)
@@ -666,7 +666,7 @@ For oil wells with OilPVT: uses Darcy above Pb, Vogel below Pb. Without OilPVT: 
 
 .. note::
 
-   Gas rates are Mscf/d everywhere from 3.7.8: ``ipr_curve()``, ``outflow_curve()``, ``operating_point()`` (its ``rate``, ``vlp`` and ``ipr``) and ``fbhp``/``fthp`` (``qg_mscfd``) share one unit, so IPR and VLP curves plot on the same axis directly. Before 3.7.8 the VLP side used MMscf/d; ``qg_mmscfd`` remains as a deprecated alias.
+   Gas rates are Mscf/d everywhere from 3.8.0: ``ipr_curve()``, ``outflow_curve()``, ``operating_point()`` (its ``rate``, ``vlp`` and ``ipr``) and ``fbhp``/``fthp`` (``qg_mscfd``) share one unit, so IPR and VLP curves plot on the same axis directly. Before 3.8.0 the VLP side used MMscf/d; ``qg_mmscfd`` remains as a deprecated alias.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -788,7 +788,7 @@ Finds the operating point where VLP outflow curve intersects the IPR inflow curv
      - Description
    * - 'rate'
      - float
-     - Operating rate (Mscf/d for gas, STB/d for oil; sm3/d if metric). Gas was MMscf/d before 3.7.8
+     - Operating rate (Mscf/d for gas, STB/d for oil; sm3/d if metric). Gas was MMscf/d before 3.8.0
    * - 'bhp'
      - float
      - Operating flowing BHP (psia, or barsa if metric=True)

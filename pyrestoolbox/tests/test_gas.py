@@ -440,8 +440,8 @@ _HYDRATE_BASELINES = {
     'motiee_hft_1000_065': 60.151725150000026,     # Motiee HFT at 1000 psia, sg=0.65
     'motiee_hfp_60_065': 987.9770436401366,        # Motiee HFP at 60 degF, sg=0.65
     'towler_hft_1000_065': 62.918902535978695,      # Towler HFT at 1000 psia, sg=0.65
-    'meoh_depression_25wt': 25.580214612531744,     # Østergaard (2005) Eq. 1 MEOH 25wt% at 2000 psia (degF); 17.958375 before 3.7.8
-    'meoh_inhibited_hft': 45.53136833277701,        # Inhibited HFT at 2000 psia, sg=0.7, MEOH 25wt%; 53.15320794530875 before 3.7.8
+    'meoh_depression_25wt': 25.580214612531744,     # Østergaard (2005) Eq. 1 MEOH 25wt% at 2000 psia (degF); 17.958375 before 3.8.0
+    'meoh_inhibited_hft': 45.53136833277701,        # Inhibited HFT at 2000 psia, sg=0.7, MEOH 25wt%; 53.15320794530875 before 3.8.0
 }
 
 def test_hydrate_frozen_baselines():
@@ -592,9 +592,9 @@ _HYDRATE_NEW_BASELINES = {
     'sw_wc_op_2000_80_070_co2': 0.06548036894255704,  # re-pinned 2026-08-19: published framework is now the default  # SoreideWhitson vaporized at operating
     'wc_res_3000_200': 0.821279572319976,                 # Vaporized at reservoir P=3000,T=200
     'condensed_3000_200_to_1000_60': 0.7699716237595706,  # Condensed between res→op
-    'meg_mass_rate_res_to_op': 0.7182496384936616,        # MEG injection lb/MMscf; 0.9013640928083764 before 3.7.8 (Ostergaard Eq. 1)
-    'meg_vol_rate_res_to_op': 0.07753629560646232,        # MEG injection gal/MMscf; 0.0973038189000881 before 3.7.8
-    'meoh_mass_rate_res_3000_200': 39.23972825786403,     # MEOH injection lb/MMscf; 49.459378804064784 before 3.7.8
+    'meg_mass_rate_res_to_op': 0.7182496384936616,        # MEG injection lb/MMscf; 0.9013640928083764 before 3.8.0 (Ostergaard Eq. 1)
+    'meg_vol_rate_res_to_op': 0.07753629560646232,        # MEG injection gal/MMscf; 0.0973038189000881 before 3.8.0
+    'meoh_mass_rate_res_3000_200': 39.23972825786403,     # MEOH injection lb/MMscf; 49.459378804064784 before 3.8.0
 }
 
 def test_hydrate_water_balance_no_reservoir():
