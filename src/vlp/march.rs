@@ -340,8 +340,11 @@ fn segment_march_gas(
     length: f64, tht: f64, bht: f64, wsg: f64,
     qg_mmscfd: f64, cgr: f64, qw_bwpd: f64, oil_vis: f64,
     injection: bool, pr: f64, theta: f64, gradient: GradientFn,
+    tc_pc: Option<(f64, f64)>,
 ) -> Result<f64, String> {
-    let (tc, pc) = sutton_tc_pc(gsg);
+    // Mixture pseudo-criticals from the caller (GasPVT with impurities or
+    // user tc/pc); None -> Sutton from gsg, matching Python _segment_march_gas
+    let (tc, pc) = tc_pc.unwrap_or_else(|| sutton_tc_pc(gsg));
     let osg = 141.5 / (api + 131.5);
     let total_mass = RHO_AIR_STC * gsg * qg_mmscfd * 1e6
         + osg * RHO_FW * cgr * qg_mmscfd * FT3_PER_BBL
@@ -551,10 +554,16 @@ macro_rules! gas_entry {
             length: f64, tht: f64, bht: f64, wsg: f64,
             qg_mmscfd: f64, cgr: f64, qw_bwpd: f64, oil_vis: f64,
             injection: bool, pr: f64, theta: f64,
+            tc: Option<f64>, pc: Option<f64>,
         ) -> Result<f64, String> {
+            let tc_pc = match (tc, pc) {
+                (Some(t), Some(p)) => Some((t, p)),
+                _ => None,
+            };
             segment_march_gas(
                 thp, api, gsg, tid, rough, length, tht, bht, wsg,
                 qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, $gradient,
+                tc_pc,
             )
         }
     };

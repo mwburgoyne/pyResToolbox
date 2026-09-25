@@ -345,6 +345,31 @@ class _FlowInputs:
     gsg: float = 0.65
     vis_frac: float = 1.0
     rsb_frac: float = 1.0
+    tc: Optional[float] = None   # pseudo-critical T (deg R); None -> Sutton from gsg in the march
+    pc: Optional[float] = None   # pseudo-critical P (psia); None -> Sutton from gsg in the march
+
+
+def _gas_pvt_tc_pc(gas_pvt):
+    """Mixture pseudo-criticals for the VLP march from a GasPVT object.
+
+    The march runs Hall-Yarborough on Sutton pseudo-criticals of the total-gas
+    sg. User-supplied tc/pc are honoured as given; otherwise, when the object
+    carries CO2/H2S/N2, Sutton + Wichert-Aziz is applied so impurities reach the
+    Z-factor as they already do in ipr_curve. Sweet gas returns (None, None) so
+    the march path is untouched. BNS-style tc/pc are hydrocarbon-only and are
+    not usable with a single-pseudo-component Z-factor, hence the SUT call here.
+    """
+    if getattr(gas_pvt, '_user_tc_pc', False):
+        return gas_pvt.tc, gas_pvt.pc
+    if gas_pvt.h2 > 0:
+        warnings.warn(
+            "VLP correlations use a Hall-Yarborough Z-factor with Sutton + Wichert-Aziz "
+            "pseudo-criticals; the H2 fraction on gas_pvt is ignored in the wellbore march.",
+            RuntimeWarning, stacklevel=3)
+    if gas_pvt.co2 > 0 or gas_pvt.h2s > 0 or gas_pvt.n2 > 0:
+        return gas.gas_tc_pc(gas_pvt.sg, co2=gas_pvt.co2, h2s=gas_pvt.h2s,
+                             n2=gas_pvt.n2, cmethod='SUT')
+    return None, None
 
 
 def _prepare_flow_inputs(well_type, metric, gas_pvt=None, oil_pvt=None,
@@ -378,8 +403,10 @@ def _prepare_flow_inputs(well_type, metric, gas_pvt=None, oil_pvt=None,
                 f.rsb = f.rsb * SM3_PER_SM3_TO_SCF_PER_STB
 
     # Take gas SG from GasPVT when the caller left gsg at its default
-    if gas_pvt is not None and well_type == 'gas' and f.gsg == 0.65:
-        f.gsg = gas_pvt.sg
+    if gas_pvt is not None and well_type == 'gas':
+        if f.gsg == 0.65:
+            f.gsg = gas_pvt.sg
+        f.tc, f.pc = _gas_pvt_tc_pc(gas_pvt)
 
     # OilPVT already holds oilfield units
     if oil_pvt is not None and well_type == 'oil':
@@ -1096,10 +1123,12 @@ def _hb_gradient_gas(s):
 @rust_accelerated('hb_fbhp_gas_rust')
 def _hb_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
-                  injection=False, pr=0.0, theta=math.pi / 2.0):
+                  injection=False, pr=0.0, theta=math.pi / 2.0,
+                  tc=None, pc=None):
     return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
-                              injection, pr, theta, _hb_gradient_gas)
+                              injection, pr, theta, _hb_gradient_gas,
+                              tc=tc, pc=pc)
 
 
 @rust_accelerated('hb_fbhp_oil_rust')
@@ -1220,10 +1249,12 @@ def _wg_gradient_gas(s):
 @rust_accelerated('wg_fbhp_gas_rust')
 def _wg_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
-                  injection=False, pr=0.0, theta=math.pi / 2.0):
+                  injection=False, pr=0.0, theta=math.pi / 2.0,
+                  tc=None, pc=None):
     return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
-                              injection, pr, theta, _wg_gradient_gas)
+                              injection, pr, theta, _wg_gradient_gas,
+                              tc=tc, pc=pc)
 
 
 @rust_accelerated('wg_fbhp_oil_rust')
@@ -1300,14 +1331,16 @@ def _gray_effective_roughness(rough_dry, sigma, rho_ns, v_sl, v_sg):
 
 def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                        wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
-                       injection, pr, theta, gradient_fn):
+                       injection, pr, theta, gradient_fn, tc=None, pc=None):
     """Shared segment march for all gas VLP methods.
 
     gradient_fn(s) -> dpdz (psi/ft)
         Called at each pressure iteration with a dict containing all
         computed PVT/flow properties for the current segment step.
+    tc, pc: mixture pseudo-criticals (deg R, psia); None -> Sutton from gsg.
     """
-    tc, pc = _sutton_tc_pc(gsg)
+    if tc is None or pc is None:
+        tc, pc = _sutton_tc_pc(gsg)
     osg = 141.5 / (api + 131.5)
     total_mass = (_RHO_AIR_STC * gsg * qg_mmscfd * 1e6 +
                   osg * _RHO_FW * cgr * qg_mmscfd * _FT3_PER_BBL +
@@ -1558,10 +1591,12 @@ def _gray_gradient_gas(s):
 @rust_accelerated('gray_fbhp_gas_rust')
 def _gray_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                     wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
-                    injection=False, pr=0.0, theta=math.pi / 2.0):
+                    injection=False, pr=0.0, theta=math.pi / 2.0,
+                  tc=None, pc=None):
     return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
-                              injection, pr, theta, _gray_gradient_gas)
+                              injection, pr, theta, _gray_gradient_gas,
+                              tc=tc, pc=pc)
 
 
 @rust_accelerated('gray_fbhp_oil_rust')
@@ -1731,11 +1766,13 @@ def _bb_gradient_gas(s):
 @rust_accelerated('bb_fbhp_gas_rust')
 def _bb_core_gas(thp, api, gsg, tid, rough, length, tht, bht,
                  wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
-                 injection=False, pr=0.0, theta=math.pi / 2.0):
+                 injection=False, pr=0.0, theta=math.pi / 2.0,
+                  tc=None, pc=None):
     """Beggs & Brill core for gas wells."""
     return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
-                              injection, pr, theta, _bb_gradient_gas)
+                              injection, pr, theta, _bb_gradient_gas,
+                              tc=tc, pc=pc)
 
 
 @rust_accelerated('bb_fbhp_oil_rust')
@@ -1843,7 +1880,8 @@ def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
                 thp=thp_in, api=f.api, gsg=f.gsg, tid=tid, rough=rough,
                 length=length, tht=tht_seg, bht=bht_seg, wsg=wsg,
                 qg_mmscfd=f.qg_mmscfd, cgr=f.cgr, qw_bwpd=f.qw_bwpd,
-                oil_vis=oil_vis, injection=injection, pr=f.pr, theta=theta)
+                oil_vis=oil_vis, injection=injection, pr=f.pr, theta=theta,
+                tc=f.tc, pc=f.pc)
         else:
             return _OIL_METHOD_DIC[vlpmethod.name](
                 thp=thp_in, api=f.api, gsg=f.gsg, tid=tid, rough=rough,
@@ -2040,7 +2078,7 @@ def outflow_curve(thp: float, completion: 'Completion', vlpmethod: str = 'WG',
             bhp_val = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
                            well_type='gas', qg_mmscfd=rate_mmscfd, cgr=f.cgr,
                            qw_bwpd=f.qw_bwpd, oil_vis=oil_vis, api=f.api, pr=f.pr,
-                           wsg=wsg, injection=injection, gsg=f.gsg)
+                           wsg=wsg, injection=injection, gsg=f.gsg, gas_pvt=gas_pvt)
         else:
             # Convert rate to STB/d for internal fbhp call
             rate_stbpd = rate * SM3_TO_STB if metric else rate
@@ -2245,7 +2283,7 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
             vlp_bhp = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
                            well_type='gas', qg_mmscfd=rate / gas_scale, cgr=f.cgr,
                            qw_bwpd=f.qw_bwpd, oil_vis=oil_vis, api=f.api, pr=pr,
-                           wsg=wsg, injection=injection, gsg=f.gsg)
+                           wsg=wsg, injection=injection, gsg=f.gsg, gas_pvt=gas_pvt)
         else:
             vlp_bhp = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
                            well_type='oil', qt_stbpd=rate, gor=f.gor, wc=wc,
@@ -2295,7 +2333,7 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
         op_bhp = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
                       well_type='gas', qg_mmscfd=op_rate / gas_scale, cgr=f.cgr,
                       qw_bwpd=f.qw_bwpd, oil_vis=oil_vis, api=f.api, pr=pr,
-                      wsg=wsg, injection=injection, gsg=f.gsg)
+                      wsg=wsg, injection=injection, gsg=f.gsg, gas_pvt=gas_pvt)
     elif well_type == 'oil' and op_rate > 0:
         op_bhp = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
                       well_type='oil', qt_stbpd=op_rate, gor=f.gor, wc=wc,
@@ -2312,7 +2350,7 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
                         well_type=well_type, rates=vlp_rates,
                         cgr=f.cgr, qw_bwpd=f.qw_bwpd, oil_vis=oil_vis, api=f.api,
                         pr=pr, gor=f.gor, wc=wc, wsg=wsg, injection=injection, gsg=f.gsg,
-                        pb=f.pb, rsb=f.rsb, sgsp=f.sgsp, oil_pvt=oil_pvt)
+                        pb=f.pb, rsb=f.rsb, sgsp=f.sgsp, oil_pvt=oil_pvt, gas_pvt=gas_pvt)
 
     # Convert operating rate to VLP units for return
     op_rate_out = op_rate / gas_scale if well_type == 'gas' else op_rate

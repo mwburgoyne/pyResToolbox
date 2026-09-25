@@ -949,3 +949,14 @@ def test_fthp_roundtrip_metric():
                   wc=0.2, api=35, pb=200, rsb=150, sgsp=0.75, metric=True)
     bhp = nodal.fbhp(thp=20, **oil_kw)
     assert abs(nodal.fthp(bhp=bhp, **oil_kw) - 20) < 1e-3
+
+
+def test_fbhp_gas_pvt_impurities_reach_the_vlp():
+    """fbhp used only gas_pvt.sg, so sour and inert-rich gas gave the sweet answer (sweep 2026-09-25)."""
+    from pyrestoolbox import nodal, gas
+    c = nodal.Completion(tid=2.441, length=12000, tht=100, bht=280)
+    kw = dict(thp=2500, completion=c, vlpmethod='BB', well_type='gas', qg_mmscfd=5, cgr=10, qw_bwpd=10)
+    sweet = nodal.fbhp(gas_pvt=gas.GasPVT(sg=0.8), **kw)
+    assert abs(sweet - nodal.fbhp(gsg=0.8, **kw)) < 1e-9
+    assert nodal.fbhp(gas_pvt=gas.GasPVT(sg=0.8, n2=0.3), **kw) < sweet - 50
+    assert nodal.fbhp(gas_pvt=gas.GasPVT(sg=0.8, co2=0.1, h2s=0.2), **kw) > sweet + 20
