@@ -81,6 +81,15 @@ fn dak_core(pr: f64, tr: f64) -> f64 {
         rhor = rhor_new;
     }
 
+    // Below Tr ~1.0 in the two-phase region there is no single-phase gas root:
+    // Newton collapses rhor towards its floor and the step test reports
+    // convergence on a Z of order 1e8. Re-check the residual (mirrors Python).
+    let r2_val = rhor * rhor;
+    let f_exit = r1 * rhor - r2 / rhor + r3 * r2_val - r4 * r2_val * r2_val * rhor
+        + r5 * r2_val * (1.0 + a11 * r2_val) * (-a11 * r2_val).exp() + 1.0;
+    if f_exit.abs() > 1e-4 {
+        return f64::NAN;
+    }
     0.27 * pr / (rhor * tr)
 }
 
@@ -107,6 +116,7 @@ fn hy_core(pr: f64, tr: f64) -> f64 {
 
     // Initial guess for reduced density y from Z = 1 (classic HY starting point)
     let mut y = (a * pr).max(1e-10);
+    let mut converged = false;
 
     for _ in 0..100 {
         // Newton-Raphson step on y, then compare successive iterates
@@ -128,10 +138,16 @@ fn hy_core(pr: f64, tr: f64) -> f64 {
         let rel_err = (y_new - y).abs() / y_new.abs().max(1e-10);
         y = y_new;
         if rel_err <= 0.0005 {
+            converged = true;
             break;
         }
     }
 
+    // Still cycling after 100 passes: no single-phase root (Tr below ~1.0);
+    // the last iterate would be exactly Z = 1.0 (mirrors Python).
+    if !converged {
+        return f64::NAN;
+    }
     y = y.max(1e-30);
     a * pr / y
 }

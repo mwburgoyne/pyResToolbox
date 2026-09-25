@@ -1198,3 +1198,15 @@ def test_gas_thermal_validates_pressure_and_temperature():
         _gas.gas_thermal(-100, 0.7, 150)
     with _pytest.raises(ValueError):
         _gas.gas_thermal(1000, 0.7, -500)
+
+
+def test_dak_hy_return_nan_without_single_phase_root():
+    """Below Tr ~1 DAK returned Z ~1e9 and HY exactly 1.0, both as 'converged' (sweep 2026-09-25)."""
+    import warnings as _w
+    from pyrestoolbox import gas as _gas
+    with _w.catch_warnings():
+        _w.simplefilter('ignore')
+        dak = _gas.gas_z([500, 1000, 2000], 1.4, 40, zmethod='DAK', cmethod='SUT', co2=0.9)
+        hy = _gas.gas_z([500, 3000], 1.4, 40, zmethod='HY', cmethod='SUT', co2=0.9)
+    assert np.isnan(dak[1]) and 0.7 < dak[0] < 0.8 and 0.25 < dak[2] < 0.35
+    assert np.isnan(hy[1]) and 0.7 < hy[0] < 0.8

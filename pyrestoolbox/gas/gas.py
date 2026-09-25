@@ -93,12 +93,29 @@ _GL10_NODES, _GL10_WEIGHTS = np.polynomial.legendre.leggauss(10)
 
 # gas_grad2sg bisection bounds. Lower = pure H2 SG (physical minimum for
 # H2-blend support); upper = 3.0 covers pure CO2 (SG ~1.53) with margin.
+_Z_EXIT_RESIDUAL = 1e-4  # DAK residual above this at exit means no single-phase root
 _GRAD2SG_SG_LO = MW_H2 / MW_AIR
 
 
 def _inert_sg(co2, h2s, n2, h2):
     """Specific gravity contributed by the non-hydrocarbon fractions alone."""
     return (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2) / MW_AIR
+
+
+def _check_sg_vs_inerts(sg, co2, h2s, n2, h2):
+    """Raise if the mixture sg leaves a non-positive hydrocarbon sg.
+
+    sg includes the inerts, so it cannot be at or below what they alone
+    contribute: SUT/PMC would return a negative Tc (Z ~ -1e8) and BNS would
+    silently clamp the hydrocarbon to methane.
+    """
+    inert_sg = _inert_sg(co2, h2s, n2, h2)
+    if (co2 + h2s + n2 + h2) < 1.0 - 1e-6 and sg <= inert_sg:
+        raise ValueError(
+            f"Gas sg={sg} is not consistent with the stated inert fractions: the inerts "
+            f"alone contribute sg {inert_sg:.4f}, leaving a non-positive hydrocarbon sg. "
+            f"sg is the whole-mixture gravity, inerts included."
+        )
 _GRAD2SG_SG_HI = 3.0
 
 # =============================================================================
@@ -576,16 +593,7 @@ def gas_tc_pc(
             return (tc / 1.8, pc * PSI_TO_BAR)  # deg R -> K, psia -> barsa
         return (tc, pc)
 
-    # A mixture sg at or below what the inerts alone contribute implies a
-    # non-positive hydrocarbon sg: SUT/PMC then return negative Tc (Z ~ -1e8)
-    # and BNS silently clamps the hydrocarbon to methane.
-    inert_sg = _inert_sg(co2, h2s, n2, h2)
-    if (co2 + h2s + n2 + h2) < 1.0 - 1e-6 and sg <= inert_sg:
-        raise ValueError(
-            f"Gas sg={sg} is not consistent with the stated inert fractions: the inerts "
-            f"alone contribute sg {inert_sg:.4f}, leaving a non-positive hydrocarbon sg. "
-            f"sg is the whole-mixture gravity, inerts included."
-        )
+    _check_sg_vs_inerts(sg, co2, h2s, n2, h2)
 
     _, cmethod = _h2_method_override(h2, 'DAK', cmethod)
     cmethod = validate_methods(["cmethod"], [cmethod])
@@ -985,6 +993,17 @@ def gas_z(
                           "result may be inaccurate", stacklevel=2)
 
         zout = _DAK_LEADING * pprs / (rhor * tr)
+        # Below Tr ~1.0 in the two-phase region there is no single-phase gas
+        # root: Newton collapses rhor towards its floor and the step test then
+        # reports convergence on a Z of order 1e8. Re-check the residual at exit.
+        r2 = rhor ** 2
+        f_exit = (R1 * rhor - R2 / rhor + R3 * r2 - R4 * rhor ** 5 +
+                  R5 * r2 * (1 + A11 * r2) * np.exp(-A11 * r2) + 1)
+        no_root = np.abs(f_exit) > _Z_EXIT_RESIDUAL
+        if np.any(no_root):
+            warnings.warn("DAK Z-factor: no single-phase gas root (Tr below ~1.0 in the "
+                          "two-phase region); affected values returned as NaN", stacklevel=2)
+            zout = np.where(no_root, np.nan, zout)
         return process_output(zout, is_list)
 
     # Hall & Yarborough — Vectorized Newton-Raphson
@@ -1017,12 +1036,15 @@ def gas_z(
                 converged = True
                 break
 
-        if not converged:
-            warnings.warn("HY Z-factor: Newton-Raphson did not converge within 100 iterations; "
-                          "result may be inaccurate", stacklevel=2)
-
         y = np.maximum(y, 1e-30)
         zout = a * pprs / y
+        if not converged:
+            # Elements still cycling at exit have no single-phase root (Tr below
+            # ~1.0); their last iterate is exactly Z = 1.0, so return NaN instead
+            warnings.warn("HY Z-factor: no single-phase gas root (Newton did not converge; "
+                          "Tr below ~1.0 in the two-phase region); affected values "
+                          "returned as NaN", stacklevel=2)
+            zout = np.where(rel_err > 0.0005, np.nan, zout)
         return process_output(zout, is_list)
 
     mws, tcs, pcs = _BNS_MWS.copy(), _BNS_TCS.copy(), _BNS_PCS.copy()
