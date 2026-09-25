@@ -20,6 +20,22 @@ def oil_sg(api_value: float) -> float:
     """
     return _API_NUMER / (api_value + _API_DENOM)
 
+_SG_O_MIN, _SG_O_MAX = 0.5, 1.2   # Stock-tank oil SG bounds (about 151 to -10 API)
+
+
+def check_sg_o(sg_o: float) -> None:
+    """Raise unless sg_o is a plausible stock-tank oil specific gravity.
+
+    Catches an API value passed as sg_o (oil_bo(sg_o=35) returned Bo = 1.004
+    silently), since oil_bo takes sg_o where most oil functions take api.
+    """
+    if not _SG_O_MIN <= sg_o <= _SG_O_MAX:
+        raise ValueError(
+            f"sg_o is stock-tank oil specific gravity relative to water ({_SG_O_MIN}-"
+            f"{_SG_O_MAX}), got {sg_o}. For an API gravity use oil_sg(api) to convert."
+        )
+
+
 def oil_api(sg_value: float) -> float:
     """ Returns oil API given specific gravity value of oil
         sg_value: Specific gravity (relative to water)

@@ -91,29 +91,17 @@ def oil_harmonize(
             degf=degf, api=api, sg_sp=sg_sp, rsb=rsb, pbmethod=pbmethod
         )
 
-    # Both defined by user — find rsb_frac that honors both
+    # Both defined by user: rsb_frac scales Rsb onto the pbmethod correlation.
+    # The Rsb that pbmethod maps to pb is pbmethod's own closed-form inverse, so
+    # no iteration is needed; above the correlation's Pb ceiling the inverse
+    # raises with a message naming the ceiling (the old fixed-point loop
+    # diverged there and raised a misleading "Need valid values" error).
     if pb_i > 0 and rsb_i > 0:
-        pbcalc = oil_pbub(
+        rsb_on_pb = oil_rs_bub(
             degf=degf, api=api, sg_sp=sg_sp, sg_g=sg_g,
-            rsb=rsb, pbmethod=pbmethod,
+            pb=pb, rsmethod=pbmethod.name,
         )
-        err = 100
-        rsb_old = rsb
-        i = 0
-        while err > 0.0001:
-            rsbnew = pb / pbcalc * rsb_old
-            pbcalc = oil_pbub(
-                degf=degf, api=api, sg_sp=sg_sp, sg_g=sg_g,
-                rsb=rsbnew, pbmethod=pbmethod,
-            )
-            rsb_old = rsbnew
-            err = abs(pb - pbcalc)
-            i += 1
-            if i > 100:
-                raise RuntimeError(
-                    "Could not solve Pb & Rsb for these combination of inputs"
-                )
-        rsb_frac = rsb_i / rsbnew
+        rsb_frac = rsb_i / rsb_on_pb
 
     # Compute vis_frac if target viscosity specified
     vis_frac = 1.0

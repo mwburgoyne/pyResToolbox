@@ -23,7 +23,7 @@ from ._constants import (
     _BO_STAN_A, _BO_STAN_B, _BO_STAN_C, _BO_STAN_EXP,
     _BO_MC_WDEN, _BO_MC_RS_COEFF,
 )
-from ._utils import check_sgs, get_real_part, oil_api
+from ._utils import check_sgs, check_sg_o, get_real_part, oil_api
 from ._density import oil_deno, _cofb_mccain
 
 
@@ -475,6 +475,7 @@ def oil_bo(
         rsb = rsb * SM3_PER_SM3_TO_SCF_PER_STB
 
     validate_pe_inputs(p=p, degf=degf)
+    check_sg_o(sg_o)
 
     sg_g, sg_sp = check_sgs(sg_g=sg_g, sg_sp=sg_sp)
     denomethod, bomethod = validate_methods(

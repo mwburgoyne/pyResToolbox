@@ -735,3 +735,29 @@ if __name__ == '__main__':
 
     print("=" * 70)
     sys.exit(1 if failed > 0 else 0)
+
+
+# --- sweep 2026-09-25 ---
+
+def test_oil_bo_rejects_api_passed_as_sg_o():
+    import pytest
+    from pyrestoolbox import oil as _oil
+    with pytest.raises(ValueError, match="sg_o is stock-tank oil specific gravity"):
+        _oil.oil_bo(p=2000, pb=3300, degf=200, rs=700, rsb=700, sg_g=0.75, sg_o=35)
+
+
+def test_oil_harmonize_above_valmc_ceiling_names_the_ceiling():
+    import pytest
+    from pyrestoolbox import oil as _oil
+    with pytest.raises(ValueError, match="exceeds the maximum Pb"):
+        _oil.oil_harmonize(pb=9000, rsb=1500, degf=200, api=35, sg_sp=0.75)
+    frac = _oil.oil_harmonize(pb=3000, rsb=800, degf=200, api=35, sg_sp=0.75)[2]
+    assert abs(frac - 1.1409550597) < 1e-8
+
+
+def test_oil_co_standing_nonzero_below_pb():
+    from pyrestoolbox import oil as _oil
+    kw = dict(api=38, degf=175, sg_sp=0.68, sg_g=0.68, pb=3900, rsb=900)
+    for p in (1000, 3000, 3900):
+        co = _oil.oil_co(p=p, bomethod='STAN', **kw)
+        assert co > 1e-6 and abs(co / _oil.oil_co(p=p, bomethod='MCAIN', **kw) - 1) < 1e-9

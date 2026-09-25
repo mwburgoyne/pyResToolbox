@@ -196,6 +196,11 @@ def oil_co(
                 pbmethod=pbmethod,
             )
 
+        # Standing's Bo has no pressure term at fixed Rs, so its derivative is
+        # exactly zero at or below Pb; differentiate McCain's density-based Bo
+        # there instead, which carries the liquid compression term.
+        bo_for_co = 'MCAIN' if (p <= pb and getattr(bomethod, 'name', bomethod) == 'STAN') else bomethod
+
         def calc_bo_at_p(p_eval):
             sg_o = oil_sg(api)
             return oil_bo(
@@ -207,7 +212,7 @@ def oil_co(
                 sg_sp=sg_sp,
                 sg_g=sg_g,
                 sg_o=sg_o,
-                bomethod=bomethod,
+                bomethod=bo_for_co,
                 denomethod=denomethod,
             )
 

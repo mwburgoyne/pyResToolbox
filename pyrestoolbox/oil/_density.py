@@ -22,7 +22,7 @@ from ._constants import (
     _SWMH_DP_A, _SWMH_DP_B, _SWMH_DP_C, _SWMH_DP_D, _SWMH_DP_E, _SWMH_DP_F, _SWMH_DP_G,
     _SWMH_DT_A, _SWMH_DT_B, _SWMH_DT_C, _SWMH_DT_D, _SWMH_DT_E, _SWMH_DT_F, _SWMH_DT_G, _SWMH_DT_H,
 )
-from ._utils import check_sgs, oil_sg
+from ._utils import check_sgs, check_sg_o, oil_sg
 
 
 def _cofb_mccain(api, sg_sp, pb, p, rsb, degf):
@@ -201,6 +201,7 @@ def oil_deno(
         api = _API_NUMER / sg_o - _API_DENOM
     else:  # overwrite sg_o with api value
         sg_o = oil_sg(api)
+    check_sg_o(sg_o)
 
     if _RUST_AVAILABLE and denomethod.name == "SWMH":
         try:
