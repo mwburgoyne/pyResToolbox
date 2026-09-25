@@ -114,8 +114,11 @@ pub const BB_HL_DIS: (f64, f64, f64) = (1.065, 0.5824, 0.0609);
 // Inclination correction (e, f, g, h per regime)
 pub const BB_IC_SEG: (f64, f64, f64, f64) = (0.011, -3.7680, 3.5390, -1.6140);
 pub const BB_IC_INT: (f64, f64, f64, f64) = (2.960, 0.3050, -0.4473, 0.0978);
+/// Downhill, all patterns (Beggs & Brill 1973 Table 1, Eq. 25); used for injection
+pub const BB_IC_DOWN: (f64, f64, f64, f64) = (4.70, -0.3692, 0.1244, -0.5056);
 
-// Payne et al. (1979), JPT 31(9) upward flow correction
+// Uphill holdup factor credited to Payne et al. (1979) by secondary sources (e.g.
+// Brill & Mukherjee 1999); not in the 1979 paper itself. Not applied downhill.
 pub const BB_PAYNE: f64 = 0.924;
 
 // Friction ratio S-factor polynomial

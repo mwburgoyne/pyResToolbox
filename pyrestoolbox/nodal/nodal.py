@@ -235,8 +235,12 @@ _BB_HL_DIS = (1.065, 0.5824, 0.0609)
 # Inclination correction (e, f, g, h per regime)
 _BB_IC_SEG = (0.011, -3.7680, 3.5390, -1.6140)
 _BB_IC_INT = (2.960, 0.3050, -0.4473, 0.0978)
+# Downhill, all patterns (Beggs & Brill 1973 Table 1, Eq. 25); used for injection
+_BB_IC_DOWN = (4.70, -0.3692, 0.1244, -0.5056)
 
-# Payne et al. (1979) upward flow correction
+# Uphill holdup factor credited to Payne et al. (1979) by secondary sources (e.g.
+# Brill & Mukherjee 1999); it does not appear in the 1979 paper itself. Not
+# applied downhill (injection), where Beggs-Brill's own downhill fit is used.
 _BB_PAYNE = 0.924
 
 # Friction ratio S-factor polynomial
@@ -1702,10 +1706,19 @@ def _bb_horizontal_holdup(lambda_l, froude, pattern):
 
 
 def _bb_inclination_correction(hl0, lambda_l, n_lv, froude, pattern,
-                                theta=math.pi / 2.0):
+                                theta=math.pi / 2.0, downhill=False):
+    """Beggs & Brill (1973) holdup inclination correction psi, Eq. 11.
+
+    Downhill (flow down the pipe, e.g. injection) uses the single downhill C
+    set for every pattern with a negative angle, and the result is bounded to
+    [0, 1] only: downhill holdup below no-slip is physical (Eq. 11).
+    """
     if lambda_l <= 0 or lambda_l >= 1.0:
         return hl0
-    if pattern == _BB_SEGREGATED:
+    if downhill:
+        e_p, f_p, g_p, h_p = _BB_IC_DOWN
+        theta = -abs(theta)
+    elif pattern == _BB_SEGREGATED:
         e_p, f_p, g_p, h_p = _BB_IC_SEG
     elif pattern == _BB_INTERMITTENT:
         e_p, f_p, g_p, h_p = _BB_IC_INT
@@ -1720,7 +1733,7 @@ def _bb_inclination_correction(hl0, lambda_l, n_lv, froude, pattern,
     c_corr = max(c_corr, 0.0)
     sin18 = math.sin(1.8 * theta)
     psi = 1.0 + c_corr * (sin18 - 0.333 * sin18 ** 3)
-    return _clamp(hl0 * psi, lambda_l, 1.0)
+    return _clamp(hl0 * psi, 0.0 if downhill else lambda_l, 1.0)
 
 
 def _bb_two_phase_friction(f_ns, lambda_l, hl_theta):
@@ -1752,10 +1765,10 @@ def _bb_gradient_gas(s):
     else:
         hl0 = _bb_horizontal_holdup(s['lambda_l'], froude, pattern)
 
-    # Payne et al. (1979), JPT 31(9): uphill liquid holdup correction factor
-    # 0.924, applied to all flow patterns (holdup floored at no-slip lambda_l)
-    hl0 *= _BB_PAYNE
-    hl0 = max(hl0, s['lambda_l'])
+    # Injection flows down the tubing: Beggs-Brill's downhill set, no Payne factor
+    down = s['injection']
+    payne = 1.0 if down else _BB_PAYNE
+    hl0 = max(hl0 * payne, s['lambda_l'])   # HL(0) >= lambda (Eq. 11)
 
     # Liquid velocity number NLV = 1.938 * vsl * (rho_l/sigma)^0.25 with sigma
     # in dyne/cm (Beggs and Brill 1973; same form and units as Hagedorn-Brown)
@@ -1764,17 +1777,17 @@ def _bb_gradient_gas(s):
 
     if pattern == _BB_TRANSITION:
         hl_seg = _bb_inclination_correction(
-            _bb_horizontal_holdup(s['lambda_l'], froude, _BB_SEGREGATED) * _BB_PAYNE,
-            s['lambda_l'], n_lv, froude, _BB_SEGREGATED, theta=s['theta'])
+            _bb_horizontal_holdup(s['lambda_l'], froude, _BB_SEGREGATED) * payne,
+            s['lambda_l'], n_lv, froude, _BB_SEGREGATED, theta=s['theta'], downhill=down)
         hl_int = _bb_inclination_correction(
-            _bb_horizontal_holdup(s['lambda_l'], froude, _BB_INTERMITTENT) * _BB_PAYNE,
-            s['lambda_l'], n_lv, froude, _BB_INTERMITTENT, theta=s['theta'])
+            _bb_horizontal_holdup(s['lambda_l'], froude, _BB_INTERMITTENT) * payne,
+            s['lambda_l'], n_lv, froude, _BB_INTERMITTENT, theta=s['theta'], downhill=down)
         hl_theta = trans_a * hl_seg + (1.0 - trans_a) * hl_int
     else:
         hl_theta = _bb_inclination_correction(
-            hl0, s['lambda_l'], n_lv, froude, pattern, theta=s['theta'])
+            hl0, s['lambda_l'], n_lv, froude, pattern, theta=s['theta'], downhill=down)
 
-    hl_theta = _clamp(hl_theta, s['lambda_l'], 1.0)
+    hl_theta = _clamp(hl_theta, 0.0 if down else s['lambda_l'], 1.0)
     rho_s = s['rho_l'] * hl_theta + s['rho_g'] * (1.0 - hl_theta)
 
     mu_ns = s['mu_l'] * s['lambda_l'] + s['mu_g'] * (1.0 - s['lambda_l'])

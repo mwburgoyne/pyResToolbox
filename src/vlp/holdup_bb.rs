@@ -74,12 +74,17 @@ pub fn bb_horizontal_holdup(lambda_l: f64, froude: f64, pattern: i32) -> f64 {
 /// BB inclination correction.
 pub fn bb_inclination_correction(
     hl0: f64, lambda_l: f64, n_lv: f64, froude: f64,
-    pattern: i32, theta: f64,
+    pattern: i32, theta: f64, downhill: bool,
 ) -> f64 {
     if lambda_l <= 0.0 || lambda_l >= 1.0 {
         return hl0;
     }
-    let (e_p, f_p, g_p, h_p) = if pattern == BB_SEGREGATED {
+    // Downhill (injection): single C set for all patterns, negative angle,
+    // bounded to [0, 1] only (Eq. 11). Mirrors Python _bb_inclination_correction.
+    let theta = if downhill { -theta.abs() } else { theta };
+    let (e_p, f_p, g_p, h_p) = if downhill {
+        BB_IC_DOWN
+    } else if pattern == BB_SEGREGATED {
         BB_IC_SEG
     } else if pattern == BB_INTERMITTENT {
         BB_IC_INT
@@ -98,7 +103,7 @@ pub fn bb_inclination_correction(
     c_corr = c_corr.max(0.0);
     let sin18 = (1.8 * theta).sin();
     let psi = 1.0 + c_corr * (sin18 - 0.333 * sin18.powi(3));
-    clamp(hl0 * psi, lambda_l, 1.0)
+    clamp(hl0 * psi, if downhill { 0.0 } else { lambda_l }, 1.0)
 }
 
 /// BB two-phase friction multiplier.

@@ -259,10 +259,11 @@ fn bb_gradient(s: &SegmentState) -> f64 {
         bb_horizontal_holdup(s.lambda_l, froude, pattern)
     };
 
-    // Payne et al. (1979), JPT 31(9): uphill liquid holdup correction factor
-    // 0.924, applied to all flow patterns (holdup floored at no-slip lambda_l)
-    hl0 *= BB_PAYNE;
-    hl0 = hl0.max(s.lambda_l);
+    // Injection flows down the tubing: Beggs-Brill's downhill set, no Payne
+    // factor (mirrors Python _bb_gradient_gas)
+    let down = s.injection;
+    let payne = if down { 1.0 } else { BB_PAYNE };
+    hl0 = (hl0 * payne).max(s.lambda_l);
 
     // Liquid velocity number NLV = 1.938 * vsl * (rho_l/sigma)^0.25 with sigma
     // in dyne/cm (Beggs and Brill 1973; same form and units as Hagedorn-Brown)
@@ -274,19 +275,19 @@ fn bb_gradient(s: &SegmentState) -> f64 {
 
     let hl_theta = if pattern == BB_TRANSITION {
         let hl_seg = bb_inclination_correction(
-            bb_horizontal_holdup(s.lambda_l, froude, BB_SEGREGATED) * BB_PAYNE,
-            s.lambda_l, n_lv, froude, BB_SEGREGATED, s.theta,
+            bb_horizontal_holdup(s.lambda_l, froude, BB_SEGREGATED) * payne,
+            s.lambda_l, n_lv, froude, BB_SEGREGATED, s.theta, down,
         );
         let hl_int = bb_inclination_correction(
-            bb_horizontal_holdup(s.lambda_l, froude, BB_INTERMITTENT) * BB_PAYNE,
-            s.lambda_l, n_lv, froude, BB_INTERMITTENT, s.theta,
+            bb_horizontal_holdup(s.lambda_l, froude, BB_INTERMITTENT) * payne,
+            s.lambda_l, n_lv, froude, BB_INTERMITTENT, s.theta, down,
         );
         trans_a * hl_seg + (1.0 - trans_a) * hl_int
     } else {
-        bb_inclination_correction(hl0, s.lambda_l, n_lv, froude, pattern, s.theta)
+        bb_inclination_correction(hl0, s.lambda_l, n_lv, froude, pattern, s.theta, down)
     };
 
-    let hl_theta = clamp(hl_theta, s.lambda_l, 1.0);
+    let hl_theta = clamp(hl_theta, if down { 0.0 } else { s.lambda_l }, 1.0);
     let rho_s = s.rho_l * hl_theta + s.rho_g * (1.0 - hl_theta);
 
     let mu_ns = s.mu_l * s.lambda_l + s.mu_g * (1.0 - s.lambda_l);

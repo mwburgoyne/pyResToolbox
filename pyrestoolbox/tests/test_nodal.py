@@ -1003,3 +1003,12 @@ def test_gas_pvt_user_tc_pc_reaches_vlp():
     kw = dict(thp=500, completion=c, vlpmethod='BB', well_type='gas', qg_mscfd=5000)
     assert abs(nodal.fbhp(gas_pvt=gas.GasPVT(sg=0.8, tc=430, pc=650), **kw)
                - nodal.fbhp(gsg=0.8, **kw)) > 1.0
+
+
+def test_bb_injection_uses_downhill_holdup():
+    """Beggs-Brill injection used the uphill correlation; downhill holdup is lower (sweep 2026-09-25)."""
+    from pyrestoolbox import nodal
+    c = nodal.Completion(tid=2.441, length=9000, tht=80, bht=200)
+    kw = dict(thp=2000, completion=c, vlpmethod='BB', well_type='gas', qg_mscfd=1000, qw_bwpd=200, gsg=0.7)
+    assert abs(nodal.fbhp(**kw) - 4375.1) < 0.2                      # producer unchanged
+    assert abs(nodal.fbhp(injection=True, **kw) - 3178.0) < 0.2     # was 4353.5 with the uphill set

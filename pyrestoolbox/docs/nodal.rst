@@ -850,7 +850,7 @@ pyResToolBox uses class objects to track calculation options through the functio
        + 'HB': Hagedorn-Brown (1965) with Orkiszewski bubble flow correction
        + 'WG': Woldesemayat-Ghajar (2007) drift-flux model
        + 'GRAY': Gray (1978) effective roughness with acceleration term
-       + 'BB': Beggs & Brill (1973) with Payne et al. correction
+       + 'BB': Beggs & Brill (1973), with the 0.924 uphill holdup factor usually credited to Payne et al. (1979); injection uses Beggs & Brill's downhill inclination correction
 
 Users can specify which calculation method to use either by passing an option string, or a class object to any given function.
 
@@ -895,7 +895,7 @@ The deviation support in pyResToolbox applies a ``sin(theta)`` correction to the
      - Notes
    * - **BB** (Beggs & Brill)
      - 0 -- 90 deg
-     - The only correlation in this set originally developed for all inclinations. The flow-pattern map and inclination correction factor (Payne et al. 1979) were fitted to data covering the full range from vertical to horizontal. Preferred first choice for deviated and horizontal wells.
+     - The only correlation in this set originally developed for all inclinations. The inclination correction (Beggs and Brill 1973) was fitted to data from -90 to +90 degrees, with one coefficient set per flow pattern uphill and a single set for all downhill flow; injection wells (fluid flowing down the tubing) use the downhill set. Preferred first choice for deviated and horizontal wells.
    * - **WG** (Woldesemayat-Ghajar)
      - 0 -- 90 deg
      - Drift-flux formulation with an inclination-dependent drift velocity term. The void-fraction model explicitly includes ``sin(theta)`` and ``cos(theta)`` terms derived from a broad multi-angle dataset. Suitable across the full inclination range.
