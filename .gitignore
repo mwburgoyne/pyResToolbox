@@ -57,3 +57,6 @@ pyrestoolbox-mcp-email.txt
 DEFECTS-FOUND-*.md
 PORT-SPEC-*.md
 *.zip
+
+# Local primary-source library (copyrighted papers and its index) - never published
+papers/
