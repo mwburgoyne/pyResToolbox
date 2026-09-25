@@ -732,7 +732,7 @@ Examples:
     >>> [round(p, 1) for p in ipr['pwf']]
     [14.7, 761.0, 1507.4, 2253.7, 3000.0]
     >>> [round(q, 1) for q in ipr['rate']]
-    [13456.5, 12812.2, 10861.0, 7290.7, 0.0]
+    [13458.9, 12814.7, 10863.4, 7292.7, 0.0]
 
 
 pyrestoolbox.nodal.operating_point

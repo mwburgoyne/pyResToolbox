@@ -411,7 +411,7 @@ Examples:
     5199.2406069808885
 
     >>> oil.oil_pbub(api=43, degf=185, rsb=2350, sg_sp = 0.72, pbmethod ='STAN')
-    6390.281894698239
+    6375.585894698239
 
     >>> # Metric example: temperature in degC, rsb in sm3/sm3, returns Pb in barsa
     >>> oil.oil_pbub(api=43, degf=85, rsb=418.8, sg_g=0.72, metric=True)
@@ -546,7 +546,7 @@ Examples:
     804.2857187814161
 
     >>> oil.oil_rs(api=43, degf=185, sg_sp=0.72, p=3000, pb =5180, rsmethod ='STAN')
-    947.1133546937306
+    952.6859841975829
 
 pyrestoolbox.oil.oil_co
 =======================

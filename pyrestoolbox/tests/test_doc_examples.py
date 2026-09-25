@@ -86,13 +86,13 @@ def test_doc_gas_ug_hy_sut():
     """gas.rst: gas_ug with HY/SUT"""
     result = gas.gas_ug(p=1000, sg=0.75, degf=180, zmethod='HY', cmethod='SUT')
     assert isinstance(result, float)
-    assert abs(result - 0.014118890100250796) / 0.014118890100250796 < RTOL
+    assert abs(result - 0.014116800815086943) / 0.014116800815086943 < RTOL
 
 def test_doc_gas_ug_default():
     """gas.rst: gas_ug with defaults"""
     result = gas.gas_ug(p=1000, sg=0.75, degf=180)
     assert isinstance(result, float)
-    assert abs(result - 0.014110092961853301) / 0.014110092961853301 < RTOL
+    assert abs(result - 0.014107936105490536) / 0.014107936105490536 < RTOL
 
 def test_doc_gas_cg_scalar():
     """gas.rst: gas_cg scalar"""
@@ -231,14 +231,14 @@ def test_doc_gas_dmp_positive():
     result = gas.gas_dmp(p1=1000, p2=2000, degf=185, sg=0.78, zmethod='HY', cmethod='SUT', n2=0.05, co2=0.1, h2s=0.02)
     assert isinstance(result, float)
     assert result > 0
-    assert abs(result - 213690308.9907268) / 213690308.9907268 < RTOL
+    assert abs(result - 213751374.11416614) / 213751374.11416614 < RTOL
 
 def test_doc_gas_dmp_negative():
     """gas.rst: gas_dmp negative (p1 > p2) with fixed tc/pc"""
     result = gas.gas_dmp(p1=2000, p2=1000, degf=185, sg=0.78, tc=371, pc=682)
     assert isinstance(result, float)
     assert result < 0
-    assert abs(result - (-213713909.36339885)) / 213713909.36339885 < RTOL
+    assert abs(result - (-213774563.18665993)) / 213774563.18665993 < RTOL
 
 def test_doc_gas_fws_sg():
     """gas.rst: gas_fws_sg"""
@@ -250,26 +250,26 @@ def test_doc_gas_rate_radial_scalar():
     """gas.rst: gas_rate_radial scalar"""
     result = gas.gas_rate_radial(k=5, h=50, pr=2000, pwf=750, r_w=0.3, r_ext=1500, degf=180, sg=0.75, D=0.01, S=5)
     assert isinstance(result, float)
-    assert abs(result - 2078.9101970773477) / 2078.9101970773477 < RTOL
+    assert abs(result - 2079.247245762053) / 2079.247245762053 < RTOL
 
 def test_doc_gas_rate_radial_array():
     """gas.rst: gas_rate_radial array"""
     result = gas.gas_rate_radial(k=1, h=50, pr=[2000, 1000], pwf=750, r_w=0.3, r_ext=1500, degf=180, sg=0.75, D=0.01, S=5)
     assert isinstance(result, np.ndarray)
-    expected = np.array([704.29202227, 135.05317439])
+    expected = np.array([704.4284481946929, 135.06896739343182])
     np.testing.assert_allclose(result, expected, rtol=RTOL)
 
 def test_doc_gas_rate_linear_scalar():
     """gas.rst: gas_rate_linear scalar"""
     result = gas.gas_rate_linear(k=0.1, area=50, length=200, pr=2000, pwf=250, degf=180, sg=0.8)
     assert isinstance(result, float)
-    assert abs(result - 1.3054025082153438) / 1.3054025082153438 < RTOL
+    assert abs(result - 1.3057674900081304) / 1.3057674900081304 < RTOL
 
 def test_doc_gas_rate_linear_array():
     """gas.rst: gas_rate_linear array"""
     result = gas.gas_rate_linear(k=0.1, area=50, length=200, pr=[2000, 1000, 500], pwf=250, degf=180, sg=0.8)
     assert isinstance(result, np.ndarray)
-    expected = np.array([1.30540251, 0.33532381, 0.06793513])
+    expected = np.array([1.3057674900081304, 0.33536123924681194, 0.06793513])
     np.testing.assert_allclose(result, expected, rtol=RTOL)
 
 # =============================================================================
@@ -307,7 +307,7 @@ def test_doc_oil_pbub_stan():
     """oil.rst: oil_pbub with Standing via sg_sp"""
     result = oil.oil_pbub(api=43, degf=185, rsb=2350, sg_sp=0.72, pbmethod='STAN')
     assert isinstance(result, float)
-    assert abs(result - 6390.281894698239) / 6390.281894698239 < RTOL
+    assert abs(result - 6375.585894698239) / 6375.585894698239 < RTOL
 
 def test_doc_oil_pbub_class_object():
     """oil.rst: oil_pbub using class object"""
@@ -348,7 +348,7 @@ def test_doc_oil_rs_stan():
     """oil.rst: oil_rs with Standing method"""
     result = oil.oil_rs(api=43, degf=185, sg_sp=0.72, p=3000, pb=5180, rsmethod='STAN')
     assert isinstance(result, float)
-    assert abs(result - 947.1133546937306) / 947.1133546937306 < RTOL
+    assert abs(result - 952.6859841975829) / 952.6859841975829 < RTOL
 
 def test_doc_oil_co_above_pb():
     """oil.rst: oil_co above bubble point"""
@@ -739,13 +739,13 @@ def test_doc_gas_rate_radial_with_pvt():
     """gas.rst: gas_rate_radial using GasPVT object"""
     gpvt = gas.GasPVT(sg=0.75, co2=0.05)
     result = gas.gas_rate_radial(k=5, h=50, pr=2000, pwf=750, r_w=0.3, r_ext=1500, degf=180, gas_pvt=gpvt, S=5, D=0.01)
-    assert abs(result - 2072.675775394653) / 2072.675775394653 < RTOL
+    assert abs(result - 2073.009199664824) / 2073.009199664824 < RTOL
 
 def test_doc_gas_rate_linear_with_pvt():
     """gas.rst: gas_rate_linear using GasPVT object"""
     gpvt = gas.GasPVT(sg=0.8)
     result = gas.gas_rate_linear(k=0.1, area=50, length=200, pr=2000, pwf=250, degf=180, gas_pvt=gpvt)
-    assert abs(result - 1.3054025082153438) / 1.3054025082153438 < RTOL
+    assert abs(result - 1.3057674900081304) / 1.3057674900081304 < RTOL
 
 # =============================================================================
 # Gas Hydrate Documentation Examples (docs/gas.rst)
@@ -819,7 +819,7 @@ def test_doc_gas_pvt_viscosity():
     """gas.rst: GasPVT viscosity"""
     gpvt = gas.GasPVT(sg=0.65, co2=0.1)
     result = gpvt.viscosity(2000, 180)
-    assert abs(result - 0.016666761192334678) / 0.016666761192334678 < RTOL
+    assert abs(result - 0.016661668850740583) / 0.016661668850740583 < RTOL
 
 def test_doc_gas_pvt_density():
     """gas.rst: GasPVT density"""
@@ -903,7 +903,7 @@ def test_doc_gaspvt_non_darcy_skin():
     gpvt = gas.GasPVT(sg=0.70)
     r = gpvt.non_darcy_skin(qg=10000, p=3000, degf=200,
                             k=100, h_perf=100, rw=0.33, krg=0.7)
-    assert round(r['S_hvf'], 4) == 0.3044
+    assert round(r['S_hvf'], 4) == 0.3046
 
 def test_doc_gaspvt_partial_penetration_skin():
     """gas.rst: GasPVT.partial_penetration_skin convenience method"""
@@ -922,7 +922,7 @@ def test_doc_nodal_gas_pvt_viscosity():
     """nodal.rst: GasPVT viscosity"""
     gpvt = gas.GasPVT(sg=0.65, co2=0.1)
     result = gpvt.viscosity(2000, 180)
-    assert abs(result - 0.016666761192334678) / 0.016666761192334678 < RTOL
+    assert abs(result - 0.016661668850740583) / 0.016661668850740583 < RTOL
 
 def test_doc_nodal_gas_pvt_density():
     """nodal.rst: GasPVT density"""
@@ -1061,7 +1061,7 @@ def test_doc_nodal_ipr_curve():
     expected_pwf = [14.7, 761.0, 1507.4, 2253.7, 3000.0]
     for actual, expected in zip(ipr['pwf'], expected_pwf):
         assert abs(round(actual, 1) - expected) < 0.2
-    expected_rate = [13456.5, 12812.2, 10861.0, 7290.7, 0.0]
+    expected_rate = [13458.9, 12814.7, 10863.4, 7292.7, 0.0]
     for actual, expected in zip(ipr['rate'], expected_rate):
         assert abs(round(actual, 1) - expected) < 0.2
 

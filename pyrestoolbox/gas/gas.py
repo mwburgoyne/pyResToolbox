@@ -168,6 +168,7 @@ _DAK_LEADING = 0.27  # Leading coefficient in DAK reduced density equation
 _HY_COEFFS = (0.06125, -1.2, 14.76, -9.76, 4.58, 90.7, -242.2, 42.4, 2.18, 2.82)
 
 # --- Lee, Gonzalez & Eakin (1966) ---
+_LBFT3_PER_GCC = 62.428  # lb/ft3 per g/cm3 (62.42796); not the 62.367 60 degF water density used before 3.7.8
 # Eqs 2.14-2.17, 'Petroleum Reservoir Fluid Property Correlations', McCain et al.
 _LGE = (3.448, 986.4, 0.01009,    # b coefficients (Eq 2.16)
         2.447, 0.2224,              # c coefficients (Eq 2.17)
@@ -1225,7 +1226,7 @@ def gas_ug(
             return process_output(ug, is_list)
 
     if zmethod.name not in ('BNS', 'BUR'):
-        rho = m * p / (t * zee * R * WDEN)
+        rho = m * p / (t * zee * R * _LBFT3_PER_GCC)  # LGE takes rho_g in g/cm3
         b = _LGE[0] + (_LGE[1] / t) + (_LGE[2] * m)  # 2.16
         c = _LGE[3] - (_LGE[4] * b)  # 2.17
         a = ((_LGE[5] + (_LGE[6] * m)) * np.power(t, 1.5) / (_LGE[7] + (_LGE[8] * m) + t))  # 2.15

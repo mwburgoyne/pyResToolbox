@@ -126,9 +126,12 @@ def oil_pbub(
         api, degf, sg_g, rsb, sg_sp
     ) -> float:  # 1.63 in 'Oil & Gas Properties & Correlations' - http://dx.doi.org/10.1016/B978-0-12-803437-8.00001-4
         a = _STAN_T_COEFF * degf - _STAN_API_COEFF * api
-        return (
-            _STAN_DENOM * ((rsb / sg_g) ** _STAN_SG_EXP * 10 ** a - _STAN_OFFSET) + psc
-        )  # Adding 14.7 as I suspect this is in psig
+        # Standing (1947) gives Pb in psia (Whitson & Brule Eq 3.78; Ahmed Eq 1.63).
+        # Before 3.7.8 psc was added on the suspicion of psig. The -1.4 offset
+        # makes the form negative for tiny Rsb; a dead oil's Pb is atmospheric.
+        return max(
+            _STAN_DENOM * ((rsb / sg_g) ** _STAN_SG_EXP * 10 ** a - _STAN_OFFSET), psc
+        )
 
     def pbub_valko_mccain(api, degf, sg_g, rsb, sg_sp) -> float:
         extrap = False
@@ -217,9 +220,9 @@ def oil_rs_bub(
 
     def rsbub_standing(api, degf, pb, sg_g, sg_sp) -> float:
         a = _STAN_T_COEFF * degf - _STAN_API_COEFF * api  # Eq 1.64
-        return sg_g * (((pb - psc) / _STAN_DENOM + _STAN_OFFSET) / 10 ** a) ** (
+        return sg_g * ((pb / _STAN_DENOM + _STAN_OFFSET) / 10 ** a) ** (
             1 / _STAN_SG_EXP
-        )  # Eq 1.72 - Subtracting 14.7 as suspect this pressure in psig
+        )  # Eq 1.72, pb in psia
 
     def rsbub_valko_mccain(api, degf, pb, sg_g, sg_sp) -> float:
         # Analytic inversion of the Valko-McCain (2003) Pb correlation.
@@ -408,9 +411,9 @@ def oil_rs(
         a = _STAN_T_COEFF * degf - _STAN_API_COEFF * api  # Eq 1.64
 
         def rs_stan_raw(press):
-            return sg_g * (((press - psc) / _STAN_DENOM + _STAN_OFFSET) / 10 ** a) ** (
+            return sg_g * ((press / _STAN_DENOM + _STAN_OFFSET) / 10 ** a) ** (
                 1 / _STAN_SG_EXP
-            )  # Eq 1.72 - Subtracting 14.7 as suspect this pressure in psig
+            )  # Eq 1.72, press in psia
 
         # Scale so that Rs(pb) == rsb, mirroring the VALMC rs_scaler approach.
         # Without this, user-supplied rsb/pb pairs produce an Rs discontinuity at Pb.

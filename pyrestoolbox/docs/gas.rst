@@ -389,10 +389,10 @@ Examples:
 .. code-block:: python
 
     >>> gas.gas_ug(p=1000, sg=0.75, degf=180, zmethod ='HY', cmethod = 'SUT')
-    0.014118890100250796
+    0.014116800815086943
 
     >>> gas.gas_ug(p=1000, sg=0.75, degf=180)
-    0.014110092961853301
+    0.014107936105490536
     
     
 pyrestoolbox.gas.gas_cg
@@ -1005,10 +1005,10 @@ Examples:
 .. code-block:: python
 
     >>> gas.gas_dmp(p1=1000, p2=2000, degf=185, sg=0.78, zmethod='HY', cmethod = 'SUT', n2 = 0.05, co2 = 0.1, h2s = 0.02)
-    213690308.9907268
+    213751374.11416614
 
     >>> gas.gas_dmp(p1=2000, p2=1000, degf=185, sg=0.78, tc = 371, pc = 682)
-    -213713909.36339885
+    -213774563.18665993
         
 pyrestoolbox.gas.gas_fws_sg
 ===========================
@@ -1152,10 +1152,10 @@ Examples:
 .. code-block:: python
 
     >>> gas.gas_rate_radial(k=5, h=50, pr=2000, pwf=750, r_w=0.3, r_ext=1500, degf=180, sg = 0.75, D = 0.01, S=5)
-    2078.9101970773477
+    2079.247245762053
 
     >>> gas.gas_rate_radial(k=1, h=50, pr=[2000,1000], pwf=750, r_w=0.3, r_ext=1500, degf=180, sg = 0.75, D = 0.01, S=5)
-    array([704.29202227, 135.05317439])
+    array([704.42844819, 135.06896739])
 
 Using a GasPVT object:
 
@@ -1163,7 +1163,7 @@ Using a GasPVT object:
 
     >>> gpvt = gas.GasPVT(sg=0.75, co2=0.05)
     >>> gas.gas_rate_radial(k=5, h=50, pr=2000, pwf=750, r_w=0.3, r_ext=1500, degf=180, gas_pvt=gpvt, S=5, D=0.01)
-    2072.675775394653
+    2073.009199664824
     
 
 pyrestoolbox.gas.gas_sg
@@ -1304,10 +1304,10 @@ Examples:
 .. code-block:: python
 
     >>> gas.gas_rate_linear(k=0.1, area=50, length=200, pr=2000, pwf=250, degf=180, sg = 0.8)
-    1.3054025082153438
+    1.3057674900081304
 
     >>> gas.gas_rate_linear(k=0.1, area=50, length=200, pr=[2000, 1000, 500], pwf=250, degf=180, sg = 0.8)
-    array([1.30540251, 0.33532381, 0.06793513])
+    array([1.30576749, 0.33536124, 0.06793513])
 
 Using a GasPVT object:
 
@@ -1315,7 +1315,7 @@ Using a GasPVT object:
 
     >>> gpvt = gas.GasPVT(sg=0.8)
     >>> gas.gas_rate_linear(k=0.1, area=50, length=200, pr=2000, pwf=250, degf=180, gas_pvt=gpvt)
-    1.3054025082153438
+    1.3057674900081304
 
 
 pyrestoolbox.gas.gas_hydrate
@@ -1827,7 +1827,7 @@ Examples:
     >>> gpvt.z(2000, 180)
     0.9026719828498643
     >>> gpvt.viscosity(2000, 180)
-    0.016666761192334678
+    0.016661668850740583
     >>> gpvt.density(2000, 180)
     6.077743278791424
     >>> gpvt.bg(2000, 180)
@@ -1851,7 +1851,7 @@ Using metric units (pressure in barsa, temperature in deg C):
     >>> r = gpvt.non_darcy_skin(qg=10000, p=3000, degf=200,
     ...                          k=100, h_perf=100, rw=0.33, krg=0.7)
     >>> round(r['S_hvf'], 4)
-    0.3044
+    0.3046
     >>> round(gpvt.partial_penetration_skin(htot=50, htop=10, hbot=45,
     ...                                      rw=0.108, kh_kv=8), 4)
     2.1555
