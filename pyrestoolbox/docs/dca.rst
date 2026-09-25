@@ -4,7 +4,7 @@ Decline Curve Analysis
 
 Functions for fitting and forecasting production decline using Arps (exponential, hyperbolic, harmonic), modified hyperbolic (hyperbolic-to-exponential), two-segment hyperbolic (transient-to-boundary-dominated) and Duong models. Includes rate-vs-cumulative fitting, EUR-constrained type-curve generation, secondary phase ratio forecasting, uptime inference, and EUR estimation.
 
-All functions are unit-agnostic - they operate on the numerical values you provide. If you pass rates in stb/d and time in months, the fitted ``qi`` comes back in stb/d and ``di`` in 1/month. No unit conversions are performed internally.
+All functions are unit-agnostic - they operate on the numerical values you provide. If you pass rates in stb/d and time in months, the fitted ``qi`` comes back in stb/d and ``di`` in 1/month, and every cumulative and EUR comes back in stb/d x months (multiply by 30.4 for stb). Pass rates per unit of the time axis (stb/month with months) to get cumulatives in stb directly. No unit conversions are performed internally.
 
 
 pyrestoolbox.dca.arps_rate

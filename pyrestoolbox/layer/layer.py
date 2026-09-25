@@ -238,8 +238,7 @@ def lorenz_2_layers(
         phi_h_fracs: Optional ability to specify a sorted list of phi_h fractions to get permeabilities for. If this list does not add to unity, then one additional layer permeability will be returned. The list needs to be in sorted order of best flow capacity to worst
 
     """
-    if phi_h_fracs is None:
-        phi_h_fracs = []
+    phi_h_fracs = [] if phi_h_fracs is None else list(phi_h_fracs)
     if nlayers <= 1:
         if len(phi_h_fracs) < 2:
             return np.array([k_avg])

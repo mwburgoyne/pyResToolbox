@@ -262,6 +262,34 @@ def check_2_inputs(x: Union[float, List[float]], y: Union[float, List[float]]) -
     return False
 
 
+class _ParkMillerRng:
+    """Park-Miller minimal-standard LCG, bit-identical to src/dca/ransac.rs so the
+    Python and Rust RANSAC paths draw the same samples and return the same fit."""
+
+    _MULT = 48271
+    _MOD = 2_147_483_647
+
+    def __init__(self, seed: int):
+        self.state = int(seed) if seed != 0 else 1
+
+    def next_u64(self) -> int:
+        self.state = (self.state * self._MULT) % self._MOD
+        return self.state
+
+    def rand_index(self, n: int) -> int:
+        return self.next_u64() % n
+
+    def choice(self, n: int, k: int) -> np.ndarray:
+        """k distinct indices in [0, n): k=1 one draw, k=2 the Rust choice2 scheme."""
+        i1 = self.rand_index(n)
+        if k == 1:
+            return np.array([i1])
+        i2 = self.rand_index(n - 1)
+        if i2 >= i1:
+            i2 += 1
+        return np.array([i1, i2])
+
+
 def ransac_linreg(x: np.ndarray, y: np.ndarray,
                   n_iter: int = 200, threshold_sigma: float = 3.0,
                   seed: int = 42,
@@ -339,14 +367,14 @@ def ransac_linreg(x: np.ndarray, y: np.ndarray,
 
     threshold = threshold_sigma * sigma_est
 
-    rng = np.random.RandomState(seed)
+    rng = _ParkMillerRng(seed)
     best_n_inliers = 0
     best_inlier_mask = np.ones(n, dtype=bool)
     best_slope = slope_full
     best_intercept = intercept_full
 
     for _ in range(n_iter):
-        idx = rng.choice(n, size=min_samples, replace=False)
+        idx = rng.choice(n, min_samples)
         slope_t, intercept_t = _fit_ols(x[idx], y[idx])
         residuals_t = np.abs(y - (slope_t * x + intercept_t))
         inlier_mask = residuals_t < threshold

@@ -102,9 +102,6 @@ _HYP2_FIT_R_MIN = 0.01
 _HYP2_P0_TELF_IDX = 3          # Initial telf guess = t[len(t) // idx] (THM p0)
 
 # Duong (2011) cumulative integration grid
-_DUONG_TRAP_LB = 0.001      # Lower trap bound to avoid t=0 singularity
-_DUONG_GRID_MIN = 500       # Minimum trap grid points per integration
-_DUONG_GRID_DENSITY = 10    # Additional points per unit t
 
 # Duong curve_fit bounds and initial guess (Duong 2011, Eq. 5)
 _DUONG_BOUNDS_LO = (0.0, 0.01, 1.001)
@@ -430,16 +427,10 @@ def duong_cum(qi: float, a: float, m: float, t: ArrayLike) -> Union[float, np.nd
     if np.any(t <= 0):
         raise ValueError("Time must be positive for Duong model")
 
-    # Generate fine time grid for integration. Lower bound must be strictly
-    # less than ti to give np.linspace an ascending range, otherwise trapezoid
-    # integrates over a descending axis and returns negative cumulative.
-    results = np.zeros_like(t, dtype=float)
-    for i, ti in enumerate(t):
-        lower = min(_DUONG_TRAP_LB, ti * _DUONG_TRAP_LB)
-        t_fine = np.linspace(lower, ti, max(_DUONG_GRID_MIN, int(ti * _DUONG_GRID_DENSITY)))
-        q_fine = qi * t_fine ** (-m) * np.exp(a / (1.0 - m) * (t_fine ** (1.0 - m) - 1.0))
-        results[i] = np.trapezoid(q_fine, t_fine)
-
+    # Closed form (Duong 2011): with u = a/(1-m) (t^(1-m) - 1), du/dt = a t^-m,
+    # so q = (qi/a) exp(u) du/dt and Np = (qi/a) exp(u); Np -> 0 as t -> 0 for m > 1.
+    # Equivalent to Duong's q/Np = a t^-m.
+    results = qi / a * np.exp(a / (1.0 - m) * (t ** (1.0 - m) - 1.0))
     return process_output(results, is_list)
 
 
@@ -466,10 +457,18 @@ def eur(qi: float, di: float, b: float, q_min: float) -> float:
     """
     if q_min >= qi:
         raise ValueError(f"q_min ({q_min}) must be less than qi ({qi})")
+    if q_min < 0:
+        raise ValueError(f"q_min must be non-negative, got {q_min}")
     if di <= 0:
         raise ValueError(f"di must be positive, got {di}")
     if b < 0:
         raise ValueError(f"b must be non-negative, got {b}")
+    if q_min == 0:
+        # Infinite-time limit: finite only for b < 1
+        if b >= 1:
+            raise ValueError("EUR is unbounded for b >= 1 with q_min = 0; "
+                             "specify a positive q_min")
+        return float(qi / ((1.0 - b) * di))
 
     # Solve for time when q(t) = q_min
     if b == 0:
@@ -1190,6 +1189,7 @@ def fit_decline_cum(Np: ArrayLike, q: ArrayLike, method: str = 'best',
     """
     Np = np.asarray(Np, dtype=float)
     q = np.asarray(q, dtype=float)
+    _check_decline_data(Np, q, 'Np')
 
     if Np_start is not None or Np_end is not None:
         mask = np.ones(len(Np), dtype=bool)
@@ -1205,12 +1205,8 @@ def fit_decline_cum(Np: ArrayLike, q: ArrayLike, method: str = 'best',
             raise ValueError("No data points within the specified Np_start/Np_end window")
         Np = Np - Np[0]  # Shift so window starts at Np=0
 
-    if len(Np) != len(q):
-        raise ValueError(f"Np and q must have same length, got {len(Np)} and {len(q)}")
     if len(Np) < 3:
         raise ValueError("Need at least 3 data points for fitting")
-    if np.any(q <= 0):
-        raise ValueError("All rate values must be positive")
 
     if method == 'duong':
         raise ValueError("Duong model has no analytical rate-vs-cumulative form")
@@ -1262,6 +1258,21 @@ def fit_decline_cum(Np: ArrayLike, q: ArrayLike, method: str = 'best',
     return best
 
 
+def _check_decline_data(x, q, xname):
+    """Shared fit-input checks, run before any windowing.
+
+    Lengths must match (a mismatch otherwise surfaced as an IndexError from the
+    window mask), values must be finite (NaN rates returned NaN fits on the
+    Python path but raised on the Rust path), and rates must be positive.
+    """
+    if len(x) != len(q):
+        raise ValueError(f"{xname} and q must have same length, got {len(x)} and {len(q)}")
+    if not (np.all(np.isfinite(x)) and np.all(np.isfinite(q))):
+        raise ValueError(f"{xname} and q must be finite (no NaN or inf)")
+    if np.any(q <= 0):
+        raise ValueError("All rate values must be positive")
+
+
 def fit_decline(t: ArrayLike, q: ArrayLike, method: str = 'best',
                 t_start: Optional[float] = None,
                 t_end: Optional[float] = None) -> 'DeclineResult':
@@ -1291,6 +1302,7 @@ def fit_decline(t: ArrayLike, q: ArrayLike, method: str = 'best',
     """
     t = np.asarray(t, dtype=float)
     q = np.asarray(q, dtype=float)
+    _check_decline_data(t, q, 't')
 
     if t_start is not None or t_end is not None:
         mask = np.ones(len(t), dtype=bool)
@@ -1304,12 +1316,8 @@ def fit_decline(t: ArrayLike, q: ArrayLike, method: str = 'best',
             raise ValueError("No data points within the specified t_start/t_end window")
         t = t - t[0]  # Shift so window starts at t=0
 
-    if len(t) != len(q):
-        raise ValueError(f"t and q must have same length, got {len(t)} and {len(q)}")
     if len(t) < 3:
         raise ValueError("Need at least 3 data points for fitting")
-    if np.any(q <= 0):
-        raise ValueError("All rate values must be positive")
 
     fitters = {
         'exponential': _fit_exponential,
@@ -1613,7 +1621,13 @@ def forecast(result: 'DeclineResult', t_end: float, dt: float = 1.0,
                 x_eval = t
             R = np.asarray(ratio_forecast(rr, x_eval), dtype=float)
             sec_rate = q * R
-            sec_cum = np.cumsum(sec_rate * dt)
+            # Secondary cumulative: exact primary increment per step times the
+            # mean ratio over the step (trapezoid in ratio, analytic in volume).
+            # Exact for a constant ratio; a right-rectangle cumsum of rate*dt
+            # is biased low by a whole step of decline.
+            dQ = np.diff(Qcum, prepend=0.0)
+            R_prev = np.concatenate(([R[0]], R[:-1]))
+            sec_cum = np.cumsum(dQ * 0.5 * (R_prev + R))
             secondary[name] = {'ratio': R, 'rate': sec_rate, 'cum': sec_cum}
 
     return ForecastResult(

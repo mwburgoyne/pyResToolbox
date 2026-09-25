@@ -1005,3 +1005,62 @@ def test_fit_best_common_subset_with_t0():
     result = dca.fit_decline(t, q, method='best')
     assert result.method == 'exponential'
     assert result.r_squared > 0.999
+
+
+# --- sweep 2026-09-25 ---
+
+def test_eur_q_min_zero_is_the_infinite_time_limit():
+    import pytest
+    assert abs(dca.eur(1000, 0.1, 0.5, 0) - 20000.0) < 1e-9
+    assert abs(dca.mh_eur(1000, 0.1, 0, b=0.5) - 20000.0) < 1e-9
+    with pytest.raises(ValueError):
+        dca.eur(1000, 0.1, 1.2, 0)
+
+
+def test_duong_cum_matches_integral_of_rate():
+    from scipy.integrate import quad
+    for ti in (1.0, 5.0, 120.0):
+        ref = quad(lambda x: dca.duong_rate(500, 1.1, 1.2, x), 0, ti, limit=200)[0]
+        assert abs(dca.duong_cum(500, 1.1, 1.2, ti) / ref - 1) < 1e-8
+
+
+def test_forecast_secondary_cum_exact_for_constant_ratio():
+    t = np.arange(1, 37.0)
+    res = dca.fit_decline(t, 1000 / (1 + 0.5 * 0.15 * t) ** 2, method='hyperbolic')
+    rr = dca.RatioResult(method='linear', a=2.0, b=0.0, domain='time')
+    fc = dca.forecast(res, t_end=360, dt=30, ratios={'gor': rr})
+    assert np.allclose(fc.secondary['gor']['cum'], 2.0 * fc.Qcum, rtol=1e-12)
+
+
+def test_fit_decline_rejects_nan_and_length_mismatch_before_windowing():
+    import pytest
+    with pytest.raises(ValueError, match="finite"):
+        dca.fit_decline([1, 2, 3, 4], [1, np.nan, 3, 4])
+    with pytest.raises(ValueError, match="same length"):
+        dca.fit_decline([1, 2, 3], [1, 2, 3, 4], t_start=1)
+
+
+def test_ransac_fits_identical_with_and_without_rust():
+    """Python used numpy's RandomState, Rust Park-Miller: fits differed on noisy data."""
+    import importlib
+    from pyrestoolbox._accelerator import RUST_AVAILABLE
+    if not RUST_AVAILABLE:
+        return
+    from pyrestoolbox.tests.test_rust_acceleration import force_python
+    for seed in range(12):
+        rng = np.random.default_rng(seed)
+        t = np.arange(1, 37.0)
+        q = 1000 / (1 + 0.5 * 0.15 * t) ** 2 * (1 + 0.03 * rng.standard_normal(36))
+        if seed % 2:
+            q[rng.integers(5, 30)] *= 0.4
+        r_rust = dca.fit_decline(t, q, method='hyperbolic')
+        with force_python():
+            r_py = dca.fit_decline(t, q, method='hyperbolic')
+        assert np.allclose([r_rust.qi, r_rust.di, r_rust.b], [r_py.qi, r_py.di, r_py.b], rtol=1e-9)
+
+
+def test_lorenz_2_layers_does_not_mutate_caller_list():
+    from pyrestoolbox import layer
+    fracs = [0.4, 0.3, 0.2]
+    layer.lorenz_2_layers(0.5, 10, phi_h_fracs=fracs)
+    assert fracs == [0.4, 0.3, 0.2]
