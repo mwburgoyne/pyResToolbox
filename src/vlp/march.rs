@@ -86,8 +86,11 @@ fn condensate_vis(
     pr: f64, cgr_local: f64, gsg: f64, api: f64, temp_f: f64,
     p_avg: f64, oil_vis: f64,
 ) -> f64 {
+    // Dropped condensate is a saturated live liquid: Beggs-Robinson at the
+    // Standing solution GOR at local p, T with Pb = p (mirrors Python _condensate_vis)
     if pr > 14.7 && cgr_local > 0.01 {
-        oil_viscosity_full(gsg, api, temp_f, 0.0, 14.7, p_avg, 1.0, 1.0)
+        let rs_sat = standing_rs(gsg, p_avg, temp_f, api);
+        oil_viscosity_full(gsg, api, temp_f, rs_sat, p_avg, p_avg, 1.0, 1.0)
     } else {
         oil_vis
     }

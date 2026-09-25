@@ -1048,8 +1048,17 @@ def _condensate_dropout(cgr, qg_mmscfd, p_avg, pr, osg, qw_bwpd, wsg):
 
 
 def _condensate_vis(pr, cgr_local, gsg, api, temp_f, p_avg, oil_vis):
+    """Viscosity (cP) of condensate dropped out in the tubing.
+
+    The dropped liquid is in equilibrium with the gas at the local pressure, so
+    it is a saturated live liquid: Beggs-Robinson live-oil viscosity at the
+    Standing (1947) solution GOR at local p and T, with Pb = p. Before 3.8.1 it
+    was given the dead-oil viscosity (Rs = 0), 2-5x too viscous for a light
+    condensate (up to ~16 cP at low temperature).
+    """
     if pr > 14.7 and cgr_local > 0.01:
-        return _oil_viscosity_full(gsg, api, temp_f, rsb=0.0, pb=14.7,
+        rs_sat = _standing_rs(gsg, p_avg, temp_f, api)
+        return _oil_viscosity_full(gsg, api, temp_f, rsb=rs_sat, pb=p_avg,
                                    press_psia=p_avg)
     return oil_vis
 
