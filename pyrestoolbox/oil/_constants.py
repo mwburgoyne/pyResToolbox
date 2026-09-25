@@ -60,9 +60,10 @@ _BR_B_MULT = 5.44         # Live oil B multiplier
 _BR_B_EXP = -0.338        # Live oil B exponent
 _BR_B_OFFSET = 150.0      # Live oil B Rs offset
 
-# Petrosky-Farshad (1993) undersaturated viscosity — Eq 3.24
+# Petrosky & Farshad (1995) SPE 29468, Eq. 6: undersaturated viscosity
 _PF_POLY = (-1.0146, 1.3322, -0.4876, -1.15036)  # log10(uob) polynomial coeffs
 _PF_P_COEFF = 1.3449e-3   # Pressure coefficient
+_PF_UOB_MAX = 3.546       # Upper uob (cP) of the fitted data, Table 3 p. 254; the cubic collapses beyond ~5 cP
 
 # Standing-Witte-McCain-Hill (1995) density — Eqs 3.17-3.19
 _SWMH_RHOPO_INIT = 52.8   # Initial pseudo-liquid density constant
