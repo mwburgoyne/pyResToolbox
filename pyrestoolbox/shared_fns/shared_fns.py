@@ -39,6 +39,7 @@ __all__ = [
     'ransac_linreg',
 ]
 
+import math
 import numpy as np
 from math import ceil
 from typing import Union, List, Tuple
@@ -48,6 +49,10 @@ def bisect_solve(args, f, xmin, xmax, rtol):
         xmin, xmax = xmax, xmin
     err_hi = f(args, xmax)
     err_lo = f(args, xmin)
+    if err_hi == 0:       # Root exactly on a bracket end: the sign test below
+        return xmax       # would step away from it and never converge
+    if err_lo == 0:
+        return xmin
     if err_hi * err_lo > 0:
         raise ValueError(f"bisect_solve: root is not bracketed between xmin={xmin} and xmax={xmax} (f(xmin)={err_lo}, f(xmax)={err_hi})")
     iternum = 0
@@ -66,12 +71,17 @@ def bisect_solve(args, f, xmin, xmax, rtol):
     return mid_val
     
 def convert_to_numpy(input_data):
-    # Convert input data to a numpy array ensuring it is always sizeable
-    if isinstance(input_data, (np.ndarray, list, tuple)):
-        return np.atleast_1d(input_data), True
-    else:
-        # Scalar input
-        return np.atleast_1d(input_data), False
+    # Convert input data to a numpy array ensuring it is always sizeable.
+    # Anything with a shape (ndarray, pandas Series/Index, array-likes) is
+    # treated as a sequence when it has at least one dimension; a 0-d array
+    # is a scalar and comes back as one.
+    if isinstance(input_data, (list, tuple)):
+        return np.atleast_1d(np.asarray(input_data)), True
+    if hasattr(input_data, '__array__') or hasattr(input_data, 'to_numpy'):
+        arr = np.asarray(input_data)
+        return np.atleast_1d(arr), arr.ndim > 0
+    # Scalar input
+    return np.atleast_1d(input_data), False
 
                 
 def process_output(input_data, is_list):
@@ -192,25 +202,25 @@ def validate_pe_inputs(p=None, degf=None, sg=None, co2=None, h2s=None, n2=None, 
         and (h2 is None or isinstance(h2, (int, float)))
     ):
         if p is not None:
-            if p != p:
-                raise ValueError("Parameter 'p' must not be NaN")
+            if not math.isfinite(p):
+                raise ValueError("Parameter 'p' must not be NaN or inf")
             if p <= 0:
                 raise ValueError(f"Pressure must be positive, got min value: {p}")
         if degf is not None:
-            if degf != degf:
-                raise ValueError("Parameter 'degf' must not be NaN")
+            if not math.isfinite(degf):
+                raise ValueError("Parameter 'degf' must not be NaN or inf")
             if degf <= -459.67:
                 raise ValueError(f"Temperature must be above absolute zero (-459.67 degF), got: {degf}")
         if sg is not None:
-            if sg != sg:
-                raise ValueError("Parameter 'sg' must not be NaN")
+            if not math.isfinite(sg):
+                raise ValueError("Parameter 'sg' must not be NaN or inf")
             if sg <= 0:
                 raise ValueError(f"Specific gravity must be positive, got min value: {sg}")
         frac_sum = 0.0
         for name, val in (('co2', co2), ('h2s', h2s), ('n2', n2), ('h2', h2)):
             if val is not None:
-                if val != val:
-                    raise ValueError(f"Parameter '{name}' must not be NaN")
+                if not math.isfinite(val):
+                    raise ValueError(f"Parameter '{name}' must not be NaN or inf")
                 if val < 0:
                     raise ValueError(f"Mole fraction {name} must be non-negative, got min value: {val}")
                 frac_sum += val
@@ -221,20 +231,20 @@ def validate_pe_inputs(p=None, degf=None, sg=None, co2=None, h2s=None, n2=None, 
     # Vectorized numpy path for lists/arrays (or mixed scalar/array inputs)
     if p is not None:
         p_arr = np.atleast_1d(p)
-        if np.any(np.isnan(p_arr)):
-            raise ValueError("Parameter 'p' must not be NaN")
+        if not np.all(np.isfinite(p_arr)):
+            raise ValueError("Parameter 'p' must not be NaN or inf")
         if np.any(p_arr <= 0):
             raise ValueError(f"Pressure must be positive, got min value: {np.min(p_arr)}")
     if degf is not None:
         degf_arr = np.atleast_1d(degf)
-        if np.any(np.isnan(degf_arr)):
-            raise ValueError("Parameter 'degf' must not be NaN")
+        if not np.all(np.isfinite(degf_arr)):
+            raise ValueError("Parameter 'degf' must not be NaN or inf")
         if np.any(degf_arr <= -459.67):
             raise ValueError(f"Temperature must be above absolute zero (-459.67 degF), got: {np.min(degf_arr)}")
     if sg is not None:
         sg_arr = np.atleast_1d(sg)
-        if np.any(np.isnan(sg_arr)):
-            raise ValueError("Parameter 'sg' must not be NaN")
+        if not np.all(np.isfinite(sg_arr)):
+            raise ValueError("Parameter 'sg' must not be NaN or inf")
         if np.any(sg_arr <= 0):
             raise ValueError(f"Specific gravity must be positive, got min value: {np.min(sg_arr)}")
     fracs = {'co2': co2, 'h2s': h2s, 'n2': n2, 'h2': h2}
@@ -242,8 +252,8 @@ def validate_pe_inputs(p=None, degf=None, sg=None, co2=None, h2s=None, n2=None, 
     for name, val in fracs.items():
         if val is not None:
             val_arr = np.atleast_1d(val)
-            if np.any(np.isnan(val_arr)):
-                raise ValueError(f"Parameter '{name}' must not be NaN")
+            if not np.all(np.isfinite(val_arr)):
+                raise ValueError(f"Parameter '{name}' must not be NaN or inf")
             if np.any(val_arr < 0):
                 raise ValueError(f"Mole fraction {name} must be non-negative, got min value: {np.min(val_arr)}")
             frac_sum = frac_sum + val_arr

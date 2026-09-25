@@ -1210,3 +1210,28 @@ def test_dak_hy_return_nan_without_single_phase_root():
         hy = _gas.gas_z([500, 3000], 1.4, 40, zmethod='HY', cmethod='SUT', co2=0.9)
     assert np.isnan(dak[1]) and 0.7 < dak[0] < 0.8 and 0.25 < dak[2] < 0.35
     assert np.isnan(hy[1]) and 0.7 < hy[0] < 0.8
+
+
+def test_array_inputs_pandas_series_and_0d():
+    """A pandas Series was treated as a scalar and crashed; a 0-d array came back as an array."""
+    import pandas as pd
+    from pyrestoolbox import gas as _gas
+    ser = _gas.gas_z(pd.Series([1000.0, 2000.0, 3000.0]), 0.7, 200)
+    lst = _gas.gas_z([1000.0, 2000.0, 3000.0], 0.7, 200)
+    assert np.allclose(ser, lst)
+    assert isinstance(_gas.gas_z(np.array(2000.0), 0.7, 200), float)
+
+
+def test_non_finite_inputs_rejected():
+    import pytest as _pytest
+    from pyrestoolbox import gas as _gas
+    with _pytest.raises(ValueError, match="NaN or inf"):
+        _gas.gas_z(2000, 0.7, float('inf'))
+    with _pytest.raises(ValueError, match="NaN or inf"):
+        _gas.gas_z([2000, float('inf')], 0.7, 200)
+
+
+def test_bisect_solve_root_on_bracket_end():
+    from pyrestoolbox.shared_fns import bisect_solve
+    assert bisect_solve(None, lambda a, x: x - 10.0, 0.0, 10.0, 1e-9) == 10.0
+    assert bisect_solve(None, lambda a, x: x, 0.0, 10.0, 1e-9) == 0.0

@@ -14,6 +14,25 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+
+def _warn_if_extension_stale(native):
+    """Warn when the compiled extension's version differs from the package's.
+
+    A stale local build otherwise runs old numerics silently (3.7.6 under a
+    3.7.7 package was found on 25 September 2026).
+    """
+    try:
+        from pyrestoolbox import __version__ as pkg_version
+    except ImportError:
+        return
+    ext_version = getattr(native, '__version__', None)
+    if ext_version and pkg_version and ext_version != pkg_version:
+        import warnings
+        warnings.warn(
+            f"pyrestoolbox Rust extension is version {ext_version} but the package is "
+            f"{pkg_version}; rebuild the extension or set PYRESTOOLBOX_NO_RUST=1.",
+            RuntimeWarning, stacklevel=2)
+
 RUST_AVAILABLE: bool = False
 _rust_module = None
 _failure_reason: str = ""
@@ -139,6 +158,7 @@ else:
                 RUST_AVAILABLE = True
                 logger.debug("pyResToolbox Rust acceleration loaded successfully")
                 _clear_sentinel()
+                _warn_if_extension_stale(_native)
 
             except ImportError as e:
                 _failure_reason = f"ImportError: {e}"
