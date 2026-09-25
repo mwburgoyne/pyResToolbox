@@ -2161,6 +2161,9 @@ class GasPVT:
                 tc = tc * 1.8  # K -> deg R
             if pc > 0:
                 pc = pc * BAR_TO_PSI
+        # Whether the user overrode tc or pc: the nodal VLP march honours an
+        # override but otherwise computes its own (Sutton + Wichert-Aziz) values
+        self._user_tc_pc = tc > 0 or pc > 0
         self.zmethod, self.cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
         # self.tc/self.pc are the effective critical properties every method uses:
         # a user-supplied value where given (either or both), else cmethod output.

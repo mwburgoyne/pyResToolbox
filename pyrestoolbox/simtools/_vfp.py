@@ -222,7 +222,7 @@ def _sweep_vfpinj_bhp(completion, vlpm, flo_type, thp_values, flo_rates,
                         thp=thp, completion=completion,
                         vlpmethod=vlpm, well_type='gas',
                         gas_pvt=gas_pvt,
-                        qg_mmscfd=flo / 1000.0, cgr=0, qw_bwpd=0,
+                        qg_mscfd=flo, cgr=0, qw_bwpd=0,
                         wsg=wsg, gsg=gsg, injection=True)
                 elif flo_type == 'WAT':
                     bhp_val = nodal_fbhp(
@@ -273,7 +273,7 @@ def _sweep_vfpprod_bhp(completion, vlpm, well_type, thp_values, wfr_values,
                                     thp=thp, completion=completion,
                                     vlpmethod=vlpm, well_type='gas',
                                     gas_pvt=gas_pvt,
-                                    qg_mmscfd=flo / 1000.0,
+                                    qg_mscfd=flo,
                                     cgr=gfr * 1000.0,       # OGR stb/Mscf -> stb/MMscf
                                     qw_bwpd=wfr * flo,      # WGR stb/Mscf * Mscf/d
                                     oil_vis=oil_vis,

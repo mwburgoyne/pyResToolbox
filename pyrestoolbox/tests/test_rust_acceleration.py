@@ -461,7 +461,7 @@ class TestNodalVLPEquivalence:
         from pyrestoolbox.nodal import nodal
         pvt, comp = self._gas_completion()
         kwargs = dict(thp=500, gas_pvt=pvt, completion=comp,
-                      vlpmethod=vlpmethod, qg_mmscfd=5)
+                      vlpmethod=vlpmethod, qg_mscfd=5000)
         result_rust = nodal.fbhp(**kwargs)
         with force_python():
             result_python = nodal.fbhp(**kwargs)
@@ -524,7 +524,7 @@ def _nodal_parity_check_gas(vlpmethod, thp, qg, completion, rtol):
     from pyrestoolbox.nodal import nodal
     kwargs = dict(
         thp=thp, completion=completion, vlpmethod=vlpmethod,
-        well_type='gas', qg_mmscfd=qg, gsg=0.75, cgr=0, qw_bwpd=0,
+        well_type='gas', qg_mscfd=qg * 1000.0, gsg=0.75, cgr=0, qw_bwpd=0,
         api=45, oil_vis=1.0,
     )
     result_rust = nodal.fbhp(**kwargs)

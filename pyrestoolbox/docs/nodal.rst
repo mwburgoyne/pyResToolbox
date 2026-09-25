@@ -16,10 +16,10 @@ A minimal example finding the operating point for a gas well:
     >>> c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
     >>> r = nodal.Reservoir(pr=3000, degf=200, k=10, h=50, re=1500, rw=0.35, S=2, D=0.001)
     >>> result = nodal.operating_point(thp=500, completion=c, reservoir=r, vlpmethod='HB', well_type='gas', gsg=0.65)
-    >>> round(result['rate'], 2)
-    10.58
+    >>> round(result['rate'], 1)
+    10578.1
     >>> round(result['bhp'], 1)
-    1583.2
+    1583.4
 
 
 Function List
@@ -401,7 +401,7 @@ pyrestoolbox.nodal.fbhp
 
 .. code-block:: python
 
-    fbhp(thp, completion, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, qg_mmscfd=0, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, qt_stbpd=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65, metric=False, return_profile=False) -> float
+    fbhp(thp, completion, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, qg_mmscfd=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, qt_stbpd=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65, metric=False, return_profile=False, qg_mscfd=0) -> float
 
 Returns flowing bottom hole pressure (psia, or barsa if metric=True) using the specified VLP correlation. Supports both gas and oil wells. The Completion object can define vertical wells (legacy mode) or multi-segment deviated wells using WellSegment objects. The ``sin(theta)`` multiplier on hydrostatic gradient enables proper deviated and horizontal well support.
 
@@ -430,9 +430,12 @@ Returns flowing bottom hole pressure (psia, or barsa if metric=True) using the s
    * - oil_pvt
      - OilPVT
      - Oil PVT object. If provided for oil wells, extracts api, sgsp, pb, rsb
+   * - qg_mscfd
+     - float
+     - Gas rate (Mscf/d, or sm3/d if metric=True). Gas wells only. Gas rates are Mscf/d throughout the library from 3.7.8
    * - qg_mmscfd
      - float
-     - Gas rate (MMscf/d, or sm3/d if metric=True). Gas wells only
+     - Deprecated alias for the gas rate in MMscf/d (sm3/d if metric=True); converted to ``qg_mscfd`` with a ``DeprecationWarning``. Do not pass both
    * - cgr
      - float
      - Condensate-gas ratio (STB/MMscf, or sm3/sm3 if metric=True). Gas wells only
@@ -498,7 +501,7 @@ Gas well:
 
     >>> from pyrestoolbox import nodal
     >>> c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
-    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
+    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
     961.6837134610927
 
 Oil well:
@@ -524,7 +527,7 @@ Deviated well using WellSegment:
 
     >>> segs = [nodal.WellSegment(md=5000, id=2.441, deviation=0), nodal.WellSegment(md=5000, id=2.441, deviation=45)]
     >>> c_dev = nodal.Completion(segments=segs, tht=100, bht=200)
-    >>> nodal.fbhp(thp=500, completion=c_dev, vlpmethod='HB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
+    >>> nodal.fbhp(thp=500, completion=c_dev, vlpmethod='HB', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
     933.2375466817515
 
 .. note::
@@ -542,7 +545,7 @@ Pass ``return_profile=True`` to ``fbhp`` to get the wellbore pressure profile at
     ...         nodal.WellSegment(md=5000, id=2.441, deviation=45)]
     >>> c = nodal.Completion(segments=segs, tht=100, bht=200)
     >>> profile = nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas',
-    ...                      qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45,
+    ...                      qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45,
     ...                      oil_vis=1.0, return_profile=True)
     >>> profile['md']         # cumulative MD at each segment boundary
     array([    0.,  5000., 10000.])
@@ -562,16 +565,16 @@ pyrestoolbox.nodal.fthp
 
 Inverse of ``fbhp``. Solves for the tubing head pressure that produces the target flowing bottom-hole pressure, for the given flow parameters and VLP correlation. Internally wraps ``bisect_solve`` around ``fbhp`` between ``thp_min`` and ``thp_max``. ``thp_min=None`` resolves to 14.7 psia (1.01325 barsa if metric=True); ``thp_max=None`` resolves to 20,000 psia (1378.95 barsa if metric=True). ``tol`` is the absolute THP tolerance in psia (barsa if metric=True).
 
-All flow / well / unit kwargs accepted by ``fbhp`` (``qg_mmscfd``, ``qt_stbpd``, ``gor``, ``wc``, ``api``, ``pb``, ``rsb``, ``metric`` ...) are accepted here identically. ``metric=True`` switches every pressure, rate and ratio input and the return to Eclipse METRIC units, exactly as in ``fbhp``.
+All flow / well / unit kwargs accepted by ``fbhp`` (``qg_mscfd``, ``qt_stbpd``, ``gor``, ``wc``, ``api``, ``pb``, ``rsb``, ``metric`` ...) are accepted here identically. ``metric=True`` switches every pressure, rate and ratio input and the return to Eclipse METRIC units, exactly as in ``fbhp``.
 
 .. code-block:: python
 
     >>> c = nodal.Completion(tid=2.441, length=8000, tht=100, bht=180)
     >>> thp_target = 800.0
     >>> bhp = nodal.fbhp(thp=thp_target, completion=c, vlpmethod='HB', well_type='gas',
-    ...                  qg_mmscfd=3.0, gsg=0.65, cgr=0, qw_bwpd=0, api=45, oil_vis=1.0)
+    ...                  qg_mscfd=3000, gsg=0.65, cgr=0, qw_bwpd=0, api=45, oil_vis=1.0)
     >>> thp_recovered = nodal.fthp(bhp=bhp, completion=c, vlpmethod='HB', well_type='gas',
-    ...                             qg_mmscfd=3.0, gsg=0.65, cgr=0, qw_bwpd=0, api=45, oil_vis=1.0)
+    ...                             qg_mscfd=3000, gsg=0.65, cgr=0, qw_bwpd=0, api=45, oil_vis=1.0)
     >>> abs(thp_recovered - thp_target) < 1.0
     True
 
@@ -585,7 +588,7 @@ pyrestoolbox.nodal.outflow_curve
 
     outflow_curve(thp, completion, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, rates=None, n_points=20, max_rate=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65, metric=False, n_rates=None) -> dict
 
-Returns VLP outflow curve as a dictionary with keys ``'rate'`` (also aliased as ``'rates'``) and ``'bhp'``. ``n_rates`` is a deprecated alias for ``n_points`` (takes precedence if both are given). Evaluates ``fbhp()`` at each rate point. Rates are MMscf/d for gas wells (sm3/d if metric=True), STB/d for oil wells (sm3/d if metric=True). BHP is in psia (barsa if metric=True).
+Returns VLP outflow curve as a dictionary with keys ``'rate'`` (also aliased as ``'rates'``) and ``'bhp'``. ``n_rates`` is a deprecated alias for ``n_points`` (takes precedence if both are given). Evaluates ``fbhp()`` at each rate point. Rates are Mscf/d for gas wells (sm3/d if metric=True), STB/d for oil wells (sm3/d if metric=True). BHP is in psia (barsa if metric=True).
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -614,7 +617,7 @@ Returns VLP outflow curve as a dictionary with keys ``'rate'`` (also aliased as 
      - Number of rate points if rates is None. Defaults to 20. ``n_rates`` is kept as a deprecated alias for backward compatibility.
    * - max_rate
      - float
-     - Maximum rate for auto-generation. Defaults to 50 MMscf/d (gas) or 10000 STB/d (oil)
+     - Maximum rate for auto-generation. Defaults to 50,000 Mscf/d (gas) or 10,000 STB/d (oil)
    * - metric
      - bool
      - If True, interpret inputs and return output in Eclipse METRIC units. Defaults to False
@@ -631,7 +634,7 @@ Returns VLP outflow curve as a dictionary with keys ``'rate'`` (also aliased as 
      - Description
    * - 'rate' (alias 'rates')
      - list
-     - Rate values (MMscf/d for gas, STB/d for oil; sm3/d if metric)
+     - Rate values (Mscf/d for gas, STB/d for oil; sm3/d if metric). Gas was MMscf/d before 3.7.8
    * - 'bhp'
      - list
      - Flowing BHP at each rate (psia, or barsa if metric=True)
@@ -641,9 +644,9 @@ Examples:
 .. code-block:: python
 
     >>> c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
-    >>> result = nodal.outflow_curve(thp=500, completion=c, vlpmethod='HB', well_type='gas', rates=[2.0, 5.0, 10.0, 15.0, 20.0], gsg=0.65)
+    >>> result = nodal.outflow_curve(thp=500, completion=c, vlpmethod='HB', well_type='gas', rates=[2000, 5000, 10000, 15000, 20000], gsg=0.65)
     >>> result['rates']
-    [2.0, 5.0, 10.0, 15.0, 20.0]
+    [2000, 5000, 10000, 15000, 20000]
     >>> [round(b, 1) for b in result['bhp']]
     [681.6, 935.2, 1512.3, 2138.0, 2777.1]
 
@@ -661,9 +664,9 @@ For gas wells, uses pseudopressure deliverability via ``gas.gas_rate_radial()``.
 
 For oil wells with OilPVT: uses Darcy above Pb, Vogel below Pb. Without OilPVT: simple Darcy. Returns rates in STB/d.
 
-.. warning::
+.. note::
 
-   **Gas rate unit mismatch between IPR and VLP:** Gas IPR rates from ``ipr_curve()`` are returned in **Mscf/d**, while VLP rates from ``outflow_curve()`` and the operating rate from ``operating_point()`` are in **MMscf/d**. When plotting IPR and VLP curves on the same axis, divide IPR rates by 1000. ``operating_point()`` applies the factor when it intersects the two curves and returns its operating ``rate`` in MMscf/d, but the ``ipr`` dictionary it returns is the unmodified ``ipr_curve()`` output and stays in Mscf/d.
+   Gas rates are Mscf/d everywhere from 3.7.8: ``ipr_curve()``, ``outflow_curve()``, ``operating_point()`` (its ``rate``, ``vlp`` and ``ipr``) and ``fbhp``/``fthp`` (``qg_mscfd``) share one unit, so IPR and VLP curves plot on the same axis directly. Before 3.7.8 the VLP side used MMscf/d; ``qg_mmscfd`` remains as a deprecated alias.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -785,7 +788,7 @@ Finds the operating point where VLP outflow curve intersects the IPR inflow curv
      - Description
    * - 'rate'
      - float
-     - Operating rate (MMscf/d for gas, STB/d for oil; sm3/d if metric)
+     - Operating rate (Mscf/d for gas, STB/d for oil; sm3/d if metric). Gas was MMscf/d before 3.7.8
    * - 'bhp'
      - float
      - Operating flowing BHP (psia, or barsa if metric=True)
@@ -808,10 +811,10 @@ Gas well operating point:
     >>> c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
     >>> r = nodal.Reservoir(pr=3000, degf=200, k=10, h=50, re=1500, rw=0.35, S=2, D=0.001)
     >>> result = nodal.operating_point(thp=500, completion=c, reservoir=r, vlpmethod='HB', well_type='gas', gsg=0.65)
-    >>> round(result['rate'], 2)
-    10.58
+    >>> round(result['rate'], 1)
+    10578.1
     >>> round(result['bhp'], 1)
-    1583.2
+    1583.4
 
 Oil well operating point:
 
@@ -857,20 +860,20 @@ Examples:
 
     >>> from pyrestoolbox import nodal
     >>> c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
-    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
+    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
     961.6837134610927
 
 Comparing all four VLP methods for the same gas well:
 
 .. code-block:: python
 
-    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
+    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
     961.6837134610927
-    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='WG', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
+    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='WG', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
     1172.8626065704736
-    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='GRAY', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
+    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='GRAY', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
     1066.6990456110436
-    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='BB', well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
+    >>> nodal.fbhp(thp=500, completion=c, vlpmethod='BB', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
     1224.493443200605
 
 
@@ -940,7 +943,7 @@ All nodal classes and functions accept a ``metric=False`` parameter. When set to
      - inches
      - mm
    * - Gas rate
-     - MMscf/d
+     - Mscf/d
      - sm3/d
    * - Liquid rate
      - STB/d

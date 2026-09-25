@@ -166,7 +166,7 @@ def test_reservoir_basic():
 _GAS_COMP = Completion(tid=2.441, length=10000, tht=100, bht=200)
 _GAS_PARAMS = dict(
     thp=500, completion=_GAS_COMP, well_type='gas',
-    qg_mmscfd=5.0, cgr=10, qw_bwpd=10, oil_vis=1.0, api=45, gsg=0.65
+    qg_mscfd=5000, cgr=10, qw_bwpd=10, oil_vis=1.0, api=45, gsg=0.65
 )
 
 
@@ -196,8 +196,8 @@ def test_vlp_gas_bb_bhp_gt_thp():
 
 def test_vlp_gas_bhp_increases_with_rate():
     """Gas BHP should increase with increasing rate (friction effect)."""
-    bhp_low = fbhp(vlpmethod='HB', **{**_GAS_PARAMS, 'qg_mmscfd': 2.0})
-    bhp_high = fbhp(vlpmethod='HB', **{**_GAS_PARAMS, 'qg_mmscfd': 10.0})
+    bhp_low = fbhp(vlpmethod='HB', **{**_GAS_PARAMS, 'qg_mscfd': 2000})
+    bhp_high = fbhp(vlpmethod='HB', **{**_GAS_PARAMS, 'qg_mscfd': 10000})
     assert bhp_high > bhp_low, f"BHP should increase with rate: {bhp_low} vs {bhp_high}"
 
 
@@ -205,7 +205,7 @@ def test_vlp_gas_zero_rate_static_column():
     """Zero gas rate should return static column pressure."""
     c = Completion(tid=2.441, length=10000, tht=100, bht=200)
     bhp = fbhp(vlpmethod='HB', thp=500, completion=c, well_type='gas',
-               qg_mmscfd=0.0, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, gsg=0.65)
+               qg_mscfd=0, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, gsg=0.65)
     # Static column should give BHP > THP
     assert bhp > 500, f"Static BHP {bhp} should exceed THP 500"
     # Gas column ~ 0.01-0.03 psi/ft * 10000 ft + 500 ~ 600-800 psia
@@ -290,10 +290,10 @@ def test_vlp_casing_section_increases_bhp():
     comp_with_casing = Completion(tid=2.441, length=8000, tht=100, bht=250,
                                   cid=4.892, mpd=10000)
     bhp_tubing = fbhp(thp=500, completion=comp_tubing_only, vlpmethod='HB',
-                      well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10,
+                      well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10,
                       qw_bwpd=10, api=45, oil_vis=1.0)
     bhp_casing = fbhp(thp=500, completion=comp_with_casing, vlpmethod='HB',
-                      well_type='gas', qg_mmscfd=5.0, gsg=0.65, cgr=10,
+                      well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10,
                       qw_bwpd=10, api=45, oil_vis=1.0)
     assert bhp_casing > bhp_tubing, f"Casing BHP {bhp_casing} should exceed tubing-only {bhp_tubing}"
 
@@ -317,7 +317,7 @@ def test_outflow_curve_gas_returns_dict():
 def test_outflow_curve_gas_bhp_increasing():
     """Gas outflow curve BHP should generally increase with rate at moderate rates."""
     c = Completion(tid=2.441, length=10000, tht=100, bht=200)
-    rates = [2.0, 5.0, 10.0, 15.0, 20.0]
+    rates = [2000.0, 5000.0, 10000.0, 15000.0, 20000.0]
     result = outflow_curve(thp=500, completion=c, vlpmethod='HB',
                            well_type='gas', rates=rates,
                            gsg=0.65, cgr=0, qw_bwpd=0, api=45, oil_vis=1.0)
@@ -433,10 +433,10 @@ def test_vlp_gas_injection():
     """Injection should give lower BHP than production at same rate."""
     c = Completion(tid=2.441, length=5000, tht=100, bht=150)
     bhp_prod = fbhp(thp=1000, completion=c, vlpmethod='HB', well_type='gas',
-                    qg_mmscfd=2.0, gsg=0.65, cgr=0, qw_bwpd=0,
+                    qg_mscfd=2000, gsg=0.65, cgr=0, qw_bwpd=0,
                     api=45, oil_vis=1.0, injection=False)
     bhp_inj = fbhp(thp=1000, completion=c, vlpmethod='HB', well_type='gas',
-                   qg_mmscfd=2.0, gsg=0.65, cgr=0, qw_bwpd=0,
+                   qg_mscfd=2000, gsg=0.65, cgr=0, qw_bwpd=0,
                    api=45, oil_vis=1.0, injection=True)
     # Injection friction opposes gravity, so BHP should be lower
     assert bhp_inj < bhp_prod, f"Injection BHP {bhp_inj} should be less than production {bhp_prod}"
@@ -451,10 +451,10 @@ def test_fthp_roundtrip_gas():
     c = Completion(tid=2.441, length=8000, tht=100, bht=180)
     thp_in = 1200.0
     bhp = fbhp(thp=thp_in, completion=c, vlpmethod='HB', well_type='gas',
-               qg_mmscfd=3.0, gsg=0.65, cgr=0, qw_bwpd=0,
+               qg_mscfd=3000, gsg=0.65, cgr=0, qw_bwpd=0,
                api=45, oil_vis=1.0)
     thp_out = fthp(bhp=bhp, completion=c, vlpmethod='HB', well_type='gas',
-                   qg_mmscfd=3.0, gsg=0.65, cgr=0, qw_bwpd=0,
+                   qg_mscfd=3000, gsg=0.65, cgr=0, qw_bwpd=0,
                    api=45, oil_vis=1.0)
     assert abs(thp_out - thp_in) < 1.0, f"THP roundtrip failed: {thp_in} -> {bhp} -> {thp_out}"
 
@@ -477,13 +477,13 @@ def test_fthp_validates_inputs():
     c = Completion(tid=2.441, length=6000, tht=100, bht=170)
     with pytest.raises(ValueError):
         fthp(bhp=1500, completion=c, vlpmethod='HB', well_type='banana',
-             qg_mmscfd=3.0)
+             qg_mscfd=3000)
     with pytest.raises(ValueError):
         fthp(bhp=1500, completion=c, vlpmethod='NOSUCH', well_type='gas',
-             qg_mmscfd=3.0)
+             qg_mscfd=3000)
     with pytest.raises(ValueError):
         fthp(bhp=-1.0, completion=c, vlpmethod='HB', well_type='gas',
-             qg_mmscfd=3.0)
+             qg_mscfd=3000)
 
 
 # ============================================================================
@@ -499,10 +499,10 @@ def test_fbhp_return_profile_shape_and_bounds():
     c = Completion(segments=segments, tht=100, bht=200)
     thp_in = 600.0
     bhp_scalar = fbhp(thp=thp_in, completion=c, vlpmethod='HB', well_type='gas',
-                      qg_mmscfd=2.0, gsg=0.65, cgr=0, qw_bwpd=0,
+                      qg_mscfd=2000, gsg=0.65, cgr=0, qw_bwpd=0,
                       api=45, oil_vis=1.0)
     profile = fbhp(thp=thp_in, completion=c, vlpmethod='HB', well_type='gas',
-                   qg_mmscfd=2.0, gsg=0.65, cgr=0, qw_bwpd=0,
+                   qg_mscfd=2000, gsg=0.65, cgr=0, qw_bwpd=0,
                    api=45, oil_vis=1.0, return_profile=True)
     assert len(profile['md']) == 3  # THP + 2 segment boundaries
     assert len(profile['tvd']) == 3
@@ -546,7 +546,7 @@ def test_vlp_method_validation():
     c = Completion(tid=2.441, length=10000, tht=100, bht=200)
     try:
         fbhp(thp=500, completion=c, vlpmethod='INVALID', well_type='gas',
-             qg_mmscfd=5.0, gsg=0.65)
+             qg_mscfd=5000, gsg=0.65)
         assert False, "Should have raised ValueError"
     except ValueError:
         pass
@@ -614,10 +614,10 @@ def test_single_segment_matches_legacy_gas():
     seg_comp = Completion(segments=[WellSegment(md=10000, id=2.441)], tht=100, bht=200)
     for method in ['HB', 'WG', 'GRAY', 'BB']:
         bhp_legacy = fbhp(thp=500, completion=legacy, vlpmethod=method,
-                          well_type='gas', qg_mmscfd=5, cgr=10, qw_bwpd=10,
+                          well_type='gas', qg_mscfd=5000, cgr=10, qw_bwpd=10,
                           gsg=0.65, wsg=1.07)
         bhp_seg = fbhp(thp=500, completion=seg_comp, vlpmethod=method,
-                       well_type='gas', qg_mmscfd=5, cgr=10, qw_bwpd=10,
+                       well_type='gas', qg_mscfd=5000, cgr=10, qw_bwpd=10,
                        gsg=0.65, wsg=1.07)
         assert abs(bhp_legacy - bhp_seg) < 0.01, \
             f"Method {method}: legacy={bhp_legacy:.4f} vs seg={bhp_seg:.4f}"
@@ -646,10 +646,10 @@ def test_deviated_less_than_vertical_gas():
                      tht=100, bht=200)
     for method in ['HB', 'GRAY', 'BB']:
         bhp_vert = fbhp(thp=500, completion=vert, vlpmethod=method,
-                         well_type='gas', qg_mmscfd=5, cgr=10, qw_bwpd=10,
+                         well_type='gas', qg_mscfd=5000, cgr=10, qw_bwpd=10,
                          gsg=0.65, wsg=1.07)
         bhp_dev = fbhp(thp=500, completion=dev, vlpmethod=method,
-                        well_type='gas', qg_mmscfd=5, cgr=10, qw_bwpd=10,
+                        well_type='gas', qg_mscfd=5000, cgr=10, qw_bwpd=10,
                         gsg=0.65, wsg=1.07)
         assert bhp_dev < bhp_vert, \
             f"Method {method}: deviated BHP {bhp_dev:.2f} should be < vertical {bhp_vert:.2f}"
@@ -662,10 +662,10 @@ def test_horizontal_near_thp_gas():
     vert = Completion(segments=[WellSegment(md=5000, id=2.441, deviation=0)],
                       tht=150, bht=150)
     bhp_horiz = fbhp(thp=500, completion=horiz, vlpmethod='HB',
-                     well_type='gas', qg_mmscfd=5, cgr=10, qw_bwpd=10,
+                     well_type='gas', qg_mscfd=5000, cgr=10, qw_bwpd=10,
                      gsg=0.65, wsg=1.07)
     bhp_vert = fbhp(thp=500, completion=vert, vlpmethod='HB',
-                    well_type='gas', qg_mmscfd=5, cgr=10, qw_bwpd=10,
+                    well_type='gas', qg_mscfd=5000, cgr=10, qw_bwpd=10,
                     gsg=0.65, wsg=1.07)
     # Horizontal should have significantly lower BHP than vertical (no hydrostatic head)
     assert bhp_horiz < bhp_vert, \
@@ -683,7 +683,7 @@ def test_multi_segment_gas_all_methods():
     comp = Completion(segments=segs, tht=100, bht=250)
     for method in ['HB', 'WG', 'GRAY', 'BB']:
         bhp = fbhp(thp=500, completion=comp, vlpmethod=method,
-                   well_type='gas', qg_mmscfd=5, cgr=10, qw_bwpd=10,
+                   well_type='gas', qg_mscfd=5000, cgr=10, qw_bwpd=10,
                    gsg=0.65, wsg=1.07)
         assert bhp > 500, f"Method {method}: BHP {bhp:.2f} should exceed THP"
 
@@ -941,7 +941,7 @@ def test_fthp_roundtrip_metric():
     """fthp(metric=True) converts rates and ratios, not just pressures (sweep 2026-09-25)."""
     from pyrestoolbox import nodal
     c = nodal.Completion(tid=62.0, length=2400, tht=30, bht=90, metric=True)
-    gas_kw = dict(completion=c, vlpmethod='WG', well_type='gas', qg_mmscfd=141584,
+    gas_kw = dict(completion=c, vlpmethod='WG', well_type='gas', qg_mscfd=141584,
                   cgr=2.8e-4, qw_bwpd=10, gsg=0.7, metric=True)
     bhp = nodal.fbhp(thp=70, **gas_kw)
     assert abs(nodal.fthp(bhp=bhp, **gas_kw) - 70) < 1e-3
@@ -955,7 +955,7 @@ def test_fbhp_gas_pvt_impurities_reach_the_vlp():
     """fbhp used only gas_pvt.sg, so sour and inert-rich gas gave the sweet answer (sweep 2026-09-25)."""
     from pyrestoolbox import nodal, gas
     c = nodal.Completion(tid=2.441, length=12000, tht=100, bht=280)
-    kw = dict(thp=2500, completion=c, vlpmethod='BB', well_type='gas', qg_mmscfd=5, cgr=10, qw_bwpd=10)
+    kw = dict(thp=2500, completion=c, vlpmethod='BB', well_type='gas', qg_mscfd=5000, cgr=10, qw_bwpd=10)
     sweet = nodal.fbhp(gas_pvt=gas.GasPVT(sg=0.8), **kw)
     assert abs(sweet - nodal.fbhp(gsg=0.8, **kw)) < 1e-9
     assert nodal.fbhp(gas_pvt=gas.GasPVT(sg=0.8, n2=0.3), **kw) < sweet - 50
@@ -978,3 +978,28 @@ def test_ipr_curve_oil_rate_is_total_liquid_at_water_cut():
     dry = nodal.ipr_curve(r, well_type='oil', n_points=4, wc=0, bo=1.2, uo=1.0)['rate']
     wet = nodal.ipr_curve(r, well_type='oil', n_points=4, wc=0.5, bo=1.2, uo=1.0)['rate']
     assert all(abs(w - 2 * d) < 1e-9 for d, w in zip(dry, wet))
+
+
+def test_qg_mmscfd_deprecated_alias():
+    """Gas rates are Mscf/d from 3.7.8; qg_mmscfd converts with a DeprecationWarning."""
+    import warnings
+    from pyrestoolbox import nodal
+    c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
+    kw = dict(thp=500, completion=c, vlpmethod='HB', well_type='gas', gsg=0.65, cgr=10, qw_bwpd=10)
+    new = nodal.fbhp(qg_mscfd=5000, **kw)
+    with pytest.warns(DeprecationWarning, match="qg_mscfd"):
+        old = nodal.fbhp(qg_mmscfd=5.0, **kw)
+    assert old == new
+    with pytest.raises(ValueError, match="not both"):
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            nodal.fbhp(qg_mscfd=5000, qg_mmscfd=5.0, **kw)
+
+
+def test_gas_pvt_user_tc_pc_reaches_vlp():
+    """A GasPVT tc/pc override is honoured by the VLP march."""
+    from pyrestoolbox import nodal, gas
+    c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
+    kw = dict(thp=500, completion=c, vlpmethod='BB', well_type='gas', qg_mscfd=5000)
+    assert abs(nodal.fbhp(gas_pvt=gas.GasPVT(sg=0.8, tc=430, pc=650), **kw)
+               - nodal.fbhp(gsg=0.8, **kw)) > 1.0

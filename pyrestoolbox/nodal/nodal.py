@@ -323,11 +323,29 @@ def _validate_oil_correlation_range(well_type, f, degf_max):
 def _validate_rates(qg_mmscfd=0.0, qt_stbpd=0.0, qw_bwpd=0.0):
     """Raise ValueError for negative flow rates at public entry points."""
     if qg_mmscfd < 0:
-        raise ValueError(f"Gas rate qg_mmscfd must be non-negative, got {qg_mmscfd}")
+        raise ValueError(f"Gas rate qg_mscfd must be non-negative, got {qg_mmscfd * 1000.0} Mscf/d")
     if qt_stbpd < 0:
         raise ValueError(f"Liquid rate qt_stbpd must be non-negative, got {qt_stbpd}")
     if qw_bwpd < 0:
         raise ValueError(f"Water rate qw_bwpd must be non-negative, got {qw_bwpd}")
+
+
+def _gas_rate_mscfd(qg_mscfd, qg_mmscfd, metric):
+    """Public gas rate in Mscf/d (sm3/d if metric), honouring the deprecated alias.
+
+    Gas rates are Mscf/d throughout the library since 3.7.8 (Eclipse FIELD
+    units, and what ipr_curve, gas_rate_* and the VFP tables already used).
+    qg_mmscfd was MMscf/d in oilfield and already sm3/d under metric.
+    """
+    if qg_mmscfd is None:
+        return qg_mscfd
+    if qg_mscfd:
+        raise ValueError("Pass qg_mscfd or the deprecated qg_mmscfd, not both")
+    warnings.warn(
+        "qg_mmscfd is deprecated and will be removed; pass qg_mscfd in Mscf/d "
+        "(sm3/d if metric=True), e.g. qg_mscfd=5000 for 5 MMscf/d.",
+        DeprecationWarning, stacklevel=3)
+    return qg_mmscfd if metric else qg_mmscfd * 1000.0
 
 
 @dataclass
@@ -335,7 +353,8 @@ class _FlowInputs:
     """Flow conditions in oilfield units, with any PVT object already resolved."""
     thp: float = 0.0
     pr: float = 0.0
-    qg_mmscfd: float = 0.0
+    qg_mscfd: float = 0.0        # public gas rate (Mscf/d, or sm3/d before conversion)
+    qg_mmscfd: float = 0.0       # internal march unit, set by _prepare_flow_inputs
     qt_stbpd: float = 0.0
     cgr: float = 0.0
     qw_bwpd: float = 0.0
@@ -383,13 +402,15 @@ def _prepare_flow_inputs(well_type, metric, gas_pvt=None, oil_pvt=None,
     copy means a new conversion or PVT attribute reaches all three.
     """
     f = _FlowInputs(**kwargs)
+    # Public gas rates are Mscf/d (sm3/d if metric, converted below); the marches work in MMscf/d
+    f.qg_mmscfd = f.qg_mscfd / 1000.0
 
     if metric:
         f.thp = f.thp * BAR_TO_PSI
         if f.pr > 0:
             f.pr = f.pr * BAR_TO_PSI
         if well_type == 'gas':
-            f.qg_mmscfd = f.qg_mmscfd * SM3_TO_MMSCF          # sm3/d -> MMscf/d
+            f.qg_mmscfd = f.qg_mscfd * SM3_TO_MMSCF           # sm3/d -> MMscf/d
             if f.cgr > 0:
                 f.cgr = f.cgr * SM3_PER_SM3_TO_STB_PER_MMSCF  # sm3/sm3 -> STB/MMscf
             if f.qw_bwpd > 0:
@@ -1356,13 +1377,13 @@ def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
     if total_mass < 1e-6 or qg_mmscfd < 0.001:
         if qg_mmscfd >= 0.001:
             warnings.warn(
-                f"Gas rate {qg_mmscfd:.4f} MMscf/d with near-zero total mass; "
+                f"Gas rate {qg_mmscfd * 1000.0:.2f} Mscf/d with near-zero total mass; "
                 "using static gas column pressure.",
                 RuntimeWarning, stacklevel=3
             )
         elif qw_bwpd > 0 or cgr > 0:
             warnings.warn(
-                f"Gas rate {qg_mmscfd:.4f} MMscf/d below the 0.001 MMscf/d "
+                f"Gas rate {qg_mmscfd * 1000.0:.2f} Mscf/d below the 1 Mscf/d "
                 "threshold: returning a static dry-gas column that ignores "
                 "the specified liquid rates (liquid loading not modelled).",
                 RuntimeWarning, stacklevel=3
@@ -1824,12 +1845,12 @@ _OIL_METHOD_DIC = {
 
 def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type: str = 'gas',
          gas_pvt=None, oil_pvt=None,
-         qg_mmscfd: float = 0, cgr: float = 0, qw_bwpd: float = 0,
+         qg_mmscfd: Optional[float] = None, cgr: float = 0, qw_bwpd: float = 0,
          oil_vis: float = 1.0, api: float = 45, pr: float = 0,
          qt_stbpd: float = 0, gor: float = 0, wc: float = 0,
          wsg: float = 1.07, injection: bool = False,
          gsg: float = 0.65, pb: float = 0, rsb: float = 0, sgsp: float = 0.65,
-         metric: bool = False, return_profile: bool = False):
+         metric: bool = False, return_profile: bool = False, qg_mscfd: float = 0):
     """ Returns flowing bottom hole pressure (psia | barsa) using specified VLP correlation.
 
         thp: Tubing head pressure (psia | barsa)
@@ -1838,7 +1859,8 @@ def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
         well_type: 'gas' or 'oil'
 
         Gas well parameters:
-            qg_mmscfd: Gas rate (MMscf/d | sm3/d)
+            qg_mscfd: Gas rate (Mscf/d | sm3/d)
+            qg_mmscfd: Deprecated alias (MMscf/d | sm3/d); converted to qg_mscfd with a DeprecationWarning
             cgr: Condensate-gas ratio (STB/MMscf | sm3/sm3)
             qw_bwpd: Water rate (STB/d | sm3/d)
             oil_vis: Oil (condensate) viscosity (cP). Defaults to 1.0
@@ -1870,7 +1892,8 @@ def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
     f = _prepare_flow_inputs(
         well_type, metric, gas_pvt=gas_pvt, oil_pvt=oil_pvt,
         degf_max=max(completion.tht, completion.bht),
-        thp=thp, pr=pr, qg_mmscfd=qg_mmscfd, qt_stbpd=qt_stbpd, cgr=cgr,
+        thp=thp, pr=pr, qg_mscfd=_gas_rate_mscfd(qg_mscfd, qg_mmscfd, metric),
+        qt_stbpd=qt_stbpd, cgr=cgr,
         qw_bwpd=qw_bwpd, gor=gor, pb=pb, rsb=rsb, api=api, sgsp=sgsp, gsg=gsg)
 
     validate_pe_inputs(p=f.thp)
@@ -1880,7 +1903,7 @@ def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
 
     if well_type == 'gas' and f.qg_mmscfd < 0.001 and (f.qw_bwpd > 0 or f.cgr > 0):
         warnings.warn(
-            f"Gas rate {f.qg_mmscfd:.6f} MMscf/d is below the 0.001 MMscf/d "
+            f"Gas rate {f.qg_mmscfd * 1000.0:.3f} Mscf/d is below the 1 Mscf/d "
             "threshold: VLP falls back to a static gas column, which ignores "
             "liquid loading from the specified water and/or condensate.",
             RuntimeWarning, stacklevel=2
@@ -1958,19 +1981,21 @@ def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
 
 def fthp(bhp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type: str = 'gas',
          gas_pvt=None, oil_pvt=None,
-         qg_mmscfd: float = 0, cgr: float = 0, qw_bwpd: float = 0,
+         qg_mmscfd: Optional[float] = None, cgr: float = 0, qw_bwpd: float = 0,
          oil_vis: float = 1.0, api: float = 45, pr: float = 0,
          qt_stbpd: float = 0, gor: float = 0, wc: float = 0,
          wsg: float = 1.07, injection: bool = False,
          gsg: float = 0.65, pb: float = 0, rsb: float = 0, sgsp: float = 0.65,
          metric: bool = False, thp_min: Optional[float] = None,
-         thp_max: Optional[float] = None, tol: float = 1e-3) -> float:
+         thp_max: Optional[float] = None, tol: float = 1e-3,
+         qg_mscfd: float = 0) -> float:
     """ Solves for tubing head pressure (psia | barsa) that produces the specified BHP
         under the given VLP correlation. Inverse of fbhp.
 
         bhp: Target flowing bottom hole pressure (psia | barsa)
         completion, vlpmethod, well_type, gas/oil flow parameters: same as fbhp()
-            (same units as fbhp: MMscf/d | sm3/d, STB/d | sm3/d, scf/STB | sm3/sm3 ...)
+            (same units as fbhp: qg_mscfd Mscf/d | sm3/d, STB/d | sm3/d, scf/STB | sm3/sm3 ...;
+            qg_mmscfd is the deprecated MMscf/d alias)
         thp_min: Lower bracket for THP search (psia | barsa). Defaults to
             atmospheric (14.7 psia / 1.01325 barsa) when not supplied
         thp_max: Upper bracket for THP search (psia | barsa). Defaults to
@@ -1983,7 +2008,8 @@ def fthp(bhp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
     f = _prepare_flow_inputs(
         well_type, metric, gas_pvt=gas_pvt, oil_pvt=oil_pvt,
         degf_max=max(completion.tht, completion.bht),
-        thp=0.0, pr=pr, qg_mmscfd=qg_mmscfd, qt_stbpd=qt_stbpd, cgr=cgr,
+        thp=0.0, pr=pr, qg_mscfd=_gas_rate_mscfd(qg_mscfd, qg_mmscfd, metric),
+        qt_stbpd=qt_stbpd, cgr=cgr,
         qw_bwpd=qw_bwpd, gor=gor, pb=pb, rsb=rsb, api=api, sgsp=sgsp, gsg=gsg)
 
     if metric:
@@ -2005,7 +2031,7 @@ def fthp(bhp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
     def _err(_args, thp_trial):
         calculated_bhp = fbhp(thp=thp_trial, completion=completion, vlpmethod=vlpmethod,
                               well_type=well_type, gas_pvt=gas_pvt, oil_pvt=oil_pvt,
-                              qg_mmscfd=f.qg_mmscfd, cgr=f.cgr, qw_bwpd=f.qw_bwpd,
+                              qg_mscfd=f.qg_mmscfd * 1000.0, cgr=f.cgr, qw_bwpd=f.qw_bwpd,
                               oil_vis=oil_vis, api=f.api, pr=f.pr,
                               qt_stbpd=f.qt_stbpd, gor=f.gor, wc=wc,
                               wsg=wsg, injection=injection,
@@ -2046,7 +2072,8 @@ def outflow_curve(thp: float, completion: 'Completion', vlpmethod: str = 'WG',
         completion: Completion object
         vlpmethod: VLP method - 'HB' (Hagedorn-Brown), 'WG' (Woldesemayat-Ghajar), 'GRAY', or 'BB' (Beggs & Brill)
         well_type: 'gas' or 'oil'
-        rates: List of rates to evaluate (MMscf/d | sm3/d for gas, STB/d | sm3/d for oil). If None, auto-generated
+        rates: List of rates to evaluate (Mscf/d | sm3/d for gas, STB/d | sm3/d for oil). If None, auto-generated.
+            Gas rates were MMscf/d before 3.7.8
         n_points: Number of rate points if rates is None. Default 20.
         n_rates: Deprecated alias for n_points (kept for backward compatibility; takes precedence if both given).
         max_rate: Maximum rate for auto-generation
@@ -2055,7 +2082,7 @@ def outflow_curve(thp: float, completion: 'Completion', vlpmethod: str = 'WG',
 
         Returns:
             dict with keys:
-                'rate': list of flow rates (MMscf/d for gas, STB/d for oil; sm3/d if metric)
+                'rate': list of flow rates (Mscf/d for gas, STB/d for oil; sm3/d if metric)
                 'rates': alias for 'rate' (kept for backward compatibility)
                 'bhp': list of flowing BHP values (psia; barsa if metric) at each rate
     """
@@ -2072,23 +2099,23 @@ def outflow_curve(thp: float, completion: 'Completion', vlpmethod: str = 'WG',
         if max_rate is None:
             if metric:
                 # Default max rates in metric units
-                max_rate = 50.0 * MMSCF_TO_SM3 if well_type == 'gas' else 10000.0 * STB_TO_SM3
+                max_rate = 50000.0 * MSCF_TO_SM3 if well_type == 'gas' else 10000.0 * STB_TO_SM3
             else:
-                max_rate = 50.0 if well_type == 'gas' else 10000.0
+                max_rate = 50000.0 if well_type == 'gas' else 10000.0
         if metric:
-            min_rate = 0.01 * MMSCF_TO_SM3 if well_type == 'gas' else 1.0 * STB_TO_SM3
+            min_rate = 10.0 * MSCF_TO_SM3 if well_type == 'gas' else 1.0 * STB_TO_SM3
         else:
-            min_rate = 0.01 if well_type == 'gas' else 1.0
+            min_rate = 10.0 if well_type == 'gas' else 1.0
         n = n_rates if n_rates is not None else n_points
         rates = list(np.linspace(min_rate, max_rate, n))
 
     bhp_list = []
     for rate in rates:
         if well_type == 'gas':
-            # Convert rate to MMscf/d for internal fbhp call
-            rate_mmscfd = rate * SM3_TO_MMSCF if metric else rate
+            # Convert rate to Mscf/d for the internal oilfield fbhp call
+            rate_mscfd = rate * SM3_TO_MSCF if metric else rate
             bhp_val = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
-                           well_type='gas', qg_mmscfd=rate_mmscfd, cgr=f.cgr,
+                           well_type='gas', qg_mscfd=rate_mscfd, cgr=f.cgr,
                            qw_bwpd=f.qw_bwpd, oil_vis=oil_vis, api=f.api, pr=f.pr,
                            wsg=wsg, injection=injection, gsg=f.gsg, gas_pvt=gas_pvt)
         else:
@@ -2258,7 +2285,7 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
         metric: If True, inputs/outputs in Eclipse METRIC units. Default False.
 
         Returns:
-            rate: Operating rate (MMscf/d | sm3/d for gas, STB/d | sm3/d for oil)
+            rate: Operating rate (Mscf/d | sm3/d for gas, STB/d | sm3/d for oil; gas was MMscf/d before 3.7.8)
             bhp: Operating BHP (psia | barsa)
             vlp: VLP outflow curve dict
             ipr: IPR inflow curve dict
@@ -2293,19 +2320,15 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
             result['ipr'] = _convert_ipr_to_metric(ipr, well_type)
         return NodalResult(result)
 
-    # IPR gas rates are in Mscf/d; VLP uses MMscf/d. Scale factor:
-    gas_scale = 1000.0 if well_type == 'gas' else 1.0
-
     # Define error function: VLP BHP - IPR BHP at given rate
-    # rate is in IPR units (Mscf/d for gas, STB/d for oil)
+    # rate is Mscf/d for gas, STB/d for oil (IPR and VLP share units)
     def _err(args, rate):
         if rate <= 0:
             return -1.0  # At zero rate, VLP BHP < IPR BHP (Pr)
 
-        # VLP BHP (convert gas rate to MMscf/d)
         if well_type == 'gas':
             vlp_bhp = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
-                           well_type='gas', qg_mmscfd=rate / gas_scale, cgr=f.cgr,
+                           well_type='gas', qg_mscfd=rate, cgr=f.cgr,
                            qw_bwpd=f.qw_bwpd, oil_vis=oil_vis, api=f.api, pr=pr,
                            wsg=wsg, injection=injection, gsg=f.gsg, gas_pvt=gas_pvt)
         else:
@@ -2327,7 +2350,7 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
     # near-shut-in high BHP from holdup correlations), so a naive bisect between
     # min_rate and AOF may miss the true crossing. Scan the rate range first and
     # pick the sign-change closest to AOF — that's the physical operating point.
-    min_rate = 0.1 * gas_scale if well_type == 'gas' else 1.0
+    min_rate = 100.0 if well_type == 'gas' else 1.0
     max_rate_search = aof * 0.999
 
     converged = True
@@ -2355,7 +2378,7 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
     # Calculate operating BHP
     if well_type == 'gas' and op_rate > 0:
         op_bhp = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
-                      well_type='gas', qg_mmscfd=op_rate / gas_scale, cgr=f.cgr,
+                      well_type='gas', qg_mscfd=op_rate, cgr=f.cgr,
                       qw_bwpd=f.qw_bwpd, oil_vis=oil_vis, api=f.api, pr=pr,
                       wsg=wsg, injection=injection, gsg=f.gsg, gas_pvt=gas_pvt)
     elif well_type == 'oil' and op_rate > 0:
@@ -2366,9 +2389,9 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
     else:
         op_bhp = pr
 
-    # Generate VLP curve for output (in VLP units: MMscf/d for gas, STB/d for oil)
-    vlp_max = max_rate_search / gas_scale
-    vlp_min = 0.1 if well_type == 'gas' else 1.0
+    # VLP curve for output (Mscf/d for gas, STB/d for oil)
+    vlp_max = max_rate_search
+    vlp_min = 100.0 if well_type == 'gas' else 1.0
     vlp_rates = list(np.linspace(vlp_min, vlp_max, n_points))
     vlp = outflow_curve(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
                         well_type=well_type, rates=vlp_rates,
@@ -2376,14 +2399,13 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
                         pr=pr, gor=f.gor, wc=wc, wsg=wsg, injection=injection, gsg=f.gsg,
                         pb=f.pb, rsb=f.rsb, sgsp=f.sgsp, oil_pvt=oil_pvt, gas_pvt=gas_pvt)
 
-    # Convert operating rate to VLP units for return
-    op_rate_out = op_rate / gas_scale if well_type == 'gas' else op_rate
+    op_rate_out = op_rate
 
     # Convert outputs to metric
     if metric:
         op_bhp = op_bhp * PSI_TO_BAR
         if well_type == 'gas':
-            op_rate_out = op_rate_out * MMSCF_TO_SM3  # MMscf/d -> sm3/d
+            op_rate_out = op_rate_out * MSCF_TO_SM3  # Mscf/d -> sm3/d
         else:
             op_rate_out = op_rate_out * STB_TO_SM3  # STB/d -> sm3/d
         vlp = _convert_vlp_to_metric(vlp, well_type)
@@ -2397,7 +2419,7 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
 def _convert_vlp_to_metric(vlp, well_type):
     """Convert VLP outflow curve dict from oilfield to metric units."""
     if well_type == 'gas':
-        rates = [r * MMSCF_TO_SM3 for r in vlp['rate']]  # MMscf/d -> sm3/d
+        rates = [r * MSCF_TO_SM3 for r in vlp['rate']]  # Mscf/d -> sm3/d
     else:
         rates = [r * STB_TO_SM3 for r in vlp['rate']]  # STB/d -> sm3/d
     bhps = [b * PSI_TO_BAR for b in vlp['bhp']]  # psia -> barsa

@@ -443,7 +443,7 @@ class TestNodalErrors:
         from pyrestoolbox import nodal
         comp = nodal.Completion(tid=2.441, length=8000, tht=100, bht=180)
         with pytest.raises(ValueError, match="non-negative"):
-            nodal.fbhp(thp=300, completion=comp, qg_mmscfd=-1.0)
+            nodal.fbhp(thp=300, completion=comp, qg_mscfd=-1000)
 
     def test_fbhp_diverged_injection_raises(self):
         # Infeasible high-rate injection: the march pressure falls below
@@ -452,7 +452,7 @@ class TestNodalErrors:
         from pyrestoolbox import nodal
         comp = nodal.Completion(tid=2.441, length=8000, tht=100, bht=180)
         with pytest.raises(RuntimeError, match="diverged"):
-            nodal.fbhp(thp=20, completion=comp, qg_mmscfd=50.0, injection=True)
+            nodal.fbhp(thp=20, completion=comp, qg_mscfd=50000, injection=True)
 
 
 # ── simtools module ────────────────────────────────────────────────
