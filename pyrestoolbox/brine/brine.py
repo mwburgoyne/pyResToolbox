@@ -125,6 +125,7 @@ _SG_METHANE = 0.5537
 # self-consistent. Near the root-selection boundary the two classes can
 # alternate, hence the bound.
 _CO2_SAT_MAX_PASSES = 5
+_SP_HT_MAX_ITER = 300  # slow monotone convergence near 300 degC / 550-590 bar (~100 passes)
 
 # Spycher-Pruess K-value coefficients (low-temperature, non-saturated CO2)
 _SP_K_CO2_LT = [1.189, 1.304e-2, -5.446e-5]
@@ -770,6 +771,14 @@ class CO2_Brine_Mixture():
         self.aMix = amix
         self.aij = a
         self.kij = k
+        # Eq A-8's asymmetric terms take the constant K_ij of Table 1. As printed,
+        # A-8 uses k_ij, but with k_ij from Eq A-6 (K_ij y_i + K_ji y_j) the
+        # (k_ij - k_ji) terms vanish identically; only the constant-K reading (the
+        # Panagiotopoulos-Reid form, gas-phase y in the last sum) reproduces the
+        # paper's Fig 1/2 curves (rms 0.08 mol% in yH2O at 250-300 degC, checked
+        # 2026-09-25). A symmetric k_ij left the high-T solve with no two-phase
+        # root at 275-300 degC and 400-600 bar once V was re-solved each pass.
+        self.Kij = np.zeros((2,2)) if self.low_temp else K
         
     
     def bMix_RK(self):
@@ -856,7 +865,7 @@ class CO2_Brine_Mixture():
     #=======================================================================
     #  Pressure * Fugacity Coefficient of CO2 or H2O in CO2-Water Mixture
     #=======================================================================
-        x, y, kij, aMix, aij = self.x, self.y, self.kij, self.aMix, self.aij
+        x, y, kij, aMix, aij = self.x, self.y, self.Kij, self.aMix, self.aij
         bMix, b = self.bMix, self.b
         vMol = self.MolarVol           # Always vapor molar volume
         yCO2 = max(min(1,y[0]), 0)
@@ -872,7 +881,7 @@ class CO2_Brine_Mixture():
             for i in range(2):
                 for j in range(2):
                     t3 -= y[i]**2 * y[j] * (kij[i][j] - kij[j][i]) * (aij[i][i] * aij[j][j])**0.5
-            t3 += sum([x[k] * x[i] * (kij[k][i] - kij[i][k]) * (aij[i][i] * aij[k][k])**0.5 for i in range(2)])
+            t3 += sum([y[k] * y[i] * (kij[k][i] - kij[i][k]) * (aij[i][i] * aij[k][k])**0.5 for i in range(2)])  # P&R: phase (gas) composition
             t3 /= aMix
             t3 -= b[k] / bMix
             t4 = (aMix / (bMix * RGASCON * self.tKel ** 1.5)) * np.log(vMol / (vMol + bMix))
@@ -1016,6 +1025,35 @@ class CO2_Brine_Mixture():
                 f"(yH2O = 1, xCO2 = 0) at {self.pBar:.2f} bar, {self.degC:.1f} degC; "
                 f"results are not a phase equilibrium.", RuntimeWarning, stacklevel=3)
 
+    def _fugP_blended(self):
+        """P*phi at the current state; in the 99-109 degC range, blended
+        linearly with the low-T model's values (S&P 2010 p.179)."""
+        self.fugP()
+        if self.scaled:
+            phiP_ht = list(self.fugPi)  # copy: fugP() mutates self.fugPi in place
+            phiP_lt = self._low_t_fugP()
+            self.fugPi[0] = self.blended_val(phiP_lt[0], phiP_ht[0])
+            self.fugPi[1] = self.blended_val(phiP_lt[1], phiP_ht[1])
+
+    def _low_t_fugP(self):
+        """Low-T model P*phi for the 99-109 degC blend: yH2O = 0 in the mixing
+        rules, low-T a and b, and the low-T molar volume (S&P 2010 p.179, p.192).
+        Restores the high-T state (y, mixing rules, molar volume) afterwards."""
+        y_ht, v_ht, sat, rep_ = self.y.copy(), self.MolarVol, self.CO2_sat, self.repeat
+        self.low_temp = True
+        self.y = np.array([1.0, 0.0])
+        self.aMix_RK()
+        self.bMix_RK()
+        self.MolarVolume()
+        self.fugP()
+        phiP_lt = list(self.fugPi)
+        self.low_temp = False
+        self.y = y_ht
+        self.aMix_RK()
+        self.bMix_RK()
+        self.MolarVol, self.CO2_sat, self.repeat = v_ht, sat, rep_
+        return phiP_lt
+
     def co2BrineSolubility(self):
         """ Calculates CO2-brine mutual solubilities at self.pBar, self.degC
             and self.ppm (Spycher & Pruess 2010). Takes no arguments and
@@ -1107,18 +1145,7 @@ class CO2_Brine_Mixture():
         self.solve_root_class()
 
         #--Calculate Fugacity Coefficients*Pressure---------------------------------------
-        self.fugP()
-        
-        if self.scaled: # Recalculate mixing rules and fugacity pressure products with low temp relationships
-            phiP_ht = list(self.fugPi)  # copy: fugP() mutates self.fugPi in place
-            self.low_temp = True  # Set flag for low temp coefficiencts
-            self.aMix_RK()
-            self.bMix_RK()
-            
-            self.fugP()
-            self.fugPi[0] = self.blended_val(self.fugPi[0], phiP_ht[0])
-            self.fugPi[1] = self.blended_val(self.fugPi[1], phiP_ht[1])
-            self.low_temp = False # Reset low temp flag
+        self._fugP_blended()
 
         self.calc_gammas()
         self.A_B()     
@@ -1138,26 +1165,16 @@ class CO2_Brine_Mixture():
         if not self.low_temp:  # Iterate to solution
             err = 1
             iternum = 0
-            while err > EPS and iternum < 100:
+            while err > EPS and iternum < _SP_HT_MAX_ITER:
                 yH2O_last = max(self.y[1], EPS)
                 
                 # Trigger mixing rules for changed compositions
                 self.aMix_RK()
                 self.bMix_RK()
+                self.MolarVolume()  # V at the current composition (phi, rhoGas, GASZ)
         
                 #--Fugacity Coefficients*Pressure---------------------------------------
-                self.fugP()
-                
-                if self.scaled:
-                    phiP_ht = list(self.fugPi)  # copy: fugP() mutates self.fugPi in place
-                    self.low_temp = True  # Set flag for low temp coefficient calculations
-                    self.aMix_RK()
-                    self.bMix_RK()
-            
-                    self.fugP()
-                    self.fugPi[0] = self.blended_val(self.fugPi[0], phiP_ht[0])
-                    self.fugPi[1] = self.blended_val(self.fugPi[1], phiP_ht[1])
-                    self.low_temp = False # Reset low temp flag
+                self._fugP_blended()
                 
                 self.calc_gammas()
                 self.A_B()
@@ -1184,7 +1201,10 @@ class CO2_Brine_Mixture():
         #=======================================================================
         
         #--Solve the Cubic------------------------------------------------------
-        #self.MolarVolume()                                   #--Molar Volume [cm3/gmol]
+        if not self.low_temp:
+            self.aMix_RK()
+            self.bMix_RK()
+            self.MolarVolume()                               #--Molar Volume at converged y [cm3/gmol]
         self.MwGas = self.mixMolar(self.y[0], MWCO2, MWWAT)   #--Mole weight  [gm/gmol]
         self.rhoGas = self.MwGas / self.MolarVol              #--Density of Gas Mixture [gm/cm3]
         self.GASZ = self.MolarVol * self.pRT

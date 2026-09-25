@@ -519,9 +519,9 @@ def test_doc_co2_brine_field():
     mix = brine.CO2_Brine_Mixture(pres=5000, temp=275, ppm=30000, metric=False)
     assert isinstance(mix.bw, list)
     assert len(mix.bw) == 3
-    assert abs(float(mix.bw[0]) - 1.1090908985270322) / 1.1090908985270322 < RTOL
+    assert abs(float(mix.bw[0]) - 1.1090966489093108) / 1.1090966489093108 < RTOL
     assert isinstance(mix.x, np.ndarray)
-    assert abs(mix.x[0] - 0.02431225) / 0.02431225 < RTOL
+    assert abs(mix.x[0] - 0.02431474274865895) / 0.02431474274865895 < RTOL
 
 def test_doc_co2_brine_metric():
     """brine.rst: CO2_Brine_Mixture metric units"""

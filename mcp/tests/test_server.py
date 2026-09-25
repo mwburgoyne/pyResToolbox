@@ -167,8 +167,8 @@ def test_recommend_methods_h2_mandatory_bns():
 def test_co2_brine_props_matches_doc_example():
     out = srv.co2_brine_props(pres=5000, temp=275, ppm=30000)
     # brine.rst worked example values
-    assert abs(out['bw'][0] - 1.1090908985270322) < 1e-6
-    assert abs(out['x'][0] - 0.02431225) < 1e-6
+    assert abs(out['bw'][0] - 1.1090966489093108) < 1e-6
+    assert abs(out['x'][0] - 0.02431474274865895) < 1e-6
     assert type(out['bw'][0]) is float  # json-clean
 
 

@@ -21,6 +21,9 @@ const EPS: f64 = 1e-8;
 // Maximum passes over the K-value/mixing-rule/cubic block. Must match
 // _CO2_SAT_MAX_PASSES in pyrestoolbox/brine/brine.py.
 const CO2_SAT_MAX_PASSES: usize = 5;
+/// High-T back-substitution cap: convergence is slow and monotone near 300 degC /
+/// 550-590 bar (~100 passes) once V is re-solved each pass (mirrors Python _SP_HT_MAX_ITER)
+const SP_HT_MAX_ITER: usize = 300;
 
 // ---- Helper: polynomial evaluator  sum(x[i] * t^i) --------------------
 #[inline]
@@ -57,6 +60,7 @@ struct SpState {
     a_mix: f64,
     aij: [[f64; 2]; 2],
     kij: [[f64; 2]; 2],
+    k_a8: [[f64; 2]; 2], // constant K_ij for Eq A-8's asymmetric terms (zero at low T)
     b_mix: f64,
     b: [f64; 2],
 
@@ -94,6 +98,7 @@ impl SpState {
             a_mix: 0.0,
             aij: [[0.0; 2]; 2],
             kij: [[0.0; 2]; 2],
+            k_a8: [[0.0; 2]; 2],
             b_mix: 0.0,
             b: [0.0; 2],
             molar_vol: 0.0,
@@ -238,6 +243,9 @@ impl SpState {
         self.a_mix = amix;
         self.aij = aij;
         self.kij = kij;
+        // Eq A-8's asymmetric terms take the constant K_ij: with the Eq A-6 k_ij
+        // they vanish identically (mirrors Python aMix_RK / Kij)
+        self.k_a8 = if self.low_temp { [[0.0; 2]; 2] } else { k_big };
     }
 
     // ---- bMix for RK-EOS ---------------------------------------------
@@ -335,7 +343,7 @@ impl SpState {
     fn fug_p(&mut self) {
         let y = self.y;
         let x = self.x;
-        let kij = self.kij;
+        let kij = self.k_a8;
         let a_mix = self.a_mix;
         let aij = self.aij;
         let b_mix = self.b_mix;
@@ -368,9 +376,10 @@ impl SpState {
                         * (aij[i][i] * aij[j][j]).sqrt();
                 }
             }
-            // Add: sum_i x[k] * x[i] * (kij[k][i] - kij[i][k]) * sqrt(aij[i][i]*aij[k][k])
+            // Add: sum_i y[k] * y[i] * (K[k][i] - K[i][k]) * sqrt(aij[i][i]*aij[k][k]),
+            // gas-phase composition (Panagiotopoulos-Reid form)
             for i in 0..2 {
-                t3 += x_arr[k] * x_arr[i]
+                t3 += y_arr[k] * y_arr[i]
                     * (kij[k][i] - kij[i][k])
                     * (aij[i][i] * aij[k][k]).sqrt();
             }
@@ -382,6 +391,39 @@ impl SpState {
 
             let log_phi = t1 + t2 + t3 * t4; // Eq A-8
             self.fug_pi[k] = self.p_bar * log_phi.exp();
+        }
+    }
+
+    // ---- Low-T model P*phi for the 99-109 degC blend --------------------
+    // yH2O = 0 in the mixing rules, low-T a and b, and the low-T molar volume
+    // (S&P 2010 p.179, p.192); restores y, the high-T mixing rules, V and the
+    // root class afterwards. Mirrors Python _low_t_fugP.
+    fn low_t_fug_p(&mut self) -> [f64; 2] {
+        let (y_ht, v_ht, sat) = (self.y, self.molar_vol, self.co2_sat);
+        self.low_temp = true;
+        self.y = [1.0, 0.0];
+        self.a_mix_rk();
+        self.b_mix_rk();
+        let _ = self.molar_volume();
+        self.fug_p();
+        let phi_p_lt = self.fug_pi;
+        self.low_temp = false;
+        self.y = y_ht;
+        self.a_mix_rk();
+        self.b_mix_rk();
+        self.molar_vol = v_ht;
+        self.co2_sat = sat;
+        phi_p_lt
+    }
+
+    // ---- P*phi, blended with the low-T model in 99-109 degC (S&P p.179) --
+    fn fug_p_blended(&mut self) {
+        self.fug_p();
+        if self.scaled {
+            let phi_p_ht = self.fug_pi;
+            let phi_p_lt = self.low_t_fug_p();
+            self.fug_pi[0] = self.blended_val(phi_p_lt[0], phi_p_ht[0]);
+            self.fug_pi[1] = self.blended_val(phi_p_lt[1], phi_p_ht[1]);
         }
     }
 
@@ -663,23 +705,8 @@ pub fn co2_brine_solubility(
         }
     }
 
-    // Fugacity coefficients * pressure
-    s.fug_p();
-
-    // If scaled (99-109 degC): recalculate with low temp coefficients and blend
-    if s.scaled {
-        let phi_p_ht = s.fug_pi;
-        s.low_temp = true;
-        s.a_mix_rk();
-        s.b_mix_rk();
-        // Note: do NOT re-solve cubic -- MolarVolume is not called again
-        // The Python code calls self.fugP() which uses self.MolarVol from the
-        // high-temp solve above
-        s.fug_p();
-        s.fug_pi[0] = s.blended_val(s.fug_pi[0], phi_p_ht[0]);
-        s.fug_pi[1] = s.blended_val(s.fug_pi[1], phi_p_ht[1]);
-        s.low_temp = false;
-    }
+    // Fugacity coefficients * pressure (blended with the low-T model in 99-109 degC)
+    s.fug_p_blended();
 
     s.calc_gammas();
     s.a_b();
@@ -700,32 +727,22 @@ pub fn co2_brine_solubility(
 
     // Iterative refinement for high-temp path. The low-temp path is direct
     // (non-iterative) so it is always treated as converged; the high-temp
-    // loop clears the flag if it exits on the 100-iteration cap, mirroring
+    // loop clears the flag if it exits on the SP_HT_MAX_ITER cap, mirroring
     // the Python `.converged` semantics (brine.py: err > EPS => not converged).
     let mut converged = true;
     if !s.low_temp {
         let mut err = 1.0;
         let mut iter_num = 0;
-        while err > EPS && iter_num < 100 {
+        while err > EPS && iter_num < SP_HT_MAX_ITER {
             let yh2o_last = s.y[1].max(EPS);
 
-            // Mixing rules for updated compositions
+            // Mixing rules and molar volume for the updated compositions
             s.a_mix_rk();
             s.b_mix_rk();
+            let _ = s.molar_volume();
 
             // Fugacity
-            s.fug_p();
-
-            if s.scaled {
-                let phi_p_ht = s.fug_pi;
-                s.low_temp = true;
-                s.a_mix_rk();
-                s.b_mix_rk();
-                s.fug_p();
-                s.fug_pi[0] = s.blended_val(s.fug_pi[0], phi_p_ht[0]);
-                s.fug_pi[1] = s.blended_val(s.fug_pi[1], phi_p_ht[1]);
-                s.low_temp = false;
-            }
+            s.fug_p_blended();
 
             s.calc_gammas();
             s.a_b();
@@ -753,7 +770,12 @@ pub fn co2_brine_solubility(
         }
     }
 
-    // Re-compute gas phase density
+    // Re-compute gas phase density at the converged composition
+    if !s.low_temp {
+        s.a_mix_rk();
+        s.b_mix_rk();
+        let _ = s.molar_volume();
+    }
     let mw_gas = SpState::mix_molar(s.y[0], MWCO2, MWWAT);
     let rho_gas = mw_gas / s.molar_vol;
     let gas_z = s.molar_vol * s.p_rt;

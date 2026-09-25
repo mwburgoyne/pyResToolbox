@@ -586,3 +586,16 @@ def test_brine_input_guards():
         brine.CO2_Brine_Mixture(pres=200, temp=60, ppm=-5, metric=True)
     with pytest.raises(ValueError, match="ch4_sat"):
         brine.brine_props(p=3000, degf=200, wt=3, ch4_sat=2)
+
+
+def test_co2_brine_high_t_matches_spycher_pruess_2010_fig2():
+    """High-T solve reproduces S&P 2010 Fig 1/2 (pure water); it collapsed at 275-300 degC, 400-600 bar
+    once V was re-solved with the symmetric k_ij in Eq A-8 (sweep 2026-09-25). Digitised values +-0.2/0.5 mol%."""
+    import warnings
+    fig = {(250, 400): (5.5, 28), (275, 400): (6.6, 37), (300, 300): (4.9, 49), (300, 500): (13.8, 51)}
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        for (T, P), (x_pct, y_pct) in fig.items():
+            m = brine.CO2_Brine_Mixture(pres=P, temp=T, ppm=0, metric=True)
+            assert m.converged
+            assert abs(100 * m.x[0] - x_pct) < 0.4 and abs(100 * m.y[1] - y_pct) < 1.0, (T, P, m.x[0], m.y[1])
