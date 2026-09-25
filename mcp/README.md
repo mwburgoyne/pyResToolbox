@@ -66,8 +66,7 @@ pyrestoolbox-mcp --transport streamable-http --host 0.0.0.0 --port 8000
 
 It is stateless (no session affinity needed behind a load balancer) and
 serves the MCP endpoint at `/mcp`. A `Dockerfile` is included; put an API
-gateway in front for authentication. See `DEPLOYMENT.md` for the platform
-team one-pager.
+gateway in front for authentication.
 
 ## Tests
 

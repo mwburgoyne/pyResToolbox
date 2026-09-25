@@ -9,7 +9,7 @@ description = "pyResToolbox - A collection of Reservoir Engineering Utilities"
 license = {text = "GPL-3.0-or-later"}
 authors = [{name = "Mark W. Burgoyne", email = "mark.w.burgoyne@gmail.com"}]
 keywords = ["restoolbox", "petroleum", "reservoir"]
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Rust",
@@ -24,7 +24,6 @@ dependencies = [
     "ilt-inversion",
     "mpmath",
     "gmpy2",
-    "python-flint",
     "openpyxl",
 ]
 readme = "README.rst"

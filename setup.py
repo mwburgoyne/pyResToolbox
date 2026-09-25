@@ -35,7 +35,6 @@ setup(
         'ilt-inversion',
         'mpmath',
         'gmpy2',
-        'python-flint',
         'openpyxl'
     ]
 )
