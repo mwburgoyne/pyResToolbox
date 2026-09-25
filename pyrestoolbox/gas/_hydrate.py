@@ -37,14 +37,22 @@ _TOWLER = (13.47, 34.27, -1.675, -20.35)
 _HFP_P_LO = 14.696   # ~1 atm (psia)
 _HFP_P_HI = 15000.0   # Upper search bound (psia)
 
-# Østergaard et al. (2005) coefficients: delta_T(degC) = C1*w + C2*w^2 + C3*w^3, w in wt% (0-100)
+# Østergaard, Masoudi, Tohidi, Danesh & Todd (2005) JPSE 48, 70-80, Eq. 1 (p. 76):
+#   dT = (C1 W + C2 W^2 + C3 W^3)(C4 ln P + C5)(C6 (P0 - 1000) + 1)
+# dT in K (= degC delta), W inhibitor mass% in the aqueous phase, P system
+# pressure in kPa, P0 distilled-water dissociation pressure at 273.15 K in kPa.
+# The P0 factor is omitted (P0 = 1000 kPa), which the paper says has "limited
+# effect on the results". Coefficients C1-C5 from Table 3 (p. 76). Before
+# 3.7.8 this held an unsourced pressure-free cubic that under-predicted
+# suppression by 26-43% at 25-50 wt% (overdosing).
 _OSTERGAARD = {
-    inhibitor.MEOH: (0.4411, -0.0033, 6.476e-5),
-    inhibitor.MEG:  (0.2533, -0.0009, 2.222e-5),
-    inhibitor.DEG:  (0.1833, -0.0004, 6.667e-6),
-    inhibitor.TEG:  (0.1333, -0.0002, 3.333e-6),
-    inhibitor.ETOH: (0.3750, -0.0020, 3.500e-5),
+    inhibitor.MEOH: (0.478, 7.17e-3, -1.44e-5, 2.947e-2, 0.596),
+    inhibitor.ETOH: (1.118, -4.48e-3, 6.979e-4, 5.85e-3, 0.225),
+    inhibitor.MEG:  (38.93, -0.522, 1.767e-2, 3.503e-4, 5.083e-3),
+    inhibitor.DEG:  (0.343, -3.47e-3, 2.044e-4, 1.8e-2, 0.3346),
+    inhibitor.TEG:  (0.1964, -5.81e-3, 1.393e-4, 2.855e-2, 0.854),
 }
+_KPA_PER_PSI = 6.894757293168361
 
 
 # Inhibitor physical density at 20 degC (g/cm3) — for volumetric injection rate
@@ -62,13 +70,15 @@ _GCM3_TO_LB_PER_GAL = 8.34540445
 # Water mass at standard conditions: lb per stb
 _WATER_LB_PER_STB = 350.2
 
-# Maximum valid wt% for each inhibitor (aqueous phase concentration)
+# Upper limit (mass% in the aqueous phase) of the Østergaard et al. (2005)
+# data range, Table 3 p. 76. A validity limit of the correlation, not a
+# physical maximum: methanol is routinely dosed higher.
 _MAX_WT_PCT = {
-    inhibitor.MEOH: 25.0,
-    inhibitor.MEG:  70.0,
-    inhibitor.DEG:  70.0,
-    inhibitor.TEG:  50.0,
-    inhibitor.ETOH: 30.0,
+    inhibitor.MEOH: 43.3,
+    inhibitor.ETOH: 31.2,
+    inhibitor.MEG:  59.6,
+    inhibitor.DEG:  51.0,
+    inhibitor.TEG:  59.5,
 }
 
 
@@ -96,15 +106,16 @@ class HydrateResult:
         Temperature depression from inhibitor (degF | degC delta), or 0.
     required_inhibitor_wt_pct : float
         Wt% inhibitor in aqueous phase (water + inhibitor) needed to bring HFT
-        below operating temperature, or 0. Capped at the physical maximum for
-        the selected inhibitor type.
+        below operating temperature, or 0. Capped at the upper limit of the
+        Østergaard et al. (2005) data range for the selected inhibitor.
     max_inhibitor_wt_pct : float
-        Maximum valid wt% for the selected inhibitor type (MEOH: 25%, MEG: 70%,
-        DEG: 70%, TEG: 50%, ETOH: 30%). 0 if no inhibitor specified.
+        Upper limit of the Østergaard et al. (2005) data range for the
+        inhibitor (MEOH 43.3%, ETOH 31.2%, MEG 59.6%, DEG 51%, TEG 59.5%; Table 3).
+        A validity limit, not a physical maximum. 0 if no inhibitor specified.
     inhibitor_underdosed : bool
         True if required_inhibitor_wt_pct exceeds max_inhibitor_wt_pct,
-        meaning this inhibitor type cannot provide sufficient depression
-        even at its physical maximum concentration. Does NOT indicate
+        meaning the required concentration lies beyond the correlation's
+        data range for this inhibitor. Does NOT indicate
         whether the applied inhibitor_wt_pct is sufficient — compare
         inhibited_hft to operating temperature to check applied-dose
         protection.
@@ -226,26 +237,33 @@ def _hydrate_formation_press(degf_target, sg, hft_fn):
     return (p_lo + p_hi) / 2.0
 
 
-def _ostergaard_depression(wt_pct, inh):
-    """Østergaard et al. (2005) temperature depression in degC.
+def _ostergaard_pressure_factor(p_psia, inh):
+    """(C4 ln P + C5) of Østergaard et al. (2005) Eq. 1, P in kPa."""
+    c4, c5 = _OSTERGAARD[inh][3:]
+    return c4 * math.log(p_psia * _KPA_PER_PSI) + c5
 
-    delta_T(degC) = C1*w + C2*w^2 + C3*w^3, where w = wt% (0-100 scale).
 
-    Reference: Østergaard, K.K. et al. (2005). J. Pet. Sci. Eng. 48, pp 70-80.
+def _ostergaard_depression(wt_pct, inh, p_psia):
+    """Østergaard et al. (2005) Eq. 1 hydrate temperature depression (degC delta).
+
+    wt_pct: inhibitor mass% in the aqueous phase; p_psia: system pressure.
     """
-    c1, c2, c3 = _OSTERGAARD[inh]
-    return c1 * wt_pct + c2 * wt_pct**2 + c3 * wt_pct**3
+    c1, c2, c3 = _OSTERGAARD[inh][:3]
+    cubic = c1 * wt_pct + c2 * wt_pct**2 + c3 * wt_pct**3
+    return cubic * _ostergaard_pressure_factor(p_psia, inh)
 
 
-def _required_concentration(depression_degc, inh):
-    """Newton-Raphson inversion of Østergaard cubic to find required wt%.
+def _required_concentration(depression_degc, inh, p_psia):
+    """Newton-Raphson inversion of Østergaard Eq. 1 for the required mass%.
 
-    Returns wt% (0-100 scale). Returns 0 if depression <= 0.
+    Returns wt% (0-100 scale). Returns 0 if depression <= 0. Each Table 3 cubic
+    is monotonic over its data range.
     """
     if depression_degc <= 0:
         return 0.0
 
-    c1, c2, c3 = _OSTERGAARD[inh]
+    c1, c2, c3 = _OSTERGAARD[inh][:3]
+    depression_degc = depression_degc / _ostergaard_pressure_factor(p_psia, inh)
 
     # Initial guess from linear term
     w = depression_degc / c1 if c1 > 0 else 20.0
@@ -432,7 +450,7 @@ def gas_hydrate(
 
         if inhibitor_wt_pct > 0:
             # Østergaard depression (in degC), convert to degF delta
-            depression_degc = _ostergaard_depression(inhibitor_wt_pct, inh)
+            depression_degc = _ostergaard_depression(inhibitor_wt_pct, inh, p_psia)
             depression_degf = depression_degc * 9.0 / 5.0
             inhibited_hft_degf = hft_degf - depression_degf
         else:
@@ -442,7 +460,7 @@ def gas_hydrate(
         # Required concentration to bring HFT below operating T (with capping)
         if degf_of < hft_degf:
             needed_depression_degc = (hft_degf - degf_of) * 5.0 / 9.0
-            raw_wt_pct = _required_concentration(needed_depression_degc, inh)
+            raw_wt_pct = _required_concentration(needed_depression_degc, inh, p_psia)
             if raw_wt_pct > max_wt_pct:
                 required_wt_pct = max_wt_pct
                 underdosed = True

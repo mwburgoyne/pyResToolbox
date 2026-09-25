@@ -1383,7 +1383,7 @@ pyrestoolbox.gas.gas_hydrate
 
 Returns a ``HydrateResult`` dataclass with gas hydrate formation temperature (HFT), hydrate formation pressure (HFP), subcooling, hydrate window assessment, thermodynamic inhibitor calculations, a full water balance between reservoir and operating conditions, and inhibitor injection rates.
 
-Two HFT correlations are available: Motiee (1991) and Towler & Mokhatab (2005). Hydrate formation pressure is computed by bisection inversion of the HFT correlation. Inhibitor temperature depression uses the Østergaard et al. (2005) cubic polynomial, and required inhibitor concentration is computed by Newton-Raphson inversion of the same polynomial. The required concentration is capped at the physical maximum for each inhibitor type.
+Two HFT correlations are available: Motiee (1991) and Towler & Mokhatab (2005). Hydrate formation pressure is computed by bisection inversion of the HFT correlation. Inhibitor temperature depression uses the Østergaard et al. (2005) general correlation (JPSE 48, Eq. 1 with Table 3 coefficients): a cubic in inhibitor mass% times a pressure factor ``C4 ln P + C5`` (P in kPa at the assessment point), with the paper's optional P0 factor omitted. Required concentration is the Newton-Raphson inverse of the same equation, capped at the upper limit of the paper's data range for each inhibitor (MeOH 43.3, EtOH 31.2, MEG 59.6, DEG 51, TEG 59.5 mass%). The cap is a validity limit of the correlation, not a physical maximum. Before 3.7.8 the depression used unsourced coefficients without the pressure factor, under-predicting suppression by 26-43% at 25-50 wt%, and methanol was capped at 25 wt%.
 
 **Water balance.** The gas leaves the reservoir saturated with vaporized water at reservoir P,T (``p_res``, ``degf_res``). At the operating point (lower P,T), the gas can hold less water vapor - the excess condenses as liquid. The function computes vaporized water at both conditions and reports the condensed amount. Any free liquid water entrained from the reservoir (``additional_water``) is added to the condensed water to give the total liquid water at the operating point. When gas composition is provided (``co2``/``h2s``/``n2``/``h2``), the SoreideWhitson VLE model is used; otherwise the Danesh correlation. If ``p_res``/``degf_res`` are not provided, the operating ``p``/``degf`` are used for both (no condensation).
 
@@ -1466,13 +1466,13 @@ Two HFT correlations are available: Motiee (1991) and Towler & Mokhatab (2005). 
      - Temperature depression from inhibitor (deg F | deg C delta), or 0
    * - required_inhibitor_wt_pct
      - float
-     - Wt% inhibitor in aqueous phase needed to bring HFT below operating temperature, capped at physical maximum for selected inhibitor. 0 if no inhibitor or outside hydrate window
+     - Wt% inhibitor in aqueous phase needed to bring HFT below operating temperature, capped at the upper limit of the Østergaard et al. (2005) data range for the selected inhibitor. 0 if no inhibitor or outside hydrate window
    * - max_inhibitor_wt_pct
      - float
-     - Maximum valid wt% for selected inhibitor type (MEOH: 25, MEG: 70, DEG: 70, TEG: 50, ETOH: 30). 0 if no inhibitor specified
+     - Upper limit of the Østergaard et al. (2005) data range for the selected inhibitor (MEOH 43.3, ETOH 31.2, MEG 59.6, DEG 51, TEG 59.5 mass%). A validity limit, not a physical maximum. 0 if no inhibitor specified
    * - inhibitor_underdosed
      - bool
-     - True if ``required_inhibitor_wt_pct`` exceeds ``max_inhibitor_wt_pct`` for the selected inhibitor type - meaning this inhibitor **cannot** provide sufficient depression even at its physical maximum concentration. This does NOT indicate whether the *applied* ``inhibitor_wt_pct`` is sufficient; compare ``inhibited_hft`` to the operating temperature to determine if the applied dose provides protection
+     - True if ``required_inhibitor_wt_pct`` exceeds ``max_inhibitor_wt_pct`` for the selected inhibitor type - meaning the required concentration lies beyond the correlation's data range for this inhibitor. This does NOT indicate whether the *applied* ``inhibitor_wt_pct`` is sufficient; compare ``inhibited_hft`` to the operating temperature to determine if the applied dose provides protection
    * - water_vaporized_res
      - float
      - Vaporized water content at reservoir P,T (stb/MMscf | sm3/sm3). This is the water the gas picked up in the reservoir
@@ -1524,11 +1524,11 @@ With MEG inhibitor (25 wt%):
 
     >>> r = gas.gas_hydrate(p=2000, degf=50, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEG', inhibitor_wt_pct=25)
     >>> r.inhibited_hft
-    60.10064544530876
+    57.11794760529469
     >>> r.inhibitor_depression
-    11.0109375
+    13.99363534001407
     >>> r.required_inhibitor_wt_pct
-    45.41491129114502
+    33.6568143160645
 
 Using metric units (barsa, deg C):
 
@@ -1540,24 +1540,33 @@ Using metric units (barsa, deg C):
     >>> r.hfp
     87.78593833339396
 
-MEOH inhibitor with capping and injection rate (reservoir P,T specified, MEOH max = 25 wt%):
+MEOH inhibitor and injection rate (reservoir P,T specified). 31 degF of subcooling needs about 29 wt% methanol, inside the correlation's 43.3 wt% range:
 
 .. code-block:: python
 
     >>> r = gas.gas_hydrate(p=2000, degf=40, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH',
     ...                      p_res=4000, degf_res=250)
     >>> r.inhibitor_underdosed
-    True
+    False
     >>> r.required_inhibitor_wt_pct
-    25.0
+    29.197810323745266
     >>> r.max_inhibitor_wt_pct
-    25.0
+    43.3
     >>> r.water_condensed
     1.6332263666472937
     >>> r.inhibitor_mass_rate
-    190.6519578666274
+    235.86642146637018
     >>> r.inhibitor_vol_rate
-    28.881343840274702
+    35.73075931122035
+
+At 0 degF the required dose exceeds the data range, so it is capped and flagged:
+
+.. code-block:: python
+
+    >>> r = gas.gas_hydrate(p=2000, degf=0, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH',
+    ...                      p_res=4000, degf_res=250)
+    >>> r.inhibitor_underdosed, r.required_inhibitor_wt_pct
+    (True, 43.3)
 
 With CO2 composition and reservoir P,T (SoreideWhitson water content):
 
@@ -1570,7 +1579,7 @@ With CO2 composition and reservoir P,T (SoreideWhitson water content):
     >>> r.water_condensed
     0.8805095446084514
     >>> r.required_inhibitor_wt_pct
-    23.07967423824071
+    19.445109531719257
     >>> r.inhibitor_underdosed
     False
 
@@ -1583,7 +1592,7 @@ With reservoir P,T (gas equilibrated at reservoir, hydrate assessment at wellhea
     >>> r.water_vaporized_res
     1.651022101177945
     >>> r.inhibitor_mass_rate
-    272.313861641059
+    207.95747131785018
     >>> r.inhibitor_underdosed
     False
 

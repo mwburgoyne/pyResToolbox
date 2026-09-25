@@ -440,8 +440,8 @@ _HYDRATE_BASELINES = {
     'motiee_hft_1000_065': 60.151725150000026,     # Motiee HFT at 1000 psia, sg=0.65
     'motiee_hfp_60_065': 987.9770436401366,        # Motiee HFP at 60 degF, sg=0.65
     'towler_hft_1000_065': 62.918902535978695,      # Towler HFT at 1000 psia, sg=0.65
-    'meoh_depression_25wt': 17.958375,              # Østergaard MEOH 25wt% depression (degF)
-    'meoh_inhibited_hft': 53.15320794530875,        # Inhibited HFT at 2000 psia, sg=0.7, MEOH 25wt%
+    'meoh_depression_25wt': 25.580214612531744,     # Østergaard (2005) Eq. 1 MEOH 25wt% at 2000 psia (degF); 17.958375 before 3.7.8
+    'meoh_inhibited_hft': 45.53136833277701,        # Inhibited HFT at 2000 psia, sg=0.7, MEOH 25wt%; 53.15320794530875 before 3.7.8
 }
 
 def test_hydrate_frozen_baselines():
@@ -509,8 +509,8 @@ def test_hydrate_required_concentration_round_trip():
     # Compute what 20wt% gives as depression, then check required_concentration for that depression
     from pyrestoolbox.gas._hydrate import _ostergaard_depression, _required_concentration
     from pyrestoolbox.classes import inhibitor as inh_enum
-    dep_c = _ostergaard_depression(20, inh_enum.MEG)
-    conc = _required_concentration(dep_c, inh_enum.MEG)
+    dep_c = _ostergaard_depression(20, inh_enum.MEG, 1000.0)
+    conc = _required_concentration(dep_c, inh_enum.MEG, 1000.0)
     assert abs(conc - 20.0) < 1e-4, f"Round-trip concentration: {conc} != 20.0"
 
 def test_hydrate_no_inhibitor():
@@ -592,9 +592,9 @@ _HYDRATE_NEW_BASELINES = {
     'sw_wc_op_2000_80_070_co2': 0.06548036894255704,  # re-pinned 2026-08-19: published framework is now the default  # SoreideWhitson vaporized at operating
     'wc_res_3000_200': 0.821279572319976,                 # Vaporized at reservoir P=3000,T=200
     'condensed_3000_200_to_1000_60': 0.7699716237595706,  # Condensed between res→op
-    'meg_mass_rate_res_to_op': 0.9013640928083764,        # MEG injection lb/MMscf
-    'meg_vol_rate_res_to_op': 0.0973038189000881,         # MEG injection gal/MMscf
-    'meoh_mass_rate_res_3000_200': 49.459378804064784,    # MEOH injection lb/MMscf
+    'meg_mass_rate_res_to_op': 0.7182496384936616,        # MEG injection lb/MMscf; 0.9013640928083764 before 3.7.8 (Ostergaard Eq. 1)
+    'meg_vol_rate_res_to_op': 0.07753629560646232,        # MEG injection gal/MMscf; 0.0973038189000881 before 3.7.8
+    'meoh_mass_rate_res_3000_200': 39.23972825786403,     # MEOH injection lb/MMscf; 49.459378804064784 before 3.7.8
 }
 
 def test_hydrate_water_balance_no_reservoir():
@@ -649,12 +649,14 @@ def test_hydrate_water_balance_frozen_baselines():
     assert abs(r3.water_condensed - _HYDRATE_NEW_BASELINES['condensed_3000_200_to_1000_60']) < 1e-10
 
 def test_hydrate_meoh_capping():
-    """MEOH should cap at 25wt% for high-subcooling scenario"""
-    r = gas.gas_hydrate(p=2000, degf=40, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH', inhibitor_wt_pct=25)
-    assert r.required_inhibitor_wt_pct == 25.0, \
-        f"MEOH required should be capped at 25.0, got {r.required_inhibitor_wt_pct}"
-    assert r.max_inhibitor_wt_pct == 25.0, f"Max should be 25.0, got {r.max_inhibitor_wt_pct}"
-    assert r.inhibitor_underdosed is True, "Should be underdosed"
+    """MEOH caps at the Ostergaard (2005) data limit, 43.3 wt%, when subcooling needs more"""
+    r = gas.gas_hydrate(p=2000, degf=0, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH')
+    assert r.required_inhibitor_wt_pct == 43.3
+    assert r.max_inhibitor_wt_pct == 43.3
+    assert r.inhibitor_underdosed is True
+    # 31 degF subcooling needs ~29 wt%, inside the range (was falsely 'underdosed' at a 25 wt% cap)
+    r = gas.gas_hydrate(p=2000, degf=40, sg=0.7, hydmethod='MOTIEE', inhibitor_type='MEOH')
+    assert 28 < r.required_inhibitor_wt_pct < 31 and r.inhibitor_underdosed is False
 
 def test_hydrate_meg_no_capping():
     """MEG should NOT cap at moderate conditions"""
@@ -666,7 +668,7 @@ def test_hydrate_meg_no_capping():
 
 def test_hydrate_all_max_wt_pct():
     """All 5 inhibitors report correct max_inhibitor_wt_pct"""
-    expected = {'MEOH': 25.0, 'MEG': 70.0, 'DEG': 70.0, 'TEG': 50.0, 'ETOH': 30.0}
+    expected = {'MEOH': 43.3, 'MEG': 59.6, 'DEG': 51.0, 'TEG': 59.5, 'ETOH': 31.2}  # Ostergaard (2005) Table 3
     for inh_name, exp_max in expected.items():
         r = gas.gas_hydrate(p=1000, degf=60, sg=0.65, inhibitor_type=inh_name)
         assert r.max_inhibitor_wt_pct == exp_max, \
