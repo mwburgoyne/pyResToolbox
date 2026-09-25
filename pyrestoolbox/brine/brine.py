@@ -433,7 +433,8 @@ PSTND = 1.01325        # Standard Pressure (bar)
 TSTND = 288.706        # Standard Temperature (Kelvin)
 VMCO2S = 23690.5       # Molar Volume of CO2 at STP [cm3/gmol]
 RHOCO2S = 0.00185771   # Density CO2 at STP [gm/cm3]
-DENW = 998.98          # Freshwater density at standard conditions [kg/m3]
+KGM3_PER_GCC = 1000.0  # g/cm3 -> kg/m3. Every density it multiplies is absolute g/cm3 (IF97/Spivey);
+                       # it was 998.98 (60 degF water density) before 3.7.8, which left Rs 0.102% low
 KGMOL2SM3 = 23.545     # sm3 CO2 per kg-mol at 60 deg F and 1 atm (from PhazeComp run to get definitive value, where zCO2 = 0.99388)
 BBL2CUFT = 5.614583333 # cuft in a bbl
 
@@ -1370,14 +1371,14 @@ class CO2_Brine_Mixture():
         sg_SC_Brine, rhowSC = brine_denw(PSTND/10, tKel_local=tKel_sc)
         
         # Calculate mass of 1 sm3 of brine without CO2
-        brine_mass = sg_SC_Brine * DENW              # kg brine / sm3 (No CO2)
+        brine_mass = sg_SC_Brine * KGM3_PER_GCC              # kg brine / sm3 (No CO2)
         brine_moles = brine_mass / MwB               # kg Moles of brine per sm3
         
         # Calculate mass of 1 sm3 of fresh water at reservoir conditions
-        water_mass = rhowtp * DENW                   # kg water / sm3 (Freshwater)
+        water_mass = rhowtp * KGM3_PER_GCC                   # kg water / sm3 (Freshwater)
         
         # Calculate volume at standard conditions of that much freshwater mass
-        sc_volume_freshwater = water_mass / DENW / rhowSC # m3 freshwater
+        sc_volume_freshwater = water_mass / KGM3_PER_GCC / rhowSC # m3 freshwater
         bw_freshwater = 1/sc_volume_freshwater
         
         # Spycher xCO2 is on the IONISED aqueous basis (denominator counts
@@ -1390,11 +1391,11 @@ class CO2_Brine_Mixture():
         
         co2_mass = co2_moles * MWCO2                   # kg co2 / sm3 brine
         rs = KGMOL2SM3 * co2_moles                     # sm3 CO2 per sm3 Brine (23.545 m3/kgmol at 60 deg F and 1 atm)
-        brine_res_vol = brine_mass / (sg_brine * DENW) # reservoir volume of brine (res m3 No CO2)
+        brine_res_vol = brine_mass / (sg_brine * KGM3_PER_GCC) # reservoir volume of brine (res m3 No CO2)
         
         # Total mass of brine and CO2, divided by density will yield FVF
         tot_mass = co2_mass + brine_mass
-        bw = tot_mass / (sg_CO2_Brine * DENW)
+        bw = tot_mass / (sg_CO2_Brine * KGM3_PER_GCC)
         
         # Undersaturated compressibility = 1/V dV/dP
         c_usat = 1 - sg_CO2_Brine / sg_CO2_Brine_ # 1/Bar    
@@ -2068,7 +2069,7 @@ class SoreideWhitson:
         # Step 6: Bw and Rs
         # ================================================================
         # Mass of 1 sm3 of gas-free brine at standard conditions
-        brine_mass = rho_sc_brine_gcc * DENW  # kg/sm3
+        brine_mass = rho_sc_brine_gcc * KGM3_PER_GCC  # kg/sm3
         brine_moles = brine_mass / self.MwBrine  # kg-mol (paired NaCl) /sm3
 
         # The S&W flash x is on a salt-free basis (liquid = H2O + dissolved
@@ -2094,11 +2095,11 @@ class SoreideWhitson:
 
         self.Rs_total = sum(self.Rs.values())
 
-        # Bw = total mass / (corrected density * DENW)
+        # Bw = total mass / (corrected density * KGM3_PER_GCC)
         tot_mass = total_gas_mass + brine_mass
         self.bw = [
-            tot_mass / (rho_gas_brine_gcc * DENW),   # Gas-saturated
-            brine_mass / (rho_brine_gcc * DENW),       # Gas-free brine
+            tot_mass / (rho_gas_brine_gcc * KGM3_PER_GCC),   # Gas-saturated
+            brine_mass / (rho_brine_gcc * KGM3_PER_GCC),       # Gas-free brine
             rho_sc_fw_gcc / rho_fw_gcc,                   # Freshwater Bw (sc/res density ratio)
         ]
 

@@ -267,7 +267,7 @@ Usage example for 175 Bara x 85 degC and 0% NaCl brine:
 
     >>> mix = brine.CO2_Brine_Mixture(pres = 175, temp = 85, metric = True)
     >>> mix.Rs  # Returns sm3 dissolved CO2 / sm3 Brine
-    24.743651168969475
+    24.769912141615826
 
 pyrestoolbox.brine.make_pvtw_table
 ==================================
@@ -634,7 +634,7 @@ Pure CO2 case at 5000 psia x 275 deg F and 3% NaCl brine:
     >>> mix.bDen  # Returns [Gas Saturated, Gas-Free Brine, Freshwater]
     [0.9730093241255896, 0.968164592979362, 0.9476497407774847]
     >>> mix.Rs  # Returns per-gas Rs dict (scf/stb)
-    {'CO2': 151.30103411561777}
+    {'CO2': 151.45551874473742}
     >>> mix.bw  # Returns [Gas Saturated, Gas-Free, Freshwater]
     [1.1008729259876717, 1.0543023174291248, 1.0542033190822462]
 
@@ -644,7 +644,7 @@ Pure CH4 case (SG=0.554) at 5000 psia x 275 deg F and 3% NaCl brine:
 
     >>> mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=0, sg=0.554, metric=False)
     >>> mix.Rs
-    {'CH4': 22.119943364817185}
+    {'CH4': 22.142528744136207}
     >>> mix.bDen
     [0.964025696752258, 0.968164592979362, 0.9476497407774847]
 
@@ -656,7 +656,7 @@ Mixed gas (10% CO2, 5% H2S, SG=0.7) at 200 Bar x 80 degC and 10,000 ppm NaCl:
     >>> mix.gas_comp  # Estimated gas composition including HC split
     {'CO2': 0.1, 'H2S': 0.05, 'CH4': 0.8133, 'C2H6': 0.0351, 'C3H8': 0.0015, 'nC4H10': 0.0001}
     >>> mix.Rs_total  # Total dissolved gas (sm3/sm3)
-    8.611222366730054
+    8.620014781807498
     >>> mix.bDen
     [0.9853891217810185, 0.9871360082710434, 0.9804911502375318]
 
@@ -666,9 +666,9 @@ Pure CO2 fresh water at 175 Bar x 85 degC with saturated compressibility:
 
     >>> mix = brine.SoreideWhitson(pres=175, temp=85, ppm=0, y_CO2=1.0, metric=True, cw_sat=True)
     >>> mix.Rs_total  # sm3 dissolved CO2 / sm3 Brine
-    24.906989289860665
+    24.93242035862645
     >>> mix.Cf_sat
-    0.00015991643962614776
+    0.00016011819834824565
     >>> mix.water_content
     {'y_H2O': 0.013968581961446491, 'stb_mmscf': 1.9211146471984861, 'lb_mmscf': 672.5672073622544}
 

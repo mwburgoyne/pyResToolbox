@@ -526,7 +526,7 @@ def test_doc_co2_brine_field():
 def test_doc_co2_brine_metric():
     """brine.rst: CO2_Brine_Mixture metric units"""
     mix = brine.CO2_Brine_Mixture(pres=175, temp=85, metric=True)
-    assert abs(mix.Rs - 24.743651168969475) / 24.743651168969475 < RTOL
+    assert abs(mix.Rs - 24.769912141615826) / 24.769912141615826 < RTOL
 
 def test_doc_make_pvtw_table_keys():
     """brine.rst: make_pvtw_table result keys"""
@@ -543,7 +543,7 @@ def test_doc_sw_pure_co2_field():
     # Re-pinned 2026-09-06 for the CO2 shift refit with McBride-Wright (2015)
     # in calibration (was 0.9738595754362946 from 2026-08-19).
     assert abs(mix.bDen[0] - 0.9730093241255896) / 0.9730093241255896 < RTOL
-    assert abs(mix.Rs['CO2'] - 151.30103411561777) / 151.30103411561777 < RTOL
+    assert abs(mix.Rs['CO2'] - 151.45551874473742) / 151.45551874473742 < RTOL
     # Re-pinned 2026-08-19 (was 1.0964191153239935, and 1.096613263262556
     # before the 2026-07-25 V_phi route change): published framework is now the
     # default. bw is the reciprocal of the density shift above.
@@ -552,14 +552,14 @@ def test_doc_sw_pure_co2_field():
 def test_doc_sw_pure_ch4_field():
     """brine.rst: SoreideWhitson pure CH4 field units"""
     mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=0, sg=0.554, metric=False)
-    assert abs(mix.Rs['CH4'] - 22.119943364817185) / 22.119943364817185 < RTOL
+    assert abs(mix.Rs['CH4'] - 22.142528744136207) / 22.142528744136207 < RTOL
     # Re-pinned 2026-08-19 (was 0.9642344204009531).
     assert abs(mix.bDen[0] - 0.964025696752258) / 0.964025696752258 < RTOL
 
 def test_doc_sw_mixed_gas_metric():
     """brine.rst: SoreideWhitson mixed gas metric"""
     mix = brine.SoreideWhitson(pres=200, temp=80, ppm=10000, y_CO2=0.1, y_H2S=0.05, sg=0.7, metric=True)
-    assert abs(mix.Rs_total - 8.611222366730054) / 8.611222366730054 < RTOL
+    assert abs(mix.Rs_total - 8.620014781807498) / 8.620014781807498 < RTOL
     # Re-pinned 2026-09-06 for the CO2 shift refit (was 0.9854888113586086 from
     # 2026-08-19). This case carries H2S.
     assert abs(mix.bDen[0] - 0.9853891217810185) / 0.9853891217810185 < RTOL
@@ -568,11 +568,11 @@ def test_doc_sw_mixed_gas_metric():
 def test_doc_sw_co2_freshwater_cw_sat():
     """brine.rst: SoreideWhitson pure CO2 freshwater with Cf_sat"""
     mix = brine.SoreideWhitson(pres=175, temp=85, ppm=0, y_CO2=1.0, metric=True, cw_sat=True)
-    assert abs(mix.Rs_total - 24.906989289860665) / 24.906989289860665 < RTOL
+    assert abs(mix.Rs_total - 24.93242035862645) / 24.93242035862645 < RTOL
     # Re-pinned 2026-09-06 for the CO2 shift refit (was 0.00016187484271371722
     # from 2026-09-01). Cf_sat is a difference of two densities, so it amplifies
     # whatever moves the density.
-    assert abs(mix.Cf_sat - 0.00015991643962614776) / 0.00015991643962614776 < RTOL
+    assert abs(mix.Cf_sat - 0.00016011819834824565) / 0.00016011819834824565 < RTOL
     assert isinstance(mix.water_content, dict)
     assert abs(mix.water_content['stb_mmscf'] - 1.9211146471984861) / 1.9211146471984861 < RTOL
 
