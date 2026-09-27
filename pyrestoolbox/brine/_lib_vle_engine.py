@@ -67,6 +67,14 @@ R_GAS = 8.314462  # J/(mol·K)
 OMEGA_A = 0.45724
 OMEGA_B = 0.07780
 MW_NACL = 58.4428  # NaCl molar weight (matches brine.MWSAL)
+# flash_tp trivial-solution test: max|ln K| below this means both labelled
+# phases collapsed onto one composition (K -> 1). Gas-water K-values sit
+# orders of magnitude from 1, so a genuine split never comes near it.
+TRIVIAL_LNK_TOL = 1e-6
+# Tangent-plane stability (Michelsen 1982, Fluid Phase Equilib. 9:1-19): a
+# non-trivial stationary point with sum(Y) above 1 + this makes the feed
+# unstable. The margin keeps round-off at sum(Y) = 1 from reading as a split.
+STABILITY_TM_TOL = 1e-8
 MW_H2O = 18.015
 
 # H2 critical temperature for BIP correlations (manuscript value, NIST)
@@ -1130,6 +1138,11 @@ def rr_solver(
     return N_it, yi, xi, V, L
 
 
+def _is_trivial_k(K: np.ndarray) -> bool:
+    """True when every K is within TRIVIAL_LNK_TOL of 1 in log terms."""
+    return bool(np.max(np.abs(np.log(K))) < TRIVIAL_LNK_TOL)
+
+
 def solve_rachford_rice(z: np.ndarray, K: np.ndarray) -> Tuple[float, np.ndarray, np.ndarray]:
     """
     Convenience wrapper around rr_solver for flash calculations.
@@ -2059,6 +2072,16 @@ class SWMultiComponentFlash:
             tol: Convergence tolerance on K-values
 
         Returns: V (vapor fraction), x (liquid), y (vapor), converged (bool)
+
+        When successive substitution collapses onto the trivial solution
+        (all K -> 1; e.g. a feed so dilute in gas that the trial vapor stays
+        water-dominated and both phases take the liquid root), a tangent-plane
+        stability test decides. A stable feed returns single phase, converged:
+        V = 0 when water is the majority component (x = z), else V = 1 (y = z).
+        The other composition is the incipient-phase stationary point, or the
+        feed itself when no such phase exists on the cubic. An unstable feed
+        is re-flashed from K seeded by the stability test. converged is False
+        only if the result is still trivial or the test is inconclusive.
         """
         z = np.asarray(z, dtype=float)
         z = z / np.sum(z)
@@ -2107,9 +2130,41 @@ class SWMultiComponentFlash:
             gamma_eff = np.asarray(gamma, dtype=float)
 
         # Initialize K-values (Wilson + gamma for initial estimate)
-        K = self._wilson_k_values(T_K, P_Pa) * gamma_eff
-        K[self.iw] = min(K[self.iw], 0.01)
+        K0 = self._wilson_k_values(T_K, P_Pa) * gamma_eff
+        K0[self.iw] = min(K0[self.iw], 0.01)
 
+        eos = (Ai, Bi, sqrt_Ai, onemk)
+        K, converged = self._ss_iterate(z, K0, eos, gamma_eff, max_iter, tol)
+
+        # SS collapsed onto K = 1: both labelled phases took one composition,
+        # so V says nothing. Settle it with a stability test instead.
+        if _is_trivial_k(K):
+            verdict = self._resolve_trivial(z, K0, eos, gamma_eff, max_iter, tol)
+            if verdict is not None and verdict[0] == 'stable':
+                _, feed_liquid, incipient = verdict
+                if feed_liquid:
+                    return 0.0, z.copy(), incipient, True
+                return 1.0, incipient, z.copy(), True
+            if verdict is not None:
+                K, converged = self._ss_iterate(z, verdict[1], eos, gamma_eff,
+                                                max_iter, tol)
+
+        # Final compositions with converged K
+        V, x, y = solve_rachford_rice(z, K)
+        x = np.clip(x, 1e-15, None)
+        y = np.clip(y, 1e-15, None)
+        x = x / np.sum(x)
+        y = y / np.sum(y)
+        if _is_trivial_k(K):
+            converged = False
+        return V, x, y, converged
+
+    def _ss_iterate(self, z: np.ndarray, K: np.ndarray, eos: tuple,
+                    gamma_eff: np.ndarray, max_iter: int,
+                    tol: float) -> Tuple[np.ndarray, bool]:
+        """Damped successive substitution from K. Returns (K, converged)."""
+        Ai, Bi, sqrt_Ai, onemk = eos
+        K = K.copy()
         converged = False
         damp = 0.5
         prev_err = np.inf
@@ -2145,15 +2200,84 @@ class SWMultiComponentFlash:
             prev_err = err
 
             K = K * (K_new / K)**damp
+        return K, converged
 
-        # Final compositions with converged K
-        V, x, y = solve_rachford_rice(z, K)
-        x = np.clip(x, 1e-15, None)
-        y = np.clip(y, 1e-15, None)
-        x = x / np.sum(x)
-        y = y / np.sum(y)
-        return V, x, y, converged
+    def _stability_trial(self, lnf_feed: np.ndarray, seed: np.ndarray,
+                         trial_phase: str, eos: tuple, ln_gamma: np.ndarray,
+                         max_iter: int, tol: float) -> Optional[Tuple[float, np.ndarray]]:
+        """
+        Tangent-plane stationary point by direct substitution (Michelsen 1982):
+        ln Y_i = ln f_i(z) - ln phi_i(y), less ln gamma_i for a liquid trial.
 
+        Returns (sum Y, normalised y), or None when the cubic fails or the
+        search does not settle (inconclusive).
+        """
+        Ai, Bi, sqrt_Ai, onemk = eos
+        lnY = np.log(np.clip(seed / np.sum(seed), 1e-300, None))
+        for _ in range(max_iter):
+            Y = np.exp(lnY)
+            phi = self._calc_fugacity_fast(Y / np.sum(Y), Ai, Bi, sqrt_Ai, onemk,
+                                           trial_phase)
+            if not np.all(np.isfinite(phi)):
+                return None
+            lnY_new = lnf_feed - np.log(phi)
+            if trial_phase == 'liquid':
+                lnY_new = lnY_new - ln_gamma
+            step = np.max(np.abs(lnY_new - lnY))
+            lnY = lnY_new
+            if step < tol:
+                Y = np.exp(lnY)
+                return float(np.sum(Y)), Y / np.sum(Y)
+        return None
+
+    def _resolve_trivial(self, z: np.ndarray, K0: np.ndarray, eos: tuple,
+                         gamma_eff: np.ndarray, max_iter: int, tol: float):
+        """
+        Stability test on the feed after SS collapsed onto K = 1.
+
+        The feed is taken as aqueous (liquid root, with gamma) when water is
+        the majority component, else as the non-aqueous phase (vapor root).
+        Vapor-like trials seeded from K0*z and from the gas components, and
+        liquid-like trials seeded from z/K0 and from pure water, search for a
+        second phase; any unstable trial wins.
+
+        Returns ('stable', feed_liquid, incipient) where incipient is the
+        opposite-phase stationary point (the feed itself when that trial
+        collapsed, i.e. no such phase exists on the cubic), ('split', K) with
+        K seeded from an unstable trial, or None when inconclusive.
+        """
+        Ai, Bi, sqrt_Ai, onemk = eos
+        feed_liquid = bool(z[self.iw] > 0.5)
+        ln_gamma = np.log(gamma_eff)
+        zc = np.clip(z, 1e-300, None)
+        phi_z = self._calc_fugacity_fast(zc, Ai, Bi, sqrt_Ai, onemk,
+                                         'liquid' if feed_liquid else 'vapor')
+        if not np.all(np.isfinite(phi_z)):
+            return None
+        lnf = np.log(zc) + np.log(phi_z) + (ln_gamma if feed_liquid else 0.0)
+
+        # Wilson-type seeds alone can start water-dominated and collapse onto
+        # the feed even when a split exists, so each trial phase also gets a
+        # near-pure seed: gas-only for the vapor, water-only for the liquid.
+        not_w = np.arange(len(z)) != self.iw
+        gas_seed = np.where(not_w, zc, 0.0) + 1e-10
+        water_seed = np.where(not_w, 1e-10, 1.0)
+        incipient = z.copy()
+        seeds = (('vapor', K0 * zc), ('vapor', gas_seed),
+                 ('liquid', zc / K0), ('liquid', water_seed))
+        for phase, seed in seeds:
+            res = self._stability_trial(lnf, seed, phase, eos, ln_gamma,
+                                        max_iter, tol)
+            if res is None:
+                return None
+            sum_Y, y = res
+            if _is_trivial_k(y / zc):
+                continue
+            if sum_Y > 1.0 + STABILITY_TM_TOL:
+                return 'split', (y / zc if phase == 'vapor' else zc / y)
+            if (phase == 'vapor') == feed_liquid:
+                incipient = y
+        return 'stable', feed_liquid, incipient
 
     def calc_equilibrium(self, T_K: float, P_Pa: float, z: np.ndarray,
                          salinity_method: str = 'gamma_phi',

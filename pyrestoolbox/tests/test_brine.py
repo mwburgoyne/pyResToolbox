@@ -599,3 +599,49 @@ def test_co2_brine_high_t_matches_spycher_pruess_2010_fig2():
             m = brine.CO2_Brine_Mixture(pres=P, temp=T, ppm=0, metric=True)
             assert m.converged
             assert abs(100 * m.x[0] - x_pct) < 0.4 and abs(100 * m.y[1] - y_pct) < 1.0, (T, P, m.x[0], m.y[1])
+
+
+def test_flash_tp_resolves_trivial_collapse_by_stability(monkeypatch):
+    """Issue #5: successive substitution collapses onto K = 1 for feeds far
+    from saturation, and reported V = 1 for 1 kg water with 5e-7 mol each H2
+    and CH4 (1 mol/kg NaCl, 45 degC, 100 bar). A tangent-plane stability test
+    now settles those exits: stable feeds come back single phase and
+    converged, unstable ones are re-flashed from the trial's K."""
+    from pyrestoolbox.brine import _lib_vle_engine as vle
+    verdicts = []
+    resolve = _SWFlash._resolve_trivial
+    def spy(self, *a, **k):
+        r = resolve(self, *a, **k)
+        verdicts.append(None if r is None else r[0])
+        return r
+    monkeypatch.setattr(_SWFlash, '_resolve_trivial', spy)
+
+    # Undersaturated brine: single-phase aqueous, x = feed
+    flash = _SWFlash(['H2O', 'H2', 'CH4'], salinity_molal=1.0,
+                     framework='default', salinity_method='embedded')
+    feed = np.array([1000.0 / vle.COMPONENTS['H2O'].MW, 5e-7, 5e-7])
+    z = feed / feed.sum()
+    V, x, y, converged = flash.flash_tp(318.15, 1e7, z, mode='AQ')
+    assert (V, converged) == (0.0, True)
+    assert np.allclose(x, z, rtol=0, atol=1e-15)
+
+    # Trace water in methane: single-phase vapour, y = feed
+    flash = _SWFlash(['H2O', 'CH4'], framework='default', salinity_method='embedded')
+    z = np.array([1e-6, 1.0 - 1e-6])
+    V, x, y, converged = flash.flash_tp(280.0, 1e5, z, mode='AQ')
+    assert (V, converged) == (1.0, True)
+    assert np.allclose(y, z, rtol=0, atol=1e-15)
+    # The spy only sees the Python path; Rust resolves internally.
+    python_path = not vle._RUST_AVAILABLE
+    assert verdicts == (['stable', 'stable'] if python_path else [])
+
+    # Brine 10% above its NA-flash methane saturation: SS collapses from the
+    # Wilson start, stability finds the split, the reseeded flash converges.
+    _, x_sat, _, _ = flash.flash_tp(280.0, 1e7, np.array([0.5, 0.5]), mode='NA')
+    z = x_sat.copy()
+    z[1] *= 1.1
+    z[0] = 1.0 - z[1]
+    V, x, y, converged = flash.flash_tp(280.0, 1e7, z, mode='NA')
+    assert verdicts[-1:] == (['split'] if python_path else [])
+    assert converged and 0.0 < V < 1.0
+    assert abs(x[1] - x_sat[1]) < 1e-6 * x_sat[1]

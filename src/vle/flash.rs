@@ -12,6 +12,17 @@ use crate::vle::fugacity::calc_fugacity_fast;
 use crate::vle::k_init::sw_kvalue_init;
 use crate::vle::rachford_rice::solve_rachford_rice;
 
+/// Trivial-solution test for `flash_tp`: max|ln K| below this means both
+/// labelled phases collapsed onto one composition (K -> 1). Gas-water K-values
+/// sit orders of magnitude from 1, so a genuine split never comes near it.
+/// Same value as Python `_lib_vle_engine.TRIVIAL_LNK_TOL`.
+const TRIVIAL_LNK_TOL: f64 = 1e-6;
+
+/// Tangent-plane stability (Michelsen 1982, Fluid Phase Equilib. 9:1-19): a
+/// non-trivial stationary point with sum(Y) above 1 + this makes the feed
+/// unstable. Same value as Python `_lib_vle_engine.STABILITY_TM_TOL`.
+const STABILITY_TM_TOL: f64 = 1e-8;
+
 /// Precomputed EOS quantities that are constant across SS iterations (T,P fixed).
 struct EosPrecomputed {
     ai_dim: Vec<f64>,  // Dimensionless Ai = ai*P/(RT)^2
@@ -110,7 +121,14 @@ fn precompute_eos(
 /// * `tol` - Convergence tolerance on K-values
 ///
 /// # Returns
-/// (V, x, y, converged) - vapor fraction, liquid comp, vapor comp, convergence flag
+/// (V, x, y, converged) - vapor fraction, liquid comp, vapor comp, convergence flag.
+/// When successive substitution collapses onto the trivial solution (all
+/// K -> 1), a tangent-plane stability test decides: a stable feed returns
+/// single phase, converged (V = 0 with x = z when water is the majority
+/// component, else V = 1 with y = z; the other composition is the incipient
+/// stationary point, or the feed when none exists); an unstable feed is
+/// re-flashed from the trial's K. `converged` is false only if the result is
+/// still trivial or the test is inconclusive. Port of Python `flash_tp`.
 pub fn flash_tp(
     t_k: f64,
     p_pa: f64,
@@ -149,22 +167,68 @@ pub fn flash_tp(
 
     // Initialize K-values (SW-specific + gamma for initial estimate)
     let k_init = sw_kvalue_init(comp_indices, &tc, &pc, &omega, t_k, p_pa);
-    let mut k_vals: Vec<f64> = k_init
+    let mut k0: Vec<f64> = k_init
         .iter()
         .zip(gamma.iter())
         .map(|(&ki, &gi)| ki * gi)
         .collect();
 
     // Water K should be << 1 in gas-water systems
-    k_vals[iw] = k_vals[iw].min(0.01);
+    k0[iw] = k0[iw].min(0.01);
 
+    let (mut k_vals, mut converged) = ss_iterate(&z_norm, &k0, &eos, gamma, nc, max_iter, tol);
+
+    // SS collapsed onto K = 1: both labelled phases took one composition, so
+    // V says nothing. Settle it with a stability test instead.
+    if is_trivial_k(&k_vals) {
+        match resolve_trivial(&z_norm, &k0, &eos, gamma, iw, max_iter, tol) {
+            Some(Verdict::Stable { feed_liquid, incipient }) => {
+                return if feed_liquid {
+                    (0.0, z_norm, incipient, true)
+                } else {
+                    (1.0, incipient, z_norm, true)
+                };
+            }
+            Some(Verdict::Split(k_seed)) => {
+                (k_vals, converged) = ss_iterate(&z_norm, &k_seed, &eos, gamma, nc, max_iter, tol);
+            }
+            None => {}
+        }
+    }
+
+    // Final compositions with converged K
+    let (v, mut x, mut y) = solve_rachford_rice(&z_norm, &k_vals);
+    clip_and_normalize(&mut x);
+    clip_and_normalize(&mut y);
+
+    let converged = converged && !is_trivial_k(&k_vals);
+
+    (v, x, y, converged)
+}
+
+/// True when every K is within `TRIVIAL_LNK_TOL` of 1 in log terms.
+fn is_trivial_k(k: &[f64]) -> bool {
+    k.iter().map(|k| k.ln().abs()).fold(0.0_f64, f64::max) < TRIVIAL_LNK_TOL
+}
+
+/// Damped successive substitution from `k_start`. Returns (K, converged).
+fn ss_iterate(
+    z: &[f64],
+    k_start: &[f64],
+    eos: &EosPrecomputed,
+    gamma: &[f64],
+    nc: usize,
+    max_iter: usize,
+    tol: f64,
+) -> (Vec<f64>, bool) {
+    let mut k_vals = k_start.to_vec();
     let mut converged = false;
     let mut damp: f64 = 0.5;
     let mut prev_err: f64 = f64::INFINITY;
 
     for _it in 0..max_iter {
         // Robust RR solver (Nielsen & Lia 2022)
-        let (_v, mut x, mut y) = solve_rachford_rice(&z_norm, &k_vals);
+        let (_v, mut x, mut y) = solve_rachford_rice(z, &k_vals);
 
         // Clip and normalize
         clip_and_normalize(&mut x);
@@ -206,13 +270,118 @@ pub fn flash_tp(
             k_vals[i] *= (k_new[i] / k_vals[i]).powf(damp);
         }
     }
+    (k_vals, converged)
+}
 
-    // Final compositions with converged K
-    let (v, mut x, mut y) = solve_rachford_rice(&z_norm, &k_vals);
-    clip_and_normalize(&mut x);
-    clip_and_normalize(&mut y);
+/// Outcome of the stability test after a trivial SS exit.
+enum Verdict {
+    /// Feed is one phase; `incipient` is the opposite-phase stationary point
+    /// (the feed itself when that trial collapsed).
+    Stable { feed_liquid: bool, incipient: Vec<f64> },
+    /// Feed splits; K seeded from the unstable trial.
+    Split(Vec<f64>),
+}
 
-    (v, x, y, converged)
+/// Tangent-plane stationary point by direct substitution (Michelsen 1982):
+/// ln Y_i = ln f_i(z) - ln phi_i(y), less ln gamma_i for a liquid trial.
+/// Returns (sum Y, normalised y), or None when phi is non-finite or the
+/// search does not settle. Port of Python `_stability_trial`.
+#[allow(clippy::too_many_arguments)]
+fn stability_trial(
+    lnf_feed: &[f64],
+    seed: &[f64],
+    liquid: bool,
+    eos: &EosPrecomputed,
+    ln_gamma: &[f64],
+    nc: usize,
+    max_iter: usize,
+    tol: f64,
+) -> Option<(f64, Vec<f64>)> {
+    let seed_sum: f64 = seed.iter().sum();
+    let mut ln_y: Vec<f64> = seed.iter().map(|&s| (s / seed_sum).max(1e-300).ln()).collect();
+    for _ in 0..max_iter {
+        let big_y: Vec<f64> = ln_y.iter().map(|v| v.exp()).collect();
+        let y_sum: f64 = big_y.iter().sum();
+        let y: Vec<f64> = big_y.iter().map(|v| v / y_sum).collect();
+        let phi = calc_fugacity_fast(&y, &eos.ai_dim, &eos.bi_dim, &eos.sqrt_ai, &eos.onemk, nc, liquid);
+        if !phi.iter().all(|p| p.is_finite()) {
+            return None;
+        }
+        let mut step = 0.0_f64;
+        for i in 0..nc {
+            let mut v = lnf_feed[i] - phi[i].ln();
+            if liquid {
+                v -= ln_gamma[i];
+            }
+            step = step.max((v - ln_y[i]).abs());
+            ln_y[i] = v;
+        }
+        if step < tol {
+            let big_y: Vec<f64> = ln_y.iter().map(|v| v.exp()).collect();
+            let y_sum: f64 = big_y.iter().sum();
+            return Some((y_sum, big_y.iter().map(|v| v / y_sum).collect()));
+        }
+    }
+    None
+}
+
+/// Stability test on the feed after SS collapsed onto K = 1. The feed is
+/// taken as aqueous (liquid root, with gamma) when water is the majority
+/// component, else as the non-aqueous phase (vapor root). Vapor-like trials
+/// seeded from K0*z and from the gas components, and liquid-like trials seeded
+/// from z/K0 and from pure water, search for a second phase; any unstable
+/// trial wins. Port of Python `_resolve_trivial`.
+fn resolve_trivial(
+    z: &[f64],
+    k0: &[f64],
+    eos: &EosPrecomputed,
+    gamma: &[f64],
+    iw: usize,
+    max_iter: usize,
+    tol: f64,
+) -> Option<Verdict> {
+    let nc = z.len();
+    let feed_liquid = z[iw] > 0.5;
+    let ln_gamma: Vec<f64> = gamma.iter().map(|g| g.ln()).collect();
+    let zc: Vec<f64> = z.iter().map(|&v| v.max(1e-300)).collect();
+    let phi_z = calc_fugacity_fast(&zc, &eos.ai_dim, &eos.bi_dim, &eos.sqrt_ai, &eos.onemk, nc, feed_liquid);
+    if !phi_z.iter().all(|p| p.is_finite()) {
+        return None;
+    }
+    let lnf: Vec<f64> = (0..nc)
+        .map(|i| zc[i].ln() + phi_z[i].ln() + if feed_liquid { ln_gamma[i] } else { 0.0 })
+        .collect();
+
+    // Wilson-type seeds alone can start water-dominated and collapse onto the
+    // feed even when a split exists, so each trial phase also gets a near-pure
+    // seed: gas-only for the vapor, water-only for the liquid.
+    let gas_seed: Vec<f64> = (0..nc).map(|i| if i == iw { 0.0 } else { zc[i] } + 1e-10).collect();
+    let water_seed: Vec<f64> = (0..nc).map(|i| if i == iw { 1.0 } else { 1e-10 }).collect();
+    let wilson_vap: Vec<f64> = (0..nc).map(|i| k0[i] * zc[i]).collect();
+    let wilson_liq: Vec<f64> = (0..nc).map(|i| zc[i] / k0[i]).collect();
+    let seeds: [(bool, &[f64]); 4] = [
+        (false, &wilson_vap),
+        (false, &gas_seed),
+        (true, &wilson_liq),
+        (true, &water_seed),
+    ];
+
+    let mut incipient = z.to_vec();
+    for (liquid, seed) in seeds {
+        let (sum_y, y) = stability_trial(&lnf, seed, liquid, eos, &ln_gamma, nc, max_iter, tol)?;
+        let k_trial: Vec<f64> = (0..nc).map(|i| y[i] / zc[i]).collect();
+        if is_trivial_k(&k_trial) {
+            continue;
+        }
+        if sum_y > 1.0 + STABILITY_TM_TOL {
+            let k_seed = if liquid { k_trial.iter().map(|k| 1.0 / k).collect() } else { k_trial };
+            return Some(Verdict::Split(k_seed));
+        }
+        if liquid != feed_liquid {
+            incipient = y;
+        }
+    }
+    Some(Verdict::Stable { feed_liquid, incipient })
 }
 
 /// Clip compositions to [1e-15, inf) and normalize.
