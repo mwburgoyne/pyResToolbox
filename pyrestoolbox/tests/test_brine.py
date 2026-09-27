@@ -645,3 +645,23 @@ def test_flash_tp_resolves_trivial_collapse_by_stability(monkeypatch):
     assert verdicts[-1:] == (['split'] if python_path else [])
     assert converged and 0.0 < V < 1.0
     assert abs(x[1] - x_sat[1]) < 1e-6 * x_sat[1]
+
+
+def test_binary_water_content_matches_flash():
+    """The binary (Henry) water-content route normalised K x instead of
+    imposing sum(K x) = 1, so y_H2O came out low by roughly y_H2O itself
+    (0.440 against 0.786 at 200 degF, 14.7 psia). It now matches the NA flash,
+    and returns nan where no split exists (below the water vapour pressure)."""
+    import warnings
+    def y_h2o(method, T, P, **gas):
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            return _cge(salinity_wt_pct=0, temperature_F=T, pressure_psia=P,
+                        method=method, framework='mc3', **gas)[1]['y_H2O']
+    for T, P, gas in ((200, 14.7, 'CH4'), (350, 4000, 'CH4'), (100, 10000, 'CO2'),
+                      (300, 100, 'H2')):
+        henry = y_h2o('henry', T, P, **{'y_' + gas: 1.0})
+        flash = y_h2o('flash', T, P, **{'y_' + gas: 1.0})
+        assert abs(henry / flash - 1) < 1e-8, (T, P, gas, henry, flash)
+    assert abs(y_h2o('henry', 200, 14.7, y_CH4=1.0) - 0.7864) < 1e-3
+    assert np.isnan(y_h2o('henry', 300, 50, y_CH4=1.0))  # Psat(300 degF) = 67 psia

@@ -1534,78 +1534,44 @@ class SWBinaryVLE:
         """
         Calculate water mole fraction in gas phase using specified kij_NA.
 
+        Binary two-phase equilibrium by successive substitution on the K-values,
+        with the phase compositions fixed each pass by the binary closure
+        sum(K_i x_i) = sum(y_i) = 1:
+        x_w = (K_g - 1) / (K_g - K_w), y_w = K_w x_w. Before 3.8.3 the loop
+        normalised K x instead, which any x satisfies, so y_H2O came out as
+        K_w / (K_w + K_g x_g) with x_g wherever the iteration drifted; low by
+        roughly y_H2O itself (0.44 against 0.79 at 200 degF, 14.7 psia).
+
         Args:
             T_K: Temperature in Kelvin
             P_Pa: Pressure in Pascals
             kij_na: Binary interaction parameter for non-aqueous phase
             max_iter: Maximum iterations
 
-        Runs the successive substitution twice: the adaptive-damping pass
-        (canonical, preserves released behaviour) and a fixed-damping
-        verification pass. Near the dew boundary (high T, P within a few
-        multiples of Psat) the normalised iteration has multiple fixed
-        points; when the passes disagree by more than 0.5% relative the
-        answer is path-dependent and np.nan is returned instead of an
-        arbitrary branch. Non-convergence also returns np.nan.
-
         Returns:
-            y_H2O: Water mole fraction in gas phase (np.nan if the
-                   iteration fails to converge or is ambiguous)
+            y_H2O: Water mole fraction in gas phase; np.nan when no two-phase
+                   split exists (K_w >= 1 or K_g <= 1, e.g. at or below the
+                   water vapour pressure) or the iteration does not converge.
         """
-        y1, conv1 = self._water_content_ss(T_K, P_Pa, kij_na, max_iter,
-                                           adaptive=True)
-        if not conv1:
-            return np.nan
-        y2, conv2 = self._water_content_ss(T_K, P_Pa, kij_na, 2 * max_iter,
-                                           adaptive=False, damp=0.4)
-        if not conv2 or abs(y2 - y1) > 5e-3 * max(abs(y1), 1e-8):
-            return np.nan
-        return y1
+        y_w, converged = self._water_content_ss(T_K, P_Pa, kij_na, max_iter)
+        return y_w if converged else np.nan
 
     def _water_content_ss(self, T_K: float, P_Pa: float, kij_na: float,
-                          max_iter: int, adaptive: bool = True,
-                          damp: float = 0.3) -> Tuple[float, bool]:
-        """Damped successive substitution for water content. Returns (y_H2O, converged)."""
+                          max_iter: int) -> Tuple[float, bool]:
+        """Binary successive substitution for water content. Returns (y_H2O, converged)."""
         x = np.array([0.999, 0.001])
         y = np.array([0.02, 0.98])
-
-        prev_error = np.inf
-        for iteration in range(max_iter):
-            x = np.clip(x, 1e-14, 1.0 - 1e-14)
-            x = x / np.sum(x)
-            y = np.clip(y, 1e-14, 1.0 - 1e-14)
-            y = y / np.sum(y)
-
+        for _ in range(max_iter):
             K = self._calc_K_with_kij(T_K, P_Pa, x, y, kij_na)
-            if not np.all(np.isfinite(K)):
+            if not np.all(np.isfinite(K)) or K[0] >= 1.0 or K[1] <= 1.0:
                 return np.nan, False
-
-            y_new = K * x
-            y_new = np.clip(y_new, 1e-14, 1.0 - 1e-14)
-            y_new = y_new / np.sum(y_new)
-
-            error = np.max(np.abs(y_new - y))
-            if error < 1e-10:
+            x_w = (K[1] - 1.0) / (K[1] - K[0])
+            y_new = np.array([K[0] * x_w, 1.0 - K[0] * x_w])
+            converged = abs(y_new[0] - y[0]) < 1e-12 * max(y_new[0], 1e-8)
+            x = np.array([x_w, 1.0 - x_w])
+            y = y_new
+            if converged:
                 return y[0], True
-
-            if adaptive:
-                if error < prev_error:
-                    damp = min(damp * 1.15, 0.8)
-                else:
-                    damp = max(damp * 0.5, 0.1)
-                prev_error = error
-
-            y = y + damp * (y_new - y)
-            y = y / np.sum(y)
-
-            x_new = y / (K + 1e-30)
-            x_new = np.clip(x_new, 1e-14, 1.0 - 1e-14)
-            x_new = x_new / np.sum(x_new)
-            if x_new[0] < 0.5:
-                x_new = np.array([0.98, 0.02])
-            x = x + damp * (x_new - x)
-            x = x / np.sum(x)
-
         return y[0], False
 
     # Aliases for backward compatibility
