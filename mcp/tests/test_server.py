@@ -4,9 +4,9 @@ Run from the repo root:
     PYTHONPATH=/home/mark/projects/pyResToolbox:/home/mark/projects/pyResToolbox/mcp \
         python3 -m pytest mcp/tests/ -q
 
-Most tests exercise the tool functions directly (FastMCP's @tool decorator
+Most tests exercise the tool functions directly (the SDK's @tool decorator
 returns the undecorated function). test_client_session_* run the full MCP
-protocol over an in-process transport.
+protocol over an in-process transport. The suite runs on mcp 1.x and 2.x.
 """
 
 import os
@@ -186,15 +186,19 @@ def test_fit_and_forecast_exponential():
 
 # ------------------------------------------------- full MCP protocol session
 
+def _in_memory_client():
+    """In-process client session: mcp 2.x Client takes the server directly;
+    1.x needs the memory-stream helper and the low-level server."""
+    if srv._MCP_V2:
+        from mcp.client import Client
+        return Client(srv.mcp)
+    from mcp.shared.memory import create_connected_server_and_client_session
+    return create_connected_server_and_client_session(srv.mcp._mcp_server)
+
+
 @pytest.mark.anyio
 async def test_client_session_tools_and_resources():
-    try:
-        from mcp.shared.memory import create_connected_server_and_client_session
-    except ImportError:
-        pytest.skip('mcp.shared.memory helper not available in this SDK version')
-
-    async with create_connected_server_and_client_session(
-            srv.mcp._mcp_server) as client:
+    async with _in_memory_client() as client:
         tools = await client.list_tools()
         names = {t.name for t in tools.tools}
         assert {'list_functions', 'describe', 'call', 'recommend_methods',
@@ -204,7 +208,8 @@ async def test_client_session_tools_and_resources():
         result = await client.call_tool(
             'call', {'name': 'gas.gas_z',
                      'arguments': {'p': 2000, 'sg': 0.75, 'degf': 200}})
-        assert not result.isError
+        # 2.x result fields are snake_case
+        assert not (result.is_error if srv._MCP_V2 else result.isError)
         assert '0.868265' in result.content[0].text
 
         resources = await client.list_resources()
@@ -230,3 +235,23 @@ def test_cli_parser_defaults_and_http():
                          '--host', '0.0.0.0', '--port', '9000'])
     assert (args.transport, args.host, args.port) == ('streamable-http',
                                                       '0.0.0.0', 9000)
+
+
+def test_main_passes_http_settings_to_the_sdk(monkeypatch):
+    """host, port and stateless_http reach the SDK: as run() keywords on
+    mcp 2.x, through mcp.settings on 1.x."""
+    calls = []
+    monkeypatch.setattr(srv.mcp, 'run', lambda **kw: calls.append(kw))
+    monkeypatch.setattr('sys.argv', ['pyrestoolbox-mcp', '--transport', 'streamable-http',
+                                     '--host', '0.0.0.0', '--port', '9000'])
+    srv.main()
+    want = {'host': '0.0.0.0', 'port': 9000, 'stateless_http': True}
+    if srv._MCP_V2:
+        assert calls == [dict(transport='streamable-http', **want)]
+    else:
+        assert calls == [{'transport': 'streamable-http'}]
+        assert {k: getattr(srv.mcp.settings, k) for k in want} == want
+    calls.clear()
+    monkeypatch.setattr('sys.argv', ['pyrestoolbox-mcp'])
+    srv.main()
+    assert calls == [{'transport': 'stdio'}]

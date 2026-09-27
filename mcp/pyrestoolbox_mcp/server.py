@@ -17,7 +17,12 @@ as MCP resources (docs://gas, docs://oil, ...).
 import importlib
 import inspect
 
-from mcp.server.fastmcp import FastMCP
+try:  # mcp >= 2 renamed FastMCP to MCPServer
+    from mcp.server.mcpserver import MCPServer as _MCPServer
+    _MCP_V2 = True
+except ImportError:  # mcp 1.x
+    from mcp.server.fastmcp import FastMCP as _MCPServer
+    _MCP_V2 = False
 
 from pyrestoolbox_mcp.serialize import to_jsonable
 
@@ -37,7 +42,7 @@ ALLOWED_MODULES = {
     "sensitivity": "Parameter sweeps and tornado analysis",
 }
 
-mcp = FastMCP(
+mcp = _MCPServer(
     "pyrestoolbox",
     instructions=(
         "Petroleum/reservoir engineering calculations from the pyrestoolbox "
@@ -382,13 +387,18 @@ def build_parser():
 
 def main():
     args = build_parser().parse_args()
-    if args.transport == "streamable-http":
-        mcp.settings.host = args.host
-        mcp.settings.port = args.port
-        # Independent request handling; no server-side session affinity needed
-        # behind a load balancer.
-        mcp.settings.stateless_http = True
-    mcp.run(transport=args.transport)
+    if args.transport != "streamable-http":
+        mcp.run(transport=args.transport)
+        return
+    # stateless_http: independent request handling; no server-side session
+    # affinity needed behind a load balancer.
+    http = {"host": args.host, "port": args.port, "stateless_http": True}
+    if _MCP_V2:
+        mcp.run(transport=args.transport, **http)
+    else:  # 1.x reads these from settings, not run()
+        for key, value in http.items():
+            setattr(mcp.settings, key, value)
+        mcp.run(transport=args.transport)
 
 
 if __name__ == "__main__":
