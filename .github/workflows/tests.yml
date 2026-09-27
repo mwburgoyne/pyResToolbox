@@ -63,6 +63,32 @@ jobs:
       - name: Run full test suite (Rust + parity)
         run: python3 -m pytest pyrestoolbox/tests/ -q
 
+  # ── MCP server (separate distribution in mcp/) on both SDK majors ────
+  # The server picks FastMCP (1.x) or MCPServer (2.x) at import; test both so
+  # an SDK release that breaks either path fails here, not in a deployment.
+  test-mcp:
+    name: MCP server (${{ matrix.mcp }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mcp: ["mcp>=1.2,<2", "mcp>=2,<3"]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install numpy scipy pandas tabulate openpyxl mpmath ilt-inversion pytest "${{ matrix.mcp }}"
+
+      # Library from the source tree (pure Python), server from mcp/.
+      - name: Run MCP tests
+        env:
+          PYRESTOOLBOX_NO_RUST: "1"
+        run: PYTHONPATH="$PWD:$PWD/mcp" python3 -m pytest mcp/tests/ -q
+
   # ── Complexity ratchet (new code only; existing offenders baselined) ─
   complexity:
     name: Complexity ratchet

@@ -11,8 +11,8 @@ authors = [{name = "Mark W. Burgoyne", email = "mark.w.burgoyne@gmail.com"}]
 keywords = ["mcp", "petroleum", "reservoir", "pyrestoolbox"]
 requires-python = ">=3.10"
 dependencies = [
-    "mcp>=1.2,<2",
-    "pyrestoolbox>=3.7",
+    "mcp>=1.2,<3",
+    "pyrestoolbox>=3.8.2",
 ]
 readme = "README.md"
 
