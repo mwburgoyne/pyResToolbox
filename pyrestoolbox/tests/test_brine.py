@@ -696,3 +696,28 @@ def test_helium_vle_and_rust_parity(monkeypatch):
     for r, p in zip(first, run()):
         assert np.allclose(r, p, rtol=1e-10, atol=1e-14), (r, p)
 
+
+def test_flash_rust_python_agree_for_default_framework_salinity_methods(monkeypatch):
+    """The Rust 'default' kernel always applies the embedded delta_kij, so the
+    first Rust gate in flash_tp must only take default-framework flashes whose
+    salinity_method is 'embedded' (or that carry no salt). With the class
+    defaults ('default' + 'gamma_phi') at 2 m NaCl the two paths used to put
+    dissolved CH4 35% apart."""
+    from pyrestoolbox.brine import _lib_vle_engine as vle
+    if not vle._RUST_AVAILABLE:
+        pytest.skip("Rust extension not available")
+    z = np.array([0.5, 0.5])
+
+    def run():
+        out = []
+        for method in ('gamma_phi', 'embedded'):
+            flash = vle.SWMultiComponentFlash(['H2O', 'CH4'], salinity_molal=2.0,
+                                              framework='default', salinity_method=method)
+            V, x, y, converged = flash.flash_tp(348.15, 300e5, z)
+            out.append(np.r_[V, x, y])
+        return out
+
+    first = run()
+    monkeypatch.setattr(vle, '_RUST_AVAILABLE', False)
+    for r, p in zip(first, run()):
+        assert np.allclose(r, p, rtol=1e-10, atol=1e-14), (r, p)

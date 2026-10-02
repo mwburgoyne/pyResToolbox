@@ -2042,6 +2042,23 @@ class SWMultiComponentFlash:
 
         return gamma
 
+    def _rust_matches(self, mode: str) -> bool:
+        """True if the Rust flash kernel computes what the Python path would.
+
+        The Rust 'default' kernel always adds the embedded delta_kij in AQ mode,
+        whereas the Python path adds it only for salinity_method='embedded'
+        (build_kij_matrix). Any other default pairing with salt present (e.g.
+        the class defaults, 'default' with 'gamma_phi') must take the Python
+        path: sending it to Rust put dissolved-gas x 30-50% apart between the
+        two paths at 2 m NaCl. 'mc3' matches for every salinity_method.
+        """
+        if self.framework == 'mc3':
+            return True
+        if self.framework != 'default':
+            return False
+        return (self.salinity_method == 'embedded' or self.salinity <= 0
+                or mode != 'AQ')
+
     def flash_tp(self, T_K: float, P_Pa: float, z: np.ndarray,
                  mode: str = 'AQ', gamma: Optional[np.ndarray] = None,
                  max_iter: int = 200,
@@ -2090,7 +2107,8 @@ class SWMultiComponentFlash:
         #
         # 'sw_original' has no Rust implementation and takes the Python path
         # rather than being silently downgraded.
-        if _RUST_AVAILABLE and self.framework in ('mc3', 'default'):
+        # See _rust_matches for which framework/salinity pairings qualify.
+        if _RUST_AVAILABLE and self._rust_matches(mode):
             try:
                 gamma_arr = np.asarray(gamma, dtype=float) if gamma is not None \
                     else np.ones(self.nc)
