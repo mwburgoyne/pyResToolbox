@@ -58,6 +58,9 @@ from dataclasses import dataclass
 from pyrestoolbox._accelerator import RUST_AVAILABLE as _RUST_AVAILABLE
 if _RUST_AVAILABLE:
     from pyrestoolbox import _native as _rust
+# Components the Rust VLE tables (src/vle/components.rs) do not carry: any flash that
+# contains one takes the Python path, so Rust results for the other gases are unchanged.
+_RUST_UNSUPPORTED = frozenset({'He'})
 
 
 # =============================================================================
@@ -106,6 +109,13 @@ COMPONENTS = {
     # Hydrogen (this work) - Uses Tc=33.145 K (NIST) consistently for both EOS and BIP correlations
     'H2': ComponentProperties('Hydrogen', 33.145, 1.2964e6, -0.219, 20.3, 2.016),
 
+    # Helium (He extension, 2026-10-02) - NIST constants (Ortiz-Vega et al. 2019 EOS critical
+    # point, as in CoolProp 8.0), used consistently for EOS and BIP correlations (Tr = T/5.1953).
+    # NOT the 5-component Z-factor model's helium Tc (a deliberately non-standard 6.35 degR, tuned
+    # for LBC dilute viscosity); the correlations below are valid only with these constants.
+    # Python path only: the Rust flash has no He, so flashes containing He take the Python path.
+    'He': ComponentProperties('Helium', 5.1953, 0.228323e6, -0.38354, 4.2238, 4.002602),
+
     # Acid gases
     'CO2': ComponentProperties('Carbon Dioxide', 304.2, 7.38e6, 0.2273, 194.7, 44.01),
     'H2S': ComponentProperties('Hydrogen Sulfide', 373.2, 8.94e6, 0.1081, 212.8, 34.082),
@@ -130,7 +140,7 @@ COMPONENTS = {
 # List of supported gas species (excludes water)
 GAS_SPECIES = ['H2', 'CO2', 'N2', 'H2S', 'CH4', 'C2H6', 'C3H8',
                'iC4H10', 'nC4H10', 'iC5H12', 'nC5H12',
-               'nC6H14', 'nC7H16', 'nC8H18', 'nC10H22']
+               'nC6H14', 'nC7H16', 'nC8H18', 'nC10H22', 'He']
 
 
 # =============================================================================
@@ -434,6 +444,16 @@ def kij_aq_h2_dropin(T_K: float, salinity_molal: float = 0.0) -> float:
     Tr = T_K / 33.145
     return (-14.9412 + Tr) / (2.2832 + 0.3893 * Tr)
 
+def kij_aq_he_dropin(T_K: float, salinity_molal: float = 0.0) -> float:
+    """He: rational, n=130, MAE=0.0183 (S&W alpha; He extension 2026-10-02).
+
+    Fitted L1 to fugacity-targeted pointwise kij from Gardiner & Smith 1972, Gerth 1983,
+    Abrosimov & Lebedeva 2013 (50-80 C), Pray et al. 1952 (163 C) and Potter & Clynne 1978
+    (104, 149 C); data 20-163 C, 1-1000 bar. Not validated above 200 C.
+    """
+    Tr = T_K / 5.1953
+    return (-71.6152 + Tr) / (-0.394962 + 0.505807 * Tr)
+
 def kij_aq_ch4_dropin(T_K: float, salinity_molal: float = 0.0) -> float:
     """CH4: rational, n=115, MAE=0.0089 (S&W alpha)."""
     Tr = T_K / 190.60
@@ -466,6 +486,7 @@ def _kij_aq_hc_proposed(gas: str):
 # Proposed: MC-3 alpha + freshwater-only kij. Salinity via Sechenov/gamma-phi.
 KIJ_AQ_MC3: Dict[str, Callable] = {
     'H2': kij_aq_h2_proposed,
+    'He': kij_aq_he_dropin,          # Default-framework fit, not refitted on MC-3 alpha
     'CO2': kij_aq_co2_proposed,
     'N2': kij_aq_n2_proposed,
     'H2S': kij_aq_h2s_proposed,
@@ -485,6 +506,7 @@ KIJ_AQ_MC3: Dict[str, Callable] = {
 # S&W original: S&W alpha + embedded salinity in kij for HC/CO2/N2.
 KIJ_AQ_SW_ORIGINAL: Dict[str, Callable] = {
     'H2': kij_aq_h2,                # Paper 1 rational (S&W had no H2)
+    'He': kij_aq_he_dropin,         # He extension (S&W had no He)
     'CO2': kij_aq_co2,              # S&W Eq 14 (embedded salinity)
     'N2': kij_aq_n2,                # S&W Eq 13 (embedded salinity)
     'H2S': kij_aq_h2s,              # S&W Eq 15 (no salinity)
@@ -504,6 +526,7 @@ KIJ_AQ_SW_ORIGINAL: Dict[str, Callable] = {
 # Drop-in: S&W alpha + freshwater-only kij refitted for S&W alpha + embedded delta.
 KIJ_AQ_DEFAULT: Dict[str, Callable] = {
     'H2': kij_aq_h2_dropin,
+    'He': kij_aq_he_dropin,
     'CO2': kij_aq_co2_dropin,
     'N2': kij_aq_n2_dropin,
     'H2S': kij_aq_h2s_dropin,
@@ -536,6 +559,7 @@ EMBEDDED_SALINITY_PARAMS_MC3 = {
     'CH4':    {'Tc': 190.60, 'a0': 0.1383, 'a1': -0.1394, 'a2': 0.0442},
     'N2':     {'Tc': 126.10, 'a0': 0.2257, 'a1': -0.1548, 'a2': 0.0321},
     'H2':     {'Tc': 33.145, 'a0': 0.3833, 'a1': -0.0660, 'a2': 0.0033},
+    'He':     {'Tc': 5.1953, 'a0': 0.359923, 'a1': -0.0095344, 'a2': 7.00398e-05},  # From default (not refitted)
     'C2H6':   {'Tc': 305.40, 'a0': 0.0791, 'a1': -0.1263, 'a2': 0.0677},
     'C3H8':   {'Tc': 369.80, 'a0': 0.0606, 'a1': -0.1165, 'a2': 0.0772},
     'nC4H10': {'Tc': 425.20, 'a0': 0.0488, 'a1': -0.1072, 'a2': 0.0836},
@@ -551,6 +575,7 @@ EMBEDDED_SALINITY_PARAMS_DEFAULT: Dict[str, Dict] = {
     'CH4':  {'Tc': 190.60, 'a0': 0.1304, 'a1': -0.1295, 'a2': 0.0394},
     'N2':   {'Tc': 126.10, 'a0': 0.2173, 'a1': -0.1468, 'a2': 0.0302},
     'H2':   {'Tc': 33.145, 'a0': 0.3658, 'a1': -0.0625, 'a2': 0.0030},
+    'He':   {'Tc': 5.1953, 'a0': 0.359923, 'a1': -0.0095344, 'a2': 7.00398e-05},  # He extension 2026-10-02: Sechenov target S&W Eq 8 (Tb 4.2238 K), 25-100 C
     'C2H6':   {'Tc': 305.40, 'a0': 0.0813, 'a1': -0.1287, 'a2': 0.0646},
     'C3H8':   {'Tc': 369.80, 'a0': 0.0606, 'a1': -0.1165, 'a2': 0.0772},  # From proposed (not refitted)
     'nC4H10': {'Tc': 425.20, 'a0': 0.0488, 'a1': -0.1072, 'a2': 0.0836},  # From proposed (not refitted)
@@ -668,6 +693,7 @@ def get_kij_aq(gas: str, T_K: float, salinity_molal: float = 0.0,
 # Constant kij_NA values from S&W 1992 Table 5
 KIJ_NA: Dict[str, Optional[float]] = {
     'H2': 0.468,       # This work
+    'He': 0.468,       # SURROGATE (He extension 2026-10-02): H2 value; no He water-content data found. Unvalidated.
     'CO2': 0.1896,     # S&W 1992 (or 0.18756 from Yan 2011)
     'N2': 0.4778,      # S&W 1992
     'H2S': 0.1610,     # This work (constant; replaces S&W Eq 17)
@@ -1720,6 +1746,7 @@ _SW_KVALUE_PARAMS = {
     # Light gases: Cross form [a, b, c, d, e, f]
     # Fitted using proposed Burgoyne & Nielsen 2026 freshwater kij_AQ forms (Feb 2026)
     'H2':     [6.4295, 25.5844, -0.5985, -50.0000, -0.0007, -3.2598],
+    'He':     [9.7370, 50.0000, -1.0874, 50.0000, 0.0039, 10.0747],  # He extension 2026-10-02; b, d at bounds
     'CO2':    [-5.9974, 26.3804, -0.9380, -16.3941, 0.0607, 0.3688],
     'N2':     [1.4998, 36.4929, -0.6419, -50.0000, 0.0110, -0.6328],
     'H2S':    [-1.0549, 7.7334, -1.3646, -3.4035, 0.0850, 0.8651],
@@ -2067,7 +2094,8 @@ class SWMultiComponentFlash:
         #
         # 'sw_original' has no Rust implementation and takes the Python path
         # rather than being silently downgraded.
-        if _RUST_AVAILABLE and self.framework in ('mc3', 'default'):
+        if (_RUST_AVAILABLE and self.framework in ('mc3', 'default')
+                and not (_RUST_UNSUPPORTED & set(self.names))):
             try:
                 gamma_arr = np.asarray(gamma, dtype=float) if gamma is not None \
                     else np.ones(self.nc)
@@ -2304,6 +2332,7 @@ class SWMultiComponentFlash:
         # 'sw_original', and any other pairing, takes the Python path rather
         # than being silently downgraded.
         if (_RUST_AVAILABLE
+                and not (_RUST_UNSUPPORTED & set(self.names))
                 and ((self.framework == 'mc3' and salinity_method == 'gamma_phi')
                      or (self.framework == 'default' and salinity_method == 'embedded'))):
             try:
