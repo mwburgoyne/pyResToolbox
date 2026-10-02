@@ -299,6 +299,7 @@ def gas_hydrate(
     degf_res: float = None,
     additional_water: float = 0,
     metric: bool = False,
+    he: float = 0,
 ) -> HydrateResult:
     """ Returns gas hydrate formation prediction, water balance, and inhibitor calculations.
 
@@ -329,6 +330,9 @@ def gas_hydrate(
         h2s: H2S mole fraction (0-1). Defaults to 0
         n2: N2 mole fraction (0-1). Defaults to 0
         h2: H2 mole fraction (0-1). Defaults to 0
+        he: He mole fraction (0-1). Defaults to 0. Keyword, last in the signature.
+            Used only in the Soreide-Whitson water-content step; helium is not a
+            hydrate former and does not enter the hydrate correlation.
         p_res: Reservoir pressure where gas was last in equilibrium with water
                (psia | barsa if metric=True). Determines how much water the gas
                carries as vapor from the reservoir. If None, uses p (operating
@@ -371,7 +375,7 @@ def gas_hydrate(
     degf_wc = degf_res_of if degf_res_of is not None else degf_of
 
     # Validate inputs
-    validate_pe_inputs(p=p_psia, degf=degf_of, sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2)
+    validate_pe_inputs(p=p_psia, degf=degf_of, sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2, he=he)
     if p_wc != p_psia:
         validate_pe_inputs(p=p_wc)
     if inhibitor_wt_pct < 0 or inhibitor_wt_pct >= 100:
@@ -401,7 +405,7 @@ def gas_hydrate(
     # Condensed water = what dropped out of vapor between the two points.
     # Free water = liquid water entrained from reservoir (user input).
     # Total liquid = condensed + free = what needs inhibitor treatment.
-    has_composition = co2 > 0 or h2s > 0 or n2 > 0 or h2 > 0
+    has_composition = any(v > 0 for v in (co2, h2s, n2, h2, he))
 
     def _water_content_at(p_eval, degf_eval):
         """Compute equilibrium vaporized water content at given P,T (stb/MMscf)."""
@@ -409,7 +413,7 @@ def gas_hydrate(
             from pyrestoolbox.brine import SoreideWhitson
             sw = SoreideWhitson(
                 pres=p_eval, temp=degf_eval, ppm=0,
-                y_CO2=co2, y_H2S=h2s, y_N2=n2, y_H2=h2,
+                y_CO2=co2, y_H2S=h2s, y_N2=n2, y_H2=h2, y_He=he,
                 sg=sg, metric=False,
             )
             return float(sw.water_content['stb_mmscf'])

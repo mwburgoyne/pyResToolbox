@@ -20,7 +20,9 @@ def test_vshift_values_pinned():
                 # direct 298 K determinations (see test below).
                 'C3H8': -0.113326,
                 # NC4H10 from Moore (1982) 76.6; the only positive shift.
-                'NC4H10': +0.110920}
+                'NC4H10': +0.110920,
+                # He (3.8.3) from Zhou & Battino (2001) densimetry, 24.6 cm3/mol.
+                'He': -0.302941}
     assert pr_vphi.VSHIFT == pytest.approx(expected, abs=1e-9)
 
 

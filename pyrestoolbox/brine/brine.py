@@ -45,7 +45,7 @@ from typing import Tuple
 
 import pyrestoolbox.gas as gas # Needed for Z-Factor
 from pyrestoolbox.shared_fns import halley_solve_cubic, validate_pe_inputs
-from pyrestoolbox.constants import (psc, tsc, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2,
+from pyrestoolbox.constants import (psc, tsc, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2, MW_HE,
                                     BAR_TO_PSI, degc_to_degf,
                                     INVPSI_TO_INVBAR, SCF_PER_STB_TO_SM3_PER_SM3)
 from pyrestoolbox.plyasunov.iapws_if97 import rho_if97 as _rho_if97
@@ -1522,6 +1522,7 @@ _VLE_TO_PLYASUNOV = {
     'N2': 'N2',
     'H2S': 'H2S',
     'H2': 'H2',
+    'He': 'He',
 }
 
 # Molecular weights for dissolved gas Rs calculations (g/mol)
@@ -1534,6 +1535,7 @@ _SW_GAS_MW = {
     'N2': 28.0134,
     'H2S': 34.081,
     'H2': 2.01588,
+    'He': 4.002602,
 }
 
 # Plyasunov model (internal submodule)
@@ -1597,6 +1599,16 @@ class SoreideWhitson:
             y_H2S: Mole fraction H2S in dry gas (default 0)
             y_N2: Mole fraction N2 in dry gas (default 0)
             y_H2: Mole fraction H2 in dry gas (default 0)
+            y_He: Mole fraction He in dry gas (default 0). Keyword-only, so
+                positional calls are unchanged. Helium uses NIST critical
+                constants (Tc 5.1953 K), a refitted kij_AQ (data 20-163 degC,
+                1-1000 bar), an embedded salinity delta_kij against S&W Eq 8,
+                kij_NA borrowed from H2 (0.468; no helium water-content data,
+                so water content in helium-rich gas is unvalidated), a volume
+                shift anchored on the 24.6 cm3/mol densimetric V_phi (Zhou &
+                Battino 2001) and no viscosity correction (no data). With
+                cw_sat=True the gas Bg comes from the BNS Z-factor, which
+                carries helium as a sixth component.
             sg: Gas specific gravity — used to estimate HC split among C1-C4 (default 0.65)
             metric: Boolean for units (True=metric, False=oilfield). Default False.
             cw_sat: If True, also calculate saturated compressibility (default False)
@@ -1648,6 +1660,10 @@ class SoreideWhitson:
             mix = brine.SoreideWhitson(pres=200, temp=80, ppm=10000, y_CO2=0.1, y_H2S=0.05, sg=0.7, metric=True)
             mix.bDen  # Returns [gas-saturated, gas-free, freshwater] densities
 
+            # Helium-bearing gas (y_He is keyword-only)
+            mix = brine.SoreideWhitson(pres=3000, temp=150, ppm=50000, sg=0.65, y_He=0.05)
+            mix.x['He']  # Dissolved helium mole fraction
+
         References:
             Soreide, I. and Whitson, C.H., "Peng-Robinson Predictions for Hydrocarbons,
             CO2, N2, and H2S with Pure Water and NaCl Brine", Fluid Phase Equilibria,
@@ -1672,7 +1688,7 @@ class SoreideWhitson:
                  sg=0.65, metric=False, cw_sat=False,
                  framework='default', salinity_method='auto',
                  vphi_route=_VPHI_ROUTE,
-                 *, p=None, degf=None, wt=None):
+                 *, p=None, degf=None, wt=None, y_He=0):
         # V_phi source for the Garcia density step. 'auto' (default) is the S&W
         # modified-PR route with one volume shift per gas, falling back to
         # Plyasunov where PR is not calibrated; 'plyasunov' forces the pre
@@ -1717,7 +1733,7 @@ class SoreideWhitson:
         _p_val = pres if not metric else pres * BAR2PSI
         _t_val = temp if not metric else temp * 1.8 + 32
         validate_pe_inputs(p=_p_val, degf=_t_val)
-        _validate_dry_gas_fractions(y_CO2=y_CO2, y_H2S=y_H2S, y_N2=y_N2, y_H2=y_H2)
+        _validate_dry_gas_fractions(y_CO2=y_CO2, y_H2S=y_H2S, y_N2=y_N2, y_H2=y_H2, y_He=y_He)
 
         self.metric = metric
         self.ppm = ppm
@@ -1742,7 +1758,7 @@ class SoreideWhitson:
         self.MwBrine = xNaCl * MWSAL + (1 - xNaCl) * MWWAT
 
         # Estimate HC split from SG and build full gas composition
-        self.gas_comp = self._estimate_gas_comp(y_CO2, y_H2S, y_N2, y_H2, sg)
+        self.gas_comp = self._estimate_gas_comp(y_CO2, y_H2S, y_N2, y_H2, sg, y_He)
 
         # Lazy-import VLE engine and Plyasunov model
         self._import_dependencies()
@@ -1770,7 +1786,8 @@ class SoreideWhitson:
                             co2=self.gas_comp.get('CO2', 0),
                             h2s=self.gas_comp.get('H2S', 0),
                             n2=self.gas_comp.get('N2', 0),
-                            h2=self.gas_comp.get('H2', 0))
+                            h2=self.gas_comp.get('H2', 0),
+                            he=self.gas_comp.get('He', 0))
             Bg = PSTND * zee * self.tKel / (TSTND * self.pBar)  # rm3/sm3
             dBwdP = (bw1 - bw2) / dP_bar
             dRsdP = (Rs1_total - Rs2_total) / dP_bar  # sm3/sm3/bar (internal units)
@@ -1887,7 +1904,7 @@ class SoreideWhitson:
         }
 
     @staticmethod
-    def _estimate_gas_comp(y_CO2, y_H2S, y_N2, y_H2, sg):
+    def _estimate_gas_comp(y_CO2, y_H2S, y_N2, y_H2, sg, y_He=0.0):
         """Estimate full gas composition including HC split from SG.
 
         The hydrocarbon portion (1 - sum of non-HC) is split among C1-C4
@@ -1896,7 +1913,7 @@ class SoreideWhitson:
 
         Returns dict with VLE engine keys (e.g. 'CH4', 'C2H6', 'nC4H10').
         """
-        y_hc = 1.0 - y_CO2 - y_H2S - y_N2 - y_H2
+        y_hc = 1.0 - y_CO2 - y_H2S - y_N2 - y_H2 - y_He
         if y_hc < 0:
             raise ValueError(
                 f"Non-HC gas fractions sum to {1 - y_hc:.4f}, exceeding 1.0"
@@ -1911,11 +1928,14 @@ class SoreideWhitson:
             comp['N2'] = y_N2
         if y_H2 > 0:
             comp['H2'] = y_H2
+        if y_He > 0:
+            comp['He'] = y_He
 
         if y_hc > 1e-10:
             # Compute apparent HC molecular weight from SG
             mw_gas = sg * MW_AIR
-            mw_hc_num = mw_gas - y_CO2 * MW_CO2 - y_H2S * MW_H2S - y_N2 * MW_N2 - y_H2 * MW_H2
+            mw_hc_num = (mw_gas - y_CO2 * MW_CO2 - y_H2S * MW_H2S - y_N2 * MW_N2 - y_H2 * MW_H2
+                         - y_He * MW_HE)
             mw_hc = mw_hc_num / y_hc
 
             # Exponential decay split
@@ -1955,6 +1975,7 @@ class SoreideWhitson:
             y_N2=self.gas_comp.get('N2', 0),
             y_H2S=self.gas_comp.get('H2S', 0),
             y_H2=self.gas_comp.get('H2', 0),
+            y_He=self.gas_comp.get('He', 0),
             method='flash',
             salinity_method=self.salinity_method,
             framework=self.framework,
@@ -2164,7 +2185,7 @@ _BRINE_METHODS = {
 }
 
 
-def recommended_method(y_CO2=0.0, y_H2S=0.0, y_N2=0.0, y_H2=0.0, ch4_only=False):
+def recommended_method(y_CO2=0.0, y_H2S=0.0, y_N2=0.0, y_H2=0.0, ch4_only=False, y_He=0.0):
     """Which brine entry point to use for a given equilibrium gas, and why.
 
     The three entry points are not interchangeable wrappers: they carry three
@@ -2174,7 +2195,7 @@ def recommended_method(y_CO2=0.0, y_H2S=0.0, y_N2=0.0, y_H2=0.0, ch4_only=False)
 
     Returns (function name, solubility model, reason).
     """
-    others = float(y_H2S) + float(y_N2) + float(y_H2)
+    others = float(y_H2S) + float(y_N2) + float(y_H2) + float(y_He)
     if float(y_CO2) >= 1.0 - 1e-12 and others <= 1e-12:
         return _BRINE_METHODS['co2'] + (
             'pure CO2: Spycher-Pruess scores 3.7% MARE against Yan (2011) '

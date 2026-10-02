@@ -1239,3 +1239,32 @@ def test_bisect_solve_root_on_bracket_end():
     from pyrestoolbox.shared_fns import bisect_solve
     assert bisect_solve(None, lambda a, x: x - 10.0, 0.0, 10.0, 1e-9) == 10.0
     assert bisect_solve(None, lambda a, x: x, 0.0, 10.0, 1e-9) == 0.0
+
+
+def test_bns_helium():
+    """He as the sixth BNS component (3.8.3). Reference values from the standalone
+    BNS implementation with helium (deliberately non-standard He Tc 6.35 degR)."""
+    import warnings
+    from pyrestoolbox import gas
+    # he forces BNS like h2, and he=0 leaves results untouched
+    z0 = gas.gas_z(p=2000, sg=0.65, degf=120, zmethod='BNS', cmethod='BNS')
+    assert gas.gas_z(p=2000, sg=0.65, degf=120, zmethod='BNS', cmethod='BNS', he=0) == z0
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        zh = gas.gas_z(p=2000, sg=0.6, degf=120, he=0.05)        # DAK default overruled silently
+    assert zh != gas.gas_z(p=2000, sg=0.6, degf=120)
+    # pure helium vs NIST WebBook at 120 degF, 1989.696 psia: Z 1.059255, 0.021332 cP
+    # (fit errors there: Z -0.4%, viscosity +1.0%)
+    z = gas.gas_z(p=1989.696, sg=4.003 / 28.97, degf=120, he=1.0)
+    assert abs(z / 1.059255 - 1) < 0.01, z
+    ug = gas.gas_ug(p=1989.696, sg=4.003 / 28.97, degf=120, he=1.0)
+    assert abs(ug / 0.021332 - 1) < 0.02, ug
+    # composition helpers and GasPVT carry he
+    assert abs(gas.gas_sg(hc_mw=16.043, co2=0, h2s=0, n2=0, h2=0, he=1.0) - 4.003 / 28.97) < 1e-12
+    gp = gas.GasPVT(sg=0.6, he=0.1)
+    assert gp.he == 0.1 and gp.zmethod.name == 'BNS'
+    assert abs(gp.z(2000, 120) - gas.gas_z(p=2000, sg=0.6, degf=120, he=0.1)) < 1e-12
+    th = gas.gas_thermal(p=2000, sg=0.6, degf=120, he=0.1)
+    assert all(k in th for k in ('H', 'Cp', 'Cv', 'JT'))
+    from pyrestoolbox import recommend
+    assert recommend.recommend_gas_methods(he=0.02)['zmethod'].mandatory

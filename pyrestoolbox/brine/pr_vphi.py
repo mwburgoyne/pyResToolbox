@@ -86,7 +86,7 @@ T_VOUCHED_MAX = 450.0       # ~350 degF; the only one of the three that is an
                             # the fitted shift stops being fitted.
 P_MAX = 100.0
 
-SUPPORTED = ('CH4', 'CO2', 'H2S', 'N2', 'H2', 'C2H6', 'C3H8', 'NC4H10')
+SUPPORTED = ('CH4', 'CO2', 'H2S', 'N2', 'H2', 'C2H6', 'C3H8', 'NC4H10', 'He')
 
 # This library spells butane 'NC4H10'; the S&W component tables spell it
 # 'nC4H10'. That mismatch is why butane looked absent from the component
@@ -129,11 +129,19 @@ VSHIFT = {
     # measurement of this quantity, but it is a single lab and two runs, and
     # C4 sits outside the five-gas validated scope.
     'NC4H10': +0.110920,
+    # He added 2026-10-02. Anchored on the only direct volumetric measurement,
+    # Zhou & Battino (2001) densimetry, 24.6 +/- 3.0 cm3/mol at 298.15 K and
+    # 0.1013 MPa (one point, solved exactly; the +/-3.0 maps to s +/- 0.204).
+    # Enns et al. (1965, hydrostatic) 29.7 would give s = -0.649; every
+    # solubility-derived value (13-16 cm3/mol at 25 C) is excluded under the
+    # direct-data rule. Uses the engine's NIST He constants (Tc 5.1953 K), not
+    # the non-standard 6.35 degR of the 5-component Z-factor model.
+    'He':   -0.302941,
 }
 
 # Gases whose shift rests on 298 K data alone, so their temperature behaviour is
 # the EOS's unaided prediction and is NOT calibrated. Reported, not hidden.
-UNCALIBRATED_IN_T = ('N2', 'H2', 'C2H6', 'C3H8', 'NC4H10')
+UNCALIBRATED_IN_T = ('N2', 'H2', 'C2H6', 'C3H8', 'NC4H10', 'He')
 
 
 def _ab(species, T, m_nacl=0.0):

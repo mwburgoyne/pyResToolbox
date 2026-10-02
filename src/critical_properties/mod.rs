@@ -8,6 +8,7 @@ const MW_CO2: f64 = 44.01;
 const MW_H2S: f64 = 34.082;
 const MW_N2: f64 = 28.014;
 const MW_H2: f64 = 2.016;
+const MW_HE: f64 = 4.003; // BNS helium (as fitted; see zfactor)
 
 /// Sutton (1985) pseudocritical properties from gas specific gravity.
 /// Returns (Ppc_psia, Tpc_degR) for the HC+impurity mixture using
@@ -73,16 +74,18 @@ pub fn wichert_aziz_correction(
 /// Returns (Ppc_psia, Tpc_degR) for the hydrocarbon pseudo-component.
 /// Does NOT apply Wichert-Aziz — BNS mixing rules handle acid gas internally.
 #[pyfunction]
+#[pyo3(signature = (sg, co2, h2s, n2, h2, he=0.0))]
 pub fn bns_pseudocritical(
     sg: f64,
     co2: f64,
     h2s: f64,
     n2: f64,
     h2: f64,
+    he: f64,
 ) -> PyResult<(f64, f64)> {
-    let inert_sum = co2 + h2s + n2 + h2;
+    let inert_sum = co2 + h2s + n2 + h2 + he;
     let sg_hc = if inert_sum < 1.0 {
-        let raw = (sg - (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2) / MW_AIR) / (1.0 - inert_sum);
+        let raw = (sg - (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2 + he * MW_HE) / MW_AIR) / (1.0 - inert_sum);
         if raw < 0.553779772 { 0.553779772 } else { raw }
     } else {
         0.75
@@ -111,10 +114,11 @@ pub fn bns_pseudocritical_internal(
     h2s: f64,
     n2: f64,
     h2: f64,
+    he: f64,
 ) -> (f64, f64, f64) {
-    let inert_sum = co2 + h2s + n2 + h2;
+    let inert_sum = co2 + h2s + n2 + h2 + he;
     let sg_hc = if inert_sum < 1.0 {
-        let raw = (sg - (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2) / MW_AIR) / (1.0 - inert_sum);
+        let raw = (sg - (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2 + he * MW_HE) / MW_AIR) / (1.0 - inert_sum);
         if raw < 0.553779772 { 0.553779772 } else { raw }
     } else {
         0.75

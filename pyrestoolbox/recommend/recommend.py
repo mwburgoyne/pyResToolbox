@@ -69,7 +69,7 @@ class MethodRecommendation:
 
 
 def recommend_gas_methods(sg: float = 0.65, co2: float = 0, h2s: float = 0,
-                          n2: float = 0, h2: float = 0) -> Dict[str, MethodRecommendation]:
+                          n2: float = 0, h2: float = 0, he: float = 0) -> Dict[str, MethodRecommendation]:
     """Recommend Z-factor and critical property methods for a gas composition.
 
     Parameters
@@ -86,6 +86,8 @@ def recommend_gas_methods(sg: float = 0.65, co2: float = 0, h2s: float = 0,
         N2 mole fraction (default 0).
     h2 : float
         H2 mole fraction (default 0).
+    he : float
+        He mole fraction (default 0).
 
     Returns
     -------
@@ -93,14 +95,15 @@ def recommend_gas_methods(sg: float = 0.65, co2: float = 0, h2s: float = 0,
         Keys: 'zmethod', 'cmethod'.
     """
     _ = sg  # reserved, see docstring
-    inerts = co2 + h2s + n2 + h2
+    inerts = co2 + h2s + n2 + h2 + he
     recs = {}
 
-    if h2 > 0:
+    if h2 > 0 or he > 0:
+        present = ' and '.join(f'{n} ({v:.1%})' for n, v in (('H2', h2), ('He', he)) if v > 0)
         recs['zmethod'] = MethodRecommendation(
             category='zmethod',
             recommended='BNS',
-            rationale=f'H2 present ({h2:.1%}). BNS is the only method with H2 support.',
+            rationale=f'{present} present. BNS is the only method with H2 and He support.',
             alternatives=[],
             mandatory=True,
         )
@@ -244,7 +247,7 @@ def recommend_methods(sg: float = 0.65, co2: float = 0, h2s: float = 0,
                       n2: float = 0, h2: float = 0,
                       api: Optional[float] = None,
                       deviation: float = 0,
-                      well_type: str = 'gas') -> Dict[str, MethodRecommendation]:
+                      well_type: str = 'gas', he: float = 0) -> Dict[str, MethodRecommendation]:
     """Master recommendation function combining gas, oil, and VLP recommendations.
 
     Parameters
@@ -259,6 +262,8 @@ def recommend_methods(sg: float = 0.65, co2: float = 0, h2s: float = 0,
         N2 mole fraction (default 0).
     h2 : float
         H2 mole fraction (default 0).
+    he : float
+        He mole fraction (default 0; keyword, last in the signature).
     api : float, optional
         Oil API gravity. If provided, oil method recommendations are included.
     deviation : float
@@ -271,7 +276,7 @@ def recommend_methods(sg: float = 0.65, co2: float = 0, h2s: float = 0,
     dict of str to MethodRecommendation
     """
     recs = {}
-    recs.update(recommend_gas_methods(sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2))
+    recs.update(recommend_gas_methods(sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2, he=he))
 
     if api is not None:
         recs.update(recommend_oil_methods(api=api))

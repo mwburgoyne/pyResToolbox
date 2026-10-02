@@ -24,7 +24,7 @@ distinguishes them is how much gas they put into the brine.
      - Spycher-Pruess is more accurate than the S&W flash for pure CO2: 3.7% MARE against Yan (2011) where S&W scores 8.3%
    * - Any mixture, or any single gas other than pure CO2
      - ``SoreideWhitson``
-     - The only route that handles mixtures, and the only one covering H2S, N2 and H2
+     - The only route that handles mixtures, and the only one covering H2S, N2, H2 and He
    * - Methane only, oilfield units, following the textbook
      - ``brine_props``
      - Duan-Mao/McCain Ch. 4 solubility. Use ``SoreideWhitson`` instead if you want the S&W flash or any other gas
@@ -52,7 +52,7 @@ Returns tuple of (Bw (rb/stb), Density (sg), viscosity (cP), Compressibility (1/
 
 **CO2_Brine_Mixture** - CO2-saturated brine via Spycher-Pruess mutual solubility model. Returns a class object with calculated CO2 saturated brine property attributes. Retained deliberately rather than folded into ``SoreideWhitson``, because it is the more accurate route for pure CO2.
 
-**SoreideWhitson** - Multicomponent gas-saturated brine via the Soreide-Whitson VLE model, using by default the refreshed BIP relationships of `Burgoyne & Nielsen (2026) <https://doi.org/10.1016/j.fluid.2026.114824>`_. Supports mixtures of C1, C2, C3, nC4, CO2, H2S, N2 and H2 in fresh or saline water.
+**SoreideWhitson** - Multicomponent gas-saturated brine via the Soreide-Whitson VLE model, using by default the refreshed BIP relationships of `Burgoyne & Nielsen (2026) <https://doi.org/10.1016/j.fluid.2026.114824>`_. Supports mixtures of C1, C2, C3, nC4, CO2, H2S, N2, H2 and He in fresh or saline water.
 
 Unit System Support
 -------------------
@@ -474,14 +474,14 @@ pyrestoolbox.brine.SoreideWhitson
 
 .. code-block:: python
 
-    SoreideWhitson(pres, temp, ppm=0, y_CO2=0, y_H2S=0, y_N2=0, y_H2=0, sg=0.65, metric=False, cw_sat=False, framework='default', salinity_method='auto', vphi_route='auto', *, p=None, degf=None, wt=None) -> class
+    SoreideWhitson(pres, temp, ppm=0, y_CO2=0, y_H2S=0, y_N2=0, y_H2=0, sg=0.65, metric=False, cw_sat=False, framework='default', salinity_method='auto', vphi_route='auto', *, p=None, degf=None, wt=None, y_He=0) -> class
 
 Soreide-Whitson VLE model for multicomponent gas solubility in water/brine, using by
 default the refreshed BIP relationships of `Burgoyne & Nielsen (2026) <https://doi.org/10.1016/j.fluid.2026.114824>`_,
 with mass-balance density corrections and calibrated viscosity corrections. Supports gas mixtures containing any combination
-of C1, C2, C3, nC4, CO2, H2S, N2 and H2 in fresh or saline water.
+of C1, C2, C3, nC4, CO2, H2S, N2, H2 and He in fresh or saline water.
 
-The hydrocarbon portion of the gas (1 - y_CO2 - y_H2S - y_N2 - y_H2) is automatically split among C1-C4
+The hydrocarbon portion of the gas (1 - y_CO2 - y_H2S - y_N2 - y_H2 - y_He) is automatically split among C1-C4
 based on the gas specific gravity using constrained exponential decay to match the implied HC molecular weight.
 
 .. list-table:: Method employed for different calculations (SoreideWhitson)
@@ -501,7 +501,7 @@ based on the gas specific gravity using constrained exponential decay to match t
    * - Gas-free Brine Viscosity
      - IAPWS-2008 water x ion-additive Jones-Dole salt ratio x Kestin measured pressure factor. **Changed in 3.7.3**; Mao-Duan (2009) remains available. See the ``brine_viscosity`` section above.
    * - Gas-Corrected Brine Viscosity
-     - Per-gas multiplicative corrections: Calabrese et al. (2019) Eq. 25 for CO2 (**changed in 3.7.2**, superseding Islam-Carlson), an Arrhenius-times-Langmuir form refitted to all 23 Ostermann (SPE-14211, 1985) measurements for CH4, and Murphy & Gaines (1974) for H2S. C2H6 and N2 are measured nulls; H2, C3H8 and nC4H10 carry no correction because no data exists.
+     - Per-gas multiplicative corrections: Calabrese et al. (2019) Eq. 25 for CO2 (**changed in 3.7.2**, superseding Islam-Carlson), an Arrhenius-times-Langmuir form refitted to all 23 Ostermann (SPE-14211, 1985) measurements for CH4, and Murphy & Gaines (1974) for H2S. C2H6 and N2 are measured nulls; H2, He, C3H8 and nC4H10 carry no correction because no data exists.
 
 The V_phi used in the density step comes from the route set by ``vphi_route``
 (``'auto'`` default); see *Density and Viscosity Calculation Details* at the end
@@ -535,6 +535,9 @@ of this page for the routes, the fitted shifts and their validity limits.
    * - y_H2
      - float
      - Mole fraction of H2 in dry gas. Default 0
+   * - y_He
+     - float
+     - Mole fraction of He in dry gas. Default 0. **Keyword-only** (new in 3.8.3), so existing positional calls are unchanged. See *Helium* below for the basis and limits
    * - sg
      - float
      - Gas specific gravity, used to estimate HC split among C1-C4. Default 0.65
@@ -683,8 +686,50 @@ References:
 - Appelo, C.A.J., Parkhurst, D.L. and Post, V.E.A. (2014), Geochim. Cosmochim. Acta, 125, 49-67. (ion-additive salt ratio)
 - Hnedkovsky, L., Wood, R.H. and Majer, V. (1996), J. Chem. Thermodynamics, 28, 125-142. (the densimetry the volume shifts are fitted to)
 - Plyasunov, A.V., "Values of the Apparent Molar Volumes...," Fluid Phase Equilibria, Parts I-IV, 2019-2021. (the fallback V_phi route)
+- Zhou, T. and Battino, R. (2001), J. Chem. Eng. Data, 46, 331-332, doi:10.1021/je000215o. (the helium V_phi anchor, 24.6 cm3/mol)
+- Gardiner, G.E. and Smith, N.O. (1972), J. Phys. Chem., 76, 1195-1202, doi:10.1021/j100652a019; Gerth, W.A. (1983), J. Solution Chem., 12, 655-669, doi:10.1007/BF00648669; Abrosimov, V.K. and Lebedeva, E.Yu. (2013), Russ. J. Inorg. Chem., 58, 808-812, doi:10.1134/S0036023613070024; Pray, H.A., Schweickert, C.E. and Minnich, B.H. (1952), Ind. Eng. Chem., 44, 1146-1151, doi:10.1021/ie50509a058; Potter, R.W. and Clynne, M.A. (1978), J. Solution Chem., 7, 837-844, doi:10.1007/BF00650811. (helium solubility data behind the He kij_AQ and Sechenov check)
 - Garcia, J.E., "Density of Aqueous Solutions of CO2", LBNL Report 49023, 2001. (the CO2 V_phi cubic used by CO2_Brine_Mixture)
 - Islam, A.W. and Carlson, E.S. (2012), "Viscosity Models and Effects of Dissolved CO2", Energy & Fuels, 26(8), 5330-5336. (superseded by Calabrese in 3.7.2; listed for provenance)
+
+Helium
+------
+
+Helium (``y_He``, new in 3.8.3) is carried through the same Soreide-Whitson
+route as the other gases. Its basis, and where it is thin:
+
+* **Critical constants** are NIST (Tc 5.1953 K, Pc 0.228323 MPa, omega -0.38354,
+  Tb 4.2238 K), used in reduced temperature by every helium correlation below.
+  These are deliberately *not* the helium constants of the BNS gas Z-factor
+  model, whose helium Tc is an effective 6.35 degR tuned for LBC viscosity; the
+  two sets must not be swapped.
+* **kij_AQ** is (A + Tr)/(B + C Tr) with A = -71.6152, B = -0.394962,
+  C = 0.505807 (Tr = T/5.1953 K), fitted L1 on the S&W water alpha to pointwise
+  kij from Gardiner & Smith (1972), Gerth (1983), Abrosimov & Lebedeva (2013),
+  Pray et al. (1952) and Potter & Clynne (1978): 130 points over 20-163 degC and
+  1-1000 bar. Mean absolute error in dissolved mole fraction is 2.4-6.8% by
+  source below 150 degC (15.7% for Pray's three 163 degC points), with a
+  structured pressure bias inherent to a kij(T)-only form: about +4 to +17% at
+  1-10 MPa helium partial pressure and -7 to -13% at 70-100 MPa. It is not
+  validated above 200 degC. The same kij is used, unrefitted, under ``'mc3'``
+  and ``'sw_original'``.
+* **Salinity**: embedded delta_kij = (0.359923 - 0.0095344 Tr + 7.00398e-5 Tr^2) m,
+  fitted to S&W Eq. 8 Sechenov targets (Tb 4.2238 K), 25-100 degC. Eq. 8 matches
+  measured helium Sechenov coefficients in NaCl to 0.007 mean absolute error;
+  the two NaCl data sources disagree with each other at 25 degC (0.078 against
+  0.092 on the molality scale).
+* **kij_NA** (water content of the gas phase) is 0.468, borrowed from H2. No
+  helium water-content data exist, so water content of helium-rich gas is
+  unvalidated.
+* **Density**: V_phi from the PR route with VSHIFT -0.302941, anchored on the
+  only direct volumetric value, Zhou & Battino (2001) densimetry, 24.6 +/- 3.0
+  cm3/mol at 298.15 K (the +/-3.0 maps to +/-0.204 in the shift). Solubility-
+  derived helium volumes (13-16 cm3/mol) are not used. The temperature trend is
+  the equation of state unaided (about 28.7 cm3/mol at 100 degC, 10 MPa).
+* **Viscosity**: no correction, as for H2; no dissolved-helium viscosity data
+  were found.
+* **Saturated compressibility**: with ``cw_sat=True`` the gas Bg comes from the
+  BNS Z-factor, which carries helium as a sixth component (see the gas docs).
+* **Rust**: the Rust flash carries helium; Rust and Python agree to 1e-14.
 
 Density and Viscosity Calculation Details
 -----------------------------------------
@@ -702,16 +747,17 @@ aqueous-phase route and unrelated to the BNS gas-phase shift used by ``gas.gas_z
 
 **Route selection** (``vphi_route``, new in 3.7.2). ``'auto'`` is the default
 and uses this PR route wherever the state is inside its validity box, falling
-back to the Plyasunov correlation outside it. All eight gases carry a fitted
-shift since 3.7.3, so the fallback is by state, not by gas. ``'pr'`` and
+back to the Plyasunov correlation outside it. All eight original gases carry a fitted
+shift since 3.7.3, so the fallback is by state, not by gas; helium (3.8.3) has no
+Plyasunov parameters, so outside the PR box it raises instead of falling back. ``'pr'`` and
 ``'plyasunov'`` force one route; ``'plyasunov'`` reproduces pre-3.7.2 results
 exactly. The PR
 route needs one fitted number per gas against 35 coefficients per gas for the
 correlation, matches or beats it on five of six gases against the calibration
 densimetry, and reproduces an H2S temperature trend the correlation misses.
 The delivered shifts are CH4 -0.111430, CO2 -0.070103, H2S -0.079416,
-N2 -0.176768, H2 -0.178503, C2H6 -0.073843, C3H8 -0.113326 and
-nC4H10 +0.110920. They are fitted against the ``'default'`` kij_AQ set and the
+N2 -0.176768, H2 -0.178503, C2H6 -0.073843, C3H8 -0.113326,
+nC4H10 +0.110920 and He -0.302941. They are fitted against the ``'default'`` kij_AQ set and the
 route pins that framework internally (refitted in 3.7.7; the values before it
 went with the ``'mc3'`` set the route pinned until then). A shift and the kij
 set it was fitted against are one calibration, so the two are never mixed.
@@ -719,7 +765,7 @@ set it was fitted against are one calibration, so the two are never mixed.
 Three ceilings should not be conflated: the arithmetic stops at 623.15 K, the
 volume shift stops being fitted at 473.15 K, and **accuracy is claimed only to
 about 450 K (300 to 350 degF)**, which is the only one of the three that is a
-statement about the answer. N2, H2, C2H6, C3H8 and nC4H10 have no
+statement about the answer. N2, H2, He, C2H6, C3H8 and nC4H10 have no
 temperature-resolved calibration data, so for those the temperature behaviour is
 the equation of state unaided.
 
@@ -763,7 +809,7 @@ MW/V_phi against 1. Of the gases in scope only CO2 is positive: at 298.15 K and 
 carries 44.0 g/mol against a displaced 33.3 cm3/mol, a margin of +10.4 g/mol. **H2S lightens
 brine**, by -0.9 g/mol at 298.15 K widening to -7.3 g/mol by 453 K, and above about 327 K it
 lightens brine more than any other gas in the set. H2S is the near-miss case and at ambient
-temperature its sign should be read as probable rather than established. CH4, N2, H2, C2H6,
+temperature its sign should be read as probable rather than established. CH4, N2, H2, He, C2H6,
 C3H8 and nC4H10 lighten brine throughout.
 
 **Gas-corrected brine viscosity** applies multiplicative per-gas corrections to the gas-free
@@ -790,7 +836,7 @@ refutes, getting the sign wrong for three of five gases.
    * - C2H6, N2
      - No correction
      - Measured nulls. N2's null bounds the effect below about 2.5% rather than establishing zero
-   * - H2, C3H8, nC4H10
+   * - H2, He, C3H8, nC4H10
      - No correction
      - **No measurement exists.** The zero is a conservative default, not evidence; treat H2 as 0 to several percent
 

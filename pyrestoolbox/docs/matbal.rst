@@ -13,7 +13,7 @@ pyrestoolbox.matbal.gas_matbal
     gas_matbal(p, Gp, degf, sg=0.65, co2=0, h2s=0, n2=0, h2=0,
                Wp=None, Bw=1.0, We=None,
                zmethod='DAK', cmethod='PMC', metric=False,
-               pvt_table=None) -> GasMatbalResult
+               pvt_table=None, he=0) -> GasMatbalResult
 
 P/Z gas material balance for OGIP estimation. Performs linear regression of P/Z vs cumulative gas production to determine original gas in place (OGIP = -intercept/slope). Optionally computes Cole plot diagnostics (F/Et vs Gp) and Havlena-Odeh regression when cumulative water influx (We) is provided.
 
@@ -48,6 +48,9 @@ P/Z gas material balance for OGIP estimation. Performs linear regression of P/Z 
    * - h2
      - float
      - H2 mole fraction (default 0)
+   * - he
+     - float
+     - He mole fraction (default 0). Keyword, last in the signature (new in 3.8.3); like h2 it forces BNS
    * - Wp
      - array-like, optional
      - Cumulative water production (STB | sm3). Same length as p

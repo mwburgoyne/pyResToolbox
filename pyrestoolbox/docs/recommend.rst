@@ -10,14 +10,14 @@ pyrestoolbox.recommend.recommend_gas_methods
 
 .. code-block:: python
 
-    recommend_gas_methods(sg=0.65, co2=0, h2s=0, n2=0, h2=0) -> dict
+    recommend_gas_methods(sg=0.65, co2=0, h2s=0, n2=0, h2=0, he=0) -> dict
 
 Recommend Z-factor and critical property methods for a gas composition. Returns a dict with keys ``'zmethod'`` and ``'cmethod'``, each mapping to a ``MethodRecommendation``.
 
 Decision logic:
 
-- H2 present → BNS mandatory (only method with H2 support)
-- Inerts > 55% → BNS recommended (5-component PR-EOS handles extreme compositions)
+- H2 or He present → BNS mandatory (only method with H2 and He support)
+- Inerts > 55% → BNS recommended (tuned PR-EOS handles extreme compositions)
 - CO2 > 10% or H2S > 10% → DAK/PMC (moderate impurity corrections)
 - Otherwise → DAK/PMC (standard defaults)
 
@@ -43,6 +43,9 @@ Decision logic:
    * - h2
      - float
      - H2 mole fraction (default 0)
+   * - he
+     - float
+     - He mole fraction (default 0). Keyword, last in the signature (new in 3.8.3); like h2 it forces BNS
 
 .. list-table:: Returns (dict)
    :widths: 10 15 40
@@ -191,7 +194,7 @@ pyrestoolbox.recommend.recommend_methods
 .. code-block:: python
 
     recommend_methods(sg=0.65, co2=0, h2s=0, n2=0, h2=0,
-                      api=None, deviation=0, well_type='gas') -> dict
+                      api=None, deviation=0, well_type='gas', he=0) -> dict
 
 Master recommendation function combining gas, oil, and VLP recommendations. Oil recommendations are included only when ``api`` is provided.
 
@@ -217,6 +220,9 @@ Master recommendation function combining gas, oil, and VLP recommendations. Oil 
    * - h2
      - float
      - H2 mole fraction (default 0)
+   * - he
+     - float
+     - He mole fraction (default 0). Keyword, last in the signature (new in 3.8.3); like h2 it forces BNS
    * - api
      - float, optional
      - Oil API gravity. If provided, oil method recommendations are included

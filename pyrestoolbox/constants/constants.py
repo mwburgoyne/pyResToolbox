@@ -25,7 +25,7 @@ Physical constants, molecular weights, and unit conversion factors.
 Constants
 ---------
 R, psc, tsc, degF2R, tscr, scf_per_mol, CUFTperBBL, WDEN
-MW_AIR, MW_CO2, MW_H2S, MW_N2, MW_H2
+MW_AIR, MW_CO2, MW_H2S, MW_N2, MW_H2, MW_HE
 
 Unit Conversions (FIELD <-> Eclipse METRIC)
 -------------------------------------------
@@ -43,7 +43,7 @@ degc_to_degf    Convert degrees Celsius to Fahrenheit
 __all__ = [
     # Physical constants
     'R', 'psc', 'tsc', 'degF2R', 'tscr', 'scf_per_mol', 'CUFTperBBL', 'WDEN',
-    'MW_AIR', 'MW_CO2', 'MW_H2S', 'MW_N2', 'MW_H2',
+    'MW_AIR', 'MW_CO2', 'MW_H2S', 'MW_N2', 'MW_H2', 'MW_HE',
     # Temperature conversion functions
     'degf_to_degc', 'degc_to_degf',
     # Unit conversion constants
@@ -81,6 +81,7 @@ MW_CO2 = 44.01
 MW_H2S = 34.082
 MW_N2 = 28.014
 MW_H2 = 2.016
+MW_HE = 4.003  # Helium; the value the BNS model was fitted with (PhazeComp library), rounded like the other inert MWs
 
 # ---- Unit conversion constants (FIELD <-> Eclipse METRIC) ----
 # Pressure: psia <-> barsa

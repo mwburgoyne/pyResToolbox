@@ -141,7 +141,7 @@ class OilMatbalResult:
 def gas_matbal(p, Gp, degf, sg=0.65, co2=0, h2s=0, n2=0, h2=0,
                Wp=None, Bw=1.0, We=None,
                zmethod='DAK', cmethod='PMC', metric=False,
-               pvt_table=None):
+               pvt_table=None, he=0):
     """P/Z gas material balance for OGIP estimation.
 
     Performs linear regression of P/Z vs cumulative gas production to
@@ -171,6 +171,9 @@ def gas_matbal(p, Gp, degf, sg=0.65, co2=0, h2s=0, n2=0, h2=0,
         N2 mole fraction (default 0).
     h2 : float
         H2 mole fraction (default 0).
+    he : float
+        He mole fraction (default 0; keyword, last in the signature). Like H2,
+        it forces the BNS Z-factor.
     Wp : array-like, optional
         Cumulative water production (STB | sm3). Same length as p.
     Bw : float
@@ -260,14 +263,14 @@ def gas_matbal(p, Gp, degf, sg=0.65, co2=0, h2s=0, n2=0, h2=0,
     else:
         # Z-factor at each pressure (gas_z handles metric internally)
         z = np.array([
-            gas.gas_z(pi, sg, degf, co2=co2, h2s=h2s, n2=n2, h2=h2,
+            gas.gas_z(pi, sg, degf, co2=co2, h2s=h2s, n2=n2, h2=h2, he=he,
                       zmethod=zmethod, cmethod=cmethod, metric=metric)
             for pi in p
         ])
 
         # Bg at each pressure (rcf/scf — gas_bg handles metric internally)
         bg = np.array([
-            gas.gas_bg(pi, sg, degf, co2=co2, h2s=h2s, n2=n2, h2=h2,
+            gas.gas_bg(pi, sg, degf, co2=co2, h2s=h2s, n2=n2, h2=h2, he=he,
                        zmethod=zmethod, cmethod=cmethod, metric=metric)
             for pi in p
         ])

@@ -721,3 +721,27 @@ def test_flash_rust_python_agree_for_default_framework_salinity_methods(monkeypa
     monkeypatch.setattr(vle, '_RUST_AVAILABLE', False)
     for r, p in zip(first, run()):
         assert np.allclose(r, p, rtol=1e-10, atol=1e-14), (r, p)
+
+
+def test_soreide_whitson_helium():
+    """y_He (keyword-only): helium dissolves, lightens brine (V_phi from the PR
+    route with VSHIFT -0.302941 anchored on 24.6 cm3/mol at 298.15 K), leaves
+    viscosity at the gas-free value (no data, no correction) and is validated
+    like the other non-HC fractions."""
+    from pyrestoolbox.brine import pr_vphi
+    assert abs(pr_vphi.V2_inf('He', 298.15, 0.101325) - 24.6) < 1e-3
+    he = brine.SoreideWhitson(pres=3000, temp=150, ppm=50000, y_He=1.0)
+    assert set(he.x) == {'He'} and 5e-5 < he.x['He'] < 5e-3
+    assert he.bDen[0] < he.bDen[1]              # gas-saturated lighter than gas-free
+    assert he.bVis[0] == he.bVis[1]             # no helium viscosity correction
+    assert he.Rs['He'] > 0 and he.Rs_total == he.Rs['He']
+    mix = brine.SoreideWhitson(pres=3000, temp=150, ppm=50000, sg=0.65, y_He=0.05)
+    assert abs(mix.gas_comp['He'] - 0.05) < 1e-12 and 'CH4' in mix.gas_comp
+    with pytest.raises(ValueError):
+        brine.SoreideWhitson(pres=3000, temp=150, y_He=1.2)
+    with pytest.raises(ValueError):
+        brine.SoreideWhitson(pres=3000, temp=150, y_CO2=0.6, y_He=0.6)
+    # the low-level entry point takes y_He last
+    from pyrestoolbox.brine import _lib_vle_engine as vle
+    x, w = vle.calc_gas_brine_equilibrium(5.0, 150.0, 3000.0, y_CH4=0.9, y_He=0.1)
+    assert x['He'] > 0 and x['CH4'] > 0

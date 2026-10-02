@@ -255,7 +255,7 @@ def _construct(dotted, key, spec):
 @mcp.tool()
 def recommend_methods(sg: float = 0.65, co2: float = 0, h2s: float = 0,
                       n2: float = 0, h2: float = 0, api: float | None = None,
-                      deviation: float = 0, well_type: str = "gas") -> dict:
+                      deviation: float = 0, well_type: str = "gas", he: float = 0) -> dict:
     """Recommend correlation methods for a fluid/well, with rationale.
 
     Composition fractions are molar. api: stock tank oil gravity (include to
@@ -268,7 +268,7 @@ def recommend_methods(sg: float = 0.65, co2: float = 0, h2s: float = 0,
     from pyrestoolbox import recommend
     recs = recommend.recommend_methods(sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2,
                                        api=api, deviation=deviation,
-                                       well_type=well_type)
+                                       well_type=well_type, he=he)
     return to_jsonable(recs)
 
 
@@ -296,12 +296,12 @@ def co2_brine_props(pres: float, temp: float, ppm: float = 0,
 def sw_brine_props(pres: float, temp: float, ppm: float = 0,
                    y_CO2: float = 0, y_H2S: float = 0, y_N2: float = 0,
                    y_H2: float = 0, sg: float = 0.65, cw_sat: bool = False,
-                   metric: bool = False) -> dict:
+                   metric: bool = False, y_He: float = 0) -> dict:
     """Multicomponent gas-saturated brine properties (Soreide-Whitson VLE).
 
     pres: pressure (psia, or barsa if metric=True). temp: temperature
     (deg F, or deg C if metric=True). ppm: NaCl-equivalent salinity.
-    y_*: molar fractions of CO2/H2S/N2/H2 in the equilibrium gas; the
+    y_*: molar fractions of CO2/H2S/N2/H2/He in the equilibrium gas; the
     remainder is hydrocarbon gas of specific gravity sg. Returns aqueous
     composition, brine density/viscosity triplets, Rs, water content and
     compressibilities.
@@ -309,7 +309,7 @@ def sw_brine_props(pres: float, temp: float, ppm: float = 0,
     from pyrestoolbox import brine
     sw = brine.SoreideWhitson(pres=pres, temp=temp, ppm=ppm, y_CO2=y_CO2,
                               y_H2S=y_H2S, y_N2=y_N2, y_H2=y_H2, sg=sg,
-                              cw_sat=cw_sat, metric=metric)
+                              cw_sat=cw_sat, metric=metric, y_He=y_He)
     keys = ("x", "bDen", "bVis", "bw", "Rs", "Rs_total", "water_content",
             "Cf_usat", "Cf_sat")
     return {k: to_jsonable(getattr(sw, k, None)) for k in keys}

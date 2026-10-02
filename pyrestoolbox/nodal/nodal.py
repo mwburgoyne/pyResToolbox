@@ -388,10 +388,10 @@ def _gas_pvt_tc_pc(gas_pvt):
     """
     if getattr(gas_pvt, '_user_tc_pc', False):
         return gas_pvt.tc, gas_pvt.pc
-    if gas_pvt.h2 > 0:
+    if gas_pvt.h2 > 0 or getattr(gas_pvt, 'he', 0) > 0:
         warnings.warn(
             "VLP correlations use a Hall-Yarborough Z-factor with Sutton + Wichert-Aziz "
-            "pseudo-criticals; the H2 fraction on gas_pvt is ignored in the wellbore march.",
+            "pseudo-criticals; the H2 and He fractions on gas_pvt are ignored in the wellbore march.",
             RuntimeWarning, stacklevel=3)
     if gas_pvt.co2 > 0 or gas_pvt.h2s > 0 or gas_pvt.n2 > 0:
         return gas.gas_tc_pc(gas_pvt.sg, co2=gas_pvt.co2, h2s=gas_pvt.h2s,
@@ -2282,16 +2282,15 @@ def ipr_curve(reservoir: 'Reservoir', well_type: str = 'gas',
 
     if well_type == 'gas':
         sg = gas_pvt.sg if gas_pvt else gsg
-        co2 = gas_pvt.co2 if gas_pvt else 0
-        h2s = gas_pvt.h2s if gas_pvt else 0
-        n2 = gas_pvt.n2 if gas_pvt else 0
-        h2_frac = gas_pvt.h2 if gas_pvt else 0
+        co2, h2s, n2, h2_frac, he_frac = (
+            (gas_pvt.co2, gas_pvt.h2s, gas_pvt.n2, gas_pvt.h2, getattr(gas_pvt, 'he', 0))
+            if gas_pvt else (0, 0, 0, 0, 0))
 
         for pwf in pwf_list:
             qg = gas.gas_rate_radial(
                 k=k, h=h, pr=pr, pwf=pwf, r_w=rw, r_ext=re,
                 degf=degf, S=S, D=D, sg=sg,
-                co2=co2, h2s=h2s, n2=n2, h2=h2_frac)
+                co2=co2, h2s=h2s, n2=n2, h2=h2_frac, he=he_frac)
             rate_list.append(float(qg))  # Mscf/d in oilfield
 
     elif well_type == 'oil':

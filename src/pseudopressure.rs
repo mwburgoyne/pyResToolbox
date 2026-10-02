@@ -80,6 +80,7 @@ struct GasState<'a> {
     h2s: f64,
     n2: f64,
     h2: f64,
+    he: f64,
     lbc_params: &'a Option<gas_viscosity::LbcParams>,
 }
 
@@ -95,7 +96,7 @@ impl GasState<'_> {
                 zfactor::hy_core_pub(p_psia / self.ppc_sut, self.deg_r / self.tpc_sut)
             }
             ZMethod::Bns => zfactor::bns_zfactor_core_pub(
-                p_psia, self.deg_r, self.co2, self.h2s, self.n2, self.h2,
+                p_psia, self.deg_r, self.co2, self.h2s, self.n2, self.h2, self.he,
                 self.tpc_bns, self.ppc_bns,
             ),
         }
@@ -212,13 +213,13 @@ pub fn gas_dmp_rust(
     sg: f64,
     zmethod: &str,
     cmethod: &str,
-    co2: f64,
-    h2s: f64,
-    n2: f64,
-    h2: f64,
+    inerts: [f64; 5],
     tc: f64,
     pc: f64,
 ) -> PyResult<f64> {
+    // inerts = [co2, h2s, n2, h2, he] mole fractions (one record keeps the
+    // signature under clippy's argument threshold)
+    let [co2, h2s, n2, h2, he] = inerts;
     if p1 == p2 {
         return Ok(0.0);
     }
@@ -259,7 +260,7 @@ pub fn gas_dmp_rust(
             if user_tc_pc {
                 (tc, pc)
             } else {
-                let (t, p, _) = critical_properties::bns_pseudocritical_internal(sg, co2, h2s, n2, h2);
+                let (t, p, _) = critical_properties::bns_pseudocritical_internal(sg, co2, h2s, n2, h2, he);
                 (t, p)
             }
         }
@@ -270,14 +271,14 @@ pub fn gas_dmp_rust(
     let lbc_p = match method {
         ZMethod::Bns => {
             let (tc_lbc, pc_lbc) = if user_tc_pc { (tc, pc) } else { (0.0, 0.0) };
-            Some(gas_viscosity::lbc_params(degf, sg, co2, h2s, n2, h2, tc_lbc, pc_lbc))
+            Some(gas_viscosity::lbc_params(degf, sg, co2, h2s, n2, h2, he, tc_lbc, pc_lbc))
         }
         _ => None,
     };
 
     let state = GasState {
         method, deg_r, sg, tpc_sut, ppc_sut, tpc_bns, ppc_bns,
-        co2, h2s, n2, h2, lbc_params: &lbc_p,
+        co2, h2s, n2, h2, he, lbc_params: &lbc_p,
     };
 
     // Two-tier Gauss-Legendre integration
@@ -304,14 +305,13 @@ pub fn gas_ponz2p_rust(
     sg: f64,
     zmethod: &str,
     cmethod: &str,
-    co2: f64,
-    h2s: f64,
-    n2: f64,
-    h2: f64,
+    inerts: [f64; 5],
     tc: f64,
     pc: f64,
     rtol: f64,
 ) -> PyResult<Vec<f64>> {
+    // inerts = [co2, h2s, n2, h2, he] mole fractions
+    let [co2, h2s, n2, h2, he] = inerts;
     let deg_r = degf + DEGF2R;
 
     // Determine method
@@ -345,7 +345,7 @@ pub fn gas_ponz2p_rust(
             if user_tc_pc {
                 (tc, pc)
             } else {
-                let (t, p, _) = critical_properties::bns_pseudocritical_internal(sg, co2, h2s, n2, h2);
+                let (t, p, _) = critical_properties::bns_pseudocritical_internal(sg, co2, h2s, n2, h2, he);
                 (t, p)
             }
         }
@@ -356,7 +356,7 @@ pub fn gas_ponz2p_rust(
     let no_lbc = None;
     let state = GasState {
         method, deg_r, sg, tpc_sut, ppc_sut, tpc_bns, ppc_bns,
-        co2, h2s, n2, h2, lbc_params: &no_lbc,
+        co2, h2s, n2, h2, he, lbc_params: &no_lbc,
     };
 
     let mut results = Vec::with_capacity(poverz.len());

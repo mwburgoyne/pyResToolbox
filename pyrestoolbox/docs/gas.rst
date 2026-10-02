@@ -2,7 +2,7 @@
 Gas PVT & Flow
 ==============
 
-Gas property calculations for hydrocarbon mixtures with optional impurity components (CO2, H2S, N2, H2). Includes Z-factor, viscosity, density, compressibility, formation volume factor, pseudopressure, gas flow rates (radial and linear), water content, and hydrate formation prediction with inhibitor dosing.
+Gas property calculations for hydrocarbon mixtures with optional impurity components (CO2, H2S, N2, H2, He). Includes Z-factor, viscosity, density, compressibility, formation volume factor, pseudopressure, gas flow rates (radial and linear), water content, and hydrate formation prediction with inhibitor dosing.
 
 Calculation Methods and Class Objects
 =====================================
@@ -22,7 +22,7 @@ pyResToolBox uses class objects to track calculation options through the functio
 
        + 'DAK': Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al. - Slowest, Most Accurate
        + 'HY': Hall & Yarborough (1973) - Second Fastest
-       + 'BUR'/'BNS': Tuned five component Peng Robinson EOS model, Burgoyne, Nielsen & Stanko (2025), `SPE-229932-MS <https://doi.org/10.2118/229932-MS>`_ - Fast, reliable, and able to handle wide range of mixture types including CO2, H2S, N2 and H2 at concentrations up to pure inerts. More information about the method can be found `here <https://github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor>`_
+       + 'BUR'/'BNS': Tuned Peng Robinson EOS model, Burgoyne, Nielsen & Stanko (2025), `SPE-229932-MS <https://doi.org/10.2118/229932-MS>`_, extended with helium in 3.8.3 - Fast, reliable, and able to handle wide range of mixture types including CO2, H2S, N2, H2 and He at concentrations up to pure inerts. More information about the method can be found `here <https://github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor>`_
    * - cmethod
      - c_method
      - Method for calculating gas critical properties. Defaults to 'PMC' 
@@ -65,7 +65,7 @@ Calculating gas Z-Factor of pure methane using DAK and PMC for critical properti
 .. note::
 
    **BNS method strongly recommended for high-inert or hydrogen-bearing gases.**
-   When modelling gases with significant CO2 (>10%), H2S, N2, or any H2 content, the ``'BNS'`` Z-factor and critical property methods (tuned 5-component Peng-Robinson EOS) should be used. Standard correlations (DAK/HY with PMC/SUT) were developed for sweet natural gas and become unreliable at high impurity concentrations. The BNS method handles the full range from pure hydrocarbon to 100% inerts. When ``h2 > 0``, BNS is auto-selected. For pure or high-concentration CO2/H2S/N2 gases, explicitly set ``zmethod='BNS', cmethod='BNS'``.
+   When modelling gases with significant CO2 (>10%), H2S, N2, or any H2 or He content, the ``'BNS'`` Z-factor and critical property methods (tuned Peng-Robinson EOS) should be used. Standard correlations (DAK/HY with PMC/SUT) were developed for sweet natural gas and become unreliable at high impurity concentrations. The BNS method handles the full range from pure hydrocarbon to 100% inerts. When ``h2 > 0`` or ``he > 0``, BNS is auto-selected. For pure or high-concentration CO2/H2S/N2 gases, explicitly set ``zmethod='BNS', cmethod='BNS'``.
 
 .. note::
 
@@ -75,7 +75,52 @@ Calculating gas Z-Factor of pure methane using DAK and PMC for critical properti
    User-supplied ``tc`` and ``pc`` are always respected, but their meaning depends on the critical-property method:
 
    - **SUT / PMC**: ``tc`` and ``pc`` are the *mixture* pseudo-critical values. They replace the correlation output entirely.
-   - **BNS**: ``tc`` and ``pc`` are the *inert-free hydrocarbon* pseudo-critical values. They replace only the hydrocarbon pseudo-component in the 5-component EOS; inert Tc/Pc (CO2, H2S, N2, H2) remain the BNS internal per-component constants.
+   - **BNS**: ``tc`` and ``pc`` are the *inert-free hydrocarbon* pseudo-critical values. They replace only the hydrocarbon pseudo-component in the EOS; inert Tc/Pc (CO2, H2S, N2, H2, He) remain the BNS internal per-component constants.
+
+Helium in BNS
+~~~~~~~~~~~~~
+
+From 3.8.3 every gas function that takes ``h2`` also takes ``he`` (keyword, last in the
+signature, so positional calls are unchanged), and ``GasPVT`` carries it. Helium is a
+sixth BNS component with zero BIPs to every other component, regressed against 29,400
+NIST WebBook points for pure helium (60-300 degF, 14.7-14,990 psia) with the LBC
+coefficients held. A positive ``he`` forces ``zmethod`` and ``cmethod`` to ``'BNS'``,
+as ``h2`` does.
+
+.. warning::
+
+   **The helium critical temperature in BNS is deliberately non-standard: 6.35 degR,
+   not the NIST 9.35 degR (5.195 K). This is not a typo; do not "correct" it.** In BNS
+   the critical temperature also sets the Stiel-Thodos dilute-gas viscosity inside LBC,
+   which is about 25% low for helium at the true Tc and cannot be repaired through VcVis,
+   while the density fit is insensitive to Tc. The helium constants are one regressed
+   set: Tc 6.35 degR, Pc 32.9236 psia, acentric factor -0.17984, volume shift
+   -0.078082, PR default Omegas, VcVis 0.76778 ft3/lb-mol, ideal-gas Cp/R = 5/2,
+   MW 4.003. The acentric factor also keeps the PR alpha term well behaved to 500 degF.
+   The S&W brine model (``brine.SoreideWhitson``) uses the NIST constants instead,
+   because its correlations are written in reduced temperature; the two sets are not
+   interchangeable.
+
+.. list-table:: Pure helium against NIST (mean / max absolute error)
+   :widths: 30 35 35
+   :header-rows: 1
+
+   * - Property
+     - Tc 6.35 degR (used)
+     - Tc 9.34 degR (standard)
+   * - Density
+     - 0.31% / 0.84%
+     - 0.32% / 0.86%
+   * - Viscosity
+     - 0.70% / 3.1%
+     - 18.6% / 57%
+   * - Cp
+     - 0.23% / 0.60%
+     -
+
+Thermal outputs were not fitted: the pressure dependence of helium enthalpy is about 13%
+low and the Joule-Thomson coefficient 7-19% low in magnitude against NIST. The Python and
+Rust paths agree with the reference BNS implementation to about 1e-14 in Z and viscosity.
 
 Calculating gas Z-Factor of pure CO2
 
@@ -160,13 +205,13 @@ pyrestoolbox.gas.gas_tc_pc
 
 .. code-block:: python
 
-    gas_tc_pc(sg, co2 = 0, h2s = 0, n2 = 0, h2 = 0, cmethod = 'PMC', tc = 0, pc = 0, metric = False) -> tuple
+    gas_tc_pc(sg, co2 = 0, h2s = 0, n2 = 0, h2 = 0, cmethod = 'PMC', tc = 0, pc = 0, metric = False, he = 0) -> tuple
 
 Returns a tuple of critical temperature (deg R, or K if metric=True) and critical pressure (psia, or barsa if metric=True). If one or both of the ``tc`` and ``pc`` parameters are set to be non-zero, then this function will return that unchanged value for the corresponding critical parameter.
 
 For ``cmethod='SUT'`` and ``cmethod='PMC'``, the returned values describe *mixture* pseudo-critical properties (full gas, inerts included).
 
-For ``cmethod='BNS'``, the returned values describe the *inert-free hydrocarbon* pseudo-critical properties only. The supplied inert fractions (``co2``, ``h2s``, ``n2``, ``h2``) are used solely to back out the inert-free hydrocarbon specific gravity from the overall mixture SG; the BNS pseudo-critical correlation is then applied to that hydrocarbon SG. Inert species (CO2, H2S, N2, H2) carry their own per-component Tc/Pc internally within the BNS 5-component PR-EOS, and are *not* included in the value returned here.
+For ``cmethod='BNS'``, the returned values describe the *inert-free hydrocarbon* pseudo-critical properties only. The supplied inert fractions (``co2``, ``h2s``, ``n2``, ``h2``, ``he``) are used solely to back out the inert-free hydrocarbon specific gravity from the overall mixture SG; the BNS pseudo-critical correlation is then applied to that hydrocarbon SG. Inert species (CO2, H2S, N2, H2, He) carry their own per-component Tc/Pc internally within the BNS PR-EOS, and are *not* included in the value returned here.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -190,6 +235,9 @@ For ``cmethod='BNS'``, the returned values describe the *inert-free hydrocarbon*
    * - h2
      - float
      - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
+   * - he
+     - float
+     - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
    * - cmethod
      - string or c_method
      - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
@@ -239,7 +287,7 @@ pyrestoolbox.gas.gas_z
 
 .. code-block:: python
 
-    gas_z(p, sg, degf, zmethod='DAK', cmethod='PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, metric = False) -> float or np.array
+    gas_z(p, sg, degf, zmethod='DAK', cmethod='PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, metric = False, he = 0) -> float or np.array
 
 Returns gas Z-factor (either float or Numpy array depending upon type of p specified) using specified method. 
 A float or list / array can be used for p, returning corresponding 1-D array of Z-Factors. The cmethod will be used to calculate critical gas parameters unless tc and/or pc are explicitly set to be non-zero. This option enables users to use precalculate gas critical properties and so avoid repeated duplicated critical property calculations when compute time is an issue
@@ -279,6 +327,9 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
    * - h2
      - float
      - Molar fraction of Hydrogen. Defaults to zero if undefined. zmethod and cmethod get overriden to 'BUR' if positive fraction.
+   * - he
+     - float
+     - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
    * - tc
      - float
      - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
@@ -318,7 +369,7 @@ pyrestoolbox.gas.gas_ug
 
 .. code-block:: python
 
-    gas_ug(p, sg, degf, zmethod ='DAK', cmethod = 'PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, zee = 0, ugz = False, metric = False) -> float or np.array
+    gas_ug(p, sg, degf, zmethod ='DAK', cmethod = 'PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, zee = 0, ugz = False, metric = False, he = 0) -> float or np.array
 
 Returns gas viscosity (cP) using Lee, Gonzalez & Eakin (1966) correlation unless the 'BUR' method for Z-Factor is selected in which case a tuned LBC method is used. 
 A float or list / array can be used for p, returning corresponding 1-D array of gas viscosities. The cmethod will be used to calculate critical gas parameters unless tc and/or pc are explicitly set to be non-zero. This option enables users to use pre-calculate gas critical properties and so avoid repeated duplicated critical property calculations when compute time is an issue
@@ -359,6 +410,9 @@ Furnishing a positive value for zee means it will be used instead of calculating
    * - h2
      - float
      - Molar fraction of Hydrogen. Defaults to zero if undefined. Overrides methods to 'BUR' if positive fraction.
+   * - he
+     - float
+     - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
    * - tc
      - float
      - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
@@ -402,7 +456,7 @@ pyrestoolbox.gas.gas_cg
 
 .. code-block:: python
 
-    gas_cg(p, sg, degf, co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, zmethod = 'DAK', cmethod ='PMC', metric = False) -> float or np.array
+    gas_cg(p, sg, degf, co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, zmethod = 'DAK', cmethod ='PMC', metric = False, he = 0) -> float or np.array
 
 Returns gas compressibility (1/psi, or 1/barsa if metric=True).
 A float or list / array can be used for p, returning corresponding 1-D array of gas compressibility's. The cmethod will be used to calculate critical gas parameters unless tc and/or pc are explicitly set to be non-zero. This option enables users to use precalculated gas critical properties and so avoid repeated duplicated critical property calculations when compute time is an issue
@@ -439,6 +493,9 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
    * - h2
      - float
      - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
+   * - he
+     - float
+     - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
    * - tc
      - float
      - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
@@ -476,7 +533,7 @@ pyrestoolbox.gas.gas_bg
 
 .. code-block:: python
 
-    gas_bg(p, sg, degf, zmethod='DAK', cmethod = 'PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, metric = False) -> float or np.array
+    gas_bg(p, sg, degf, zmethod='DAK', cmethod = 'PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, metric = False, he = 0) -> float or np.array
 
 Returns gas formation volume factor (rcf/scf, or rm3/sm3 if metric=True).
 A float or list / array can be used for p, returning corresponding 1-D array of gas FVF's. The cmethod will be used to calculate critical gas parameters unless tc and/or pc are explicitly set to be non-zero. This option enables users to use precalculate gas critical properties and so avoid repeated duplicated critical property calculations when compute time is an issue.
@@ -516,6 +573,9 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
    * - h2
      - float
      - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
+   * - he
+     - float
+     - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
    * - tc
      - float
      - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
@@ -552,7 +612,7 @@ pyrestoolbox.gas.gas_den
 
 .. code-block:: python
 
-    gas_den(p, sg, degf, zmethod ='DAK', cmethod ='PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, metric = False) -> float or np.array
+    gas_den(p, sg, degf, zmethod ='DAK', cmethod ='PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, metric = False, he = 0) -> float or np.array
 
 Returns gas density (lb/cuft, or kg/m3 if metric=True).
 A float or list / array can be used for p, returning corresponding 1-D array of gas densities. The cmethod will be used to calculate critical gas parameters unless tc and/or pc are explicitly set to be non-zero. This option enables users to use precalculate gas critical properties and so avoid repeated duplicated critical property calculations when compute time is an issue
@@ -592,6 +652,9 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
    * - h2
      - float
      - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
+   * - he
+     - float
+     - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
    * - tc
      - float
      - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
@@ -626,10 +689,10 @@ pyrestoolbox.gas.gas_thermal
 
 .. code-block:: python
 
-    gas_thermal(p, sg, degf, co2=0, h2s=0, n2=0, h2=0, tc=0, pc=0, metric=False) -> dict
+    gas_thermal(p, sg, degf, co2=0, h2s=0, n2=0, h2=0, tc=0, pc=0, metric=False, he=0) -> dict
 
 Returns gas enthalpy, isobaric and isochoric heat capacities and the Joule-Thomson
-coefficient from the BNS tuned 5-component Peng Robinson EOS (Burgoyne, Nielsen &
+coefficient from the BNS tuned Peng Robinson EOS (Burgoyne, Nielsen &
 Stanko 2025, `SPE-229932-MS <https://doi.org/10.2118/229932-MS>`_). Only the BNS
 method carries caloric information, so unlike ``gas_z`` there is no ``zmethod``
 choice: DAK and HY are Z-factor correlations with no thermodynamic content. Root
@@ -676,6 +739,9 @@ Departure enthalpy for lean hydrocarbon gas carries a systematic bias of about
    * - h2
      - float
      - Molar fraction of H2. Defaults to 0
+   * - he
+     - float
+     - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
    * - tc
      - float
      - Overrides the hydrocarbon pseudo-component Tc (deg R, or K if metric=True). Inert Tc stay at BNS internal constants
@@ -785,7 +851,7 @@ pyrestoolbox.gas.gas_ponz2p
 
 .. code-block:: python
 
-    gas_ponz2p(poverz, sg, degf, zmethod='DAK', cmethod='PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, rtol = 1E-7, metric = False) -> float or np.array
+    gas_ponz2p(poverz, sg, degf, zmethod='DAK', cmethod='PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, rtol = 1E-7, metric = False, he = 0) -> float or np.array
 
 Returns gas pressure (psia, or barsa if metric=True) corresponding to a value of P/Z, iteratively solving with specified zmethod via bisection.
 A float or list / array can be used for poverz, returning corresponding 1-D array of pressures. The cmethod will be used to calculate critical gas parameters unless tc and/or pc are explicitly set to be non-zero. This option enables users to use precalculate gas critical properties and so avoid repeated duplicated critical property calculations when compute time is an issue
@@ -825,6 +891,9 @@ A float or list / array can be used for poverz, returning corresponding 1-D arra
    * - h2
      - float
      - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
+   * - he
+     - float
+     - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
    * - tc
      - float
      - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
@@ -864,7 +933,7 @@ pyrestoolbox.gas.gas_grad2sg
 
 .. code-block:: python
 
-    gas_grad2sg( grad, p, degf, zmethod='DAK', cmethod='PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, rtol = 1E-7, metric = False) -> float
+    gas_grad2sg( grad, p, degf, zmethod='DAK', cmethod='PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, rtol = 1E-7, metric = False, he = 0) -> float
 
 Returns gas specific gravity consistent with observed gas gradient. Calculated through iterative solution method. Bisection bounds span pure H2 (SG ~0.070) to 3.0 to accommodate H2-blend and CO2-rich compositions; solutions outside this range will fail.
 
@@ -902,6 +971,9 @@ Returns gas specific gravity consistent with observed gas gradient. Calculated t
    * - h2
      - float
      - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
+   * - he
+     - float
+     - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
    * - tc
      - float
      - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
@@ -939,7 +1011,7 @@ pyrestoolbox.gas.gas_dmp
 
 .. code-block:: python
 
-    gas_dmp(p1, p2, degf, sg, zmethod='DAK', cmethod = 'PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, metric = False) -> float
+    gas_dmp(p1, p2, degf, sg, zmethod='DAK', cmethod = 'PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, metric = False, he = 0) -> float
 
 Returns gas pseudo-pressure integral (psi2/cP, or bar2/cP if metric=True) between two pressure points. Will return a positive value if p1 < p2, and a negative value if p1 > p2.
 Integrates the equation: m(p) = 2 * p / (ug * z)
@@ -981,6 +1053,9 @@ Integrates the equation: m(p) = 2 * p / (ug * z)
    * - h2
      - float
      - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
+   * - he
+     - float
+     - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
    * - tc
      - float
      - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
@@ -1066,12 +1141,12 @@ pyrestoolbox.gas.gas_rate_radial
 
 .. code-block:: python
 
-    gas_rate_radial(k, h, pr, pwf, r_w, r_ext, degf, zmethod='DAK', cmethod='PMC', S=0, D=0, sg=0.75, co2=0, h2s=0, n2=0, h2=0, tc=0, pc=0, gas_pvt=None, metric=False) -> float or np.array
+    gas_rate_radial(k, h, pr, pwf, r_w, r_ext, degf, zmethod='DAK', cmethod='PMC', S=0, D=0, sg=0.75, co2=0, h2s=0, n2=0, h2=0, tc=0, pc=0, gas_pvt=None, metric=False, he=0) -> float or np.array
 
 Returns gas rate (Mscf/day, or sm3/d if metric=True) for radial flow using Darcy pseudo steady state equation & gas pseudopressure.
 Arrays can be used for any one of k, h, pr or pwf, returning corresponding 1-D array of rates. Using more than one input array -- while not prohibited -- will not return expected results.
 
-A ``gas_pvt`` object can be provided instead of individual gas composition parameters. When ``gas_pvt`` is used, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, and pc are extracted from the object.
+A ``gas_pvt`` object can be provided instead of individual gas composition parameters. When ``gas_pvt`` is used, sg, co2, h2s, n2, h2, he, zmethod, cmethod, tc, and pc are extracted from the object.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -1133,7 +1208,7 @@ A ``gas_pvt`` object can be provided instead of individual gas composition param
      - Gas SG relative to air, Defaults to 0.75 if undefined
    * - gas_pvt
      - GasPVT
-     - GasPVT object. If provided, sg/co2/h2s/n2/h2/zmethod/cmethod/tc/pc are extracted from it
+     - GasPVT object. If provided, sg/co2/h2s/n2/h2/he/zmethod/cmethod/tc/pc are extracted from it
    * - metric
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
@@ -1173,7 +1248,7 @@ pyrestoolbox.gas.gas_sg
 
 .. code-block:: python
 
-    gas_sg(hc_mw, co2, h2s, n2, h2) -> float
+    gas_sg(hc_mw, co2, h2s, n2, h2, he=0) -> float
 
 Returns specific gravity of a gas mixture (relative to air) given the hydrocarbon molecular weight and molar fractions of non-hydrocarbon components. Useful for converting a known gas composition into the SG input required by other gas functions.
 
@@ -1199,6 +1274,9 @@ Returns specific gravity of a gas mixture (relative to air) given the hydrocarbo
    * - h2
      - float
      - Molar fraction of Hydrogen in the total gas mixture
+   * - he
+     - float
+     - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
 
 .. list-table:: Returns
    :widths: 10 15 40
@@ -1227,7 +1305,7 @@ pyrestoolbox.gas.gas_rate_linear
 
 .. code-block:: python
 
-    gas_rate_linear(k, pr, pwf, area, length, degf, zmethod='DAK', cmethod='PMC', sg=0.75, co2=0, h2s=0, n2=0, h2=0, tc=0, pc=0, gas_pvt=None, metric=False) -> float or np.array
+    gas_rate_linear(k, pr, pwf, area, length, degf, zmethod='DAK', cmethod='PMC', sg=0.75, co2=0, h2s=0, n2=0, h2=0, tc=0, pc=0, gas_pvt=None, metric=False, he=0) -> float or np.array
 
 Returns gas rate (Mscf/day, or sm3/d if metric=True) for linear flow using Darcy steady state equation & gas pseudopressure.
 Arrays can be used for any one of k, pr, pwf or area, returning corresponding 1-D array of rates. Using more than one input array -- while not prohibited -- will not return expected results.
@@ -1285,7 +1363,7 @@ A ``gas_pvt`` object can be provided instead of individual gas composition param
      - Gas SG relative to air, Defaults to 0.75 if undefined
    * - gas_pvt
      - GasPVT
-     - GasPVT object. If provided, sg/co2/h2s/n2/h2/zmethod/cmethod/tc/pc are extracted from it
+     - GasPVT object. If provided, sg/co2/h2s/n2/h2/he/zmethod/cmethod/tc/pc are extracted from it
    * - metric
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
@@ -1379,13 +1457,13 @@ pyrestoolbox.gas.gas_hydrate
 
     gas_hydrate(p, degf, sg, hydmethod='TOWLER', inhibitor_type=None, inhibitor_wt_pct=0,
                 co2=0, h2s=0, n2=0, h2=0, p_res=None, degf_res=None,
-                additional_water=0, metric=False) -> HydrateResult
+                additional_water=0, metric=False, he=0) -> HydrateResult
 
 Returns a ``HydrateResult`` dataclass with gas hydrate formation temperature (HFT), hydrate formation pressure (HFP), subcooling, hydrate window assessment, thermodynamic inhibitor calculations, a full water balance between reservoir and operating conditions, and inhibitor injection rates.
 
 Two HFT correlations are available: Motiee (1991) and Towler & Mokhatab (2005). Hydrate formation pressure is computed by bisection inversion of the HFT correlation. Inhibitor temperature depression uses the Østergaard et al. (2005) general correlation (JPSE 48, Eq. 1 with Table 3 coefficients): a cubic in inhibitor mass% times a pressure factor ``C4 ln P + C5`` (P in kPa at the assessment point), with the paper's optional P0 factor omitted. Required concentration is the Newton-Raphson inverse of the same equation, capped at the upper limit of the paper's data range for each inhibitor (MeOH 43.3, EtOH 31.2, MEG 59.6, DEG 51, TEG 59.5 mass%). The cap is a validity limit of the correlation, not a physical maximum. Before 3.8.0 the depression used unsourced coefficients without the pressure factor, under-predicting suppression by 26-43% at 25-50 wt%, and methanol was capped at 25 wt%.
 
-**Water balance.** The gas leaves the reservoir saturated with vaporized water at reservoir P,T (``p_res``, ``degf_res``). At the operating point (lower P,T), the gas can hold less water vapor - the excess condenses as liquid. The function computes vaporized water at both conditions and reports the condensed amount. Any free liquid water entrained from the reservoir (``additional_water``) is added to the condensed water to give the total liquid water at the operating point. When gas composition is provided (``co2``/``h2s``/``n2``/``h2``), the SoreideWhitson VLE model is used; otherwise the Danesh correlation. If ``p_res``/``degf_res`` are not provided, the operating ``p``/``degf`` are used for both (no condensation).
+**Water balance.** The gas leaves the reservoir saturated with vaporized water at reservoir P,T (``p_res``, ``degf_res``). At the operating point (lower P,T), the gas can hold less water vapor - the excess condenses as liquid. The function computes vaporized water at both conditions and reports the condensed amount. Any free liquid water entrained from the reservoir (``additional_water``) is added to the condensed water to give the total liquid water at the operating point. When gas composition is provided (``co2``/``h2s``/``n2``/``h2``/``he``), the SoreideWhitson VLE model is used (helium enters only this water-content step: it is not a hydrate former); otherwise the Danesh correlation. If ``p_res``/``degf_res`` are not provided, the operating ``p``/``degf`` are used for both (no condensation).
 
 **Inhibitor injection rate** is calculated from the **total liquid water** at the operating point (condensed + free water) and the required inhibitor concentration. Only liquid water needs treatment - vaporized water does not form hydrates. The ``inhibitor_wt_pct`` parameter represents the concentration of inhibitor in the aqueous phase (water + inhibitor mixture), not the mass fraction of the total stream. Injection rates are reported in lb/MMscf and gal/MMscf (oilfield) or kg/sm3 and L/sm3 (metric).
 
@@ -1426,6 +1504,9 @@ Two HFT correlations are available: Motiee (1991) and Towler & Mokhatab (2005). 
    * - h2
      - float
      - H2 mole fraction (0-1). Defaults to 0
+   * - he
+     - float
+     - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
    * - p_res
      - float or None
      - Reservoir pressure where gas equilibrated with water (psia | barsa). Controls water content. If None, uses ``p``. Defaults to None
@@ -1824,9 +1905,9 @@ pyrestoolbox.gas.GasPVT
 
 .. code-block:: python
 
-    GasPVT(sg=0.75, co2=0, h2s=0, n2=0, h2=0, zmethod='DAK', cmethod='PMC', tc=0, pc=0, metric=False)
+    GasPVT(sg=0.75, co2=0, h2s=0, n2=0, h2=0, zmethod='DAK', cmethod='PMC', tc=0, pc=0, metric=False, he=0)
 
-Stores gas composition and method choices. Pre-computes critical temperature and pressure via ``gas_tc_pc()`` so they are not recalculated per call. Automatically selects BNS zmethod/cmethod when h2 > 0. Can be passed directly to ``fbhp()`` and ``operating_point()`` for VLP calculations, and to ``gas_rate_radial()`` and ``gas_rate_linear()`` for IPR rate calculations.
+Stores gas composition and method choices. Pre-computes critical temperature and pressure via ``gas_tc_pc()`` so they are not recalculated per call. Automatically selects BNS zmethod/cmethod when h2 > 0 or he > 0. Can be passed directly to ``fbhp()`` and ``operating_point()`` for VLP calculations, and to ``gas_rate_radial()`` and ``gas_rate_linear()`` for IPR rate calculations.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -1850,6 +1931,9 @@ Stores gas composition and method choices. Pre-computes critical temperature and
    * - h2
      - float
      - Molar fraction of Hydrogen. Defaults to 0. If positive, overrides zmethod and cmethod to 'BNS'
+   * - he
+     - float
+     - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
    * - zmethod
      - string or z_method
      - Method for Z-factor calculation. Defaults to 'DAK'

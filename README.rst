@@ -20,7 +20,7 @@ Includes functions to perform calculations including;
 - Nodal analysis operating point determination
 - Eclipse VFP table generation (VFPPROD and VFPINJ keywords)
 - PVT Calculations for oil
-- PVT calculation for gas, including up to 100% inerts for CO2, H2S, N2 and H2
+- PVT calculation for gas, including up to 100% inerts for CO2, H2S, N2, H2 and He
 - Gas caloric properties (enthalpy, Cp, Cv, Joule-Thomson coefficient) from the BNS tuned Peng Robinson EOS
 - Gas hydrate formation prediction with thermodynamic inhibitor calculations
 - Return critical parameters for typical components

@@ -252,6 +252,7 @@ MW_GAS = {
     'N-C4H10': 58.122,
     'NC4': 58.122,
     'H2S': 34.081,
+    'HE': 4.002602,   # molar mass only: the Plyasunov model carries no He parameters
 }
 
 

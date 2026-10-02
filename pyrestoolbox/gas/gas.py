@@ -72,7 +72,7 @@ from dataclasses import dataclass
 from pyrestoolbox.classes import z_method, c_method, hyd_method, inhibitor
 from pyrestoolbox.shared_fns import convert_to_numpy, process_output, check_2_inputs, bisect_solve, validate_pe_inputs
 from pyrestoolbox.validate import validate_methods
-from pyrestoolbox.constants import (R, psc, tsc, degF2R, scf_per_mol, CUFTperBBL, WDEN, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2,
+from pyrestoolbox.constants import (R, psc, tsc, degF2R, scf_per_mol, CUFTperBBL, WDEN, MW_CO2, MW_H2S, MW_N2, MW_AIR, MW_H2, MW_HE,
     BAR_TO_PSI, PSI_TO_BAR, degc_to_degf, degf_to_degc,
     M_TO_FT, SQM_TO_SQFT,
     LBCUFT_TO_KGM3, INVPSI_TO_INVBAR,
@@ -107,20 +107,20 @@ def _rust_cmethod(cmethod):
     return 'BNS' if cmethod.name in ('BNS', 'BUR') else 'SUT'
 
 
-def _inert_sg(co2, h2s, n2, h2):
+def _inert_sg(co2, h2s, n2, h2, he=0):
     """Specific gravity contributed by the non-hydrocarbon fractions alone."""
-    return (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2) / MW_AIR
+    return (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2 + he * MW_HE) / MW_AIR
 
 
-def _check_sg_vs_inerts(sg, co2, h2s, n2, h2):
+def _check_sg_vs_inerts(sg, co2, h2s, n2, h2, he=0):
     """Raise if the mixture sg leaves a non-positive hydrocarbon sg.
 
     sg includes the inerts, so it cannot be at or below what they alone
     contribute: SUT/PMC would return a negative Tc (Z ~ -1e8) and BNS would
     silently clamp the hydrocarbon to methane.
     """
-    inert_sg = _inert_sg(co2, h2s, n2, h2)
-    if (co2 + h2s + n2 + h2) < 1.0 - 1e-6 and sg <= inert_sg:
+    inert_sg = _inert_sg(co2, h2s, n2, h2, he)
+    if (co2 + h2s + n2 + h2 + he) < 1.0 - 1e-6 and sg <= inert_sg:
         raise ValueError(
             f"Gas sg={sg} is not consistent with the stated inert fractions: the inerts "
             f"alone contribute sg {inert_sg:.4f}, leaving a non-positive hydrocarbon sg. "
@@ -245,9 +245,9 @@ _SP_CONV_TOL = 1.0e-6  # relative tail-block tolerance used to emit a warning
 # Valid β-correlation tags
 _BETA_METHODS = ('FK', 'JONES', 'TCK')
 
-def _h2_method_override(h2, zmethod, cmethod):
-    """Force BNS method when hydrogen is present."""
-    if h2 > 0:
+def _h2_method_override(h2, zmethod, cmethod, he=0):
+    """Force BNS method when hydrogen or helium is present (only BNS carries them)."""
+    if h2 > 0 or he > 0:
         return 'BNS', 'BNS'
     return zmethod, cmethod
 
@@ -265,11 +265,11 @@ def _method_label(method):
         return method.name
     return str(method)
 
-def _resolve_methods(zmethod, cmethod, h2=0):
+def _resolve_methods(zmethod, cmethod, h2=0, he=0):
     """Resolve z/c methods with BNS coupling and return validated Enums.
 
     Policy:
-      1. h2 > 0 forces both methods to 'BNS' (documented auto-selection, no warning).
+      1. h2 > 0 or he > 0 forces both methods to 'BNS' (documented auto-selection, no warning).
       2. If either method is BNS, force both to BNS and emit UserWarning naming
          the overruled counterpart. Non-BNS methods are not coupled.
 
@@ -277,7 +277,7 @@ def _resolve_methods(zmethod, cmethod, h2=0):
     for BNS they replace the hydrocarbon pseudo-component Tc/Pc (inert Tc/Pc
     remain BNS internal constants); for SUT/PMC they replace the mixture Tc/Pc.
     """
-    if h2 > 0:
+    if h2 > 0 or he > 0:
         zmethod, cmethod = 'BNS', 'BNS'
     else:
         z_is_bns = _is_bns_method(zmethod)
@@ -313,7 +313,7 @@ def _metric_to_field_pvt(p, degf, tc, pc, metric):
 # Optional Rust acceleration
 from pyrestoolbox._accelerator import RUST_AVAILABLE, _rust_module
 
-def _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s, h2):
+def _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s, h2, he=0):
     """Compute pseudopressure difference and flow direction for gas rate calculations.
 
     Handles scalar and array inputs for pr and pwf.
@@ -329,7 +329,7 @@ def _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s,
             gas_dmp(
                 p1=pwf, p2=pr, degf=degf, sg=sg,
                 zmethod=zmethod, cmethod=cmethod, tc=tc, pc=pc,
-                n2=n2, co2=co2, h2s=h2s, h2=h2,
+                n2=n2, co2=co2, h2s=h2s, h2=h2, he=he,
             )
         )
     else:
@@ -338,7 +338,7 @@ def _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s,
             delta_mp = np.absolute(np.array([
                 gas_dmp(p1=p, p2=pwf, degf=degf, sg=sg,
                         zmethod=zmethod, cmethod=cmethod, tc=tc, pc=pc,
-                        n2=n2, co2=co2, h2s=h2s, h2=h2)
+                        n2=n2, co2=co2, h2s=h2s, h2=h2, he=he)
                 for p in pr
             ]))
         else:  # Multiple BHFP's
@@ -346,16 +346,16 @@ def _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s,
             delta_mp = np.absolute(np.array([
                 gas_dmp(p1=pr, p2=bhfp, degf=degf, sg=sg,
                         zmethod=zmethod, cmethod=cmethod, tc=tc, pc=pc,
-                        n2=n2, co2=co2, h2s=h2s, h2=h2)
+                        n2=n2, co2=co2, h2s=h2s, h2=h2, he=he)
                 for bhfp in pwf
             ]))
     return direction, delta_mp
 
-def _prepare_gas_rate_inputs(degf, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, pc):
+def _prepare_gas_rate_inputs(degf, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, pc, he=0):
     """Validate inputs, apply H2 auto-selection, resolve methods and critical properties."""
-    validate_pe_inputs(degf=degf, sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2)
-    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
-    tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc)
+    validate_pe_inputs(degf=degf, sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2, he=he)
+    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2, he=he)
+    tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc, he=he)
     return zmethod, cmethod, tc, pc
 
 def gas_rate_radial(
@@ -378,7 +378,7 @@ def gas_rate_radial(
     tc: float = 0,
     pc: float = 0,
     gas_pvt = None,
-    metric: bool = False,
+    metric: bool = False, he: float = 0
 ) -> np.ndarray:
     """ Returns gas rate for radial flow (mscf/day) using Darcy pseudo steady state equation & gas pseudopressure
         k: Permeability (mD)
@@ -412,7 +412,7 @@ def gas_rate_radial(
     """
     if gas_pvt is not None:
         sg = gas_pvt.sg
-        co2, h2s, n2, h2 = gas_pvt.co2, gas_pvt.h2s, gas_pvt.n2, gas_pvt.h2
+        co2, h2s, n2, h2, he = gas_pvt.co2, gas_pvt.h2s, gas_pvt.n2, gas_pvt.h2, gas_pvt.he
         zmethod, cmethod = gas_pvt.zmethod, gas_pvt.cmethod
         tc, pc = gas_pvt.tc, gas_pvt.pc  # already in oilfield units
     if metric:
@@ -438,8 +438,8 @@ def gas_rate_radial(
     validate_pe_inputs(p=pr)
     validate_pe_inputs(p=pwf)
     if gas_pvt is None:
-        zmethod, cmethod, tc, pc = _prepare_gas_rate_inputs(degf, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, pc)
-    direction, delta_mp = _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s, h2)
+        zmethod, cmethod, tc, pc = _prepare_gas_rate_inputs(degf, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, pc, he)
+    direction, delta_mp = _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s, h2, he)
 
     qg = darcy_gas(delta_mp, k, h, degf, r_w, r_ext, S, D, radial=True)
     result = direction * qg
@@ -464,7 +464,7 @@ def gas_rate_linear(
     tc: float = 0,
     pc: float = 0,
     gas_pvt = None,
-    metric: bool = False,
+    metric: bool = False, he: float = 0
 ) -> np.ndarray:
     """ Returns gas rate for linear flow (mscf/day) using Darcy steady state equation & gas pseudopressure
         k: Permeability (mD)
@@ -495,7 +495,7 @@ def gas_rate_linear(
     """
     if gas_pvt is not None:
         sg = gas_pvt.sg
-        co2, h2s, n2, h2 = gas_pvt.co2, gas_pvt.h2s, gas_pvt.n2, gas_pvt.h2
+        co2, h2s, n2, h2, he = gas_pvt.co2, gas_pvt.h2s, gas_pvt.n2, gas_pvt.h2, gas_pvt.he
         zmethod, cmethod = gas_pvt.zmethod, gas_pvt.cmethod
         tc, pc = gas_pvt.tc, gas_pvt.pc  # already in oilfield units
     if metric:
@@ -516,8 +516,8 @@ def gas_rate_linear(
     validate_pe_inputs(p=pr)
     validate_pe_inputs(p=pwf)
     if gas_pvt is None:
-        zmethod, cmethod, tc, pc = _prepare_gas_rate_inputs(degf, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, pc)
-    direction, delta_mp = _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s, h2)
+        zmethod, cmethod, tc, pc = _prepare_gas_rate_inputs(degf, sg, co2, h2s, n2, h2, zmethod, cmethod, tc, pc, he)
+    direction, delta_mp = _compute_delta_mp(pr, pwf, degf, sg, zmethod, cmethod, tc, pc, n2, co2, h2s, h2, he)
 
     qg = darcy_gas(delta_mp, k, 1, degf, area, length, 0, 0, radial=False)
     result = direction * qg
@@ -572,7 +572,7 @@ def gas_tc_pc(
     cmethod: str = "PMC",
     tc: float = 0,
     pc: float = 0,
-    metric: bool = False,
+    metric: bool = False, he: float = 0
 ) -> Tuple:
     """ Returns a Tuple of critical temperature (deg R) and critical pressure (psia).
         For SUT and PMC, this returns an equivalent set of critical parameters for the mixture
@@ -595,7 +595,7 @@ def gas_tc_pc(
         pc: Critical gas pressure (psia | barsa). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants)
         metric: If True, input/output in Eclipse METRIC units (K, barsa). Defaults to False (FIELD)
     """
-    validate_pe_inputs(sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2)
+    validate_pe_inputs(sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2, he=he)
     if metric:
         if tc > 0:
             tc = tc * 1.8  # K to deg R
@@ -606,9 +606,9 @@ def gas_tc_pc(
             return (tc / 1.8, pc * PSI_TO_BAR)  # deg R -> K, psia -> barsa
         return (tc, pc)
 
-    _check_sg_vs_inerts(sg, co2, h2s, n2, h2)
+    _check_sg_vs_inerts(sg, co2, h2s, n2, h2, he)
 
-    _, cmethod = _h2_method_override(h2, 'DAK', cmethod)
+    _, cmethod = _h2_method_override(h2, 'DAK', cmethod, he)
     cmethod = validate_methods(["cmethod"], [cmethod])
 
     if cmethod.name == "PMC":  # Piper, McCain & Corredor (1999)
@@ -685,8 +685,9 @@ def gas_tc_pc(
             ppc_hc = pc_fn(x, vc_slope, tpc_hc)
             return tpc_hc, ppc_hc   
             
-        if co2 + h2s + n2 + h2 < 1.0: # If not 100% Inerts, then calculate hydrocarbon MW
-            hydrocarbon_specific_gravity = (sg - (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2) / MW_AIR) / (1 - co2 - h2s - n2 - h2)
+        if co2 + h2s + n2 + h2 + he < 1.0: # If not 100% Inerts, then calculate hydrocarbon MW
+            hydrocarbon_specific_gravity = ((sg - (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2 + he * MW_HE) / MW_AIR)
+                                            / (1 - co2 - h2s - n2 - h2 - he))
         else:
             hydrocarbon_specific_gravity = 0.75 # Use default value if 100% inerts to avoid numerical problems
         hydrocarbon_specific_gravity = np.max([_BNS_SG_METHANE, hydrocarbon_specific_gravity])  # Methane is lower limit
@@ -704,43 +705,55 @@ def gas_tc_pc(
     return (tpc, ppc)
 
 # EOS parameters for BNS Peng-Robinson model (shared by gas_z and gas_ug)
-_BNS_MWS = np.array([44.01, 34.082, 28.014, 2.016, 0])
-_BNS_TCS = np.array([547.416, 672.120, 227.160, 47.430, 1])  # H2 Tc has been modified
-_BNS_PCS = np.array([1069.51, 1299.97, 492.84, 187.5300, 1])
-_BNS_ACF = np.array([0.12253, 0.04909, 0.037, -0.21700, -0.03899])
-_BNS_VSHIFT = np.array([-0.27607, -0.22901, -0.21066, -0.36270, -0.19076])
-_BNS_OMEGAA = np.array([0.427671, 0.436725, 0.457236, 0.457236, 0.457236])
-_BNS_OMEGAB = np.array([0.0696397, 0.0724345, 0.0777961, 0.0777961, 0.0777961])
-_BNS_VCVIS = np.array([1.46352, 1.46808, 1.35526, 0.68473, 0.0])  # cuft/lbmol
+# Component order: [CO2, H2S, N2, H2, He, Gas]
+#
+# !!! HELIUM USES A DELIBERATELY NON-STANDARD CRITICAL TEMPERATURE - NOT A TYPO !!!
+# He Tc = 6.35 degR here, versus NIST 9.35 degR (5.195 K). In this model Tc also feeds
+# the Stiel-Thodos dilute-gas viscosity inside LBC, which is ~25% low for helium at the
+# true Tc and cannot be repaired through VcVis; the density fit is insensitive to Tc
+# (VSHIFT and AF absorb it). Against 29,400 NIST points (60-300 degF, 14.7-14,990 psia):
+# density 0.31% mean / 0.84% max, viscosity 0.70% / 3.1% (true Tc: 18.6% / 57% on
+# viscosity). He Tc, AF, VSHIFT and VCVIS are one regressed set (Burgoyne, 2026); all He
+# BIPs are zero. H2's 47.43 degR is the same kind of effective constant.
+_BNS_MWS = np.array([44.01, 34.082, 28.014, 2.016, 4.003, 0])
+_BNS_TCS = np.array([547.416, 672.120, 227.160, 47.430, 6.350, 1])  # H2 and He Tc are effective values
+_BNS_PCS = np.array([1069.51, 1299.97, 492.84, 187.5300, 32.9236, 1])
+_BNS_ACF = np.array([0.12253, 0.04909, 0.037, -0.21700, -0.17984, -0.03899])
+_BNS_VSHIFT = np.array([-0.27607, -0.22901, -0.21066, -0.36270, -0.078082, -0.19076])
+_BNS_OMEGAA = np.array([0.427671, 0.436725, 0.457236, 0.457236, 0.457236, 0.457236])
+_BNS_OMEGAB = np.array([0.0696397, 0.0724345, 0.0777961, 0.0777961, 0.0777961, 0.0777961])
+_BNS_VCVIS = np.array([1.46352, 1.46808, 1.35526, 0.68473, 0.76778, 0.0])  # cuft/lbmol
 
 # BIP precomputed matrices: kij[i,j] = _BIP_CONST[i,j] + _BIP_SLOPE_TC[i,j] / degR
-# Component order: [CO2=0, H2S=1, N2=2, H2=3, Gas=4]
+# Component order: [CO2=0, H2S=1, N2=2, H2=3, He=4, Gas=5]; every He BIP is zero
 # Gas column/row uses tpc_hc at runtime; stored slopes in _BIP_GAS_SLOPES
 _BIP_CONST = np.array([
-    [ 0.      ,  0.248638, -0.25    , -0.247153, -0.145561],
-    [ 0.248638,  0.      , -0.204414,  0.      ,  0.16852 ],
-    [-0.25    , -0.204414,  0.      , -0.166253, -0.108   ],
-    [-0.247153,  0.      , -0.166253,  0.      , -0.0620119],
-    [-0.145561,  0.16852 , -0.108   , -0.0620119,  0.      ]])
+    [ 0.      ,  0.248638, -0.25    , -0.247153, 0., -0.145561],
+    [ 0.248638,  0.      , -0.204414,  0.      , 0.,  0.16852 ],
+    [-0.25    , -0.204414,  0.      , -0.166253, 0., -0.108   ],
+    [-0.247153,  0.      , -0.166253,  0.      , 0., -0.0620119],
+    [ 0.      ,  0.      ,  0.      ,  0.      , 0.,  0.      ],
+    [-0.145561,  0.16852 , -0.108   , -0.0620119, 0.,  0.      ]])
 
 _BIP_SLOPE_TC = np.array([
-    [  0.        , -75.64467996,  63.51120432,  89.65031832, 0.],
-    [-75.64467996,   0.        , 157.55635404,   0.        , 0.],
-    [ 63.51120432, 157.55635404,   0.        ,  17.90313836, 0.],
-    [ 89.65031832,   0.        ,  17.90313836,   0.        , 0.],
-    [  0.        ,   0.        ,   0.        ,   0.        , 0.]])
+    [  0.        , -75.64467996,  63.51120432,  89.65031832, 0., 0.],
+    [-75.64467996,   0.        , 157.55635404,   0.        , 0., 0.],
+    [ 63.51120432, 157.55635404,   0.        ,  17.90313836, 0., 0.],
+    [ 89.65031832,   0.        ,  17.90313836,   0.        , 0., 0.],
+    [  0.        ,   0.        ,   0.        ,   0.        , 0., 0.],
+    [  0.        ,   0.        ,   0.        ,   0.        , 0., 0.]])
 
-_BIP_GAS_SLOPES = np.array([0.276572, -0.122378, 0.0605506, 0.0427873])
+_BIP_GAS_SLOPES = np.array([0.276572, -0.122378, 0.0605506, 0.0427873, 0.0])
 
 def _bip_slope_matrix(tpc_hc):
-    """5x5 matrix of the 1/T BIP slopes, with the hydrocarbon row/column filled in."""
+    """6x6 matrix of the 1/T BIP slopes, with the hydrocarbon row/column filled in."""
     slope_tc = _BIP_SLOPE_TC.copy()
-    slope_tc[4, :4] = _BIP_GAS_SLOPES * tpc_hc
-    slope_tc[:4, 4] = slope_tc[4, :4]
+    slope_tc[-1, :-1] = _BIP_GAS_SLOPES * tpc_hc
+    slope_tc[:-1, -1] = slope_tc[-1, :-1]
     return slope_tc
 
 def _calc_bips_fast(degR, tpc_hc):
-    """Compute 5x5 BIP matrix using precomputed constants."""
+    """Compute 6x6 BIP matrix using precomputed constants."""
     return _BIP_CONST + _bip_slope_matrix(tpc_hc) / degR
 
 def _calc_bip_derivs(degR, tpc_hc):
@@ -755,19 +768,20 @@ def _calc_bip_derivs(degR, tpc_hc):
 
 # --- BNS caloric parameters (Burgoyne, Nielsen & Stanko 2025, SPE-229932-MS) ---
 # Ideal-gas Cp as a Riazi-form polynomial in T(K), Cp/R = sum(coeff * T**i).
-# Fitted to zero-pressure NIST heat capacities. Order [CO2, H2S, N2, H2, Gas(C1+)].
+# Fitted to zero-pressure NIST heat capacities. Order [CO2, H2S, N2, H2, He, Gas(C1+)].
 _BNS_CP_POLY = np.array([
     [2.725473196,  0.004103751,  1.5602E-05, -4.19321E-08,  3.10542E-11],  # CO2
     [4.446031265, -0.005296052,  2.0533E-05, -2.58993E-08,  1.25555E-11],  # H2S
     [3.423811591,  0.001007461, -4.58491E-06,  8.4252E-09, -4.38083E-12],  # N2
     [1.421468418,  0.018192108, -6.04285E-05,  9.08033E-08, -5.18972E-11],  # H2
+    [2.5,          0.0,          0.0,          0.0,          0.0],           # He (monatomic, Cp/R = 5/2)
     [5.369051342, -0.014851371,  4.86358E-05, -3.70187E-08,  1.80641E-12],  # C1+
 ])
 # Quadratic scaling applied to the C1+ Cp coefficients as its MW rises above methane
 _BNS_CP_SCALE_A0 = np.array([7.8570E-04, 1.3123E-03, 9.8133E-04, 1.6463E-03, 1.7306E-02])
 _BNS_CP_SCALE_A1 = np.array([-8.1649E-03, 5.5485E-03, 8.3258E-02, 2.0635E-01, 2.5551E+00])
 # Reference enthalpy per component at 60 degF and 14.696 psia (Btu/lb-mol)
-_BNS_H0 = np.array([-16.6022, -21.5512, -3.57757, 0.008054, 0.0])
+_BNS_H0 = np.array([-16.6022, -21.5512, -3.57757, 0.008054, 0.425547, 0.0])
 _BNS_H0_HC = (-0.015774, -0.646645, -8.2551915)   # quadratic in (hc_mw - mw_CH4)
 _BNS_T_REF_F = 60.0            # enthalpy reference temperature (deg F)
 _BNS_P_REF_PSIA = 14.696       # enthalpy reference pressure (psia)
@@ -911,7 +925,7 @@ def gas_z(
     h2: float = 0,
     tc: float = 0,
     pc: float = 0,
-    metric: bool = False,
+    metric: bool = False, he: float = 0
 ) -> np.ndarray:
     """ Returns real-gas deviation factor (Z). Returning either single float, or numpy array depending upon
         whether single pressure of list/array or pressures has been specified.
@@ -937,14 +951,14 @@ def gas_z(
         metric: If True, input/output in Eclipse METRIC units (barsa, degC, K). Defaults to False (FIELD)
     """
     p, degf, tc, pc = _metric_to_field_pvt(p, degf, tc, pc, metric)
-    validate_pe_inputs(p=p, degf=degf, sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2)
+    validate_pe_inputs(p=p, degf=degf, sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2, he=he)
 
     tolerance = 1e-6
     p, is_list = convert_to_numpy(p)
 
-    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
+    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2, he=he)
 
-    tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc)
+    tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc, he=he)
     tr = (degf + degF2R) / tc
     pprs = np.array(p/pc)
 
@@ -1069,7 +1083,7 @@ def gas_z(
     def z_bur(psias, degf):
         degR = degf + degF2R
 
-        z = np.array([co2, h2s, n2, h2, 1 - co2 - h2s - n2 - h2])
+        z = np.array([co2, h2s, n2, h2, he, 1 - co2 - h2s - n2 - h2 - he])
 
         tcs[-1], pcs[-1] = tc, pc  # Hydrocarbon Tc and Pc from SG using BNS correlation
         trs = degR / tcs
@@ -1119,7 +1133,7 @@ def gas_z(
             zout = np.array(_rust_module.bns_zfactor_batch(
                 p.tolist(), float(degf), float(sg),
                 float(co2), float(h2s), float(n2), float(h2),
-                float(tc), float(pc),
+                float(tc), float(pc), he_frac=float(he),
             ))
             return process_output(zout, is_list)
         elif zmethod.name == 'DAK':
@@ -1156,7 +1170,7 @@ def gas_ug(
     pc: float = 0,
     zee: float = 0,
     ugz = False,
-    metric: bool = False,
+    metric: bool = False, he: float = 0
 ) -> np.ndarray:
     """ Returns Gas Viscosity (cP) or Gas Viscosity * Z-Factor
         Uses Lee, Gonzalez & Eakin (1966) Correlation using equations 2.14-2.17 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
@@ -1196,16 +1210,16 @@ def gas_ug(
     p, is_list = convert_to_numpy(p)
     zee, _ = convert_to_numpy(zee)
 
-    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
+    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2, he=he)
     # Effective tc/pc resolved once via gas_tc_pc (honours single-sided user
     # overrides); forwarded to gas_z and the Rust batch viscosity paths.
-    tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc)
+    tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc, he=he)
 
     t = degf + degF2R
     m = MW_AIR * sg
 
     if not zee_provided or not check_2_inputs(zee, p): # Need to calculate Z-Factors if not same length / type as p
-         zee = gas_z(p, sg, degf, zmethod, cmethod, co2, h2s, n2, h2, tc, pc)
+         zee = gas_z(p, sg, degf, zmethod, cmethod, co2, h2s, n2, h2, tc, pc, he=he)
 
     # Rust-accelerated viscosity (batch — single FFI call for all pressures).
     # For BNS, the effective tc/pc is forwarded as HC-only override (inert
@@ -1219,7 +1233,7 @@ def gas_ug(
         else:
             ug_list = np.array(_rust_module.gas_ug_lbc_batch(
                 p.tolist(), zee.tolist(), sg, degf, co2, h2s, n2, h2,
-                float(tc), float(pc),
+                float(tc), float(pc), he=float(he),
             ))
             ug = process_output(ug_list, is_list)
         if ugz:
@@ -1242,9 +1256,10 @@ def gas_ug(
         VCVIS_lbc = _BNS_VCVIS.copy()  # Copy to avoid mutating module-level array
 
         degR = degf + degF2R
-        zi = np.array([co2, h2s, n2, h2, 1 - co2 - h2s - n2 - h2])
-        if n2 + co2 + h2s + h2 < 1:
-            sg_hc = (sg - (co2 * mws_lbc[0] + h2s * mws_lbc[1] + n2 * mws_lbc[2] + h2 * mws_lbc[3]) / MW_AIR) / (1 - co2 - h2s - n2 - h2)
+        zi = np.array([co2, h2s, n2, h2, he, 1 - co2 - h2s - n2 - h2 - he])
+        if n2 + co2 + h2s + h2 + he < 1:
+            sg_hc = ((sg - (co2 * mws_lbc[0] + h2s * mws_lbc[1] + n2 * mws_lbc[2] + h2 * mws_lbc[3] + he * mws_lbc[4]) / MW_AIR)
+                     / (1 - co2 - h2s - n2 - h2 - he))
         else:
             sg_hc = 0.75
 
@@ -1294,7 +1309,7 @@ def gas_thermal(
     h2: float = 0,
     tc: float = 0,
     pc: float = 0,
-    metric: bool = False,
+    metric: bool = False, he: float = 0
 ) -> dict:
     """ Returns gas enthalpy, heat capacities and Joule-Thomson coefficient from the BNS
         tuned 5-component Peng Robinson EOS (Burgoyne, Nielsen & Stanko 2025, SPE-229932-MS).
@@ -1338,18 +1353,18 @@ def gas_thermal(
 
     # Hydrocarbon pseudo-component critical properties from the BNS correlation,
     # honouring a user override exactly as gas_z does
-    tc_hc, pc_hc = gas_tc_pc(sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2, cmethod='BNS',
+    tc_hc, pc_hc = gas_tc_pc(sg=sg, co2=co2, h2s=h2s, n2=n2, h2=h2, he=he, cmethod='BNS',
                              tc=tc_in, pc=pc_in)
 
-    zf = np.array([co2, h2s, n2, h2, 1 - co2 - h2s - n2 - h2])
+    zf = np.array([co2, h2s, n2, h2, he, 1 - co2 - h2s - n2 - h2 - he])
     if zf[-1] < 0:
         raise ValueError("Inert mole fractions sum to more than 1.0")
 
     tcs, pcs, mws = _BNS_TCS.copy(), _BNS_PCS.copy(), _BNS_MWS.copy()
     tcs[-1], pcs[-1] = tc_hc, pc_hc
-    if co2 + h2s + n2 + h2 < 1.0:
-        hc_sg = (sg - (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2) / MW_AIR) \
-                / (1 - co2 - h2s - n2 - h2)
+    if co2 + h2s + n2 + h2 + he < 1.0:
+        hc_sg = (sg - (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2 + he * MW_HE) / MW_AIR) \
+                / (1 - co2 - h2s - n2 - h2 - he)
     else:
         hc_sg = 0.75
     hc_mw = max(_BNS_SG_METHANE, hc_sg) * MW_AIR
@@ -1411,7 +1426,7 @@ def gas_thermal(
     # Ideal-gas Cp and its integral from the reference temperature
     cp_poly = _bns_cp_poly(hc_mw)
     T_K, T_ref_K = degR * 5.0 / 9.0, (_BNS_T_REF_F + degF2R) * 5.0 / 9.0
-    Cp_IG = float(np.dot(zf, np.array([np.polyval(cp_poly[i, ::-1], T_K) for i in range(5)]))) * R_THERMO
+    Cp_IG = float(np.dot(zf, np.array([np.polyval(cp_poly[i, ::-1], T_K) for i in range(len(zf))]))) * R_THERMO
     H_IG = R_THERMO * 9.0 / 5.0 * float(np.dot(zf, sum(
         cp_poly[:, k] / (k + 1) * (T_K**(k + 1) - T_ref_K**(k + 1)) for k in range(5))))
 
@@ -1477,7 +1492,7 @@ def gas_cg(
     pc: float = 0,
     zmethod: z_method = z_method.DAK,
     cmethod: c_method = c_method.PMC,
-    metric: bool = False,
+    metric: bool = False, he: float = 0
 ) -> np.ndarray:
     """ Returns gas compressibility (1/psi) using the 'DAK' Dranchuk & Abou-Kassem (1975) Z-Factor &
         Critical property correlation values if not explicitly specified
@@ -1504,15 +1519,15 @@ def gas_cg(
           metric: If True, input/output in Eclipse METRIC units (barsa, degC, 1/barsa). Defaults to False (FIELD)
     """
     p, degf, tc, pc = _metric_to_field_pvt(p, degf, tc, pc, metric)
-    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
+    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2, he=he)
 
     p, is_list = convert_to_numpy(p)
-    tc, pc = gas_tc_pc(sg=sg, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc, cmethod=cmethod)
+    tc, pc = gas_tc_pc(sg=sg, co2=co2, h2s=h2s, n2=n2, h2 = h2, he=he, tc=tc, pc=pc, cmethod=cmethod)
 
     degR = (degf + degF2R)
     dp = np.maximum(p * 1e-4, 0.01)  # Relative step, floor at 0.01 psi
     p_both = np.concatenate([p, p + dp])
-    zee_both = gas_z(p=p_both, sg=sg, degf=degf, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2=h2, tc=tc, pc=pc)
+    zee_both = gas_z(p=p_both, sg=sg, degf=degf, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2=h2, he=he, tc=tc, pc=pc)
     n = len(p)
     zee1 = zee_both[:n]
     zee2 = zee_both[n:]
@@ -1537,7 +1552,7 @@ def gas_bg(
     h2: float = 0,
     tc: float = 0,
     pc: float = 0,
-    metric: bool = False,
+    metric: bool = False, he: float = 0
 ) -> np.ndarray:
     """ Returns Bg (gas formation volume factor) for natural gas (rcf/scf)
         p: Gas pressure (psia | barsa)
@@ -1562,21 +1577,22 @@ def gas_bg(
           metric: If True, input/output in Eclipse METRIC units (barsa, degC). Defaults to False (FIELD)
     """
     p, degf, tc, pc = _metric_to_field_pvt(p, degf, tc, pc, metric)
-    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
+    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2, he=he)
     p, is_list = convert_to_numpy(p)
 
-    zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc)
+    zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, he=he, tc=tc, pc=pc)
     degR = (degf + degF2R)
     return process_output(zee * degR / (p * (tsc + degF2R) / psc), is_list)
 
-def gas_sg(hc_mw: float, co2: float, h2s: float, n2: float, h2: float)  -> float:
+def gas_sg(hc_mw: float, co2: float, h2s: float, n2: float, h2: float, he: float = 0)  -> float:
     """ Returns the specific gravity (relative to air) of a gas mixture from its
         hydrocarbon molecular weight and inert fractions.
 
         hc_mw: Molecular weight of the hydrocarbon fraction (lb/lbmol)
         co2, h2s, n2, h2: Mole fractions of CO2, H2S, N2 and H2 (0-1)
     """
-    return (hc_mw * (1 - co2 - h2s-  n2 - h2) + (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2)) / MW_AIR
+    return (hc_mw * (1 - co2 - h2s - n2 - h2 - he)
+            + (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2 + he * MW_HE)) / MW_AIR
 
 def gas_den(
     p: npt.ArrayLike,
@@ -1590,7 +1606,7 @@ def gas_den(
     h2: float = 0,
     tc: float = 0,
     pc: float = 0,
-    metric: bool = False,
+    metric: bool = False, he: float = 0
 ) -> np.ndarray:
     """ Returns gas density for natural gas (lb/cuft)
           p: Gas pressure (psia | barsa)
@@ -1615,10 +1631,10 @@ def gas_den(
           metric: If True, input/output in Eclipse METRIC units (barsa, degC, kg/m3). Defaults to False (FIELD)
     """
     p, degf, tc, pc = _metric_to_field_pvt(p, degf, tc, pc, metric)
-    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
+    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2, he=he)
     p, is_list = convert_to_numpy(p)
 
-    zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc)
+    zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, he=he, tc=tc, pc=pc)
 
     m = sg * MW_AIR
 
@@ -1651,7 +1667,7 @@ def gas_ponz2p(
     tc: float = 0,
     pc: float = 0,
     rtol: float = 1e-7,
-    metric: bool = False,
+    metric: bool = False, he: float = 0
 ) -> np.ndarray:
     """ Returns pressure corresponding to a P/Z value for natural gas (psia)
         Calculated through iterative solution method
@@ -1685,10 +1701,10 @@ def gas_ponz2p(
         if pc > 0:
             pc = pc * BAR_TO_PSI
 
-    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
+    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2, he=he)
     # Effective tc/pc resolved once via gas_tc_pc (honours single-sided user
     # overrides); forwarded to the Rust path and the Python fallback alike.
-    tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc)
+    tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc, he=he)
 
     poverz, is_list = convert_to_numpy(poverz)
 
@@ -1708,7 +1724,7 @@ def gas_ponz2p(
             p_list = _rust_module.gas_ponz2p_rust(
                 [float(v) for v in poverz], degf, sg,
                 zname, _rust_cmethod(cmethod),
-                co2, h2s, n2, h2, float(tc), float(pc), rtol,
+                [co2, h2s, n2, h2, he], float(tc), float(pc), rtol,
             )
             result = process_output(np.array(p_list), is_list)
             if metric:
@@ -1723,13 +1739,13 @@ def gas_ponz2p(
 
     # Python fallback: scalar bisection
     def PonZ2P_err(args, p):
-        ponz, sg, degf, zmethod, cmethod, tc, pc, co2, h2s, n2, h2 = args
-        zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc)
+        ponz, sg, degf, zmethod, cmethod, tc, pc, co2, h2s, n2, h2, he = args
+        zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, he=he, tc=tc, pc=pc)
         return (p - (ponz * zee)) / p
 
     p = []
     for ponz in poverz:
-        args = (ponz, sg, degf, zmethod, cmethod, tc, pc, co2, h2s, n2, h2)
+        args = (ponz, sg, degf, zmethod, cmethod, tc, pc, co2, h2s, n2, h2, he)
         try:
             p.append(bisect_solve(args, PonZ2P_err, ponz * 0.1, ponz * 5, rtol))
         except (ValueError, RuntimeError) as e:
@@ -1753,7 +1769,7 @@ def gas_grad2sg(
     tc: float = 0,
     pc: float = 0,
     rtol: float = 1e-7,
-    metric: bool = False,
+    metric: bool = False, he: float = 0
 ) -> float:
     """ Returns insitu gas specific gravity consistent with observed gas gradient. Solution iteratively calculated via bisection
         Calculated through iterative solution method. Bisection bounds span pure H2 (SG ~0.070) to 3.0 to
@@ -1790,25 +1806,25 @@ def gas_grad2sg(
         if pc > 0:
             pc = pc * BAR_TO_PSI
 
-    validate_pe_inputs(p=p, degf=degf, co2=co2, h2s=h2s, n2=n2, h2=h2)
+    validate_pe_inputs(p=p, degf=degf, co2=co2, h2s=h2s, n2=n2, h2=h2, he=he)
     if grad <= 0:
         raise ValueError("Gas gradient must be positive")
 
     degR = degf + degF2R
 
     def grad_err(args, sg):
-        grad, p, zmethod, cmethod, tc, pc, co2, h2s, n2, h2 = args
+        grad, p, zmethod, cmethod, tc, pc, co2, h2s, n2, h2, he = args
         m = sg * MW_AIR
-        zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, tc=tc, pc=pc)
+        zee = gas_z(p=p, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod, co2=co2, h2s=h2s, n2=n2, h2 = h2, he=he, tc=tc, pc=pc)
         grad_calc = p * m / (zee * R * degR) / 144
         error = (grad - grad_calc) / grad
         return error
 
-    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
+    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2, he=he)
 
-    args = (grad, p, zmethod, cmethod, tc, pc, co2, h2s, n2, h2)
+    args = (grad, p, zmethod, cmethod, tc, pc, co2, h2s, n2, h2, he)
     # Keep the bracket above the sg the inerts alone contribute (see gas_tc_pc)
-    sg_lo = max(_GRAD2SG_SG_LO, _inert_sg(co2, h2s, n2, h2) * (1 + 1e-6) + 1e-9)
+    sg_lo = max(_GRAD2SG_SG_LO, _inert_sg(co2, h2s, n2, h2, he) * (1 + 1e-6) + 1e-9)
     return bisect_solve(args, grad_err, sg_lo, _GRAD2SG_SG_HI, rtol)
 
 def gas_dmp(
@@ -1824,7 +1840,7 @@ def gas_dmp(
     h2: float = 0,
     tc: float = 0,
     pc: float = 0,
-    metric: bool = False,
+    metric: bool = False, he: float = 0
 ) -> float:
     """ Numerical integration of real-gas pseudopressure between two pressures
         Returns integral over range between p1 to p2 (psi**2/cP)
@@ -1865,10 +1881,10 @@ def gas_dmp(
     if p1 == p2:
         return 0
 
-    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
+    zmethod, cmethod = _resolve_methods(zmethod, cmethod, h2=h2, he=he)
     # Effective tc/pc resolved once via gas_tc_pc (honours single-sided user
     # overrides); forwarded to the Rust path and the Python fallback alike.
-    tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc)
+    tc, pc = gas_tc_pc(sg, co2, h2s, n2, h2, cmethod.name, tc, pc, he=he)
 
     # Rust-accelerated pseudopressure (entire integration in Rust — no Python round-trips).
     # Effective tc/pc is honoured by the Rust path: mixture override for
@@ -1878,7 +1894,7 @@ def gas_dmp(
             result = _rust_module.gas_dmp_rust(
                 float(p1), float(p2), degf, sg,
                 zmethod.name, _rust_cmethod(cmethod),
-                co2, h2s, n2, h2, float(tc), float(pc),
+                [co2, h2s, n2, h2, he], float(tc), float(pc),
             )
             if metric:
                 return result * PSI2CP_TO_BAR2CP
@@ -1892,8 +1908,8 @@ def gas_dmp(
         p_half = (hi - lo) * 0.5
         p_eval = p_mid + p_half * nodes
         zee = gas_z(p=p_eval, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod,
-                     co2=co2, h2s=h2s, n2=n2, h2=h2, tc=tc, pc=pc)
-        mugz = gas_ug(p_eval, sg, degf, zmethod, cmethod, co2, h2s, n2, h2, tc, pc, zee, ugz=True)
+                     co2=co2, h2s=h2s, n2=n2, h2=h2, he=he, tc=tc, pc=pc)
+        mugz = gas_ug(p_eval, sg, degf, zmethod, cmethod, co2, h2s, n2, h2, tc, pc, zee, ugz=True, he=he)
         return p_half * np.sum(weights * 2.0 * p_eval / mugz)
 
     # Two-tier integration: compute with n=7 and n=10, compare for convergence
@@ -1915,8 +1931,8 @@ def gas_dmp(
                                  p_center_hi + p_half_hi * _GL10_NODES])
 
         zee = gas_z(p=p_eval, degf=degf, sg=sg, zmethod=zmethod, cmethod=cmethod,
-                     co2=co2, h2s=h2s, n2=n2, h2=h2, tc=tc, pc=pc)
-        mugz = gas_ug(p_eval, sg, degf, zmethod, cmethod, co2, h2s, n2, h2, tc, pc, zee, ugz=True)
+                     co2=co2, h2s=h2s, n2=n2, h2=h2, he=he, tc=tc, pc=pc)
+        mugz = gas_ug(p_eval, sg, degf, zmethod, cmethod, co2, h2s, n2, h2, tc, pc, zee, ugz=True, he=he)
         integrand = 2.0 * p_eval / mugz
 
         n = len(_GL10_NODES)
@@ -2150,12 +2166,13 @@ class GasPVT:
         user-chosen non-BNS method). h2 > 0 auto-selects BNS silently.
     """
     def __init__(self, sg=0.75, co2=0, h2s=0, n2=0, h2=0,
-                 zmethod='DAK', cmethod='PMC', tc=0, pc=0, metric=False):
+                 zmethod='DAK', cmethod='PMC', tc=0, pc=0, metric=False, he=0):
         self.sg = sg
         self.co2 = co2
         self.h2s = h2s
         self.n2 = n2
         self.h2 = h2
+        self.he = he
         self.metric = metric
         # Convert user-supplied metric tc/pc to oilfield units for internal storage
         if metric:
@@ -2166,12 +2183,12 @@ class GasPVT:
         # Whether the user overrode tc or pc: the nodal VLP march honours an
         # override but otherwise computes its own (Sutton + Wichert-Aziz) values
         self._user_tc_pc = tc > 0 or pc > 0
-        self.zmethod, self.cmethod = _resolve_methods(zmethod, cmethod, h2=h2)
+        self.zmethod, self.cmethod = _resolve_methods(zmethod, cmethod, h2=h2, he=he)
         # self.tc/self.pc are the effective critical properties every method uses:
         # a user-supplied value where given (either or both), else cmethod output.
         # For SUT/PMC these are mixture pseudo-critical values; for BNS they are the
         # inert-free hydrocarbon pseudo-critical values.
-        self.tc, self.pc = gas_tc_pc(sg, co2, h2s, n2, h2, self.cmethod.name, tc, pc)
+        self.tc, self.pc = gas_tc_pc(sg, co2, h2s, n2, h2, self.cmethod.name, tc, pc, he=he)
 
     def _convert_inputs(self, p, degf):
         """Convert metric inputs to oilfield for internal calculations."""
@@ -2186,7 +2203,7 @@ class GasPVT:
         tc, pc = self.tc, self.pc
         return gas_z(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
                      cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
-                     n2=self.n2, h2=self.h2, tc=tc, pc=pc)
+                     n2=self.n2, h2=self.h2, he=self.he, tc=tc, pc=pc)
 
     def viscosity(self, p, degf):
         """ Returns gas viscosity (cP) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
@@ -2194,7 +2211,7 @@ class GasPVT:
         tc, pc = self.tc, self.pc
         return gas_ug(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
                       cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
-                      n2=self.n2, h2=self.h2, tc=tc, pc=pc)
+                      n2=self.n2, h2=self.h2, he=self.he, tc=tc, pc=pc)
 
     def density(self, p, degf):
         """ Returns gas density (lb/cuft | kg/m3) at pressure p (psia | barsa) and temperature degf (deg F | deg C) """
@@ -2202,7 +2219,7 @@ class GasPVT:
         tc, pc = self.tc, self.pc
         result = gas_den(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
                          cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
-                         n2=self.n2, h2=self.h2, tc=tc, pc=pc)
+                         n2=self.n2, h2=self.h2, he=self.he, tc=tc, pc=pc)
         if self.metric:
             return result * LBCUFT_TO_KGM3
         return result
@@ -2213,7 +2230,7 @@ class GasPVT:
         tc, pc = self.tc, self.pc
         return gas_bg(p=p, sg=self.sg, degf=degf, zmethod=self.zmethod,
                       cmethod=self.cmethod, co2=self.co2, h2s=self.h2s,
-                      n2=self.n2, h2=self.h2, tc=tc, pc=pc)
+                      n2=self.n2, h2=self.h2, he=self.he, tc=tc, pc=pc)
 
     def non_darcy_skin(self, qg, p, degf, k, h_perf, rw,
                        krg=1.0, beta_method='FK', phi=0.0):

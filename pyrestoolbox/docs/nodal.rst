@@ -426,7 +426,7 @@ Returns flowing bottom hole pressure (psia, or barsa if metric=True) using the s
      - 'gas' or 'oil'
    * - gas_pvt
      - GasPVT
-     - Gas PVT object. If provided, extracts gas composition (sg, co2, h2s, n2, h2) and method selections for IPR calculations
+     - Gas PVT object. If provided, extracts gas composition (sg, co2, h2s, n2, h2, he) and method selections for IPR calculations
    * - oil_pvt
      - OilPVT
      - Oil PVT object. If provided for oil wells, extracts api, sgsp, pb, rsb
@@ -683,7 +683,7 @@ For oil wells with OilPVT: uses Darcy above Pb, Vogel below Pb. Without OilPVT: 
      - 'gas', 'oil', or 'water'
    * - gas_pvt
      - GasPVT
-     - Gas PVT object. Used for gas well composition (sg, co2, h2s, n2, h2)
+     - Gas PVT object. Used for gas well composition (sg, co2, h2s, n2, h2, he)
    * - oil_pvt
      - OilPVT
      - Oil PVT object. Used for oil well Pb, Rs, Bo, viscosity

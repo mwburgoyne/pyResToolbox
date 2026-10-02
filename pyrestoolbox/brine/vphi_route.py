@@ -88,7 +88,8 @@ def V_phi(gas: str, T: float, P: float, route: str = DEFAULT_ROUTE,
     """Dissolved-gas apparent molar volume at infinite dilution, cm3/mol.
 
     Args:
-        gas: gas name ('CO2', 'CH4', 'H2S', 'N2', 'H2', 'C2H6', 'C3H8', 'NC4H10')
+        gas: gas name ('CO2', 'CH4', 'H2S', 'N2', 'H2', 'C2H6', 'C3H8', 'NC4H10', 'He';
+            He has no Plyasunov parameters, so outside the PR box it raises)
         T: temperature, K
         P: pressure, MPa
         route: 'auto' uses PR where calibrated and Plyasunov elsewhere; 'pr'

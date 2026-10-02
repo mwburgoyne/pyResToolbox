@@ -255,3 +255,9 @@ def test_main_passes_http_settings_to_the_sdk(monkeypatch):
     monkeypatch.setattr('sys.argv', ['pyrestoolbox-mcp'])
     srv.main()
     assert calls == [{'transport': 'stdio'}]
+
+
+def test_sw_brine_props_helium():
+    out = srv.sw_brine_props(pres=3000, temp=150, ppm=50000, y_He=1.0)
+    assert out['x']['He'] > 0
+    assert out['bDen'][0] < out['bDen'][1]

@@ -10,11 +10,14 @@ const R: f64 = 10.731577089016;
 const MW_AIR: f64 = 28.97;
 const DEGF2R: f64 = 459.67;
 
-// BNS EOS component arrays (same as zfactor module)
-const BNS_MWS: [f64; 5] = [44.01, 34.082, 28.014, 2.016, 0.0];
-const BNS_TCS: [f64; 5] = [547.416, 672.120, 227.160, 47.430, 1.0];
-const BNS_PCS: [f64; 5] = [1069.51, 1299.97, 492.84, 187.5300, 1.0];
-const BNS_VCVIS: [f64; 5] = [1.46352, 1.46808, 1.35526, 0.68473, 0.0];
+// BNS EOS component arrays (same as zfactor module): [CO2, H2S, N2, H2, He, Gas].
+// He Tc 6.35 degR is DELIBERATELY NON-STANDARD (see zfactor); it sets the
+// Stiel-Thodos dilute viscosity below.
+use crate::zfactor::{NC, IGAS};
+const BNS_MWS: [f64; NC] = [44.01, 34.082, 28.014, 2.016, 4.003, 0.0];
+const BNS_TCS: [f64; NC] = [547.416, 672.120, 227.160, 47.430, 6.350, 1.0];
+const BNS_PCS: [f64; NC] = [1069.51, 1299.97, 492.84, 187.5300, 32.9236, 1.0];
+const BNS_VCVIS: [f64; NC] = [1.46352, 1.46808, 1.35526, 0.68473, 0.76778, 0.0];
 
 // LBC polynomial coefficients
 const A_LBC: [f64; 5] = [0.1023, 0.023364, 0.058533, -0.0392852, 0.00926279];
@@ -65,12 +68,12 @@ pub struct LbcParams {
 pub fn lbc_params(
     degf: f64,
     sg: f64,
-    co2: f64, h2s: f64, n2: f64, h2: f64,
+    co2: f64, h2s: f64, n2: f64, h2: f64, he: f64,
     tc_user: f64,
     pc_user: f64,
 ) -> LbcParams {
     let deg_r = degf + DEGF2R;
-    let zi = [co2, h2s, n2, h2, 1.0 - co2 - h2s - n2 - h2];
+    let zi = [co2, h2s, n2, h2, he, 1.0 - co2 - h2s - n2 - h2 - he];
 
     let mut mws = BNS_MWS;
     let mut tcs = BNS_TCS;
@@ -78,31 +81,31 @@ pub fn lbc_params(
     let mut vcvis = BNS_VCVIS;
 
     // Compute HC properties
-    let inert_sum = co2 + h2s + n2 + h2;
+    let inert_sum = co2 + h2s + n2 + h2 + he;
     let sg_hc = if inert_sum < 1.0 {
-        let raw = (sg - (co2 * mws[0] + h2s * mws[1] + n2 * mws[2] + h2 * mws[3]) / MW_AIR) / (1.0 - inert_sum);
+        let raw = (sg - (co2 * mws[0] + h2s * mws[1] + n2 * mws[2] + h2 * mws[3] + he * mws[4]) / MW_AIR) / (1.0 - inert_sum);
         if raw < 0.553779772 { 0.553779772 } else { raw }
     } else {
         0.75
     };
     let hc_gas_mw = sg_hc * MW_AIR;
 
-    mws[4] = hc_gas_mw;
+    mws[IGAS] = hc_gas_mw;
     if tc_user > 0.0 && pc_user > 0.0 {
-        tcs[4] = tc_user;
-        pcs[4] = pc_user;
+        tcs[IGAS] = tc_user;
+        pcs[IGAS] = pc_user;
     } else {
         let (tpc_hc, ppc_hc, _) = critical_properties::bns_pseudocritical_internal(
-            hc_gas_mw / MW_AIR, 0.0, 0.0, 0.0, 0.0
+            hc_gas_mw / MW_AIR, 0.0, 0.0, 0.0, 0.0, 0.0
         );
-        tcs[4] = tpc_hc;
-        pcs[4] = ppc_hc;
+        tcs[IGAS] = tpc_hc;
+        pcs[IGAS] = ppc_hc;
     }
-    vcvis[4] = 0.0576710 * (hc_gas_mw - 16.0425) + 1.44383;
+    vcvis[IGAS] = 0.0576710 * (hc_gas_mw - 16.0425) + 1.44383;
 
     // Stiel-Thodos dilute gas viscosity per component
-    let mut ui = [0.0; 5];
-    for i in 0..5 {
+    let mut ui = [0.0; NC];
+    for i in 0..NC {
         let tr = deg_r / tcs[i];
         let tc_k = tcs[i] * 5.0 / 9.0;
         let pc_atm = pcs[i] / 14.696;
@@ -118,7 +121,7 @@ pub fn lbc_params(
     // Herning-Zippener
     let mut num = 0.0;
     let mut den = 0.0;
-    for i in 0..5 {
+    for i in 0..NC {
         let sqrt_mw = mws[i].sqrt();
         num += zi[i] * ui[i] * sqrt_mw;
         den += zi[i] * sqrt_mw;
@@ -130,7 +133,7 @@ pub fn lbc_params(
     let mut tc_k_sum = 0.0;
     let mut mw_sum = 0.0;
     let mut pc_atm_sum = 0.0;
-    for i in 0..5 {
+    for i in 0..NC {
         vc_sum += vcvis[i] * zi[i];
         tc_k_sum += zi[i] * tcs[i] * 5.0 / 9.0;
         mw_sum += zi[i] * mws[i];
@@ -158,7 +161,7 @@ pub fn lbc_viscosity_with_params(
 
 /// LBC viscosity exposed to Python (scalar, full computation).
 #[pyfunction]
-#[pyo3(signature = (p_psia, sg, degf, co2, h2s, n2, h2, zee, tc_user=0.0, pc_user=0.0))]
+#[pyo3(signature = (p_psia, sg, degf, co2, h2s, n2, h2, zee, tc_user=0.0, pc_user=0.0, he=0.0))]
 pub fn gas_ug_lbc(
     p_psia: f64,
     sg: f64,
@@ -170,9 +173,10 @@ pub fn gas_ug_lbc(
     zee: f64,
     tc_user: f64,
     pc_user: f64,
+    he: f64,
 ) -> PyResult<f64> {
     let deg_r = degf + DEGF2R;
-    let params = lbc_params(degf, sg, co2, h2s, n2, h2, tc_user, pc_user);
+    let params = lbc_params(degf, sg, co2, h2s, n2, h2, he, tc_user, pc_user);
     Ok(lbc_viscosity_with_params(p_psia, deg_r, zee, &params))
 }
 
@@ -208,7 +212,7 @@ pub fn gas_ug_lge_batch(
 /// Precomputes LBC mixture parameters (u0, eta_mix, rhoc) once.
 /// If tc_user > 0 and pc_user > 0, those override only the HC pseudo-component Tc/Pc.
 #[pyfunction]
-#[pyo3(signature = (pressures, z_factors, sg, degf, co2, h2s, n2, h2, tc_user=0.0, pc_user=0.0))]
+#[pyo3(signature = (pressures, z_factors, sg, degf, co2, h2s, n2, h2, tc_user=0.0, pc_user=0.0, he=0.0))]
 pub fn gas_ug_lbc_batch(
     pressures: Vec<f64>,
     z_factors: Vec<f64>,
@@ -220,9 +224,10 @@ pub fn gas_ug_lbc_batch(
     h2: f64,
     tc_user: f64,
     pc_user: f64,
+    he: f64,
 ) -> PyResult<Vec<f64>> {
     let deg_r = degf + DEGF2R;
-    let params = lbc_params(degf, sg, co2, h2s, n2, h2, tc_user, pc_user);
+    let params = lbc_params(degf, sg, co2, h2s, n2, h2, he, tc_user, pc_user);
 
     let result: Vec<f64> = pressures.iter().zip(z_factors.iter()).map(|(&p, &z)| {
         lbc_viscosity_with_params(p, deg_r, z, &params)

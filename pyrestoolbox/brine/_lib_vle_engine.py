@@ -2492,6 +2492,7 @@ def calc_gas_brine_equilibrium(
     method: str = 'henry',
     salinity_method: str = 'gamma_phi',
     framework: str = 'default',
+    y_He: float = 0.0,
 ) -> Tuple[Dict[str, float], Dict[str, float]]:
     """
     Calculate gas-brine equilibrium using Soreide-Whitson framework.
@@ -2523,7 +2524,8 @@ def calc_gas_brine_equilibrium(
         salinity_wt_pct: Brine salinity in weight percent NaCl
         temperature_F: Temperature in degrees Fahrenheit
         pressure_psia: Pressure in psia
-        y_*: Mole fractions of each gas in dry gas (will be normalized)
+        y_*: Mole fractions of each gas in dry gas (will be normalized).
+             y_He is last in the signature so positional calls are unaffected.
         method: 'henry' (binary decomposition) or 'flash' (multi-component)
         salinity_method: 'gamma_phi', 'explicit', or 'embedded'
         framework: 'default', 'mc3', or 'sw_original' ('dropin' and
@@ -2546,16 +2548,10 @@ def calc_gas_brine_equilibrium(
     salinity_molal = wt_pct_to_molality(salinity_wt_pct)
 
     # Build gas composition dict
-    gas_comp = {}
-    if y_CH4 > 0: gas_comp['CH4'] = y_CH4
-    if y_C2H6 > 0: gas_comp['C2H6'] = y_C2H6
-    if y_C3H8 > 0: gas_comp['C3H8'] = y_C3H8
-    if y_nC4H10 > 0: gas_comp['nC4H10'] = y_nC4H10
-    if y_iC4H10 > 0: gas_comp['iC4H10'] = y_iC4H10
-    if y_CO2 > 0: gas_comp['CO2'] = y_CO2
-    if y_N2 > 0: gas_comp['N2'] = y_N2
-    if y_H2S > 0: gas_comp['H2S'] = y_H2S
-    if y_H2 > 0: gas_comp['H2'] = y_H2
+    gas_comp = {name: y for name, y in (
+        ('CH4', y_CH4), ('C2H6', y_C2H6), ('C3H8', y_C3H8), ('nC4H10', y_nC4H10),
+        ('iC4H10', y_iC4H10), ('CO2', y_CO2), ('N2', y_N2), ('H2S', y_H2S),
+        ('H2', y_H2), ('He', y_He)) if y > 0}
 
     if not gas_comp:
         raise ValueError("At least one gas component must have non-zero mole fraction")

@@ -195,49 +195,58 @@ pub fn hall_yarborough_zfactor_full(
 }
 
 // =========================================================================
-// BNS Z-factor (Peng-Robinson EOS, 5-component)
+// BNS Z-factor (Peng-Robinson EOS, 6-component: CO2, H2S, N2, H2, He, Gas)
 // =========================================================================
 
-// EOS parameters: [CO2=0, H2S=1, N2=2, H2=3, Gas=4]
+// EOS parameters: [CO2=0, H2S=1, N2=2, H2=3, He=4, Gas=5]
+//
+// !!! He Tc = 6.35 degR is DELIBERATELY NON-STANDARD (NIST 9.35 degR). Not a typo: it
+// sets the Stiel-Thodos dilute viscosity in LBC, ~25% low for He at the true Tc and not
+// repairable through VcVis; the density fit is insensitive to it. He Tc, ACF, VSHIFT
+// and VCVIS are one regressed set (Burgoyne, 2026). All He BIPs are zero.
+pub const NC: usize = 6;
+pub const IGAS: usize = 5;
 #[allow(dead_code)]
-const BNS_MWS: [f64; 5] = [44.01, 34.082, 28.014, 2.016, 0.0]; // Gas MW set at runtime
-const BNS_TCS: [f64; 5] = [547.416, 672.120, 227.160, 47.430, 1.0]; // Gas Tc set at runtime
-const BNS_PCS: [f64; 5] = [1069.51, 1299.97, 492.84, 187.5300, 1.0]; // Gas Pc set at runtime
-const BNS_ACF: [f64; 5] = [0.12253, 0.04909, 0.037, -0.21700, -0.03899];
-const BNS_VSHIFT: [f64; 5] = [-0.27607, -0.22901, -0.21066, -0.36270, -0.19076];
-const BNS_OMEGAA: [f64; 5] = [0.427671, 0.436725, 0.457236, 0.457236, 0.457236];
-const BNS_OMEGAB: [f64; 5] = [0.0696397, 0.0724345, 0.0777961, 0.0777961, 0.0777961];
+const BNS_MWS: [f64; NC] = [44.01, 34.082, 28.014, 2.016, 4.003, 0.0]; // Gas MW set at runtime
+const BNS_TCS: [f64; NC] = [547.416, 672.120, 227.160, 47.430, 6.350, 1.0]; // Gas Tc set at runtime
+const BNS_PCS: [f64; NC] = [1069.51, 1299.97, 492.84, 187.5300, 32.9236, 1.0]; // Gas Pc set at runtime
+const BNS_ACF: [f64; NC] = [0.12253, 0.04909, 0.037, -0.21700, -0.17984, -0.03899];
+const BNS_VSHIFT: [f64; NC] = [-0.27607, -0.22901, -0.21066, -0.36270, -0.078082, -0.19076];
+const BNS_OMEGAA: [f64; NC] = [0.427671, 0.436725, 0.457236, 0.457236, 0.457236, 0.457236];
+const BNS_OMEGAB: [f64; NC] = [0.0696397, 0.0724345, 0.0777961, 0.0777961, 0.0777961, 0.0777961];
 
-// BIP constant matrix (5x5, row-major)
-const BIP_CONST: [[f64; 5]; 5] = [
-    [ 0.0,       0.248638, -0.25,     -0.247153, -0.145561],
-    [ 0.248638,  0.0,      -0.204414,  0.0,       0.16852],
-    [-0.25,     -0.204414,  0.0,      -0.166253, -0.108],
-    [-0.247153,  0.0,      -0.166253,  0.0,      -0.0620119],
-    [-0.145561,  0.16852,  -0.108,    -0.0620119, 0.0],
+// BIP constant matrix (6x6, row-major); He row/column all zero
+const BIP_CONST: [[f64; NC]; NC] = [
+    [ 0.0,       0.248638, -0.25,     -0.247153, 0.0, -0.145561],
+    [ 0.248638,  0.0,      -0.204414,  0.0,      0.0,  0.16852],
+    [-0.25,     -0.204414,  0.0,      -0.166253, 0.0, -0.108],
+    [-0.247153,  0.0,      -0.166253,  0.0,      0.0, -0.0620119],
+    [ 0.0,       0.0,       0.0,       0.0,      0.0,  0.0],
+    [-0.145561,  0.16852,  -0.108,    -0.0620119, 0.0, 0.0],
 ];
 
-// BIP slope/Tc matrix (5x5)
-const BIP_SLOPE_TC: [[f64; 5]; 5] = [
-    [  0.0,          -75.64467996,  63.51120432, 89.65031832, 0.0],
-    [-75.64467996,    0.0,         157.55635404,  0.0,        0.0],
-    [ 63.51120432,  157.55635404,   0.0,         17.90313836, 0.0],
-    [ 89.65031832,    0.0,          17.90313836,  0.0,        0.0],
-    [  0.0,            0.0,          0.0,          0.0,        0.0],
+// BIP slope/Tc matrix (6x6); He row/column all zero
+const BIP_SLOPE_TC: [[f64; NC]; NC] = [
+    [  0.0,          -75.64467996,  63.51120432, 89.65031832, 0.0, 0.0],
+    [-75.64467996,    0.0,         157.55635404,  0.0,        0.0, 0.0],
+    [ 63.51120432,  157.55635404,   0.0,         17.90313836, 0.0, 0.0],
+    [ 89.65031832,    0.0,          17.90313836,  0.0,        0.0, 0.0],
+    [  0.0,            0.0,          0.0,          0.0,        0.0, 0.0],
+    [  0.0,            0.0,          0.0,          0.0,        0.0, 0.0],
 ];
 
-// Gas column BIP slopes
-const BIP_GAS_SLOPES: [f64; 4] = [0.276572, -0.122378, 0.0605506, 0.0427873];
+// Gas column BIP slopes (He-Gas slope zero)
+const BIP_GAS_SLOPES: [f64; IGAS] = [0.276572, -0.122378, 0.0605506, 0.0427873, 0.0];
 
-fn calc_bips(deg_r: f64, tpc_hc: f64) -> [[f64; 5]; 5] {
-    let mut kij = [[0.0_f64; 5]; 5];
-    for i in 0..5 {
-        for j in 0..5 {
+fn calc_bips(deg_r: f64, tpc_hc: f64) -> [[f64; NC]; NC] {
+    let mut kij = [[0.0_f64; NC]; NC];
+    for i in 0..NC {
+        for j in 0..NC {
             let mut slope = BIP_SLOPE_TC[i][j];
             // Gas column/row adjustments
-            if i == 4 && j < 4 {
+            if i == IGAS && j < IGAS {
                 slope = BIP_GAS_SLOPES[j] * tpc_hc;
-            } else if j == 4 && i < 4 {
+            } else if j == IGAS && i < IGAS {
                 slope = BIP_GAS_SLOPES[i] * tpc_hc;
             }
             kij[i][j] = BIP_CONST[i][j] + slope / deg_r;
@@ -324,21 +333,22 @@ fn bns_zfactor_core(
     h2s: f64,
     n2: f64,
     h2: f64,
+    he: f64,
     tpc_hc: f64,
     ppc_hc: f64,
 ) -> f64 {
-    let zi = [co2, h2s, n2, h2, 1.0 - co2 - h2s - n2 - h2];
+    let zi = [co2, h2s, n2, h2, he, 1.0 - co2 - h2s - n2 - h2 - he];
 
     // Set up component properties
     let mut tcs = BNS_TCS;
     let mut pcs = BNS_PCS;
-    tcs[4] = tpc_hc;
-    pcs[4] = ppc_hc;
+    tcs[IGAS] = tpc_hc;
+    pcs[IGAS] = ppc_hc;
 
     // Reduced temperatures, alpha function, m parameter
-    let mut trs = [0.0; 5];
-    let mut alpha = [0.0; 5];
-    for i in 0..5 {
+    let mut trs = [0.0; NC];
+    let mut alpha = [0.0; NC];
+    for i in 0..NC {
         trs[i] = deg_r / tcs[i];
         let m = 0.37464 + 1.54226 * BNS_ACF[i] - 0.26992 * BNS_ACF[i] * BNS_ACF[i];
         let sqrt_tr = trs[i].sqrt();
@@ -349,31 +359,31 @@ fn bns_zfactor_core(
     let kij = calc_bips(deg_r, tpc_hc);
 
     // EOS parameters for this pressure
-    let mut ai = [0.0; 5];
-    let mut bi = [0.0; 5];
-    for i in 0..5 {
+    let mut ai = [0.0; NC];
+    let mut bi = [0.0; NC];
+    for i in 0..NC {
         let pr_i = p_psia / pcs[i];
         ai[i] = BNS_OMEGAA[i] * alpha[i] * pr_i / (trs[i] * trs[i]);
         bi[i] = BNS_OMEGAB[i] * pr_i / trs[i];
     }
 
     // Mixing rules
-    let mut sqrt_ai = [0.0; 5];
-    for i in 0..5 {
+    let mut sqrt_ai = [0.0; NC];
+    for i in 0..NC {
         sqrt_ai[i] = ai[i].sqrt();
     }
 
     // A = sum_i sum_j zi*zj*sqrt(ai*aj)*(1-kij)
     let mut a_mix = 0.0;
-    for i in 0..5 {
-        for j in 0..5 {
+    for i in 0..NC {
+        for j in 0..NC {
             a_mix += zi[i] * zi[j] * sqrt_ai[i] * sqrt_ai[j] * (1.0 - kij[i][j]);
         }
     }
 
     // B = sum_i zi*bi
     let mut b_mix = 0.0;
-    for i in 0..5 {
+    for i in 0..NC {
         b_mix += zi[i] * bi[i];
     }
 
@@ -424,7 +434,7 @@ fn bns_zfactor_core(
 
     // Volume translation
     let mut vshift = 0.0;
-    for i in 0..5 {
+    for i in 0..NC {
         vshift += zi[i] * BNS_VSHIFT[i] * bi[i];
     }
 
@@ -433,6 +443,7 @@ fn bns_zfactor_core(
 
 /// BNS full pipeline: BNS pseudocritical -> BNS PR-EOS Z-factor
 #[pyfunction]
+#[pyo3(signature = (p_psia, t_degf, sg, co2_frac, h2s_frac, n2_frac, h2_frac, he_frac=0.0))]
 pub fn bns_zfactor_full(
     p_psia: f64,
     t_degf: f64,
@@ -441,13 +452,14 @@ pub fn bns_zfactor_full(
     h2s_frac: f64,
     n2_frac: f64,
     h2_frac: f64,
+    he_frac: f64,
 ) -> PyResult<f64> {
     let deg_r = t_degf + DEGF2R;
     let (tpc, ppc, _sg_hc) = critical_properties::bns_pseudocritical_internal(
-        sg, co2_frac, h2s_frac, n2_frac, h2_frac
+        sg, co2_frac, h2s_frac, n2_frac, h2_frac, he_frac
     );
 
-    Ok(bns_zfactor_core(p_psia, deg_r, co2_frac, h2s_frac, n2_frac, h2_frac, tpc, ppc))
+    Ok(bns_zfactor_core(p_psia, deg_r, co2_frac, h2s_frac, n2_frac, h2_frac, he_frac, tpc, ppc))
 }
 
 // =========================================================================
@@ -521,7 +533,7 @@ pub fn hy_zfactor_batch(
 /// If tc_user > 0 and pc_user > 0, those replace only the hydrocarbon pseudo-component
 /// Tc/Pc (inert component Tc/Pc remain at BNS internal constants).
 #[pyfunction]
-#[pyo3(signature = (pressures, t_degf, sg, co2_frac, h2s_frac, n2_frac, h2_frac, tc_user=0.0, pc_user=0.0))]
+#[pyo3(signature = (pressures, t_degf, sg, co2_frac, h2s_frac, n2_frac, h2_frac, tc_user=0.0, pc_user=0.0, he_frac=0.0))]
 pub fn bns_zfactor_batch(
     pressures: Vec<f64>,
     t_degf: f64,
@@ -532,19 +544,20 @@ pub fn bns_zfactor_batch(
     h2_frac: f64,
     tc_user: f64,
     pc_user: f64,
+    he_frac: f64,
 ) -> PyResult<Vec<f64>> {
     let deg_r = t_degf + DEGF2R;
     let (tpc_hc, ppc_hc) = if tc_user > 0.0 && pc_user > 0.0 {
         (tc_user, pc_user)
     } else {
         let (t, p, _) = critical_properties::bns_pseudocritical_internal(
-            sg, co2_frac, h2s_frac, n2_frac, h2_frac
+            sg, co2_frac, h2s_frac, n2_frac, h2_frac, he_frac
         );
         (t, p)
     };
 
     let result: Vec<f64> = pressures.iter().map(|&p| {
-        bns_zfactor_core(p, deg_r, co2_frac, h2s_frac, n2_frac, h2_frac, tpc_hc, ppc_hc)
+        bns_zfactor_core(p, deg_r, co2_frac, h2s_frac, n2_frac, h2_frac, he_frac, tpc_hc, ppc_hc)
     }).collect();
 
     Ok(result)
@@ -569,8 +582,9 @@ pub fn bns_zfactor_core_pub(
     h2s: f64,
     n2: f64,
     h2: f64,
+    he: f64,
     tpc_hc: f64,
     ppc_hc: f64,
 ) -> f64 {
-    bns_zfactor_core(p_psia, deg_r, co2, h2s, n2, h2, tpc_hc, ppc_hc)
+    bns_zfactor_core(p_psia, deg_r, co2, h2s, n2, h2, he, tpc_hc, ppc_hc)
 }

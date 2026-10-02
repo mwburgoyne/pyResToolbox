@@ -181,7 +181,7 @@ def halley_solve_cubic(c2, c1, c0, flag=1, max_iter=50, tol=1e-12):
     return roots
 
 
-def validate_pe_inputs(p=None, degf=None, sg=None, co2=None, h2s=None, n2=None, h2=None):
+def validate_pe_inputs(p=None, degf=None, sg=None, co2=None, h2s=None, n2=None, h2=None, he=None):
     """Validate common petroleum engineering inputs.
     Checks physical constraints: positive pressure, temperature above absolute zero,
     positive specific gravity, non-negative mole fractions summing to <= 1.0.
@@ -192,15 +192,7 @@ def validate_pe_inputs(p=None, degf=None, sg=None, co2=None, h2s=None, n2=None, 
     lists/arrays use the vectorized numpy path.
     """
     # Scalar fast path: every provided value is a plain int/float
-    if (
-        (p is None or isinstance(p, (int, float)))
-        and (degf is None or isinstance(degf, (int, float)))
-        and (sg is None or isinstance(sg, (int, float)))
-        and (co2 is None or isinstance(co2, (int, float)))
-        and (h2s is None or isinstance(h2s, (int, float)))
-        and (n2 is None or isinstance(n2, (int, float)))
-        and (h2 is None or isinstance(h2, (int, float)))
-    ):
+    if all(v is None or isinstance(v, (int, float)) for v in (p, degf, sg, co2, h2s, n2, h2, he)):
         if p is not None:
             if not math.isfinite(p):
                 raise ValueError("Parameter 'p' must not be NaN or inf")
@@ -217,7 +209,7 @@ def validate_pe_inputs(p=None, degf=None, sg=None, co2=None, h2s=None, n2=None, 
             if sg <= 0:
                 raise ValueError(f"Specific gravity must be positive, got min value: {sg}")
         frac_sum = 0.0
-        for name, val in (('co2', co2), ('h2s', h2s), ('n2', n2), ('h2', h2)):
+        for name, val in (('co2', co2), ('h2s', h2s), ('n2', n2), ('h2', h2), ('he', he)):
             if val is not None:
                 if not math.isfinite(val):
                     raise ValueError(f"Parameter '{name}' must not be NaN or inf")
@@ -247,7 +239,7 @@ def validate_pe_inputs(p=None, degf=None, sg=None, co2=None, h2s=None, n2=None, 
             raise ValueError("Parameter 'sg' must not be NaN or inf")
         if np.any(sg_arr <= 0):
             raise ValueError(f"Specific gravity must be positive, got min value: {np.min(sg_arr)}")
-    fracs = {'co2': co2, 'h2s': h2s, 'n2': n2, 'h2': h2}
+    fracs = {'co2': co2, 'h2s': h2s, 'n2': n2, 'h2': h2, 'he': he}
     frac_sum = 0.0
     for name, val in fracs.items():
         if val is not None:
