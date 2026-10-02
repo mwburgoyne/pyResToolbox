@@ -152,7 +152,7 @@ dependencies = [
 
 [[package]]
 name = "pyrestoolbox-native"
-version = "3.8.2"
+version = "3.8.3"
 dependencies = [
  "pyo3",
  "rug",
