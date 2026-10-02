@@ -77,6 +77,11 @@ pub fn besselk0e(x: f64) -> f64 {
     if x <= 2.0 {
         let t = x * x / 4.0;
         let i0 = besseli0(x);
+        // -0.57721566 is A&S 9.8.5's tabulated 8-digit coefficient of a fitted
+        // polynomial, not a stand-in for Euler's constant: replacing it with
+        // f64::consts::EULER_GAMMA would move K0 by ~1e-9 and break parity with
+        // the published table and the Python path.
+        #[allow(clippy::approx_constant)]
         let poly = -0.57721566
             + t * (0.42278420
                 + t * (0.23069756
