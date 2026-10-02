@@ -1,8 +1,9 @@
 #![allow(dead_code)]
 //! Component properties database for Soreide-Whitson VLE engine.
 //!
-//! 16 components: H2O + 15 gas species.
-//! Critical properties from S&W 1992 Table 5; H2 from this work.
+//! 17 components: H2O + 16 gas species.
+//! Critical properties from S&W 1992 Table 5; H2 from this work; He (NIST) from the
+//! helium extension (appended last so no existing index moves).
 
 /// Physical constants
 pub const R_GAS: f64 = 8.314462; // J/(mol·K)
@@ -41,14 +42,15 @@ pub const IDX_NC6H14: usize = 12;
 pub const IDX_NC7H16: usize = 13;
 pub const IDX_NC8H18: usize = 14;
 pub const IDX_NC10H22: usize = 15;
+pub const IDX_HE: usize = 16;
 
-pub const NUM_COMPONENTS: usize = 16;
+pub const NUM_COMPONENTS: usize = 17;
 
 /// Ordered component names matching COMPONENT_DB indices.
 pub const COMPONENT_NAMES: [&str; NUM_COMPONENTS] = [
     "H2O", "H2", "CO2", "H2S", "N2", "CH4",
     "C2H6", "C3H8", "iC4H10", "nC4H10",
-    "iC5H12", "nC5H12", "nC6H14", "nC7H16", "nC8H18", "nC10H22",
+    "iC5H12", "nC5H12", "nC6H14", "nC7H16", "nC8H18", "nC10H22", "He",
 ];
 
 /// Component database: Tc, Pc, omega, Tb, MW
@@ -86,6 +88,9 @@ pub const COMPONENT_DB: [ComponentProperties; NUM_COMPONENTS] = [
     ComponentProperties { tc: 568.8, pc: 2.49e6, omega: 0.3980, tb: 398.8, mw: 114.2 },
     // nC10H22
     ComponentProperties { tc: 617.7, pc: 2.10e6, omega: 0.4900, tb: 447.3, mw: 142.3 },
+    // He: NIST (Ortiz-Vega et al. 2019 EOS critical point). Not the 5-component Z-factor
+    // model's deliberately non-standard 6.35 degR; the He correlations need these values.
+    ComponentProperties { tc: 5.1953, pc: 0.228323e6, omega: -0.38354, tb: 4.2238, mw: 4.002602 },
 ];
 
 /// Look up component index by name. Returns None if not found.

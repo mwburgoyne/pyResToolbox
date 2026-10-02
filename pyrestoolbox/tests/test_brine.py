@@ -665,3 +665,34 @@ def test_binary_water_content_matches_flash():
         assert abs(henry / flash - 1) < 1e-8, (T, P, gas, henry, flash)
     assert abs(y_h2o('henry', 200, 14.7, y_CH4=1.0) - 0.7864) < 1e-3
     assert np.isnan(y_h2o('henry', 300, 50, y_CH4=1.0))  # Psat(300 degF) = 67 psia
+
+
+def test_helium_vle_and_rust_parity(monkeypatch):
+    """Helium (NIST Tc 5.1953 K, default-framework kij_AQ, embedded delta_kij,
+    surrogate kij_NA 0.468). Binary solubility against Gardiner & Smith (1972)
+    Table VI, 50 degC and 200 atm, X2 = 1.363e-3; then the Rust flash against
+    the Python flash for a He-bearing gas in both Rust frameworks."""
+    from pyrestoolbox.brine import _lib_vle_engine as vle
+    x = vle.SWBinaryVLE('He', 0.0, framework='default').calc_gas_solubility(323.15, 200 * 101325.0)
+    assert abs(x / 1.363e-3 - 1) < 0.03, x
+
+    names = ['H2O', 'N2', 'CO2', 'CH4', 'He']
+    z = np.array([0.5, 0.05, 0.05, 0.3, 0.1])
+    cases = [('default', 'embedded', m) for m in (0.0, 2.0)] + [('mc3', 'gamma_phi', m) for m in (0.0, 2.0)]
+
+    def run():
+        out = []
+        for fw, method, m in cases:
+            flash = vle.SWMultiComponentFlash(names, salinity_molal=m, framework=fw, salinity_method=method)
+            V, x, y, converged = flash.flash_tp(373.15, 300e5, z)
+            assert converged
+            out.append(np.r_[V, x, y])
+        return out
+
+    first = run()
+    if not vle._RUST_AVAILABLE:
+        pytest.skip("Rust extension not available; parity half not exercised")
+    monkeypatch.setattr(vle, '_RUST_AVAILABLE', False)
+    for r, p in zip(first, run()):
+        assert np.allclose(r, p, rtol=1e-10, atol=1e-14), (r, p)
+

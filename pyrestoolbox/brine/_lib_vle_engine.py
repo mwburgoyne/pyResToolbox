@@ -58,9 +58,6 @@ from dataclasses import dataclass
 from pyrestoolbox._accelerator import RUST_AVAILABLE as _RUST_AVAILABLE
 if _RUST_AVAILABLE:
     from pyrestoolbox import _native as _rust
-# Components the Rust VLE tables (src/vle/components.rs) do not carry: any flash that
-# contains one takes the Python path, so Rust results for the other gases are unchanged.
-_RUST_UNSUPPORTED = frozenset({'He'})
 
 
 # =============================================================================
@@ -113,7 +110,6 @@ COMPONENTS = {
     # point, as in CoolProp 8.0), used consistently for EOS and BIP correlations (Tr = T/5.1953).
     # NOT the 5-component Z-factor model's helium Tc (a deliberately non-standard 6.35 degR, tuned
     # for LBC dilute viscosity); the correlations below are valid only with these constants.
-    # Python path only: the Rust flash has no He, so flashes containing He take the Python path.
     'He': ComponentProperties('Helium', 5.1953, 0.228323e6, -0.38354, 4.2238, 4.002602),
 
     # Acid gases
@@ -2094,8 +2090,7 @@ class SWMultiComponentFlash:
         #
         # 'sw_original' has no Rust implementation and takes the Python path
         # rather than being silently downgraded.
-        if (_RUST_AVAILABLE and self.framework in ('mc3', 'default')
-                and not (_RUST_UNSUPPORTED & set(self.names))):
+        if _RUST_AVAILABLE and self.framework in ('mc3', 'default'):
             try:
                 gamma_arr = np.asarray(gamma, dtype=float) if gamma is not None \
                     else np.ones(self.nc)
@@ -2332,7 +2327,6 @@ class SWMultiComponentFlash:
         # 'sw_original', and any other pairing, takes the Python path rather
         # than being silently downgraded.
         if (_RUST_AVAILABLE
-                and not (_RUST_UNSUPPORTED & set(self.names))
                 and ((self.framework == 'mc3' and salinity_method == 'gamma_phi')
                      or (self.framework == 'default' and salinity_method == 'embedded'))):
             try:

@@ -12,7 +12,7 @@ use crate::vle::components::*;
 
 /// Light gases: Cross form [a, b, c, d, e, f]
 /// ln(K) = a + b(Tc/T) + c·ln(P/Pc) + d(Tc/T)^2 + e·ln(P/Pc)^2 + f(Tc/T)·ln(P/Pc)
-const SW_KVALUE_PARAMS: [(usize, [f64; 6]); 9] = [
+const SW_KVALUE_PARAMS: [(usize, [f64; 6]); 10] = [
     (IDX_H2,     [6.4295, 25.5844, -0.5985, -50.0000, -0.0007, -3.2598]),
     (IDX_CO2,    [-5.9974, 26.3804, -0.9380, -16.3941, 0.0607, 0.3688]),
     (IDX_N2,     [1.4998, 36.4929, -0.6419, -50.0000, 0.0110, -0.6328]),
@@ -22,6 +22,7 @@ const SW_KVALUE_PARAMS: [(usize, [f64; 6]); 9] = [
     (IDX_C3H8,   [-9.8805, 33.3750, -1.0803, -15.1332, 0.0836, 0.6959]),
     (IDX_IC4H10, [-8.8362, 29.1657, -1.0755, -11.0413, 0.0685, 0.7280]),
     (IDX_NC4H10, [-8.4159, 27.0161, -1.0886, -10.2525, 0.0613, 0.7515]),
+    (IDX_HE,     [9.7370, 50.0000, -1.0874, 50.0000, 0.0039, 10.0747]),
 ];
 
 /// Heavy HCs: LogLinear form [a, b, c] + floor=10
@@ -148,6 +149,17 @@ mod tests {
         let k = sw_kvalue_init(&comp, &tc, &pc, &omega, 373.15, 100e5);
         assert!(k[0] < 1.0, "Water K should be < 1, got {}", k[0]);
         assert!(k[1] > 1.0, "CH4 K should be > 1, got {}", k[1]);
+    }
+
+    #[test]
+    fn test_sw_kvalue_he() {
+        // He uses its fitted Cross-form row (Wilson would give K < 1 here)
+        let comp = [IDX_H2O, IDX_HE];
+        let tc = [647.3, 5.1953];
+        let pc = [22.12e6, 0.228323e6];
+        let omega = [0.3434, -0.38354];
+        let k = sw_kvalue_init(&comp, &tc, &pc, &omega, 373.15, 100e5);
+        assert!(k[1] > 1.0, "He K should be > 1, got {}", k[1]);
     }
 
     #[test]

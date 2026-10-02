@@ -89,6 +89,8 @@ pub fn get_kij_aq_proposed(comp_idx: usize, t_k: f64) -> f64 {
         IDX_CH4 => kij_aq_ch4(t_k),
         IDX_C2H6 => kij_aq_c2h6_proposed(t_k),
         IDX_C3H8 => kij_aq_c3h8_proposed(t_k),
+        // He: the default-framework fit, not refitted on MC-3 alpha (as in KIJ_AQ_MC3).
+        IDX_HE => kij_aq_he_default(t_k),
         IDX_IC4H10 | IDX_NC4H10 | IDX_IC5H12 | IDX_NC5H12
         | IDX_NC6H14 | IDX_NC7H16 | IDX_NC8H18 | IDX_NC10H22 => {
             kij_aq_hc_proposed(comp_idx, t_k)
@@ -121,6 +123,13 @@ fn kij_aq_h2_default(t_k: f64) -> f64 {
     (-14.9412 + tr) / (2.2832 + 0.3893 * tr)
 }
 
+/// He-water kij_AQ (default framework, rational form, Tr on NIST Tc 5.1953 K).
+/// Port of kij_aq_he_dropin in _lib_vle_engine.py.
+fn kij_aq_he_default(t_k: f64) -> f64 {
+    let tr = t_k / 5.1953;
+    (-71.6152 + tr) / (-0.394962 + 0.505807 * tr)
+}
+
 fn kij_aq_ch4_default(t_k: f64) -> f64 {
     let tr = t_k / 190.60;
     (-2.1756 + tr) / (1.0388 + 0.6436 * tr)
@@ -146,6 +155,7 @@ pub fn get_kij_aq_default(comp_idx: usize, t_k: f64) -> f64 {
         IDX_CH4 => kij_aq_ch4_default(t_k),
         IDX_C2H6 => kij_aq_c2h6_default(t_k),
         IDX_C3H8 => kij_aq_c3h8_default(t_k),
+        IDX_HE => kij_aq_he_default(t_k),
         IDX_IC4H10 | IDX_NC4H10 | IDX_IC5H12 | IDX_NC5H12
         | IDX_NC6H14 | IDX_NC7H16 | IDX_NC8H18 | IDX_NC10H22 => {
             kij_aq_hc_proposed(comp_idx, t_k)
@@ -172,6 +182,7 @@ fn embedded_delta_params(comp_idx: usize) -> Option<(f64, f64, f64, f64, f64, f6
         IDX_C2H6 => Some((305.40, 0.0813, -0.1287, 0.0646, 0.0, 0.0)),
         IDX_C3H8 => Some((369.80, 0.0606, -0.1165, 0.0772, 0.0, 0.0)),
         IDX_NC4H10 => Some((425.20, 0.0488, -0.1072, 0.0836, 0.0, 0.0)),
+        IDX_HE => Some((5.1953, 0.359923, -0.0095344, 7.00398e-05, 0.0, 0.0)),
         _ => None,
     }
 }
@@ -223,6 +234,7 @@ const KIJ_NA_TABLE: [f64; NUM_COMPONENTS] = [
     0.5000, // nC7H16 (Whitson & Brule 2000 Table 9.3, C5+)
     0.5000, // nC8H18 (Whitson & Brule 2000 Table 9.3, C5+)
     0.5000, // nC10H22 (Whitson & Brule 2000 Table 9.3, C5+)
+    0.468,  // He: H2 value as a surrogate (no He water-content data); unvalidated
 ];
 
 /// Get kij_NA for a given component index.
@@ -400,6 +412,17 @@ mod tests {
             get_gas_gas_bip(IDX_CH4, IDX_CO2),
             get_gas_gas_bip(IDX_CO2, IDX_CH4)
         );
+    }
+
+    #[test]
+    fn test_kij_he() {
+        // Same value as kij_aq_he_dropin at 323.15 K (Python): -0.30305...
+        let tr = 323.15 / 5.1953;
+        let expect = (-71.6152 + tr) / (-0.394962 + 0.505807 * tr);
+        assert!((get_kij_aq_default(IDX_HE, 323.15) - expect).abs() < 1e-15);
+        assert!((get_kij_aq_proposed(IDX_HE, 323.15) - expect).abs() < 1e-15);
+        assert!((get_kij_na(IDX_HE) - 0.468).abs() < 1e-15);
+        assert!(calc_embedded_delta_kij(IDX_HE, 323.15, 1.0) > 0.0);
     }
 
     #[test]
