@@ -24,7 +24,7 @@ def validate_methods(names, variables):
             try:
                 variables[m] = class_dic[method][method_str]
             except KeyError:
-                valid = list(class_dic[method].__members__.keys())
+                valid = [e.name for e in class_dic[method]]  # canonical names only (aliases such as BUR stay silent)
                 raise ValueError(
                     f"Invalid {method}: {variables[m]!r}. "
                     f"Valid options: {valid}"
@@ -32,7 +32,7 @@ def validate_methods(names, variables):
         else:
             expected = class_dic[method]
             if not isinstance(variables[m], expected):
-                valid = list(expected.__members__.keys())
+                valid = [e.name for e in expected]
                 raise ValueError(
                     f"Invalid {method}: {variables[m]!r}. "
                     f"Expected a {expected.__name__} Enum member or one of "

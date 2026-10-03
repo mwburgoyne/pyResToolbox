@@ -46,7 +46,7 @@ Example notebooks
 ===========================  ====================================================
 File                         Content
 ===========================  ====================================================
-examples.ipynb               Worked examples across the modules plus BNS/BUR demonstrations
+examples.ipynb               Worked examples across the modules plus BNS demonstrations
 nodal_examples.ipynb         Multi-segment nodal framework examples
 nodal_hydrate_demo.ipynb     VLP, VFPPROD, nodal solutions and hydrate analysis
 ===========================  ====================================================

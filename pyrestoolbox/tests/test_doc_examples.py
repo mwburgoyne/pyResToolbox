@@ -32,8 +32,8 @@ def test_doc_gas_z_dak_pmc():
     assert abs(result - 0.8785390925376578) / 0.8785390925376578 < RTOL
 
 def test_doc_gas_z_bur_co2():
-    """gas.rst: gas_z for pure CO2 with BUR method"""
-    result = gas.gas_z(p=2350, sg=0.68, degf=180, co2=1.0, zmethod='BUR', cmethod='BUR')
+    """gas.rst: gas_z for pure CO2 with BNS method"""
+    result = gas.gas_z(p=2350, sg=0.68, degf=180, co2=1.0, zmethod='BNS', cmethod='BNS')
     assert isinstance(result, float)
     assert abs(result - 0.5258309021348752) / 0.5258309021348752 < RTOL
 
@@ -44,9 +44,9 @@ def test_doc_gas_sg():
     assert abs(result - 0.6338246461857093) / 0.6338246461857093 < RTOL
 
 def test_doc_gas_z_bur_mixture():
-    """gas.rst: gas_z BUR for complex mixture"""
+    """gas.rst: gas_z BNS for complex mixture"""
     gsg = gas.gas_sg(hc_mw=19.0, co2=0.05, h2s=0.10, n2=0, h2=0.20)
-    result = gas.gas_z(p=2350, sg=gsg, degf=180, co2=0.05, h2s=0.10, n2=0, h2=0.20, zmethod='BUR', cmethod='BUR')
+    result = gas.gas_z(p=2350, sg=gsg, degf=180, co2=0.05, h2s=0.10, n2=0, h2=0.20, zmethod='BNS', cmethod='BNS')
     assert isinstance(result, float)
     assert abs(result - 0.9048153036714465) / 0.9048153036714465 < RTOL
 

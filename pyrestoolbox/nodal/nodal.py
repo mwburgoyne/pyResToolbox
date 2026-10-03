@@ -2282,15 +2282,15 @@ def ipr_curve(reservoir: 'Reservoir', well_type: str = 'gas',
 
     if well_type == 'gas':
         sg = gas_pvt.sg if gas_pvt else gsg
-        co2, h2s, n2, h2_frac, he_frac = (
-            (gas_pvt.co2, gas_pvt.h2s, gas_pvt.n2, gas_pvt.h2, getattr(gas_pvt, 'he', 0))
-            if gas_pvt else (0, 0, 0, 0, 0))
+        co2, h2s, n2, h2_frac, he_frac, ag = (
+            (gas_pvt.co2, gas_pvt.h2s, gas_pvt.n2, gas_pvt.h2, getattr(gas_pvt, 'he', 0), getattr(gas_pvt, 'ag', False))
+            if gas_pvt else (0, 0, 0, 0, 0, False))
 
         for pwf in pwf_list:
             qg = gas.gas_rate_radial(
                 k=k, h=h, pr=pr, pwf=pwf, r_w=rw, r_ext=re,
                 degf=degf, S=S, D=D, sg=sg,
-                co2=co2, h2s=h2s, n2=n2, h2=h2_frac, he=he_frac)
+                co2=co2, h2s=h2s, n2=n2, h2=h2_frac, he=he_frac, ag=ag)
             rate_list.append(float(qg))  # Mscf/d in oilfield
 
     elif well_type == 'oil':

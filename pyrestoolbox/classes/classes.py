@@ -25,7 +25,7 @@ Enum classes for method selection and class_dic registry.
 Enums
 -----
 z_method      Z-factor calculation method (DAK, HY, BNS)
-c_method      Critical property method (PMC, SUT, BUR, BNS)
+c_method      Critical property method (PMC, SUT, BNS)
 pb_method     Bubble point method (STAN, VALMC, VELAR)
 rs_method     Solution GOR method (VELAR, STAN, VALMC)
 bo_method     Oil FVF method (MCAIN, STAN)
@@ -60,8 +60,8 @@ class z_method(Enum):  # Gas Z-Factor calculation model
 class c_method(Enum):  # Gas critical properties calculation method
     PMC = 0
     SUT = 1
-    BUR = 2
     BNS = 3
+    BUR = 3  # Legacy alias for BNS
 
 class pb_method(Enum):  # Bubble point calculation method
     STAN = 0

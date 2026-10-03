@@ -8,6 +8,8 @@ const LBFT3_PER_GCC: f64 = 62.428;
 // Constants matching pyrestoolbox/constants/constants.py
 const R: f64 = 10.731577089016;
 const MW_AIR: f64 = 28.97;
+/// Hydrocarbon SG floor: methane, 16.0425 / 28.97 (as in the reference BNS code)
+const SG_METHANE: f64 = 16.0425 / MW_AIR;
 const DEGF2R: f64 = 459.67;
 
 // BNS EOS component arrays (same as zfactor module): [CO2, H2S, N2, H2, He, Gas].
@@ -84,7 +86,7 @@ pub fn lbc_params(
     let inert_sum = co2 + h2s + n2 + h2 + he;
     let sg_hc = if inert_sum < 1.0 {
         let raw = (sg - (co2 * mws[0] + h2s * mws[1] + n2 * mws[2] + h2 * mws[3] + he * mws[4]) / MW_AIR) / (1.0 - inert_sum);
-        if raw < 0.553779772 { 0.553779772 } else { raw }
+        if raw < SG_METHANE { SG_METHANE } else { raw }
     } else {
         0.75
     };

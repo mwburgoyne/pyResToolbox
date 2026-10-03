@@ -4,6 +4,8 @@ use pyo3::exceptions::PyValueError;
 // Constants must match pyrestoolbox/constants/constants.py exactly
 const R: f64 = 10.731577089016;
 const MW_AIR: f64 = 28.97;
+/// Hydrocarbon SG floor: methane, 16.0425 / 28.97 (as in the reference BNS code)
+const SG_METHANE: f64 = 16.0425 / MW_AIR;
 const MW_CO2: f64 = 44.01;
 const MW_H2S: f64 = 34.082;
 const MW_N2: f64 = 28.014;
@@ -86,7 +88,7 @@ pub fn bns_pseudocritical(
     let inert_sum = co2 + h2s + n2 + h2 + he;
     let sg_hc = if inert_sum < 1.0 {
         let raw = (sg - (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2 + he * MW_HE) / MW_AIR) / (1.0 - inert_sum);
-        if raw < 0.553779772 { 0.553779772 } else { raw }
+        if raw < SG_METHANE { SG_METHANE } else { raw }
     } else {
         0.75
     };
@@ -119,7 +121,7 @@ pub fn bns_pseudocritical_internal(
     let inert_sum = co2 + h2s + n2 + h2 + he;
     let sg_hc = if inert_sum < 1.0 {
         let raw = (sg - (co2 * MW_CO2 + h2s * MW_H2S + n2 * MW_N2 + h2 * MW_H2 + he * MW_HE) / MW_AIR) / (1.0 - inert_sum);
-        if raw < 0.553779772 { 0.553779772 } else { raw }
+        if raw < SG_METHANE { SG_METHANE } else { raw }
     } else {
         0.75
     };

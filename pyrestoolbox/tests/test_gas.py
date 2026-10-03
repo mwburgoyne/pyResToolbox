@@ -911,7 +911,7 @@ def test_gaspvt_bns_coupling_warning():
         pvt = gas.GasPVT(sg=0.75, zmethod='BNS')
     # z_method: BNS=3, BUR=3 (BNS defined first → canonical name is BNS)
     assert pvt.zmethod.name == 'BNS'
-    # c_method: BNS=3 (distinct from BUR=2)
+    # c_method: BNS=3, BUR=3 (legacy alias, as for z_method)
     assert pvt.cmethod.name == 'BNS'
 
 
@@ -1268,3 +1268,53 @@ def test_bns_helium():
     assert all(k in th for k in ('H', 'Cp', 'Cv', 'JT'))
     from pyrestoolbox import recommend
     assert recommend.recommend_gas_methods(he=0.02)['zmethod'].mandatory
+
+
+def test_bns_associated_gas():
+    """ag=True selects the BNS associated-gas hydrocarbon Tc/Pc (3.8.4). Reference values
+    from the standalone BNS implementation (AG=True, Latest), 150 degF and 2000 psia."""
+    import warnings
+    from pyrestoolbox import gas
+    refs = [(dict(), 1.0, 0.6544225879745252, 0.02434852285402816, -891.9022818261635),
+            (dict(co2=0.1, n2=0.05), 1.0, 0.7062226981612458, 0.02242168631099144, -620.2298002616569),
+            (dict(h2s=0.2, he=0.05), 0.9, 0.7064074290131422, 0.020724324572098912, -663.2246613642042)]
+    for comp, sg, z_ref, ug_ref, h_ref in refs:
+        kw = dict(sg=sg, degf=150, zmethod='BNS', cmethod='BNS', ag=True, **comp)
+        assert abs(gas.gas_z(p=2000, **kw) / z_ref - 1) < 1e-12
+        assert abs(gas.gas_ug(p=2000, **kw) / ug_ref - 1) < 1e-12
+        h = gas.gas_thermal(p=2000, sg=sg, degf=150, ag=True, **comp)['H']
+        assert abs(float(h) - h_ref) < 1e-8
+    # the two hydrocarbon correlations differ; ag defaults to False
+    tc_gc, pc_gc = gas.gas_tc_pc(sg=0.75, cmethod='BNS')
+    tc_ag, pc_ag = gas.gas_tc_pc(sg=0.75, cmethod='BNS', ag=True)
+    assert abs(tc_ag - 397.7239050745307) < 1e-9 and abs(pc_ag - 653.8703430787151) < 1e-9
+    assert (tc_gc, pc_gc) == gas.gas_tc_pc(sg=0.75, cmethod='BNS', ag=False)
+    assert gas.gas_z(p=2000, sg=0.75, degf=150, zmethod='BNS', cmethod='BNS') == \
+        gas.gas_z(p=2000, sg=0.75, degf=150, zmethod='BNS', cmethod='BNS', ag=False)
+    # non-BNS methods ignore ag; user tc/pc take precedence
+    assert gas.gas_tc_pc(sg=0.75, cmethod='PMC', ag=True) == gas.gas_tc_pc(sg=0.75, cmethod='PMC')
+    assert gas.gas_tc_pc(sg=0.75, cmethod='BNS', ag=True, tc=400, pc=650) == (400, 650)
+    # GasPVT and the rate functions carry ag
+    gp = gas.GasPVT(sg=0.75, zmethod='BNS', cmethod='BNS', ag=True)
+    assert gp.ag is True and (gp.tc, gp.pc) == (tc_ag, pc_ag)
+    assert gp.z(2000, 150) == gas.gas_z(p=2000, sg=0.75, degf=150, zmethod='BNS', cmethod='BNS', ag=True)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        q_ag = gas.gas_rate_radial(k=1, h=50, pr=3000, pwf=1500, r_w=0.3, r_ext=1500, degf=150, sg=0.75,
+                                   zmethod='BNS', cmethod='BNS', ag=True)
+        q_gc = gas.gas_rate_radial(k=1, h=50, pr=3000, pwf=1500, r_w=0.3, r_ext=1500, degf=150, sg=0.75,
+                                   zmethod='BNS', cmethod='BNS')
+        q_pvt = gas.gas_rate_radial(k=1, h=50, pr=3000, pwf=1500, r_w=0.3, r_ext=1500, degf=150, gas_pvt=gp)
+    assert q_ag != q_gc and abs(q_pvt / q_ag - 1) < 1e-12
+
+
+def test_bur_is_silent_alias_for_bns():
+    """'BUR' stays accepted for compatibility, resolves to BNS, and is not advertised."""
+    from pyrestoolbox import gas
+    from pyrestoolbox.classes import z_method, c_method
+    assert c_method['BUR'] is c_method.BNS and z_method['BUR'] is z_method.BNS
+    assert gas.gas_z(p=2000, sg=0.7, degf=150, zmethod='BUR', cmethod='BUR') == \
+        gas.gas_z(p=2000, sg=0.7, degf=150, zmethod='BNS', cmethod='BNS')
+    with pytest.raises(ValueError) as e:
+        gas.gas_z(p=2000, sg=0.7, degf=150, cmethod='NOSUCH')
+    assert 'BUR' not in str(e.value) and 'BNS' in str(e.value)

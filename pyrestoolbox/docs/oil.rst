@@ -22,7 +22,7 @@ pyResToolBox uses class objects to track calculation options through the functio
 
        + 'DAK': Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al. - Slowest, Most Accurate
        + 'HY': Hall & Yarborough (1973) - Second Fastest
-       + 'BUR'/'BNS': Fast, can handle 100% inerts and Hydrogen. Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen & Stanko (2025), `SPE-229932-MS <https://doi.org/10.2118/229932-MS>`_
+       + 'BNS': Fast, can handle 100% inerts and Hydrogen. Tuned 5 component Peng Robinson EOS model, Burgoyne, Nielsen & Stanko (2025), `SPE-229932-MS <https://doi.org/10.2118/229932-MS>`_
    * - cmethod
      - c_method
      - Method for calculating gas critical properties. Defaults to 'PMC' 
@@ -30,7 +30,7 @@ pyResToolBox uses class objects to track calculation options through the functio
 
        + 'SUT': Sutton with Wichert & Aziz non-hydrocarbon corrections
        + 'PMC': Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-       + 'BUR': Burgoyne method (2024). If h2 > 0, or the 'BUR' method is used for Z-Factor then 'BUR' will automatically be used
+       + 'BNS': Burgoyne, Nielsen & Stanko (2025) hydrocarbon pseudo-critical correlation. If h2 > 0, or the 'BNS' method is used for Z-Factor then 'BNS' will automatically be used
    * - pbmethod
      - pb_method
      - Method for calculating bubble point pressure of oil. Defaults to 'VALMC' ('VELAR' for make_bot_og).

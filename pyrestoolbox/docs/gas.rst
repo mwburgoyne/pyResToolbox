@@ -22,7 +22,7 @@ pyResToolBox uses class objects to track calculation options through the functio
 
        + 'DAK': Dranchuk & Abou-Kassem (1975) using from Equations 2.7-2.8 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al. - Slowest, Most Accurate
        + 'HY': Hall & Yarborough (1973) - Second Fastest
-       + 'BUR'/'BNS': Tuned Peng Robinson EOS model, Burgoyne, Nielsen & Stanko (2025), `SPE-229932-MS <https://doi.org/10.2118/229932-MS>`_, extended with helium in 3.8.3 - Fast, reliable, and able to handle wide range of mixture types including CO2, H2S, N2, H2 and He at concentrations up to pure inerts. More information about the method can be found `here <https://github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor>`_
+       + 'BNS': Tuned Peng Robinson EOS model, Burgoyne, Nielsen & Stanko (2025), `SPE-229932-MS <https://doi.org/10.2118/229932-MS>`_, extended with helium in 3.8.3 - Fast, reliable, and able to handle wide range of mixture types including CO2, H2S, N2, H2 and He at concentrations up to pure inerts. More information about the method can be found `here <https://github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor>`_
    * - cmethod
      - c_method
      - Method for calculating gas critical properties. Defaults to 'PMC' 
@@ -30,7 +30,7 @@ pyResToolBox uses class objects to track calculation options through the functio
 
        + 'SUT': Sutton with Wichert & Aziz non-hydrocarbon corrections
        + 'PMC': Piper, McCain & Corredor (1999) correlation, using equations 2.4 - 2.6 from 'Petroleum Reservoir Fluid Property Correlations' by W. McCain et al.
-       + 'BUR': Correlation tuned to return the critical properties of the pure hydrocarbon component of a mixture, required for the 'BUR' (tuned Peng Robinson) Z-Factor method. More information about the method can be found `here <https://github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor>`_
+       + 'BNS': Correlation tuned to return the critical properties of the pure hydrocarbon component of a mixture, required for the 'BNS' (tuned Peng Robinson) Z-Factor method. Gas-condensate correlation by default; set ``ag=True`` for the associated-gas correlation (see *Associated gas in BNS*). More information about the method can be found `here <https://github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor>`_
    * - hydmethod
      - hyd_method
      - Method for calculating gas hydrate formation temperature. Defaults to 'TOWLER'.
@@ -76,6 +76,16 @@ Calculating gas Z-Factor of pure methane using DAK and PMC for critical properti
 
    - **SUT / PMC**: ``tc`` and ``pc`` are the *mixture* pseudo-critical values. They replace the correlation output entirely.
    - **BNS**: ``tc`` and ``pc`` are the *inert-free hydrocarbon* pseudo-critical values. They replace only the hydrocarbon pseudo-component in the EOS; inert Tc/Pc (CO2, H2S, N2, H2, He) remain the BNS internal per-component constants.
+
+Associated gas in BNS
+---------------------
+
+BNS characterises the hydrocarbon part of the gas as one pseudo-component whose Tc and Pc come from the hydrocarbon specific gravity. Burgoyne, Nielsen & Stanko (2025) fitted two such correlations: one for gas condensates (the default) and one for associated gas, which gives a lower Pc at every specific gravity and a Tc within about 1.5% of the condensate value (lower below a hydrocarbon SG of about 1.2, higher above). Set ``ag=True`` to use the associated-gas correlation. It applies only with ``cmethod='BNS'`` and is ignored by other methods; a user-supplied ``tc`` or ``pc`` takes precedence. The hydrocarbon-inert binary interaction parameters are functions of the hydrocarbon Tc, so they follow the selected correlation, as in the regression behind the method. Results match the reference implementation (``AG=True`` in the `5_Component_PengRobinson_Z-Factor <https://github.com/mwburgoyne/5_Component_PengRobinson_Z-Factor>`_ repository) to about 1e-14 in Z and viscosity.
+
+    >>> gas.gas_tc_pc(sg=0.75, cmethod='BNS')
+    (401.2348975509288, 663.436579436262)
+    >>> gas.gas_tc_pc(sg=0.75, cmethod='BNS', ag=True)
+    (397.7239050745307, 653.8703430787151)
 
 Helium in BNS
 ~~~~~~~~~~~~~
@@ -126,7 +136,7 @@ Calculating gas Z-Factor of pure CO2
 
 .. code-block:: python
 
-    >>> gas.gas_z(p=2350, sg=0.68, degf = 180, co2 = 1.0, zmethod='BUR', cmethod='BUR')
+    >>> gas.gas_z(p=2350, sg=0.68, degf = 180, co2 = 1.0, zmethod='BNS', cmethod='BNS')
     0.5258309021348752
     
 Calculating gas sg, and then gas Z-Factor of a mixture of 5% CO2, 10% H2S, 0% N2 and 20% H2 (remainder natural gas with MW = 19).
@@ -134,7 +144,7 @@ Calculating gas sg, and then gas Z-Factor of a mixture of 5% CO2, 10% H2S, 0% N2
 .. code-block:: python
 
     >>> gsg = gas.gas_sg(hc_mw = 19.0, co2 = 0.05, h2s = 0.10, n2 = 0, h2 = 0.20)
-    >>> gas.gas_z(p=2350, sg=gsg, degf = 180, co2 = 0.05, h2s = 0.10, n2 = 0, h2 = 0.20, zmethod='BUR', cmethod='BUR')
+    >>> gas.gas_z(p=2350, sg=gsg, degf = 180, co2 = 0.05, h2s = 0.10, n2 = 0, h2 = 0.20, zmethod='BNS', cmethod='BNS')
     0.9048153036714465
 
 
@@ -234,10 +244,13 @@ For ``cmethod='BNS'``, the returned values describe the *inert-free hydrocarbon*
      - Molar fraction of Nitrogen. Defaults to zero if undefined 
    * - h2
      - float
-     - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
+     - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BNS'
    * - he
      - float
      - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
+   * - ag
+     - bool
+     - BNS only. If True, the hydrocarbon pseudo-component Tc and Pc come from the associated-gas correlation instead of the default gas-condensate one; see *Associated gas in BNS*. Defaults to False. Keyword, last in the signature (new in 3.8.4). User-supplied tc/pc take precedence
    * - cmethod
      - string or c_method
      - Method for calculating gas critical parameters. `Calculation Methods and Class Objects`_.
@@ -326,10 +339,13 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
      - Molar fraction of Nitrogen. Defaults to zero if undefined
    * - h2
      - float
-     - Molar fraction of Hydrogen. Defaults to zero if undefined. zmethod and cmethod get overriden to 'BUR' if positive fraction.
+     - Molar fraction of Hydrogen. Defaults to zero if undefined. zmethod and cmethod get overridden to 'BNS' if positive fraction.
    * - he
      - float
      - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
+   * - ag
+     - bool
+     - BNS only. If True, the hydrocarbon pseudo-component Tc and Pc come from the associated-gas correlation instead of the default gas-condensate one; see *Associated gas in BNS*. Defaults to False. Keyword, last in the signature (new in 3.8.4). User-supplied tc/pc take precedence
    * - tc
      - float
      - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
@@ -371,7 +387,7 @@ pyrestoolbox.gas.gas_ug
 
     gas_ug(p, sg, degf, zmethod ='DAK', cmethod = 'PMC', co2 = 0, h2s = 0, n2 = 0, h2 = 0, tc = 0, pc = 0, zee = 0, ugz = False, metric = False, he = 0) -> float or np.array
 
-Returns gas viscosity (cP) using Lee, Gonzalez & Eakin (1966) correlation unless the 'BUR' method for Z-Factor is selected in which case a tuned LBC method is used. 
+Returns gas viscosity (cP) using Lee, Gonzalez & Eakin (1966) correlation unless the 'BNS' method for Z-Factor is selected in which case a tuned LBC method is used. 
 A float or list / array can be used for p, returning corresponding 1-D array of gas viscosities. The cmethod will be used to calculate critical gas parameters unless tc and/or pc are explicitly set to be non-zero. This option enables users to use pre-calculate gas critical properties and so avoid repeated duplicated critical property calculations when compute time is an issue
 Furnishing a positive value for zee means it will be used instead of calculating Z, and setting ugz to True will return the viscosity * Z product instead of viscosity alone
 
@@ -409,10 +425,13 @@ Furnishing a positive value for zee means it will be used instead of calculating
      - Molar fraction of Nitrogen. Defaults to zero if undefined
    * - h2
      - float
-     - Molar fraction of Hydrogen. Defaults to zero if undefined. Overrides methods to 'BUR' if positive fraction.
+     - Molar fraction of Hydrogen. Defaults to zero if undefined. Overrides methods to 'BNS' if positive fraction.
    * - he
      - float
      - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
+   * - ag
+     - bool
+     - BNS only. If True, the hydrocarbon pseudo-component Tc and Pc come from the associated-gas correlation instead of the default gas-condensate one; see *Associated gas in BNS*. Defaults to False. Keyword, last in the signature (new in 3.8.4). User-supplied tc/pc take precedence
    * - tc
      - float
      - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
@@ -492,10 +511,13 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
      - Molar fraction of Nitrogen. Defaults to zero if undefined
    * - h2
      - float
-     - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
+     - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BNS'
    * - he
      - float
      - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
+   * - ag
+     - bool
+     - BNS only. If True, the hydrocarbon pseudo-component Tc and Pc come from the associated-gas correlation instead of the default gas-condensate one; see *Associated gas in BNS*. Defaults to False. Keyword, last in the signature (new in 3.8.4). User-supplied tc/pc take precedence
    * - tc
      - float
      - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
@@ -572,10 +594,13 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
      - Molar fraction of Nitrogen. Defaults to zero if undefined
    * - h2
      - float
-     - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
+     - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BNS'
    * - he
      - float
      - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
+   * - ag
+     - bool
+     - BNS only. If True, the hydrocarbon pseudo-component Tc and Pc come from the associated-gas correlation instead of the default gas-condensate one; see *Associated gas in BNS*. Defaults to False. Keyword, last in the signature (new in 3.8.4). User-supplied tc/pc take precedence
    * - tc
      - float
      - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
@@ -651,10 +676,13 @@ A float or list / array can be used for p, returning corresponding 1-D array of 
      - Molar fraction of Nitrogen. Defaults to zero if undefined
    * - h2
      - float
-     - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
+     - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BNS'
    * - he
      - float
      - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
+   * - ag
+     - bool
+     - BNS only. If True, the hydrocarbon pseudo-component Tc and Pc come from the associated-gas correlation instead of the default gas-condensate one; see *Associated gas in BNS*. Defaults to False. Keyword, last in the signature (new in 3.8.4). User-supplied tc/pc take precedence
    * - tc
      - float
      - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
@@ -742,6 +770,9 @@ Departure enthalpy for lean hydrocarbon gas carries a systematic bias of about
    * - he
      - float
      - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
+   * - ag
+     - bool
+     - BNS only. If True, the hydrocarbon pseudo-component Tc and Pc come from the associated-gas correlation instead of the default gas-condensate one; see *Associated gas in BNS*. Defaults to False. Keyword, last in the signature (new in 3.8.4). User-supplied tc/pc take precedence
    * - tc
      - float
      - Overrides the hydrocarbon pseudo-component Tc (deg R, or K if metric=True). Inert Tc stay at BNS internal constants
@@ -890,10 +921,13 @@ A float or list / array can be used for poverz, returning corresponding 1-D arra
      - Molar fraction of Nitrogen. Defaults to zero if undefined
    * - h2
      - float
-     - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
+     - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BNS'
    * - he
      - float
      - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
+   * - ag
+     - bool
+     - BNS only. If True, the hydrocarbon pseudo-component Tc and Pc come from the associated-gas correlation instead of the default gas-condensate one; see *Associated gas in BNS*. Defaults to False. Keyword, last in the signature (new in 3.8.4). User-supplied tc/pc take precedence
    * - tc
      - float
      - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
@@ -970,10 +1004,13 @@ Returns gas specific gravity consistent with observed gas gradient. Calculated t
      - Molar fraction of Nitrogen. Defaults to zero if undefined
    * - h2
      - float
-     - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
+     - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BNS'
    * - he
      - float
      - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
+   * - ag
+     - bool
+     - BNS only. If True, the hydrocarbon pseudo-component Tc and Pc come from the associated-gas correlation instead of the default gas-condensate one; see *Associated gas in BNS*. Defaults to False. Keyword, last in the signature (new in 3.8.4). User-supplied tc/pc take precedence
    * - tc
      - float
      - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
@@ -1052,10 +1089,13 @@ Integrates the equation: m(p) = 2 * p / (ug * z)
      - Molar fraction of Nitrogen. Defaults to zero if undefined
    * - h2
      - float
-     - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BUR'
+     - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, cmethod will override to 'BNS'
    * - he
      - float
      - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
+   * - ag
+     - bool
+     - BNS only. If True, the hydrocarbon pseudo-component Tc and Pc come from the associated-gas correlation instead of the default gas-condensate one; see *Associated gas in BNS*. Defaults to False. Keyword, last in the signature (new in 3.8.4). User-supplied tc/pc take precedence
    * - tc
      - float
      - Critical gas temperature (deg R, or K if metric=True). Uses cmethod correlation if not specified. For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants)
@@ -1197,6 +1237,9 @@ A ``gas_pvt`` object can be provided instead of individual gas composition param
    * - h2s
      - float
      - Molar fraction of H2S. Defaults to zero if undefined
+   * - h2
+     - float
+     - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, zmethod and cmethod are set to 'BNS'
    * - S
      - float
      - Skin. Defaults to zero if undefined
@@ -1208,10 +1251,16 @@ A ``gas_pvt`` object can be provided instead of individual gas composition param
      - Gas SG relative to air, Defaults to 0.75 if undefined
    * - gas_pvt
      - GasPVT
-     - GasPVT object. If provided, sg/co2/h2s/n2/h2/he/zmethod/cmethod/tc/pc are extracted from it
+     - GasPVT object. If provided, sg/co2/h2s/n2/h2/he/ag/zmethod/cmethod/tc/pc are extracted from it
    * - metric
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
+   * - he
+     - float
+     - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
+   * - ag
+     - bool
+     - BNS only. If True, the hydrocarbon pseudo-component Tc and Pc come from the associated-gas correlation instead of the default gas-condensate one; see *Associated gas in BNS*. Defaults to False. Keyword, last in the signature (new in 3.8.4). User-supplied tc/pc take precedence
 
 .. list-table:: Returns
    :widths: 10 15 40
@@ -1358,15 +1407,24 @@ A ``gas_pvt`` object can be provided instead of individual gas composition param
    * - h2s
      - float
      - Molar fraction of H2S. Defaults to zero if undefined
+   * - h2
+     - float
+     - Molar fraction of Hydrogen. Defaults to zero if undefined. If positive fraction, zmethod and cmethod are set to 'BNS'
    * - sg
      - float
      - Gas SG relative to air, Defaults to 0.75 if undefined
    * - gas_pvt
      - GasPVT
-     - GasPVT object. If provided, sg/co2/h2s/n2/h2/he/zmethod/cmethod/tc/pc are extracted from it
+     - GasPVT object. If provided, sg/co2/h2s/n2/h2/he/ag/zmethod/cmethod/tc/pc are extracted from it
    * - metric
      - bool
      - If True, inputs/outputs use Eclipse METRIC units. Defaults to False
+   * - he
+     - float
+     - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
+   * - ag
+     - bool
+     - BNS only. If True, the hydrocarbon pseudo-component Tc and Pc come from the associated-gas correlation instead of the default gas-condensate one; see *Associated gas in BNS*. Defaults to False. Keyword, last in the signature (new in 3.8.4). User-supplied tc/pc take precedence
 
 .. list-table:: Returns
    :widths: 10 15 40
@@ -1934,6 +1992,9 @@ Stores gas composition and method choices. Pre-computes critical temperature and
    * - he
      - float
      - Molar fraction of Helium. Defaults to 0. Keyword, last in the signature (new in 3.8.3). Like h2, a positive fraction forces zmethod and cmethod to 'BNS'; see *Helium in BNS*
+   * - ag
+     - bool
+     - BNS only. If True, the hydrocarbon pseudo-component Tc and Pc come from the associated-gas correlation instead of the default gas-condensate one; see *Associated gas in BNS*. Defaults to False. Keyword, last in the signature (new in 3.8.4). User-supplied tc/pc take precedence
    * - zmethod
      - string or z_method
      - Method for Z-factor calculation. Defaults to 'DAK'
