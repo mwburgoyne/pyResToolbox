@@ -273,6 +273,12 @@ _GRAY_ND_COEF = 205.0           # Diameter number coefficient in A
 _GRAY_ROUGH_K = 28.5            # Effective roughness coefficient
 _GRAY_R_THRESH = 0.007          # R threshold for roughness interpolation
 _GRAY_SP_LIQ_FRAC = 1e-6        # v_sg/v_m below this is single-phase liquid (dry roughness)
+# Below this no-slip liquid fraction the two-phase gradient is blended
+# linearly toward the method's own zero-liquid gradient (weight lambda/_LOW_LIQ_LAMBDA).
+# WG drift-flux and Gray holdup tend to finite values as liquid vanishes and
+# Beggs-Brill's friction parameter y = lambda/HL^2 grows without bound, so
+# without the blend a trace of liquid moved dry-gas BHP by up to 16%.
+_LOW_LIQ_LAMBDA = 1e-3
 _GRAY_ROUGH_FLOOR = 2.77e-5     # Minimum effective roughness (ft)
 
 # ============================================================================
@@ -1506,7 +1512,7 @@ def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                 'qg_mmscfd': qg_mmscfd, 'api': api,
             }
 
-            dpdz = gradient_fn(s)
+            dpdz = _low_liquid_gradient(gradient_fn, s)
             p_est = p_psia + dpdz * seg_len
 
         p_psia = p_est
@@ -1516,6 +1522,25 @@ def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                 "specified rates are not physically sustainable for this geometry")
 
     return p_psia
+
+
+def _low_liquid_gradient(gradient_fn, s):
+    """Gradient with a continuous approach to the dry-gas limit.
+
+    For 0 < lambda_l < _LOW_LIQ_LAMBDA returns g0 + (lambda_l/_LOW_LIQ_LAMBDA)(g - g0),
+    where g is the method's two-phase gradient and g0 the same method with the
+    liquid removed (its existing lambda_l = 0 path). At lambda_l = 0 and at or
+    above _LOW_LIQ_LAMBDA this is exactly gradient_fn(s).
+    """
+    g = gradient_fn(s)
+    lam = s['lambda_l']
+    if not 0.0 < lam < _LOW_LIQ_LAMBDA:
+        return g
+    s0 = dict(s, mflow_l=0.0, mflow_o=0.0, mflow_w=0.0, v_sl=0.0,
+              v_m=s['v_sg'], lambda_l=0.0, rho_ns=s['rho_g'],
+              mflow_total=s['mflow_g'], qo_loc=0.0, ql_loc=0.0, qw_bwpd=0.0)
+    g0 = gradient_fn(s0)
+    return g0 + (lam / _LOW_LIQ_LAMBDA) * (g - g0)
 
 
 # ============================================================================

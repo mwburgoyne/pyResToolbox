@@ -20,6 +20,7 @@ specified rates are not physically sustainable for this geometry";
 /// Per-step PVT and flow state passed to the gradient callbacks.
 /// Mirrors the state dict built by the Python segment marches; only the
 /// fields consumed by the four gradient functions are carried.
+#[derive(Clone, Copy)]
 pub struct SegmentState {
     pub p_avg: f64,    // Average segment pressure (psia)
     pub mu_g: f64,     // Gas viscosity (cP)
@@ -46,6 +47,30 @@ pub struct SegmentState {
 }
 
 pub type GradientFn = fn(&SegmentState) -> f64;
+
+/// Gradient with a continuous approach to the dry-gas limit (Python
+/// _low_liquid_gradient): for 0 < lambda_l < LOW_LIQ_LAMBDA returns
+/// g0 + (lambda_l / LOW_LIQ_LAMBDA)(g - g0), g0 being the same method with the
+/// liquid removed; otherwise exactly gradient(s).
+fn low_liquid_gradient(gradient: GradientFn, s: &SegmentState) -> f64 {
+    let g = gradient(s);
+    let lam = s.lambda_l;
+    if !(lam > 0.0 && lam < LOW_LIQ_LAMBDA) {
+        return g;
+    }
+    let s0 = SegmentState {
+        mflow_l: 0.0,
+        v_sl: 0.0,
+        v_m: s.v_sg,
+        lambda_l: 0.0,
+        rho_ns: s.rho_g,
+        mflow_total: s.mflow_g,
+        ql_loc: 0.0,
+        ..*s
+    };
+    let g0 = gradient(&s0);
+    g0 + (lam / LOW_LIQ_LAMBDA) * (g - g0)
+}
 
 /// Number of march segments for a given length (Python _calc_segments,
 /// min_seg_ft = 100).
@@ -407,7 +432,7 @@ fn segment_march_gas(
                 mflow_g, mflow_l, mflow_total, ql_loc, tid, rough,
             };
 
-            let dpdz = gradient(&s);
+            let dpdz = low_liquid_gradient(gradient, &s);
             p_est = p_psia + dpdz * seg_len;
         }
 

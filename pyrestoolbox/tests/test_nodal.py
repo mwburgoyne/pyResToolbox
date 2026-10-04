@@ -1055,3 +1055,29 @@ def test_bb_injection_uses_downhill_holdup():
     kw = dict(thp=2000, completion=c, vlpmethod='BB', well_type='gas', qg_mscfd=1000, qw_bwpd=200, gsg=0.7)
     assert abs(nodal.fbhp(**kw) - 4377.5) < 0.2                      # producer unchanged by the fix
     assert abs(nodal.fbhp(injection=True, **kw) - 3174.3) < 0.2     # 4355.9 with the uphill set
+
+
+# ---------------------------------------------------------------------------
+# Vanishing liquid: every VLP method must approach its dry-gas answer
+# continuously (a trace of water moved WG +62, Gray +10, BB up to +197 psi
+# before _LOW_LIQ_LAMBDA), and BHP must not fall as liquid rises from zero.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("method", ["HB", "WG", "GRAY", "BB"])
+@pytest.mark.parametrize("injection", [False, True])
+def test_vlp_trace_liquid_continuous_with_dry_gas(method, injection):
+    comp = Completion(tid=2.441, length=5000, tht=80, bht=200, rough=0.0018)
+
+    def bhp(qw):
+        return fbhp(thp=1000, completion=comp, vlpmethod=method, well_type='gas',
+                    qg_mmscfd=5, cgr=0, qw_bwpd=qw, oil_vis=0.5, api=50,
+                    pr=3000, gsg=0.65, wsg=1.0, injection=injection)
+
+    dry = bhp(0.0)
+    assert abs(bhp(1e-9) - dry) < 0.01
+    assert abs(bhp(1e-6) - dry) < 0.01
+    if not injection:
+        rates = [0.0, 1e-6, 1e-3, 0.1, 1.0, 10.0, 30.0]
+        values = [bhp(q) for q in rates]
+        for lo, hi in zip(values, values[1:]):
+            assert hi >= lo - 0.05

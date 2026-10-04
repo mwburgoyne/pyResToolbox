@@ -149,6 +149,12 @@ pub const GRAY_ND_COEF: f64 = 205.0; // Diameter number coefficient in A
 pub const GRAY_ROUGH_K: f64 = 28.5; // Effective roughness coefficient
 pub const GRAY_R_THRESH: f64 = 0.007; // R threshold for roughness interpolation
 pub const GRAY_SP_LIQ_FRAC: f64 = 1e-6; // v_sg/v_m below this is single-phase liquid (dry roughness)
+/// Below this no-slip liquid fraction the gas march blends each segment's
+/// gradient linearly toward the method's own zero-liquid gradient (weight
+/// lambda / LOW_LIQ_LAMBDA): WG and Gray holdup tend to finite values as liquid
+/// vanishes and Beggs-Brill y = lambda/HL^2 grows without bound (Python
+/// _LOW_LIQ_LAMBDA, nodal.py).
+pub const LOW_LIQ_LAMBDA: f64 = 1e-3;
 pub const GRAY_ROUGH_FLOOR: f64 = 2.77e-5; // Minimum effective roughness (ft)
 
 // ============================================================================
