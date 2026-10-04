@@ -65,8 +65,9 @@ enum ZMethod {
 ///
 /// These eleven values used to be threaded through eval_z, gl_integrate,
 /// p_over_z and solve_ponz2p_single one argument at a time, and repeated
-/// verbatim at every call site.
-struct GasState<'a> {
+/// verbatim at every call site. Built with `GasState::new`, shared by the
+/// pseudopressure entry points and the VLP gas march.
+pub(crate) struct GasState {
     method: ZMethod,
     deg_r: f64,
     sg: f64,
@@ -81,13 +82,72 @@ struct GasState<'a> {
     n2: f64,
     h2: f64,
     he: f64,
-    lbc_params: &'a Option<gas_viscosity::LbcParams>,
+    lbc_params: Option<gas_viscosity::LbcParams>,
 }
 
-impl GasState<'_> {
+impl GasState {
+    /// Resolve the method and critical properties once for a temperature.
+    ///
+    /// zmethod "DAK", "HY" (cmethod "SUT") or "BNS"/"BUR"; anything else is
+    /// an Err so the caller can fall back to Python. User tc/pc (both > 0)
+    /// replace the mixture Tc/Pc for DAK/HY and only the hydrocarbon
+    /// pseudo-component Tc/Pc for BNS (inert constants and LBC MW unchanged).
+    /// `with_viscosity` precomputes the BNS LBC parameters.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        degf: f64, sg: f64, zmethod: &str, cmethod: &str,
+        inerts: [f64; 5], tc: f64, pc: f64, with_viscosity: bool,
+    ) -> Result<Self, String> {
+        let [co2, h2s, n2, h2, he] = inerts;
+        let method = match (zmethod, cmethod) {
+            ("DAK", "SUT") => ZMethod::DakSut,
+            ("HY", "SUT") => ZMethod::HySut,
+            ("BNS", _) | ("BUR", _) => ZMethod::Bns,
+            _ => {
+                return Err(format!(
+                    "Rust acceleration not available for zmethod={}, cmethod={}", zmethod, cmethod
+                ));
+            }
+        };
+        let user_tc_pc = tc > 0.0 && pc > 0.0;
+        let (tpc_sut, ppc_sut) = match method {
+            ZMethod::DakSut | ZMethod::HySut => {
+                if user_tc_pc {
+                    (tc, pc)
+                } else {
+                    critical_properties::sutton_wa_internal(sg, co2, h2s, n2)?
+                }
+            }
+            ZMethod::Bns => (0.0, 0.0), // Not used
+        };
+        let (tpc_bns, ppc_bns) = match method {
+            ZMethod::Bns => {
+                if user_tc_pc {
+                    (tc, pc)
+                } else {
+                    let (t, p, _) = critical_properties::bns_pseudocritical_internal(sg, co2, h2s, n2, h2, he);
+                    (t, p)
+                }
+            }
+            _ => (0.0, 0.0),
+        };
+        // LBC parameters honour the HC Tc/Pc override
+        let lbc_params = match method {
+            ZMethod::Bns if with_viscosity => {
+                let (tc_lbc, pc_lbc) = if user_tc_pc { (tc, pc) } else { (0.0, 0.0) };
+                Some(gas_viscosity::lbc_params(degf, sg, co2, h2s, n2, h2, he, tc_lbc, pc_lbc))
+            }
+            _ => None,
+        };
+        Ok(GasState {
+            method, deg_r: degf + DEGF2R, sg, tpc_sut, ppc_sut, tpc_bns, ppc_bns,
+            co2, h2s, n2, h2, he, lbc_params,
+        })
+    }
+
     /// Z-factor at a single pressure. All critical property computation is
     /// internal — no Python round-trips.
-    fn eval_z(&self, p_psia: f64) -> f64 {
+    pub(crate) fn eval_z(&self, p_psia: f64) -> f64 {
         match self.method {
             ZMethod::DakSut => {
                 zfactor::dak_core_pub(p_psia / self.ppc_sut, self.deg_r / self.tpc_sut)
@@ -103,9 +163,9 @@ impl GasState<'_> {
     }
 
     /// Viscosity at a single pressure, using LBC only on the BNS path.
-    fn eval_ug(&self, p_psia: f64, zee: f64) -> f64 {
+    pub(crate) fn eval_ug(&self, p_psia: f64, zee: f64) -> f64 {
         match self.method {
-            ZMethod::Bns => match self.lbc_params {
+            ZMethod::Bns => match &self.lbc_params {
                 Some(params) => {
                     gas_viscosity::lbc_viscosity_with_params(p_psia, self.deg_r, zee, params)
                 }
@@ -219,67 +279,11 @@ pub fn gas_dmp_rust(
 ) -> PyResult<f64> {
     // inerts = [co2, h2s, n2, h2, he] mole fractions (one record keeps the
     // signature under clippy's argument threshold)
-    let [co2, h2s, n2, h2, he] = inerts;
     if p1 == p2 {
         return Ok(0.0);
     }
-
-    let deg_r = degf + DEGF2R;
-
-    // Determine method
-    let method = match (zmethod, cmethod) {
-        ("DAK", "SUT") | ("DAK", _) if cmethod == "SUT" => ZMethod::DakSut,
-        ("HY", "SUT") | ("HY", _) if cmethod == "SUT" => ZMethod::HySut,
-        ("BNS", _) | ("BUR", _) => ZMethod::Bns,
-        _ => {
-            return Err(pyo3::exceptions::PyValueError::new_err(
-                format!("Rust acceleration not available for zmethod={}, cmethod={}", zmethod, cmethod)
-            ));
-        }
-    };
-
-    // Precompute critical properties — user tc/pc override is method-dependent:
-    // DAK/HY+SUT: (tc, pc) replace the mixture Tc/Pc.
-    // BNS: (tc, pc) replace only the HC pseudo-component Tc/Pc; inert Tc/Pc
-    //      remain at BNS internal constants. LBC params also honor the HC override.
-    let user_tc_pc = tc > 0.0 && pc > 0.0;
-    let (tpc_sut, ppc_sut) = match method {
-        ZMethod::DakSut | ZMethod::HySut => {
-            if user_tc_pc {
-                (tc, pc)
-            } else {
-                critical_properties::sutton_wa_internal(sg, co2, h2s, n2)
-                    .map_err(pyo3::exceptions::PyValueError::new_err)?
-            }
-        }
-        ZMethod::Bns => (0.0, 0.0), // Not used
-    };
-
-    let (tpc_bns, ppc_bns) = match method {
-        ZMethod::Bns => {
-            if user_tc_pc {
-                (tc, pc)
-            } else {
-                let (t, p, _) = critical_properties::bns_pseudocritical_internal(sg, co2, h2s, n2, h2, he);
-                (t, p)
-            }
-        }
-        _ => (0.0, 0.0),
-    };
-
-    // Precompute LBC params for BNS method (propagates HC Tc/Pc override)
-    let lbc_p = match method {
-        ZMethod::Bns => {
-            let (tc_lbc, pc_lbc) = if user_tc_pc { (tc, pc) } else { (0.0, 0.0) };
-            Some(gas_viscosity::lbc_params(degf, sg, co2, h2s, n2, h2, he, tc_lbc, pc_lbc))
-        }
-        _ => None,
-    };
-
-    let state = GasState {
-        method, deg_r, sg, tpc_sut, ppc_sut, tpc_bns, ppc_bns,
-        co2, h2s, n2, h2, he, lbc_params: &lbc_p,
-    };
+    let state = GasState::new(degf, sg, zmethod, cmethod, inerts, tc, pc, true)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
 
     // Two-tier Gauss-Legendre integration
     let result_7 = state.gl_integrate(p1, p2, &GL7_NODES, &GL7_WEIGHTS);
@@ -310,54 +314,9 @@ pub fn gas_ponz2p_rust(
     pc: f64,
     rtol: f64,
 ) -> PyResult<Vec<f64>> {
-    // inerts = [co2, h2s, n2, h2, he] mole fractions
-    let [co2, h2s, n2, h2, he] = inerts;
-    let deg_r = degf + DEGF2R;
-
-    // Determine method
-    let method = match (zmethod, cmethod) {
-        ("DAK", "SUT") | ("DAK", _) if cmethod == "SUT" => ZMethod::DakSut,
-        ("HY", "SUT") | ("HY", _) if cmethod == "SUT" => ZMethod::HySut,
-        ("BNS", _) | ("BUR", _) => ZMethod::Bns,
-        _ => {
-            return Err(pyo3::exceptions::PyValueError::new_err(
-                format!("Rust acceleration not available for zmethod={}, cmethod={}", zmethod, cmethod)
-            ));
-        }
-    };
-
-    // Precompute critical properties — see gas_dmp_rust for override semantics.
-    let user_tc_pc = tc > 0.0 && pc > 0.0;
-    let (tpc_sut, ppc_sut) = match method {
-        ZMethod::DakSut | ZMethod::HySut => {
-            if user_tc_pc {
-                (tc, pc)
-            } else {
-                critical_properties::sutton_wa_internal(sg, co2, h2s, n2)
-                    .map_err(pyo3::exceptions::PyValueError::new_err)?
-            }
-        }
-        ZMethod::Bns => (0.0, 0.0),
-    };
-
-    let (tpc_bns, ppc_bns) = match method {
-        ZMethod::Bns => {
-            if user_tc_pc {
-                (tc, pc)
-            } else {
-                let (t, p, _) = critical_properties::bns_pseudocritical_internal(sg, co2, h2s, n2, h2, he);
-                (t, p)
-            }
-        }
-        _ => (0.0, 0.0),
-    };
-
-    // P/Z needs no viscosity, so the LBC parameters stay unset here.
-    let no_lbc = None;
-    let state = GasState {
-        method, deg_r, sg, tpc_sut, ppc_sut, tpc_bns, ppc_bns,
-        co2, h2s, n2, h2, he, lbc_params: &no_lbc,
-    };
+    // inerts = [co2, h2s, n2, h2, he] mole fractions; P/Z needs no viscosity
+    let state = GasState::new(degf, sg, zmethod, cmethod, inerts, tc, pc, false)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
 
     let mut results = Vec::with_capacity(poverz.len());
     for &target in &poverz {

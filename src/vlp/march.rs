@@ -10,7 +10,7 @@ use super::holdup_gray::{gray_effective_roughness, gray_liquid_holdup};
 use super::holdup_wg::{wg_friction_gradient_lm, wg_void_fraction};
 use super::ift::interfacial_tension;
 use super::pvt_helpers::*;
-use super::static_column::{static_gas_column_pressure, static_oil_column_pressure};
+use super::static_column::{gas_state, static_gas_column_pressure, static_oil_column_pressure, GasSpec};
 
 /// Divergence guard message - must match the Python RuntimeError text in
 /// nodal.py exactly.
@@ -353,17 +353,17 @@ fn segment_march_gas(
     length: f64, tht: f64, bht: f64, wsg: f64,
     qg_mmscfd: f64, cgr: f64, qw_bwpd: f64, oil_vis: f64,
     injection: bool, pr: f64, theta: f64, gradient: GradientFn,
-    tc_pc: Option<(f64, f64)>,
+    zspec: Option<&GasSpec>,
 ) -> Result<f64, String> {
-    // Mixture pseudo-criticals from the caller (GasPVT with impurities or
-    // user tc/pc); None -> Sutton from gsg, matching Python _segment_march_gas
-    let (tc, pc) = tc_pc.unwrap_or_else(|| sutton_tc_pc(gsg));
+    // Z and viscosity: GasPVT methods when zspec is given, else Hall-Yarborough
+    // on Sutton pseudo-criticals of gsg with LGE (Python _march_gas_z_mu)
+    let (tc, pc) = sutton_tc_pc(gsg);
     let osg = 141.5 / (api + 131.5);
     let total_mass = RHO_AIR_STC * gsg * qg_mmscfd * 1e6
         + osg * RHO_FW * cgr * qg_mmscfd * FT3_PER_BBL
         + wsg * RHO_FW * qw_bwpd * FT3_PER_BBL;
     if total_mass < 1e-6 || qg_mmscfd < 0.001 {
-        return Ok(static_gas_column_pressure(thp, length, tht, bht, gsg, theta));
+        return static_gas_column_pressure(thp, length, tht, bht, gsg, theta, zspec);
     }
 
     let diam_ft = tid / 12.0;
@@ -382,6 +382,8 @@ fn segment_march_gas(
     for i in 1..=ndiv {
         let frac = (i as f64 - 0.5) / ndiv as f64;
         let temp_f = tht + (bht - tht) * frac;
+        // GasPVT Z/viscosity evaluator at this segment temperature
+        let seg_gas = zspec.map(|g| gas_state(g, temp_f, true)).transpose()?;
         let temp_r = temp_f + 459.67;
         let mut p_est = p_psia;
 
@@ -397,8 +399,16 @@ fn segment_march_gas(
 
             let oil_vis_loc = condensate_vis(pr, cgr_loc, gsg, api, temp_f, p_avg, oil_vis);
 
-            let zee = z_factor(gsg, temp_f, p_avg, tc, pc);
-            let mu_g = gas_viscosity(gsg, temp_f, p_avg, zee, tc, pc);
+            let (zee, mu_g) = match &seg_gas {
+                Some(g) => {
+                    let z = g.eval_z(p_avg);
+                    (z, g.eval_ug(p_avg, z))
+                }
+                None => {
+                    let z = z_factor(gsg, temp_f, p_avg, tc, pc);
+                    (z, gas_viscosity(gsg, temp_f, p_avg, z, tc, pc))
+                }
+            };
 
             let rho_g = MW_AIR * gsg * p_avg / (zee * R_GAS * temp_r);
             let rho_l = lsg_loc * RHO_FW;
@@ -575,16 +585,12 @@ macro_rules! gas_entry {
             length: f64, tht: f64, bht: f64, wsg: f64,
             qg_mmscfd: f64, cgr: f64, qw_bwpd: f64, oil_vis: f64,
             injection: bool, pr: f64, theta: f64,
-            tc: Option<f64>, pc: Option<f64>,
+            zspec: Option<GasSpec>,
         ) -> Result<f64, String> {
-            let tc_pc = match (tc, pc) {
-                (Some(t), Some(p)) => Some((t, p)),
-                _ => None,
-            };
             segment_march_gas(
                 thp, api, gsg, tid, rough, length, tht, bht, wsg,
                 qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, $gradient,
-                tc_pc,
+                zspec.as_ref(),
             )
         }
     };

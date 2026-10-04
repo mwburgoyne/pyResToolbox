@@ -32,17 +32,17 @@ pub fn vlp_water_viscosity_rust(press_psia: f64, temp_f: f64, wsg: f64) -> f64 {
 
 /// HB gas VLP segment loop.
 #[pyfunction]
-#[pyo3(signature = (thp, api, gsg, tid, rough, length, tht, bht, wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, tc=None, pc=None))]
+#[pyo3(signature = (thp, api, gsg, tid, rough, length, tht, bht, wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, zspec=None))]
 pub fn hb_fbhp_gas_rust(
     thp: f64, api: f64, gsg: f64, tid: f64, rough: f64,
     length: f64, tht: f64, bht: f64, wsg: f64,
     qg_mmscfd: f64, cgr: f64, qw_bwpd: f64, oil_vis: f64,
     injection: bool, pr: f64, theta: f64,
-    tc: Option<f64>, pc: Option<f64>,
+    zspec: Option<static_column::GasSpec>,
 ) -> PyResult<f64> {
     march::hb_fbhp_gas(
         thp, api, gsg, tid, rough, length, tht, bht, wsg,
-        qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, tc, pc,
+        qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, zspec,
     )
     .map_err(PyRuntimeError::new_err)
 }
@@ -66,17 +66,17 @@ pub fn hb_fbhp_oil_rust(
 
 /// WG gas VLP segment loop.
 #[pyfunction]
-#[pyo3(signature = (thp, api, gsg, tid, rough, length, tht, bht, wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, tc=None, pc=None))]
+#[pyo3(signature = (thp, api, gsg, tid, rough, length, tht, bht, wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, zspec=None))]
 pub fn wg_fbhp_gas_rust(
     thp: f64, api: f64, gsg: f64, tid: f64, rough: f64,
     length: f64, tht: f64, bht: f64, wsg: f64,
     qg_mmscfd: f64, cgr: f64, qw_bwpd: f64, oil_vis: f64,
     injection: bool, pr: f64, theta: f64,
-    tc: Option<f64>, pc: Option<f64>,
+    zspec: Option<static_column::GasSpec>,
 ) -> PyResult<f64> {
     march::wg_fbhp_gas(
         thp, api, gsg, tid, rough, length, tht, bht, wsg,
-        qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, tc, pc,
+        qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, zspec,
     )
     .map_err(PyRuntimeError::new_err)
 }
@@ -100,17 +100,17 @@ pub fn wg_fbhp_oil_rust(
 
 /// Gray gas VLP segment loop.
 #[pyfunction]
-#[pyo3(signature = (thp, api, gsg, tid, rough, length, tht, bht, wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, tc=None, pc=None))]
+#[pyo3(signature = (thp, api, gsg, tid, rough, length, tht, bht, wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, zspec=None))]
 pub fn gray_fbhp_gas_rust(
     thp: f64, api: f64, gsg: f64, tid: f64, rough: f64,
     length: f64, tht: f64, bht: f64, wsg: f64,
     qg_mmscfd: f64, cgr: f64, qw_bwpd: f64, oil_vis: f64,
     injection: bool, pr: f64, theta: f64,
-    tc: Option<f64>, pc: Option<f64>,
+    zspec: Option<static_column::GasSpec>,
 ) -> PyResult<f64> {
     march::gray_fbhp_gas(
         thp, api, gsg, tid, rough, length, tht, bht, wsg,
-        qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, tc, pc,
+        qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, zspec,
     )
     .map_err(PyRuntimeError::new_err)
 }
@@ -134,17 +134,17 @@ pub fn gray_fbhp_oil_rust(
 
 /// BB gas VLP segment loop.
 #[pyfunction]
-#[pyo3(signature = (thp, api, gsg, tid, rough, length, tht, bht, wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, tc=None, pc=None))]
+#[pyo3(signature = (thp, api, gsg, tid, rough, length, tht, bht, wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, zspec=None))]
 pub fn bb_fbhp_gas_rust(
     thp: f64, api: f64, gsg: f64, tid: f64, rough: f64,
     length: f64, tht: f64, bht: f64, wsg: f64,
     qg_mmscfd: f64, cgr: f64, qw_bwpd: f64, oil_vis: f64,
     injection: bool, pr: f64, theta: f64,
-    tc: Option<f64>, pc: Option<f64>,
+    zspec: Option<static_column::GasSpec>,
 ) -> PyResult<f64> {
     march::bb_fbhp_gas(
         thp, api, gsg, tid, rough, length, tht, bht, wsg,
-        qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, tc, pc,
+        qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, zspec,
     )
     .map_err(PyRuntimeError::new_err)
 }

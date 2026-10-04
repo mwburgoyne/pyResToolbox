@@ -4,11 +4,24 @@
 
 use super::constants::{FW_GRAD, IN2_PER_FT2, MW_AIR, RHO_FW, R_GAS};
 use super::pvt_helpers::*;
+use crate::pseudopressure::GasState;
 
-/// Static gas column pressure (psia).
+/// GasPVT Z-factor/viscosity spec from Python _gas_pvt_zspec:
+/// (zmethod, cmethod, sg, [co2, h2s, n2, h2, he], tc, pc).
+pub type GasSpec = (String, String, f64, [f64; 5], f64, f64);
+
+/// The spec's Z/viscosity evaluator at one temperature (deg F).
+pub(crate) fn gas_state(spec: &GasSpec, degf: f64, with_viscosity: bool) -> Result<GasState, String> {
+    let (zmethod, cmethod, sg, inerts, tc, pc) = spec;
+    GasState::new(degf, *sg, zmethod, cmethod, *inerts, *tc, *pc, with_viscosity)
+}
+
+/// Static gas column pressure (psia). zspec None: Hall-Yarborough on Sutton
+/// pseudo-criticals of gsg; otherwise the GasPVT methods it carries.
 pub fn static_gas_column_pressure(
     thp: f64, length: f64, tht: f64, bht: f64, gsg: f64, theta: f64,
-) -> f64 {
+    zspec: Option<&GasSpec>,
+) -> Result<f64, String> {
     let (tc, pc) = sutton_tc_pc(gsg);
     let n_seg = 50;
     let d_len = length / n_seg as f64;
@@ -18,11 +31,14 @@ pub fn static_gas_column_pressure(
         let frac = (i as f64 + 0.5) / n_seg as f64;
         let temp_local = tht + (bht - tht) * frac;
         let temp_r = temp_local + 459.67;
-        let zee = z_factor(gsg, temp_local, p.max(14.7), tc, pc);
+        let zee = match zspec {
+            Some(spec) => gas_state(spec, temp_local, false)?.eval_z(p.max(14.7)),
+            None => z_factor(gsg, temp_local, p.max(14.7), tc, pc),
+        };
         let rho_gas = MW_AIR * gsg * p / (zee * R_GAS * temp_r);
         p += rho_gas / IN2_PER_FT2 * d_len * sin_theta;
     }
-    p
+    Ok(p)
 }
 
 /// Static oil column pressure (psia).

@@ -509,6 +509,26 @@ class TestNodalVLPEquivalence:
     def test_bb_oil(self):
         self._compare_fbhp_oil('BB')
 
+    def test_gas_pvt_z_methods_match(self):
+        """The GasPVT Z/viscosity spec gives the same march in Rust and Python."""
+        from pyrestoolbox.nodal import nodal
+        from pyrestoolbox.gas import GasPVT
+        comp = nodal.Completion(tid=2.441, length=5000, tht=80, bht=200)
+        pvts = [GasPVT(sg=0.65, zmethod='BNS', cmethod='BNS'),
+                GasPVT(sg=0.75, co2=0.1, h2s=0.05, n2=0.02, h2=0.05),
+                GasPVT(sg=0.75, co2=0.1, h2s=0.05, n2=0.02),
+                GasPVT(sg=0.65, zmethod='HY', cmethod='SUT')]
+        for pvt in pvts:
+            for method in ('HB', 'WG', 'GRAY', 'BB'):
+                for qw, inj in ((0, False), (100, False), (100, True)):
+                    kwargs = dict(thp=1000, gas_pvt=pvt, completion=comp, vlpmethod=method,
+                                  qg_mscfd=5000, qw_bwpd=qw, wsg=1.0, injection=inj)
+                    result_rust = nodal.fbhp(**kwargs)
+                    with force_python():
+                        result_python = nodal.fbhp(**kwargs)
+                    np.testing.assert_allclose(result_rust, result_python, rtol=1e-9,
+                                               err_msg=f"{method} {pvt.zmethod} qw={qw} inj={inj}")
+
 
 # =============================================================================
 # Parity harness: broader nodal grid (VLP × THP × rate × geometry)

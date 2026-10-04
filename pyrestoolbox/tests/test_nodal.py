@@ -1000,9 +1000,34 @@ def test_fbhp_gas_pvt_impurities_reach_the_vlp():
     c = nodal.Completion(tid=2.441, length=12000, tht=100, bht=280)
     kw = dict(thp=2500, completion=c, vlpmethod='BB', well_type='gas', qg_mscfd=5000, cgr=10, qw_bwpd=10)
     sweet = nodal.fbhp(gas_pvt=gas.GasPVT(sg=0.8), **kw)
-    assert abs(sweet - nodal.fbhp(gsg=0.8, **kw)) < 1e-9
+    # Without gas_pvt the march is Hall-Yarborough on Sutton; an HY/SUT GasPVT
+    # reproduces it (gas_z's HY solve differs by about 4e-5 at 4400 psia)
+    hy = nodal.fbhp(gas_pvt=gas.GasPVT(sg=0.8, zmethod='HY', cmethod='SUT'), **kw)
+    assert abs(hy / nodal.fbhp(gsg=0.8, **kw) - 1) < 1e-4
     assert nodal.fbhp(gas_pvt=gas.GasPVT(sg=0.8, n2=0.3), **kw) < sweet - 50
     assert nodal.fbhp(gas_pvt=gas.GasPVT(sg=0.8, co2=0.1, h2s=0.2), **kw) > sweet + 20
+
+
+@pytest.mark.parametrize("method", ["HB", "WG", "GRAY", "BB"])
+def test_fbhp_uses_gas_pvt_z_method(method):
+    """The march took only SG and Sutton Tc/Pc from gas_pvt and always ran
+    Hall-Yarborough; it now evaluates gas_pvt's own Z and viscosity."""
+    from pyrestoolbox import nodal, gas
+    c = nodal.Completion(tid=2.441, length=5000, tht=80, bht=200, rough=0.0018)
+    kw = dict(thp=1000, completion=c, vlpmethod=method, well_type='gas',
+              qg_mscfd=5000, qw_bwpd=100, oil_vis=0.5, api=50, pr=3000, wsg=1.0)
+    bns = nodal.fbhp(gas_pvt=gas.GasPVT(sg=0.65, zmethod='BNS', cmethod='BNS'), **kw)
+    dak = nodal.fbhp(gas_pvt=gas.GasPVT(sg=0.65), **kw)
+    # BNS Z is 1.3-2.5% below DAK here: denser gas, higher BHP
+    assert bns > dak + 0.4
+    # Zero-rate static column: p rises by the integral of rho_g = MW p / (Z R T)
+    g = gas.GasPVT(sg=0.65, zmethod='BNS', cmethod='BNS')
+    p_static = nodal.fbhp(gas_pvt=g, **dict(kw, qg_mscfd=0.0001, qw_bwpd=0))
+    p = 1000.0
+    for i in range(50):
+        t = 80 + 120 * (i + 0.5) / 50
+        p += 28.97 * 0.65 * p / (float(g.z(max(p, 14.7), t)) * 10.7316 * (t + 459.67)) / 144 * 100
+    assert abs(p_static / p - 1) < 1e-4
 
 
 def test_gray_single_phase_liquid_uses_dry_roughness():

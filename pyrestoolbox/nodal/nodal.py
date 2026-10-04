@@ -62,6 +62,7 @@ from pyrestoolbox.constants import (BAR_TO_PSI, PSI_TO_BAR, degc_to_degf, degf_t
                                     D_PER_SM3_TO_D_PER_MSCF, D_PER_MSCF_TO_D_PER_SM3,
                                     STB_TO_SM3, SM3_TO_STB)
 import pyrestoolbox.gas as gas
+from pyrestoolbox.gas.gas import _rust_cmethod
 import pyrestoolbox.oil as oil
 from pyrestoolbox.brine.viscosity_route import brine_viscosity as _brine_viscosity
 from pyrestoolbox._accelerator import RUST_AVAILABLE as _RUST_AVAILABLE, rust_accelerated
@@ -378,31 +379,25 @@ class _FlowInputs:
     gsg: float = 0.65
     vis_frac: float = 1.0
     rsb_frac: float = 1.0
-    tc: Optional[float] = None   # pseudo-critical T (deg R); None -> Sutton from gsg in the march
-    pc: Optional[float] = None   # pseudo-critical P (psia); None -> Sutton from gsg in the march
+    # Gas Z/viscosity spec from GasPVT (_gas_pvt_zspec); None -> Hall-Yarborough
+    # on Sutton pseudo-criticals of gsg with Lee-Gonzalez-Eakin viscosity
+    zspec: Optional[tuple] = None
 
 
-def _gas_pvt_tc_pc(gas_pvt):
-    """Mixture pseudo-criticals for the VLP march from a GasPVT object.
+def _gas_pvt_zspec(gas_pvt):
+    """Z-factor and viscosity specification for the VLP march from a GasPVT.
 
-    The march runs Hall-Yarborough on Sutton pseudo-criticals of the total-gas
-    sg. User-supplied tc/pc are honoured as given; otherwise, when the object
-    carries CO2/H2S/N2, Sutton + Wichert-Aziz is applied so impurities reach the
-    Z-factor as they already do in ipr_curve. Sweet gas returns (None, None) so
-    the march path is untouched. BNS-style tc/pc are hydrocarbon-only and are
-    not usable with a single-pseudo-component Z-factor, hence the SUT call here.
+    Returns (zmethod, cmethod, sg, [co2, h2s, n2, h2, he], tc, pc) with the
+    object's resolved methods and effective critical properties, so the march
+    evaluates Z and viscosity exactly as gas_pvt.z() and gas_pvt.viscosity()
+    do (Python via gas_z/gas_ug, Rust via the same GasState as gas_dmp). PMC
+    travels as 'SUT' with its already-resolved tc/pc, which gas_z treats as a
+    mixture override, as the Rust batch paths do.
     """
-    if getattr(gas_pvt, '_user_tc_pc', False):
-        return gas_pvt.tc, gas_pvt.pc
-    if gas_pvt.h2 > 0 or getattr(gas_pvt, 'he', 0) > 0:
-        warnings.warn(
-            "VLP correlations use a Hall-Yarborough Z-factor with Sutton + Wichert-Aziz "
-            "pseudo-criticals; the H2 and He fractions on gas_pvt are ignored in the wellbore march.",
-            RuntimeWarning, stacklevel=3)
-    if gas_pvt.co2 > 0 or gas_pvt.h2s > 0 or gas_pvt.n2 > 0:
-        return gas.gas_tc_pc(gas_pvt.sg, co2=gas_pvt.co2, h2s=gas_pvt.h2s,
-                             n2=gas_pvt.n2, cmethod='SUT')
-    return None, None
+    return (gas_pvt.zmethod.name, _rust_cmethod(gas_pvt.cmethod), float(gas_pvt.sg),
+            [float(gas_pvt.co2), float(gas_pvt.h2s), float(gas_pvt.n2),
+             float(gas_pvt.h2), float(getattr(gas_pvt, 'he', 0))],
+            float(gas_pvt.tc), float(gas_pvt.pc))
 
 
 def _prepare_flow_inputs(well_type, metric, gas_pvt=None, oil_pvt=None,
@@ -441,7 +436,7 @@ def _prepare_flow_inputs(well_type, metric, gas_pvt=None, oil_pvt=None,
     if gas_pvt is not None and well_type == 'gas':
         if f.gsg == 0.65:
             f.gsg = gas_pvt.sg
-        f.tc, f.pc = _gas_pvt_tc_pc(gas_pvt)
+        f.zspec = _gas_pvt_zspec(gas_pvt)
 
     # OilPVT already holds oilfield units
     if oil_pvt is not None and well_type == 'oil':
@@ -1069,7 +1064,25 @@ def _condensate_vis(pr, cgr_local, gsg, api, temp_f, p_avg, oil_vis):
     return oil_vis
 
 
-def _static_gas_column_pressure(thp, length, tht, bht, gsg, theta=math.pi / 2.0):
+def _march_gas_z_mu(gsg, temp_f, press_psia, tc, pc, zspec, viscosity=True):
+    """(Z, gas viscosity cP) for the gas march.
+
+    zspec None: Hall-Yarborough on (tc, pc) and Lee-Gonzalez-Eakin. Otherwise
+    the GasPVT methods carried by zspec (see _gas_pvt_zspec). viscosity=False
+    returns (Z, None).
+    """
+    if zspec is None:
+        zee = _z_factor(gsg, temp_f, press_psia, tc=tc, pc=pc)
+        mu = _gas_viscosity(gsg, temp_f, press_psia, z=zee, tc=tc, pc=pc) if viscosity else None
+        return zee, mu
+    zmethod, cmethod, sg, (co2, h2s, n2, h2, he), tc_z, pc_z = zspec
+    kw = dict(p=press_psia, sg=sg, degf=temp_f, zmethod=zmethod, cmethod=cmethod,
+              co2=co2, h2s=h2s, n2=n2, h2=h2, he=he, tc=tc_z, pc=pc_z)
+    zee = float(gas.gas_z(**kw))
+    return zee, (float(gas.gas_ug(**kw)) if viscosity else None)
+
+
+def _static_gas_column_pressure(thp, length, tht, bht, gsg, theta=math.pi / 2.0, zspec=None):
     tc, pc = _sutton_tc_pc(gsg)
     n_seg = 50
     d_len = length / n_seg
@@ -1079,7 +1092,7 @@ def _static_gas_column_pressure(thp, length, tht, bht, gsg, theta=math.pi / 2.0)
         frac = (i + 0.5) / n_seg
         temp_local = tht + (bht - tht) * frac
         temp_r = temp_local + 459.67
-        zee = _z_factor(gsg, temp_local, max(p, 14.7), tc=tc, pc=pc)
+        zee, _ = _march_gas_z_mu(gsg, temp_local, max(p, 14.7), tc, pc, zspec, viscosity=False)
         rho_gas = _MW_AIR * gsg * p / (zee * _R_GAS * temp_r)
         p += rho_gas / _IN2_PER_FT2 * d_len * sin_theta
     return p
@@ -1192,11 +1205,11 @@ def _hb_gradient_gas(s):
 def _hb_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                   injection=False, pr=0.0, theta=math.pi / 2.0,
-                  tc=None, pc=None):
+                  zspec=None):
     return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                               injection, pr, theta, _hb_gradient_gas,
-                              tc=tc, pc=pc)
+                              zspec=zspec)
 
 
 @rust_accelerated('hb_fbhp_oil_rust')
@@ -1318,11 +1331,11 @@ def _wg_gradient_gas(s):
 def _wg_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                   injection=False, pr=0.0, theta=math.pi / 2.0,
-                  tc=None, pc=None):
+                  zspec=None):
     return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                               injection, pr, theta, _wg_gradient_gas,
-                              tc=tc, pc=pc)
+                              zspec=zspec)
 
 
 @rust_accelerated('wg_fbhp_oil_rust')
@@ -1410,16 +1423,16 @@ def _gray_effective_roughness(rough_dry, sigma, rho_ns, v_sl, v_sg):
 
 def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                        wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
-                       injection, pr, theta, gradient_fn, tc=None, pc=None):
+                       injection, pr, theta, gradient_fn, zspec=None):
     """Shared segment march for all gas VLP methods.
 
     gradient_fn(s) -> dpdz (psi/ft)
         Called at each pressure iteration with a dict containing all
         computed PVT/flow properties for the current segment step.
-    tc, pc: mixture pseudo-criticals (deg R, psia); None -> Sutton from gsg.
+    zspec: GasPVT Z/viscosity spec (_gas_pvt_zspec); None -> Hall-Yarborough
+        on Sutton pseudo-criticals of gsg with Lee-Gonzalez-Eakin viscosity.
     """
-    if tc is None or pc is None:
-        tc, pc = _sutton_tc_pc(gsg)
+    tc, pc = _sutton_tc_pc(gsg)
     osg = 141.5 / (api + 131.5)
     total_mass = (_RHO_AIR_STC * gsg * qg_mmscfd * 1e6 +
                   osg * _RHO_FW * cgr * qg_mmscfd * _FT3_PER_BBL +
@@ -1438,7 +1451,7 @@ def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                 "the specified liquid rates (liquid loading not modelled).",
                 RuntimeWarning, stacklevel=3
             )
-        return _static_gas_column_pressure(thp, length, tht, bht, gsg, theta=theta)
+        return _static_gas_column_pressure(thp, length, tht, bht, gsg, theta=theta, zspec=zspec)
 
     diam_ft = tid / 12.0
     rough_ft = rough / 12.0
@@ -1472,8 +1485,7 @@ def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
             oil_vis_loc = _condensate_vis(pr, cgr_loc, gsg, api,
                                           temp_f, p_avg, oil_vis)
 
-            zee = _z_factor(gsg, temp_f, p_avg, tc=tc, pc=pc)
-            mu_g = _gas_viscosity(gsg, temp_f, p_avg, z=zee, tc=tc, pc=pc)
+            zee, mu_g = _march_gas_z_mu(gsg, temp_f, p_avg, tc, pc, zspec)
 
             rho_g = _MW_AIR * gsg * p_avg / (zee * _R_GAS * temp_r)
             rho_l = lsg_loc * _RHO_FW
@@ -1698,11 +1710,11 @@ def _gray_gradient_gas(s):
 def _gray_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                     wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                     injection=False, pr=0.0, theta=math.pi / 2.0,
-                  tc=None, pc=None):
+                  zspec=None):
     return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                               injection, pr, theta, _gray_gradient_gas,
-                              tc=tc, pc=pc)
+                              zspec=zspec)
 
 
 @rust_accelerated('gray_fbhp_oil_rust')
@@ -1882,12 +1894,12 @@ def _bb_gradient_gas(s):
 def _bb_core_gas(thp, api, gsg, tid, rough, length, tht, bht,
                  wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                  injection=False, pr=0.0, theta=math.pi / 2.0,
-                  tc=None, pc=None):
+                 zspec=None):
     """Beggs & Brill core for gas wells."""
     return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                               injection, pr, theta, _bb_gradient_gas,
-                              tc=tc, pc=pc)
+                              zspec=zspec)
 
 
 @rust_accelerated('bb_fbhp_oil_rust')
@@ -2000,7 +2012,7 @@ def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
                 length=length, tht=tht_seg, bht=bht_seg, wsg=wsg,
                 qg_mmscfd=f.qg_mmscfd, cgr=f.cgr, qw_bwpd=f.qw_bwpd,
                 oil_vis=oil_vis, injection=injection, pr=f.pr, theta=theta,
-                tc=f.tc, pc=f.pc)
+                zspec=f.zspec)
         else:
             return _OIL_METHOD_DIC[vlpmethod.name](
                 thp=thp_in, api=f.api, gsg=f.gsg, tid=tid, rough=rough,

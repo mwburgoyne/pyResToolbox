@@ -426,7 +426,7 @@ Returns flowing bottom hole pressure (psia, or barsa if metric=True) using the s
      - 'gas' or 'oil'
    * - gas_pvt
      - GasPVT
-     - Gas PVT object. If provided, extracts gas composition (sg, co2, h2s, n2, h2, he) and method selections for IPR calculations
+     - Gas PVT object. If provided, the gas-well VLP march evaluates Z and gas viscosity with its methods and composition (as ``gas_pvt.z()`` and ``gas_pvt.viscosity()``: DAK with PMC by default, or HY or BNS as configured, impurities and H2/He included), and IPR calculations use the same. Without it the march uses Hall-Yarborough Z on Sutton pseudo-criticals of ``gsg`` with Lee-Gonzalez-Eakin viscosity
    * - oil_pvt
      - OilPVT
      - Oil PVT object. If provided for oil wells, extracts api, sgsp, pb, rsb
