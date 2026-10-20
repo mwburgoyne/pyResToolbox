@@ -380,17 +380,22 @@ class TestPseudopressureEquivalence:
 class TestInfluenceTableEquivalence:
     """Van Everdingen-Hurst influence tables: Rust ≈ Python."""
 
-    def test_influence_tables(self):
+    # ReD 1.5 at tD 0.01 puts the Bessel arguments where a fixed series/asymptotic
+    # switch lost precision (Rust was 1.6e-4 off at M=12 before 3.8.6, 91x at M=32).
+    # Measured agreement after the fix: 6e-9 at M=7, 2e-11 at M=12.
+    @pytest.mark.parametrize("M, rtol", [(7, 1e-7), (12, 1e-9)])
+    def test_influence_tables(self, M, rtol):
+        pytest.importorskip("ilt")
         import pyrestoolbox.simtools as simtools
         # Small grid keeps the (slow) Python ilt path fast.
-        kwargs = dict(ReDs=[2.0, 5.0], min_td=0.1, max_td=50, n_incr=5, M=7)
+        kwargs = dict(ReDs=[1.5, 20.0], min_td=0.01, max_td=50, n_incr=5, M=M)
         tD_r, pDs_r = simtools.influence_tables(**kwargs)
         with force_python():
             tD_p, pDs_p = simtools.influence_tables(**kwargs)
         np.testing.assert_allclose(np.asarray(tD_r), np.asarray(tD_p),
                                    rtol=1e-10, err_msg="influence_tables tD drift")
         np.testing.assert_allclose(np.asarray(pDs_r), np.asarray(pDs_p),
-                                   rtol=RTOL_MEDIUM, atol=1e-4,
+                                   rtol=rtol, atol=0,
                                    err_msg="influence_tables pD drift Rust vs Python")
 
 

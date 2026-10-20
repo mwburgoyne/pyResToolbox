@@ -13,7 +13,7 @@
 
 use pyo3::prelude::*;
 use rug::Float;
-use rug::float::Round;
+use rug::float::{Constant, Round};
 use rug::ops::AssignRound;
 
 // =========================================================================
@@ -46,10 +46,39 @@ fn float_from_f64(val: f64, prec: u32) -> Float {
 // Small x: power series for I_n(x), then multiply by exp(-x) / exp(x).
 // Large x: asymptotic expansion gives scaled forms directly.
 //
-// Threshold: x > 20 uses asymptotic. Series converges for all x but
-// K_n series has catastrophic cancellation for large x.
+// The switch point depends on the working precision. The asymptotic series,
+// optimally truncated, is only good to a relative e^(-2x), so it is used only
+// once that is below 2^-prec (with a margin). Below the switch the K_n series
+// cancels terms of size e^x down to a result of size e^-x, so the series runs
+// with 2x*log2(e) guard bits. A fixed x > 25 switch with x*log2(e) guard bits
+// limited the transform to about 22 digits; GWR needs about 2.1*M digits.
 
-const BESSEL_THRESHOLD: f64 = 25.0;
+const ASYMP_MARGIN_BITS: f64 = 16.0;
+const SERIES_EXTRA_GUARD_BITS: u32 = 20;
+
+/// True when the asymptotic expansion reaches `prec` bits at `x`.
+fn use_asymptotic(x: &Float, prec: u32) -> bool {
+    2.0 * x.to_f64() * std::f64::consts::LOG2_E > prec as f64 + ASYMP_MARGIN_BITS
+}
+
+/// True when `term` no longer changes `sum` at `prec` bits.
+fn series_negligible(term: &Float, sum: &Float, prec: u32) -> bool {
+    match (term.get_exp(), sum.get_exp()) {
+        (Some(te), Some(se)) => te < se - prec as i32,
+        _ => term.is_zero(),
+    }
+}
+
+/// Scaled Bessel value from a power series: series(x) * exp(exp_sign * x),
+/// evaluated with enough guard bits to absorb the K_n cancellation.
+fn scaled_series(x: &Float, prec: u32, series: fn(&Float, u32) -> Float, exp_sign: i32) -> Float {
+    let guard = (2.0 * x.to_f64() * std::f64::consts::LOG2_E).ceil() as u32 + SERIES_EXTRA_GUARD_BITS;
+    let hp = prec + guard;
+    let xhp = Float::with_val(hp, x);
+    let val = series(&xhp, hp);
+    let scale = Float::with_val(hp, &xhp * exp_sign).exp();
+    Float::with_val(prec, Float::with_val(hp, &val * &scale))
+}
 
 // --- Asymptotic expansion for large x ---
 // I_ν(x) ~ e^x / sqrt(2πx) * sum_{k=0}^K (-1)^k * a_k(ν) / x^k
@@ -98,7 +127,7 @@ fn mpfr_besseli0e_asymp(x: &Float, prec: u32) -> Float {
     }
 
     // I_0e(x) = sum / sqrt(2*pi*x)
-    let two_pi_x = Float::with_val(prec, x * std::f64::consts::TAU);
+    let two_pi_x = Float::with_val(prec, x * Float::with_val(prec, Constant::Pi)) * 2u32;
     Float::with_val(prec, &sum / two_pi_x.sqrt())
 }
 
@@ -112,8 +141,10 @@ fn mpfr_besseli1e_asymp(x: &Float, prec: u32) -> Float {
 
     for k in 1u64..200 {
         let sq = (2 * k - 1) * (2 * k - 1);
-        // factor for nu=1: (4 - (2k-1)^2) / (8*k*x)
-        let numer = 4i64 - sq as i64;
+        // factor for nu=1: -(4 - (2k-1)^2) / (8*k*x), the minus being the (-1)^k
+        // of the I expansion (I_0 folds it in the same way, as +(2k-1)^2):
+        // 1 - 3/(8x) - 15/(128x^2) - ..., A&S 9.7.1
+        let numer = sq as i64 - 4i64;
         a_k *= Float::with_val(prec, numer);
         a_k /= 8u32 * k as u32;
         a_k *= &one_over_x;
@@ -126,7 +157,7 @@ fn mpfr_besseli1e_asymp(x: &Float, prec: u32) -> Float {
         sum += &a_k;
     }
 
-    let two_pi_x = Float::with_val(prec, x * std::f64::consts::TAU);
+    let two_pi_x = Float::with_val(prec, x * Float::with_val(prec, Constant::Pi)) * 2u32;
     Float::with_val(prec, &sum / two_pi_x.sqrt())
 }
 
@@ -181,7 +212,7 @@ fn mpfr_besselk0e_asymp(x: &Float, prec: u32) -> Float {
         sum += &a_k;
     }
 
-    let pi_over_2x = Float::with_val(prec, std::f64::consts::FRAC_PI_2) / x;
+    let pi_over_2x = Float::with_val(prec, Float::with_val(prec, Constant::Pi) / x) / 2u32;
     Float::with_val(prec, &sum * pi_over_2x.sqrt())
 }
 
@@ -208,7 +239,7 @@ fn mpfr_besselk1e_asymp(x: &Float, prec: u32) -> Float {
         sum += &a_k;
     }
 
-    let pi_over_2x = Float::with_val(prec, std::f64::consts::FRAC_PI_2) / x;
+    let pi_over_2x = Float::with_val(prec, Float::with_val(prec, Constant::Pi) / x) / 2u32;
     Float::with_val(prec, &sum * pi_over_2x.sqrt())
 }
 
@@ -224,7 +255,7 @@ fn mpfr_besseli0_series(x: &Float, prec: u32) -> Float {
         term *= &x2_over4;
         term /= k * k;
         result += &term;
-        if term.is_zero() || (k > 10 && Float::with_val(prec, &term / &result).to_f64().abs() < 1e-50) {
+        if k > 10 && series_negligible(&term, &result, prec) {
             break;
         }
     }
@@ -241,7 +272,7 @@ fn mpfr_besseli1_series(x: &Float, prec: u32) -> Float {
         term *= &x2_over4;
         term /= k * (k + 1);
         sum += &term;
-        if term.is_zero() || (k > 10 && Float::with_val(prec, &term / &sum).to_f64().abs() < 1e-50) {
+        if k > 10 && series_negligible(&term, &sum, prec) {
             break;
         }
     }
@@ -252,8 +283,7 @@ fn mpfr_besseli1_series(x: &Float, prec: u32) -> Float {
 /// K_0(x) = -(ln(x/2) + gamma) * I_0(x) + sum_{k=1}^inf H_k * (x^2/4)^k / (k!)^2
 fn mpfr_besselk0_series(x: &Float, prec: u32) -> Float {
     let i0 = mpfr_besseli0_series(x, prec);
-    let gamma = Float::with_val(prec,
-        Float::parse("0.57721566490153286060651209008240243104215933593992").unwrap());
+    let gamma = Float::with_val(prec, Constant::Euler);
     let ln_x_over_2 = Float::with_val(prec, x / 2u32).ln();
 
     let mut result = Float::with_val(prec, &ln_x_over_2 + &gamma);
@@ -270,7 +300,7 @@ fn mpfr_besselk0_series(x: &Float, prec: u32) -> Float {
         h_k += Float::with_val(prec, 1) / Float::with_val(prec, k);
         let contribution = Float::with_val(prec, &h_k * &term);
         result += &contribution;
-        if contribution.is_zero() || (k > 10 && Float::with_val(prec, &contribution / &result).to_f64().abs() < 1e-50) {
+        if k > 10 && series_negligible(&contribution, &result, prec) {
             break;
         }
     }
@@ -289,59 +319,19 @@ fn mpfr_besselk1_series(x: &Float, prec: u32) -> Float {
 // --- Dispatch: series or asymptotic ---
 
 fn mpfr_besseli0e(x: &Float, prec: u32) -> Float {
-    if x.to_f64() < BESSEL_THRESHOLD {
-        // I_0(x)*exp(-x): I_0 ~ exp(x)/sqrt(2πx), so product ~ 1/sqrt(2πx).
-        // Need guard bits ≈ x*log2(e) to preserve precision in I_0 before scaling.
-        let guard = (x.to_f64() * std::f64::consts::LOG2_E).ceil() as u32 + 20;
-        let hp = prec + guard;
-        let xhp = Float::with_val(hp, x);
-        let i0 = mpfr_besseli0_series(&xhp, hp);
-        let result = Float::with_val(hp, &i0 * Float::with_val(hp, -&xhp).exp());
-        Float::with_val(prec, &result)
-    } else {
-        mpfr_besseli0e_asymp(x, prec)
-    }
+    if use_asymptotic(x, prec) { mpfr_besseli0e_asymp(x, prec) } else { scaled_series(x, prec, mpfr_besseli0_series, -1) }
 }
 
 fn mpfr_besseli1e(x: &Float, prec: u32) -> Float {
-    if x.to_f64() < BESSEL_THRESHOLD {
-        let guard = (x.to_f64() * std::f64::consts::LOG2_E).ceil() as u32 + 20;
-        let hp = prec + guard;
-        let xhp = Float::with_val(hp, x);
-        let i1 = mpfr_besseli1_series(&xhp, hp);
-        let result = Float::with_val(hp, &i1 * Float::with_val(hp, -&xhp).exp());
-        Float::with_val(prec, &result)
-    } else {
-        mpfr_besseli1e_asymp(x, prec)
-    }
+    if use_asymptotic(x, prec) { mpfr_besseli1e_asymp(x, prec) } else { scaled_series(x, prec, mpfr_besseli1_series, -1) }
 }
 
 fn mpfr_besselk0e(x: &Float, prec: u32) -> Float {
-    if x.to_f64() < BESSEL_THRESHOLD {
-        // Guard bits to compensate for cancellation in K_0 series.
-        // Cancellation is O(e^x), needing ~x*log2(e) extra bits.
-        let guard = (x.to_f64() * std::f64::consts::LOG2_E).ceil() as u32 + 20;
-        let hp = prec + guard;
-        let xhp = Float::with_val(hp, x);
-        let k0 = mpfr_besselk0_series(&xhp, hp);
-        let result = Float::with_val(hp, &k0 * xhp.exp());
-        Float::with_val(prec, &result)
-    } else {
-        mpfr_besselk0e_asymp(x, prec)
-    }
+    if use_asymptotic(x, prec) { mpfr_besselk0e_asymp(x, prec) } else { scaled_series(x, prec, mpfr_besselk0_series, 1) }
 }
 
 fn mpfr_besselk1e(x: &Float, prec: u32) -> Float {
-    if x.to_f64() < BESSEL_THRESHOLD {
-        let guard = (x.to_f64() * std::f64::consts::LOG2_E).ceil() as u32 + 20;
-        let hp = prec + guard;
-        let xhp = Float::with_val(hp, x);
-        let k1 = mpfr_besselk1_series(&xhp, hp);
-        let result = Float::with_val(hp, &k1 * xhp.exp());
-        Float::with_val(prec, &result)
-    } else {
-        mpfr_besselk1e_asymp(x, prec)
-    }
+    if use_asymptotic(x, prec) { mpfr_besselk1e_asymp(x, prec) } else { scaled_series(x, prec, mpfr_besselk1_series, 1) }
 }
 
 // =========================================================================
@@ -618,6 +608,40 @@ mod tests {
         let k0e = mpfr_besselk0e(&x, prec);
         assert!(k0e.is_finite());
         assert!(k0e.to_f64() > 0.0);
+    }
+
+    /// Series and asymptotic paths agree to the working precision just past
+    /// the switch point, at the precisions GWR uses for M = 12 and M = 32.
+    #[test]
+    fn test_bessel_series_asymptotic_overlap() {
+        type Pair = (fn(&Float, u32) -> Float, fn(&Float, u32) -> Float, i32);
+        let pairs: [Pair; 4] = [
+            (mpfr_besseli0_series, mpfr_besseli0e_asymp, -1),
+            (mpfr_besseli1_series, mpfr_besseli1e_asymp, -1),
+            (mpfr_besselk0_series, mpfr_besselk0e_asymp, 1),
+            (mpfr_besselk1_series, mpfr_besselk1e_asymp, 1),
+        ];
+        for prec in [dec_to_bits(25), dec_to_bits(67)] {
+            let x_switch = (prec as f64 + ASYMP_MARGIN_BITS) / (2.0 * std::f64::consts::LOG2_E);
+            let x = Float::with_val(prec, x_switch + 0.5);
+            for (series, asymp, sign) in pairs {
+                let a = scaled_series(&x, prec, series, sign);
+                let b = asymp(&x, prec);
+                let rel = Float::with_val(prec, Float::with_val(prec, &a - &b) / &b).abs();
+                let bits = -rel.to_f64().log2();
+                assert!(bits > prec as f64 - 12.0, "prec {}: only {:.0} bits agree", prec, bits);
+            }
+        }
+    }
+
+    /// K_0 at the GWR abscissa where a 60-bit evaluation loses every digit
+    /// (mpmath: K_0(23.548200450309494) = 1.52394442662604e-11).
+    #[test]
+    fn test_besselk0_mid_argument() {
+        let prec = dec_to_bits(15);
+        let x = Float::with_val(prec, 23.548200450309494);
+        let k0 = mpfr_besselk0e(&x, prec).to_f64() * (-23.548200450309494_f64).exp();
+        assert!((k0 / 1.52394442662604e-11 - 1.0).abs() < 1e-13, "K_0 = {}", k0);
     }
 
     #[test]
