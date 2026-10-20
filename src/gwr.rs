@@ -64,6 +64,7 @@ fn asymptotic_max_terms(x: &Mp) -> u64 {
     (4.0 * x.to_f64()) as u64 + 100
 }
 
+#[cfg(test)]
 /// Scaled Bessel value from a power series: series(x) * exp(exp_sign * x),
 /// evaluated with enough guard bits to absorb the K_n cancellation.
 fn scaled_series(x: &Mp, prec: u32, series: fn(&Mp, u32) -> Mp, exp_sign: i32) -> Mp {
@@ -173,12 +174,16 @@ fn mpfr_besseli1_series(x: &Mp, prec: u32) -> Mp {
 
 /// K_0(x) via power series (A&S 9.6.13):
 /// K_0(x) = -(ln(x/2) + gamma) * I_0(x) + sum_{k=1}^inf H_k * (x^2/4)^k / (k!)^2
+#[cfg(test)]
 fn mpfr_besselk0_series(x: &Mp, prec: u32) -> Mp {
-    let i0 = mpfr_besseli0_series(x, prec);
+    besselk0_series_from_i0(x, prec, &mpfr_besseli0_series(x, prec))
+}
+
+fn besselk0_series_from_i0(x: &Mp, prec: u32, i0: &Mp) -> Mp {
     let gamma = Mp::euler(prec);
     let ln_x_over_2 = (x / 2u64).ln();
 
-    let mut result = -&(&(&ln_x_over_2 + &gamma) * &i0);
+    let mut result = -&(&(&ln_x_over_2 + &gamma) * i0);
 
     let x2_over4 = &(x * x) / 4u64;
     let mut term = x2_over4.clone(); // k=1
@@ -197,6 +202,7 @@ fn mpfr_besselk0_series(x: &Mp, prec: u32) -> Mp {
     result
 }
 
+#[cfg(test)]
 /// K_1(x) via Wronskian: K_1 = (1/x - I_1*K_0) / I_0
 fn mpfr_besselk1_series(x: &Mp, prec: u32) -> Mp {
     let i0 = mpfr_besseli0_series(x, prec);
@@ -206,20 +212,56 @@ fn mpfr_besselk1_series(x: &Mp, prec: u32) -> Mp {
     &(&one_over_x - &(&i1 * &k0)) / &i0
 }
 
-// --- Dispatch: series or asymptotic ---
+// --- All four scaled functions at one argument ---
 
+/// I_0e, I_1e, K_0e, K_1e at one argument. The VEH transform needs all four at
+/// x and I_1e/K_1e at x*ReD; computing them together shares the I_0, I_1 and
+/// K_0 series that the K_0 and K_1 (Wronskian) series would otherwise repeat.
+struct ScaledBessel {
+    i0e: Mp,
+    i1e: Mp,
+    k0e: Mp,
+    k1e: Mp,
+}
+
+fn scaled_bessel_all(x: &Mp, prec: u32) -> ScaledBessel {
+    if use_asymptotic(x, prec) {
+        return ScaledBessel {
+            i0e: mpfr_besseli0e_asymp(x, prec),
+            i1e: mpfr_besseli1e_asymp(x, prec),
+            k0e: mpfr_besselk0e_asymp(x, prec),
+            k1e: mpfr_besselk1e_asymp(x, prec),
+        };
+    }
+    // Guard bits as in scaled_series: the K_n cancellation sets them.
+    let guard = (2.0 * x.to_f64() * std::f64::consts::LOG2_E).ceil() as u32 + SERIES_EXTRA_GUARD_BITS;
+    let hp = prec + guard;
+    let xhp = x.with_prec(hp);
+    let i0 = mpfr_besseli0_series(&xhp, hp);
+    let i1 = mpfr_besseli1_series(&xhp, hp);
+    let k0 = besselk0_series_from_i0(&xhp, hp, &i0);
+    let k1 = &(&(&Mp::from_u64(1, hp) / &xhp) - &(&i1 * &k0)) / &i0;
+    let em = (-&xhp).exp();
+    let ep = xhp.exp();
+    ScaledBessel {
+        i0e: (&i0 * &em).with_prec(prec),
+        i1e: (&i1 * &em).with_prec(prec),
+        k0e: (&k0 * &ep).with_prec(prec),
+        k1e: (&k1 * &ep).with_prec(prec),
+    }
+}
+
+#[cfg(test)]
 fn mpfr_besseli0e(x: &Mp, prec: u32) -> Mp {
     if use_asymptotic(x, prec) { mpfr_besseli0e_asymp(x, prec) } else { scaled_series(x, prec, mpfr_besseli0_series, -1) }
 }
 
-fn mpfr_besseli1e(x: &Mp, prec: u32) -> Mp {
-    if use_asymptotic(x, prec) { mpfr_besseli1e_asymp(x, prec) } else { scaled_series(x, prec, mpfr_besseli1_series, -1) }
-}
-
+#[cfg(test)]
 fn mpfr_besselk0e(x: &Mp, prec: u32) -> Mp {
     if use_asymptotic(x, prec) { mpfr_besselk0e_asymp(x, prec) } else { scaled_series(x, prec, mpfr_besselk0_series, 1) }
 }
 
+#[cfg(test)]
 fn mpfr_besselk1e(x: &Mp, prec: u32) -> Mp {
     if use_asymptotic(x, prec) { mpfr_besselk1e_asymp(x, prec) } else { scaled_series(x, prec, mpfr_besselk1_series, 1) }
 }
@@ -235,23 +277,18 @@ fn mpfr_besselk1e(x: &Mp, prec: u32) -> Mp {
 ///   Factor out exp(delta) where delta = x*(ReD-1):
 ///   num = K1e(xR)*I0e(x)*exp(-2*delta) + I1e(xR)*K0e(x)
 ///   den = s*x * [I1e(xR)*K1e(x) - K1e(xR)*I1e(x)*exp(-2*delta)]
-fn laplace_pd_mpfr(s: &Mp, re_d: &Mp, prec: u32) -> Mp {
+///
+/// `x` = sqrt(s) and `bx` = its Bessel values, shared across ReD by the caller.
+fn laplace_pd_mpfr(s: &Mp, x: &Mp, bx: &ScaledBessel, re_d: &Mp, prec: u32) -> Mp {
     let zero = Mp::zero(prec);
     if *s <= zero {
         return zero;
     }
 
-    let x = s.sqrt();
-    let xr = &x * re_d;
+    let xr = x * re_d;
+    let bxr = scaled_bessel_all(&xr, prec);
 
-    let ie0x = mpfr_besseli0e(&x, prec);
-    let ie1x = mpfr_besseli1e(&x, prec);
-    let ke0x = mpfr_besselk0e(&x, prec);
-    let ke1x = mpfr_besselk1e(&x, prec);
-    let ie1xr = mpfr_besseli1e(&xr, prec);
-    let ke1xr = mpfr_besselk1e(&xr, prec);
-
-    let delta = &x * &(re_d - 1u64);
+    let delta = x * &(re_d - 1u64);
     let two_delta = &delta * 2u64;
     let exp_neg2d = if two_delta.to_f64() > 700.0 {
         Mp::zero(prec) // effectively 0
@@ -259,9 +296,9 @@ fn laplace_pd_mpfr(s: &Mp, re_d: &Mp, prec: u32) -> Mp {
         (-&two_delta).exp()
     };
 
-    let num = &(&(&ke1xr * &ie0x) * &exp_neg2d) + &(&ie1xr * &ke0x);
-    let inner = &(&ie1xr * &ke1x) - &(&(&ke1xr * &ie1x) * &exp_neg2d);
-    let den = &(s * &x) * &inner;
+    let num = &(&(&bxr.k1e * &bx.i0e) * &exp_neg2d) + &(&bxr.i1e * &bx.k0e);
+    let inner = &(&bxr.i1e * &bx.k1e) - &(&(&bxr.k1e * &bx.i1e) * &exp_neg2d);
+    let den = &(s * x) * &inner;
 
     if den.is_zero() {
         return zero;
@@ -389,26 +426,24 @@ pub fn influence_tables_rust(
     let coeffs = GwrCoefficients::new(m, prec_dec);
     let ln2 = Mp::from_u64(2, prec).ln();
 
-    let results: Vec<Vec<f64>> = red_array
-        .iter()
-        .map(|&re_d| {
-            let re_d_mp = Mp::from_f64(re_d, prec);
-            td_array
-                .iter()
-                .map(|&td| {
-                    let tau = &ln2 / td;
-
-                    let mut fni = Vec::with_capacity(2 * m);
-                    for k in 1..=(2 * m) {
-                        let s = &tau * k as u64;
-                        fni.push(laplace_pd_mpfr(&s, &re_d_mp, prec));
-                    }
-
-                    gwr_single(&fni, m, &tau, &coeffs)
-                })
-                .collect()
-        })
-        .collect();
+    let red_mp: Vec<Mp> = red_array.iter().map(|&re_d| Mp::from_f64(re_d, prec)).collect();
+    let mut results = vec![Vec::with_capacity(td_array.len()); red_array.len()];
+    for &td in &td_array {
+        let tau = &ln2 / td;
+        // s, sqrt(s) and the Bessel values at sqrt(s) do not depend on ReD
+        let nodes: Vec<(Mp, Mp, ScaledBessel)> = (1..=(2 * m))
+            .map(|k| {
+                let s = &tau * k as u64;
+                let x = s.sqrt();
+                let bx = scaled_bessel_all(&x, prec);
+                (s, x, bx)
+            })
+            .collect();
+        for (row, re_d_mp) in results.iter_mut().zip(&red_mp) {
+            let fni: Vec<Mp> = nodes.iter().map(|(s, x, bx)| laplace_pd_mpfr(s, x, bx, re_d_mp, prec)).collect();
+            row.push(gwr_single(&fni, m, &tau, &coeffs));
+        }
+    }
 
     Ok(results)
 }
