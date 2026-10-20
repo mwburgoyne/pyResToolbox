@@ -1,3 +1,7 @@
+Changelist in 3.8.8:
+
+- **PACKAGING: the LICENSE file carries the complete GPL-3.0 text.** It stopped at "END OF TERMS AND CONDITIONS", without the "How to Apply These Terms to Your New Programs" appendix; it is now the gnu.org text verbatim. The licence terms are unchanged, and no code or results change.
+
 Changelist in 3.8.7:
 
 - **SIMTOOLS: ``influence_tables`` Rust path runs on all CPU threads.** The Bessel evaluations, transform values and GWR accelerations are spread across threads (output identical at any thread count). On a 4-core, 8-thread machine the 126-point table takes 0.06 s at M=7 (0.19 s on one thread, 0.09 s for the 3.8.6 MPFR build) and 0.51 s at M=32 (1.81 s, 1.51 s). For comparison, gwr_inversion 2.0.0's built-in bounded radial transform takes 0.40 s at M=7 on one core and 0.15 s with ``workers=8``, at identical accuracy. ``RAYON_NUM_THREADS`` limits the thread count; see the ``influence_tables`` documentation.
