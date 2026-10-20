@@ -394,6 +394,24 @@ class TestInfluenceTableEquivalence:
                                    err_msg="influence_tables pD drift Rust vs Python")
 
 
+class TestInfluenceTableOptionalDeps:
+    """ilt-inversion/mpmath/gmpy2 are the optional 'aquifer' extra."""
+
+    def test_simtools_import_does_not_load_ilt(self):
+        import subprocess
+        code = ("import sys, pyrestoolbox.simtools; "
+                "sys.exit(int('ilt' in sys.modules or 'mpmath' in sys.modules))")
+        root = os.path.join(os.path.dirname(__file__), '..', '..')
+        assert subprocess.run([sys.executable, '-c', code], cwd=root).returncode == 0
+
+    def test_python_path_without_ilt_names_the_extra(self, monkeypatch):
+        import pyrestoolbox.simtools as simtools
+        monkeypatch.setitem(sys.modules, 'ilt', None)
+        with force_python():
+            with pytest.raises(ImportError, match=r"pyrestoolbox\[aquifer\]"):
+                simtools.influence_tables(ReDs=[2.0], n_incr=2)
+
+
 # =============================================================================
 # Oil module: Density equivalence
 # =============================================================================

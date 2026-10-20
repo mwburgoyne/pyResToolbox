@@ -32,9 +32,9 @@ setup(
         'scipy',
         'pandas',
         'tabulate',
-        'ilt-inversion',
-        'mpmath',
-        'gmpy2',
         'openpyxl'
-    ]
+    ],
+    extras_require={
+        'aquifer': ['ilt-inversion', 'mpmath', 'gmpy2'],
+    }
 )

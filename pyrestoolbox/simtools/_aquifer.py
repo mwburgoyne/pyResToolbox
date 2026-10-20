@@ -30,8 +30,6 @@ from typing import Union, Tuple
 import numpy as np
 import numpy.typing as npt
 from tabulate import tabulate
-from ilt import gwr
-from mpmath import mp
 
 from pyrestoolbox._accelerator import RUST_AVAILABLE, _rust_module
 
@@ -74,7 +72,17 @@ def influence_tables(
     if RUST_AVAILABLE:
         pDs = _rust_module.influence_tables_rust(tD.tolist(), list(ReDs), M)
     else:
-        # Python fallback via ilt library
+        # Python fallback via ilt library (optional extra: pyrestoolbox[aquifer])
+        try:
+            from ilt import gwr
+            from mpmath import mp
+        except ImportError as e:
+            raise ImportError(
+                "influence_tables needs the Rust extension or the optional "
+                "inverse-Laplace dependencies; install them with "
+                "pip install 'pyrestoolbox[aquifer]'"
+            ) from e
+
         def laplace_Ps(s: float, ReD: float):
             x = mp.sqrt(s)
             # pre-calculate duplicated bessel function for greater efficiency

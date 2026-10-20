@@ -39,7 +39,7 @@ All public PVT, flow rate, and simulation table functions support both oilfield 
 Rust Acceleration (Optional)
 ----------------------------
 
-pyResToolbox includes optional Rust-compiled extensions that accelerate computationally intensive algorithms. When the compiled extension is present and loadable, these functions run automatically through Rust with no API changes. When the extension is unavailable, all functions fall back silently to the pure Python implementation.
+pyResToolbox includes optional Rust-compiled extensions that accelerate computationally intensive algorithms. When the compiled extension is present and loadable, these functions run automatically through Rust with no API changes. When the extension is unavailable, all functions fall back silently to the pure Python implementation. The one exception is ``simtools.influence_tables``, whose pure-Python fallback needs the optional ``aquifer`` extra (``pip install 'pyrestoolbox[aquifer]'``).
 
 **Accelerated functions:**
 
