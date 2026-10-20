@@ -152,7 +152,7 @@ pyrestoolbox.simtools.influence_tables
 
 Solves Van Everdingin & Hurst Constant Terminal Rate solution via inverse Laplace transform and optionally writes out ECLIPSE styled AQUTAB include file.
 
-The Rust extension (in every prebuilt wheel) does the inversion with no extra packages. Without it, the pure-Python fallback needs the optional ``aquifer`` extra (``ilt-inversion``, ``mpmath``, ``gmpy2``): ``pip install 'pyrestoolbox[aquifer]'``. Calling ``influence_tables`` on the pure-Python path without them raises ``ImportError``.
+The Rust extension (in every prebuilt wheel) does the inversion with no extra packages, using all available CPU threads; set the environment variable ``RAYON_NUM_THREADS`` before importing pyrestoolbox to limit them (for example ``RAYON_NUM_THREADS=1`` when running several processes side by side). The result does not depend on the thread count. Without it, the pure-Python fallback needs the optional ``aquifer`` extra (``ilt-inversion``, ``mpmath``, ``gmpy2``): ``pip install 'pyrestoolbox[aquifer]'``. Calling ``influence_tables`` on the pure-Python path without them raises ``ImportError``.
 
 Returns a tuple of;
     1. Dimensionless time list

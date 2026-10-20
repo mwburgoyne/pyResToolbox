@@ -13,6 +13,7 @@
 
 use pyo3::prelude::*;
 use crate::mpfloat::Mp;
+use rayon::prelude::*;
 
 // =========================================================================
 //  Precision helpers
@@ -233,6 +234,29 @@ fn scaled_bessel_all(x: &Mp, prec: u32) -> ScaledBessel {
             k1e: mpfr_besselk1e_asymp(x, prec),
         };
     }
+    let (i0, i1, k0, k1, em, ep) = unscaled_series_all(x, prec);
+    ScaledBessel {
+        i0e: (&i0 * &em).with_prec(prec),
+        i1e: (&i1 * &em).with_prec(prec),
+        k0e: (&k0 * &ep).with_prec(prec),
+        k1e: (&k1 * &ep).with_prec(prec),
+    }
+}
+
+/// (I_1e, K_1e) only: the x*ReD side of the transform. Same values as
+/// `scaled_bessel_all`; skips the two order-0 asymptotic sums it would discard
+/// (below the switch K_1 needs I_0, I_1 and K_0 anyway).
+fn scaled_bessel_order1(x: &Mp, prec: u32) -> (Mp, Mp) {
+    if use_asymptotic(x, prec) {
+        return (mpfr_besseli1e_asymp(x, prec), mpfr_besselk1e_asymp(x, prec));
+    }
+    let (_, i1, _, k1, em, ep) = unscaled_series_all(x, prec);
+    ((&i1 * &em).with_prec(prec), (&k1 * &ep).with_prec(prec))
+}
+
+/// I_0, I_1, K_0, K_1 by power series with K_n guard bits, plus exp(-x) and
+/// exp(x), all at the guarded precision.
+fn unscaled_series_all(x: &Mp, prec: u32) -> (Mp, Mp, Mp, Mp, Mp, Mp) {
     // Guard bits as in scaled_series: the K_n cancellation sets them.
     let guard = (2.0 * x.to_f64() * std::f64::consts::LOG2_E).ceil() as u32 + SERIES_EXTRA_GUARD_BITS;
     let hp = prec + guard;
@@ -243,12 +267,7 @@ fn scaled_bessel_all(x: &Mp, prec: u32) -> ScaledBessel {
     let k1 = &(&(&Mp::from_u64(1, hp) / &xhp) - &(&i1 * &k0)) / &i0;
     let em = (-&xhp).exp();
     let ep = xhp.exp();
-    ScaledBessel {
-        i0e: (&i0 * &em).with_prec(prec),
-        i1e: (&i1 * &em).with_prec(prec),
-        k0e: (&k0 * &ep).with_prec(prec),
-        k1e: (&k1 * &ep).with_prec(prec),
-    }
+    (i0, i1, k0, k1, em, ep)
 }
 
 #[cfg(test)]
@@ -286,7 +305,7 @@ fn laplace_pd_mpfr(s: &Mp, x: &Mp, bx: &ScaledBessel, re_d: &Mp, prec: u32) -> M
     }
 
     let xr = x * re_d;
-    let bxr = scaled_bessel_all(&xr, prec);
+    let (i1e_r, k1e_r) = scaled_bessel_order1(&xr, prec);
 
     let delta = x * &(re_d - 1u64);
     let two_delta = &delta * 2u64;
@@ -296,8 +315,8 @@ fn laplace_pd_mpfr(s: &Mp, x: &Mp, bx: &ScaledBessel, re_d: &Mp, prec: u32) -> M
         (-&two_delta).exp()
     };
 
-    let num = &(&(&bxr.k1e * &bx.i0e) * &exp_neg2d) + &(&bxr.i1e * &bx.k0e);
-    let inner = &(&bxr.i1e * &bx.k1e) - &(&(&bxr.k1e * &bx.i1e) * &exp_neg2d);
+    let num = &(&(&k1e_r * &bx.i0e) * &exp_neg2d) + &(&i1e_r * &bx.k0e);
+    let inner = &(&i1e_r * &bx.k1e) - &(&(&k1e_r * &bx.i1e) * &exp_neg2d);
     let den = &(s * x) * &inner;
 
     if den.is_zero() {
@@ -417,6 +436,7 @@ fn gwr_single(
 #[pyfunction]
 #[pyo3(signature = (td_array, red_array, m=7))]
 pub fn influence_tables_rust(
+    py: Python<'_>,
     td_array: Vec<f64>,
     red_array: Vec<f64>,
     m: usize,
@@ -425,26 +445,45 @@ pub fn influence_tables_rust(
     let prec = dec_to_bits(prec_dec);
     let coeffs = GwrCoefficients::new(m, prec_dec);
     let ln2 = Mp::from_u64(2, prec).ln();
-
     let red_mp: Vec<Mp> = red_array.iter().map(|&re_d| Mp::from_f64(re_d, prec)).collect();
-    let mut results = vec![Vec::with_capacity(td_array.len()); red_array.len()];
-    for &td in &td_array {
-        let tau = &ln2 / td;
-        // s, sqrt(s) and the Bessel values at sqrt(s) do not depend on ReD
-        let nodes: Vec<(Mp, Mp, ScaledBessel)> = (1..=(2 * m))
-            .map(|k| {
-                let s = &tau * k as u64;
+    let taus: Vec<Mp> = td_array.iter().map(|&td| &ln2 / td).collect();
+    let n_k = 2 * m;
+    let n_red = red_mp.len();
+
+    // Three stages, each parallel over all of its independent items so the
+    // threads stay balanced (one task per tD column left most of them idle):
+    //   1. s, sqrt(s) and the Bessel values at sqrt(s), per (tD, k); shared by every ReD
+    //   2. the transform, per (tD, ReD, k)
+    //   3. the GWR acceleration, per (tD, ReD)
+    // Every item is computed exactly as in sequential order, so the output is
+    // bit-identical whatever the thread count.
+    let results = py.allow_threads(|| {
+        let nodes: Vec<(Mp, Mp, ScaledBessel)> = (0..taus.len() * n_k)
+            .into_par_iter()
+            .map(|i| {
+                let s = &taus[i / n_k] * (i % n_k + 1) as u64;
                 let x = s.sqrt();
                 let bx = scaled_bessel_all(&x, prec);
                 (s, x, bx)
             })
             .collect();
-        for (row, re_d_mp) in results.iter_mut().zip(&red_mp) {
-            let fni: Vec<Mp> = nodes.iter().map(|(s, x, bx)| laplace_pd_mpfr(s, x, bx, re_d_mp, prec)).collect();
-            row.push(gwr_single(&fni, m, &tau, &coeffs));
-        }
-    }
-
+        let fni: Vec<Mp> = (0..taus.len() * n_red * n_k)
+            .into_par_iter()
+            .map(|i| {
+                let (t, r, k) = (i / (n_red * n_k), (i / n_k) % n_red, i % n_k);
+                let (s, x, bx) = &nodes[t * n_k + k];
+                laplace_pd_mpfr(s, x, bx, &red_mp[r], prec)
+            })
+            .collect();
+        let flat: Vec<f64> = (0..taus.len() * n_red)
+            .into_par_iter()
+            .map(|i| gwr_single(&fni[i * n_k..(i + 1) * n_k], m, &taus[i / n_red], &coeffs))
+            .collect();
+        // flat is tD-major; the caller expects results[ReD][tD]
+        (0..n_red)
+            .map(|r| (0..taus.len()).map(|t| flat[t * n_red + r]).collect())
+            .collect::<Vec<Vec<f64>>>()
+    });
     Ok(results)
 }
 
