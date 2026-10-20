@@ -30,9 +30,18 @@ jobs:
         run: python3 -m pytest pyrestoolbox/tests/ -q
 
   # ── Full test suite with Rust extension (includes parity tests) ──────
+  # Linux plus macOS and Windows: the extension is pure Rust (astro-float), so
+  # every platform builds it with the default toolchain and runs the suite.
   test-with-rust:
-    name: Rust-accelerated (parity tests)
-    runs-on: ubuntu-latest
+    name: Rust-accelerated (parity tests)${{ matrix.os != 'ubuntu-latest' && format(' - {0}', matrix.os) || '' }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v5
 
@@ -52,13 +61,13 @@ jobs:
       # Tests import the repo source tree, so the compiled extension must
       # live inside it for the Rust paths to load.
       - name: Copy extension into source tree
-        run: unzip -o dist/*.whl "pyrestoolbox/_native*" -d .
+        run: python -c "import glob, zipfile; z = zipfile.ZipFile(glob.glob('dist/*.whl')[0]); [z.extract(n, '.') for n in z.namelist() if n.startswith('pyrestoolbox/_native')]"
 
       - name: Verify Rust extension loads
-        run: python3 -c "from pyrestoolbox._accelerator import get_status; s = get_status(); print(s); assert s['rust_available'], s"
+        run: python -c "from pyrestoolbox._accelerator import get_status; s = get_status(); print(s); assert s['rust_available'], s"
 
       - name: Run full test suite (Rust + parity)
-        run: python3 -m pytest pyrestoolbox/tests/ -q
+        run: python -m pytest pyrestoolbox/tests/ -q
 
   # ── MCP server (separate distribution in mcp/) on both SDK majors ────
   # The server picks FastMCP (1.x) or MCPServer (2.x) at import; test both so
