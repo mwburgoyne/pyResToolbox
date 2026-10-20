@@ -69,6 +69,13 @@ fn series_negligible(term: &Float, sum: &Float, prec: u32) -> bool {
     }
 }
 
+/// Loop bound for an asymptotic sum: past the optimal truncation index (~2x).
+/// A fixed 200 terms fell short once the precision-scaled switch passed x = 100
+/// (above about 300 bits, i.e. M of 45 or more).
+fn asymptotic_max_terms(x: &Float) -> u64 {
+    (4.0 * x.to_f64()) as u64 + 100
+}
+
 /// Scaled Bessel value from a power series: series(x) * exp(exp_sign * x),
 /// evaluated with enough guard bits to absorb the K_n cancellation.
 fn scaled_series(x: &Float, prec: u32, series: fn(&Float, u32) -> Float, exp_sign: i32) -> Float {
@@ -102,7 +109,7 @@ fn mpfr_besseli0e_asymp(x: &Float, prec: u32) -> Float {
     let mut a_k = Float::with_val(prec, 1); // a_0 = 1
     let mut prev_term_abs = Float::with_val(prec, f64::MAX);
 
-    for k in 1u64..200 {
+    for k in 1u64..asymptotic_max_terms(x) {
         let sq = (2 * k - 1) * (2 * k - 1);
         // a_k = a_{k-1} * (-(2k-1)^2) / (8k*x)
         // But we track a_k / x^k directly:
@@ -113,7 +120,7 @@ fn mpfr_besseli0e_asymp(x: &Float, prec: u32) -> Float {
 
         let term_abs = Float::with_val(prec, a_k.clone().abs());
         // Optimal truncation: stop when terms start growing
-        if term_abs > prev_term_abs {
+        if term_abs > prev_term_abs || series_negligible(&a_k, &sum, prec) {
             break;
         }
         prev_term_abs.assign_round(&term_abs, Round::Nearest);
@@ -139,7 +146,7 @@ fn mpfr_besseli1e_asymp(x: &Float, prec: u32) -> Float {
     let mut a_k = Float::with_val(prec, 1);
     let mut prev_term_abs = Float::with_val(prec, f64::MAX);
 
-    for k in 1u64..200 {
+    for k in 1u64..asymptotic_max_terms(x) {
         let sq = (2 * k - 1) * (2 * k - 1);
         // factor for nu=1: -(4 - (2k-1)^2) / (8*k*x), the minus being the (-1)^k
         // of the I expansion (I_0 folds it in the same way, as +(2k-1)^2):
@@ -150,7 +157,7 @@ fn mpfr_besseli1e_asymp(x: &Float, prec: u32) -> Float {
         a_k *= &one_over_x;
 
         let term_abs = Float::with_val(prec, a_k.clone().abs());
-        if term_abs > prev_term_abs {
+        if term_abs > prev_term_abs || series_negligible(&a_k, &sum, prec) {
             break;
         }
         prev_term_abs.assign_round(&term_abs, Round::Nearest);
@@ -169,7 +176,7 @@ fn mpfr_besselk0e_asymp(x: &Float, prec: u32) -> Float {
     let mut a_k = Float::with_val(prec, 1);
     let mut prev_term_abs = Float::with_val(prec, f64::MAX);
 
-    for k in 1u64..200 {
+    for k in 1u64..asymptotic_max_terms(x) {
         let sq = (2 * k - 1) * (2 * k - 1);
         // For K_0: a_k(0) = prod (0-(2j-1)^2) / (j*8*x)
         // = prod (-(2j-1)^2) / (8j*x)
@@ -205,7 +212,7 @@ fn mpfr_besselk0e_asymp(x: &Float, prec: u32) -> Float {
         a_k *= &one_over_x;
 
         let term_abs = Float::with_val(prec, a_k.clone().abs());
-        if term_abs > prev_term_abs {
+        if term_abs > prev_term_abs || series_negligible(&a_k, &sum, prec) {
             break;
         }
         prev_term_abs.assign_round(&term_abs, Round::Nearest);
@@ -224,7 +231,7 @@ fn mpfr_besselk1e_asymp(x: &Float, prec: u32) -> Float {
     let mut a_k = Float::with_val(prec, 1);
     let mut prev_term_abs = Float::with_val(prec, f64::MAX);
 
-    for k in 1u64..200 {
+    for k in 1u64..asymptotic_max_terms(x) {
         let sq = (2 * k - 1) * (2 * k - 1);
         let numer = 4.0 - sq as f64;
         a_k *= Float::with_val(prec, numer);
@@ -232,7 +239,7 @@ fn mpfr_besselk1e_asymp(x: &Float, prec: u32) -> Float {
         a_k *= &one_over_x;
 
         let term_abs = Float::with_val(prec, a_k.clone().abs());
-        if term_abs > prev_term_abs {
+        if term_abs > prev_term_abs || series_negligible(&a_k, &sum, prec) {
             break;
         }
         prev_term_abs.assign_round(&term_abs, Round::Nearest);
@@ -621,7 +628,7 @@ mod tests {
             (mpfr_besselk0_series, mpfr_besselk0e_asymp, 1),
             (mpfr_besselk1_series, mpfr_besselk1e_asymp, 1),
         ];
-        for prec in [dec_to_bits(25), dec_to_bits(67)] {
+        for prec in [dec_to_bits(25), dec_to_bits(67), dec_to_bits(134), dec_to_bits(300)] {
             let x_switch = (prec as f64 + ASYMP_MARGIN_BITS) / (2.0 * std::f64::consts::LOG2_E);
             let x = Float::with_val(prec, x_switch + 0.5);
             for (series, asymp, sign) in pairs {
