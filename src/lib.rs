@@ -10,6 +10,7 @@ mod matbal;
 mod oil;
 mod spycher_pruess;
 mod vle;
+mod mpfloat;
 mod gwr;
 mod brine_visc;
 

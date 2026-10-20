@@ -11,8 +11,8 @@ name = "_native"
 crate-type = ["cdylib"]
 
 [dependencies]
+astro-float = "0.9.6"
 pyo3 = { version = "0.23", features = ["extension-module"] }
-rug = { version = "1", default-features = false, features = ["float"] }
 
 [profile.release]
 opt-level = 3

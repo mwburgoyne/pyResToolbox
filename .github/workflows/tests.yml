@@ -43,9 +43,6 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install m4 (needed by gmp-mpfr-sys for the rug crate)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq m4
-
       - name: Install dependencies
         run: pip install numpy scipy pandas tabulate openpyxl mpmath ilt-inversion pytest maturin
 
@@ -116,9 +113,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-
-      - name: Install m4 (needed by gmp-mpfr-sys for the rug crate)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq m4
 
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings

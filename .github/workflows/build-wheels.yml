@@ -27,17 +27,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install Rust toolchain
-        if: matrix.os != 'windows-latest'
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.os == 'macos-14' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
-
-      - name: Install Rust toolchain (Windows GNU)
-        if: matrix.os == 'windows-latest'
-        run: |
-          rustup toolchain install stable-x86_64-pc-windows-gnu
-          rustup default stable-x86_64-pc-windows-gnu
-        shell: bash
 
       - name: Build wheels via cibuildwheel
         uses: pypa/cibuildwheel@v2.23
@@ -50,23 +42,12 @@ jobs:
           CIBW_SKIP: "*-win32 *-manylinux_i686 *-musllinux*"
           # maturin needs Rust in the build container
           CIBW_BEFORE_ALL_LINUX: >
-            yum install -y m4 diffutils &&
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
           CIBW_ENVIRONMENT_LINUX: 'PATH="$HOME/.cargo/bin:$PATH"'
           # macOS: build native arch only per runner (no cross-compilation)
           CIBW_ARCHS_MACOS: "arm64"
           CIBW_ARCHS_LINUX: "x86_64"
           CIBW_ARCHS_WINDOWS: "AMD64"
-          # Windows: use gnu target so GMP can build with MinGW GCC.
-          # MSYS2 is pre-installed on windows-latest runners.
-          CIBW_BEFORE_ALL_WINDOWS: >
-            C:\msys64\usr\bin\pacman.exe -S --noconfirm
-            mingw-w64-x86_64-gcc
-            m4
-            diffutils
-            make
-          CIBW_ENVIRONMENT_WINDOWS: >
-            PATH="C:\\msys64\\mingw64\\bin;C:\\msys64\\usr\\bin;$PATH"
           # Rust cross-compile env for macOS x86_64 on arm64 runner
           CIBW_ENVIRONMENT_MACOS: >
             CARGO_BUILD_TARGET="aarch64-apple-darwin"
@@ -80,9 +61,10 @@ jobs:
           # missing OpenBLAS (this broke the v3.6.0 first build attempt - the
           # skip is load-bearing, do not remove it). Linux import + full-suite
           # coverage lives in .github/workflows/tests.yml instead.
-          # Also skip macOS (MPFR symbol issue) and cp39 (dependency
-          # ilt-inversion may not have matching wheels on PyPI yet).
-          CIBW_TEST_SKIP: "*-manylinux* *-macosx* cp39-*"
+          # Also skip cp39 (dependency ilt-inversion may not have matching
+          # wheels on PyPI yet). macOS tests run again: the skip was for an
+          # MPFR symbol issue, and the crate no longer links GMP/MPFR.
+          CIBW_TEST_SKIP: "*-manylinux* cp39-*"
 
       - uses: actions/upload-artifact@v6
         with:
