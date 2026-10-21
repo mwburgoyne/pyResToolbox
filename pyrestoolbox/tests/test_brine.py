@@ -551,7 +551,8 @@ def test_dissolved_gas_viscosity_coefficients():
     # borrowed from Islam-Carlson's CO2 fit, never fitted to H2S; the five
     # points cannot distinguish exponents). Previously re-pinned 2026-07-25
     # (1.051235 at a_H2S = 1.79 with the borrowed exponent).
-    assert abs((1.0 + _H2S_A * 0.03) - 1.051) < 1e-9
+    # Re-based 2026-10-21 onto S&W loading, all five points, LS through origin.
+    assert abs((1.0 + _H2S_A * 0.03) - 1.0411) < 1e-9
 
     assert abs(_CH4_K - 1.52860547e-03) < 1e-10
 

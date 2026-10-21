@@ -1444,7 +1444,7 @@ def make_pvtw_table(*args, **kwargs):
 # cannot distinguish exponents (RMS 1.740 vs 1.738 pp). Was 1.79 with the
 # borrowed exponent, 1.64 (S&W basis), and 1.50 before the primary source
 # was read.
-_H2S_A = 1.70          # Murphy & Gaines Table IV on Burgess & Germann solubility
+_H2S_A = 1.37          # Murphy & Gaines Table IV on S&W (default framework) loading, LS through origin, all five points
 
 # Calabrese et al. (2019) Eq. 25 CO2 viscosity increment (JCED 64:3831):
 # ln(mu/mu_brine) = e1 * exp(-e2*(T_K/T0 - 1)) * x_CO2

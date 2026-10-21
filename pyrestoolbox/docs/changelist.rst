@@ -1,3 +1,7 @@
+Changelist in 3.8.9:
+
+- **BRINE VISCOSITY with dissolved H2S: coefficient re-based, ``1 + 1.70*x`` becomes ``1 + 1.37*x``.** Murphy and Gaines (1974) report viscosity ratios without dissolved mole fractions. The coefficient is now fitted with the loading this library's own Soreide-Whitson model (default framework) gives at their five states, which is the loading the delivered chain supplies when the factor is applied, so ``a*x`` reproduces each measured increment on the user's own basis. That loading runs 3.2 to 6.9% above Burgess and Germann (1969), the source Murphy and Gaines used; on Burgess and Germann three of the four points behind 1.70 extrapolated 1.9 degC below the table. The fit is least squares through the origin over all five ratios (RMS 1.57 percentage points); the retired rule averaged four and excluded the 35.2 degC near-null because it was small. Implied per-point values 2.07, 1.38, 1.76, 1.17 and 0.25. The factor at ``x = 0.03`` moves from 1.0510 to 1.0411. Found in peer review of the brine paper.
+
 Changelist in 3.8.8:
 
 - **PACKAGING: the LICENSE file carries the complete GPL-3.0 text.** It stopped at "END OF TERMS AND CONDITIONS", without the "How to Apply These Terms to Your New Programs" appendix; it is now the gnu.org text verbatim. The licence terms are unchanged, and no code or results change.

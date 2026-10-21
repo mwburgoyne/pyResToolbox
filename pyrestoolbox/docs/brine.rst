@@ -831,8 +831,8 @@ refutes, getting the sign wrong for three of five gases.
      - mu x (1 + A exp(B/T) x/(K + x)), with A = 1.71739196e-3, B = 1239.77535 K, K = 1.52860547e-3
      - Refitted here to all 23 Ostermann (SPE-14211, 1985) measurements rather than to his three summary values
    * - H2S
-     - mu x (1 + 1.70 x)
-     - Murphy-Gaines (1974), on their own solubility source. **About 27% uncertain**; five points, all below 309 K
+     - mu x (1 + 1.37 x)
+     - Murphy-Gaines (1974), loading from this library's Soreide-Whitson model. Five points, all below 309 K, implying 0.25 to 2.07 individually
    * - C2H6, N2
      - No correction
      - Measured nulls. N2's null bounds the effect below about 2.5% rather than establishing zero
