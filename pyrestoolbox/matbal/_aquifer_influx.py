@@ -16,6 +16,8 @@ import warnings
 
 import numpy as np
 
+from pyrestoolbox.constants import CUFTperBBL, FT_TO_M, PSI_TO_BAR
+
 # Dimensionless-time grid for the pD table: points per decade, and margins below the
 # first and above the last tD so the spline is not evaluated at its ends.
 _PD_POINTS_PER_DECADE = 12
@@ -24,6 +26,14 @@ _PD_GRID_MARGIN = 2.0
 # requested times: pD departs from the infinite-acting line near tD ~ 0.25 reD^2.
 _INFINITE_RED_MIN = 1.0e4
 _INFINITE_RED_FACTOR = 10.0
+# tD = k t / (phi mu ct r^2) in SI. Per day, with k in mD (9.869233e-16 m2, API RP 40),
+# mu in cP (1e-3 Pa s) and ct in 1/(pressure unit): factor = mD x 86400 s x Pa per
+# pressure unit / (cP x length unit^2). Field (psi, ft) gives 0.0063283; metric
+# (bar, m) gives 0.0085270, the ECLIPSE METRIC Darcy constant.
+_MD_TO_M2 = 9.869233e-16
+_SECONDS_PER_DAY = 86400.0
+_CP_TO_PAS = 1.0e-3
+_BAR_TO_PA = 1.0e5
 
 
 def aquifer_influx(t, p, B, td_per_t, red=None, M=7):
@@ -72,6 +82,43 @@ def aquifer_influx(t, p, B, td_per_t, red=None, M=7):
             (B * dp[n] - we[n - 1] * dpd_n) / (pd_n - td[n - 1] * dpd_n))
     return {'We': we, 'tD': td, 'pD': np.concatenate([[0.0], pd]),
             'dpD': np.concatenate([[np.nan], dpd])}
+
+
+def aquifer_constants(phi, ct, h, ro, k, mu, theta=360.0, metric=False):
+    """Radial aquifer influx constant B and dimensionless time per day.
+
+    Van Everdingen & Hurst (1949), Trans. AIME 186, 305: B = 2 pi phi ct h ro^2
+    (theta/360) and tD = k t / (phi mu ct ro^2), here with the unit factors of the
+    chosen system (field: B = 1.119 phi ct h ro^2 (theta/360) rb/psi, tD per day =
+    0.0063283 k / (phi mu ct ro^2)). The returned dict unpacks straight into
+    aquifer_influx with t in days: aquifer_influx(t, p, **aquifer_constants(...)).
+
+    phi: Aquifer porosity (fraction)
+    ct: Aquifer total compressibility, water plus rock (1/psi | 1/barsa if metric=True)
+    h: Aquifer thickness (ft | m if metric=True)
+    ro: Reservoir (inner aquifer) radius (ft | m if metric=True)
+    k: Aquifer permeability (mD)
+    mu: Aquifer water viscosity (cP)
+    theta: Encroachment angle in degrees, 0 < theta <= 360 (default 360)
+    metric: If True, inputs and B in Eclipse METRIC units
+
+    Returns dict with 'B' (rb/psi | rm3/bar if metric=True) and 'td_per_t'
+    (dimensionless time per day).
+    """
+    for name, val in (('phi', phi), ('ct', ct), ('h', h), ('ro', ro), ('k', k), ('mu', mu)):
+        if not (np.isfinite(val) and val > 0):
+            raise ValueError(f"{name} must be positive and finite, got {val}")
+    if phi > 1:
+        raise ValueError(f"phi must be a fraction (<= 1), got {phi}")
+    if not 0 < theta <= 360:
+        raise ValueError(f"theta must be in (0, 360] degrees, got {theta}")
+    if metric:   # m, bar; ro^2 h in m3 is already rm3
+        length_m, pressure_pa, vol_factor = 1.0, _BAR_TO_PA, 1.0
+    else:        # ft, psi; ro^2 h in ft3 converted to rb
+        length_m, pressure_pa, vol_factor = FT_TO_M, PSI_TO_BAR * _BAR_TO_PA, 1.0 / CUFTperBBL
+    B = 2.0 * math.pi * phi * ct * h * ro ** 2 * (theta / 360.0) * vol_factor
+    td_factor = _MD_TO_M2 * _SECONDS_PER_DAY * pressure_pa / (_CP_TO_PAS * length_m ** 2)
+    return {'B': B, 'td_per_t': td_factor * k / (phi * mu * ct * ro ** 2)}
 
 
 def _pd_and_derivative(td, red, M):

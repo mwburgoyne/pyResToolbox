@@ -50,6 +50,7 @@ Decline b-factor and EUR uncertainty                  dca.decline_b_range
 GOR / WOR trend fit                                   dca.fit_ratio, dca.ratio_forecast
 Gas material balance (p/z), oil Havlena-Odeh          matbal.gas_matbal, matbal.oil_matbal
 Aquifer influx history (Carter-Tracy)                 matbal.aquifer_influx
+Aquifer B and tD constants (field or metric)          matbal.aquifer_constants
 Aquifer influence tables (Van Everdingen-Hurst)       simtools.influence_tables
 Relative permeability tables and fits                 simtools.rel_perm_table, simtools.fit_rel_perm, simtools.fit_rel_perm_best
 Rachford-Rice flash                                   simtools.rr_solver

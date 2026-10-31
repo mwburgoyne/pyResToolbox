@@ -427,7 +427,7 @@ Cumulative aquifer influx by the Carter-Tracy (1960) method, the influx model be
 
 We_n = We_{n-1} + (tD_n - tD_{n-1}) (B dp_n - We_{n-1} pD'_n) / (pD_n - tD_{n-1} pD'_n), with dp_n = p_i - p_n.
 
-Units are consistent rather than fixed: We takes the units of B times pressure (rb/psi x psi = rb, or rm3/bar x bar = rm3), so no ``metric`` flag is needed. For a radial aquifer in field units, B = 1.119 phi ct h ro^2 (theta/360) rb/psi and tD per day = 0.0063283 k / (phi mu ct ro^2) (k mD, mu cP, ct 1/psi, ro and h ft). Carter-Tracy approximates Van Everdingen-Hurst superposition and tracks it more closely as the steps shorten; 30-day steps or shorter are usually adequate. Feed the result to ``gas_matbal`` or ``oil_matbal`` as ``We``.
+Units are consistent rather than fixed: We takes the units of B times pressure (rb/psi x psi = rb, or rm3/bar x bar = rm3), so no ``metric`` flag is needed. ``aquifer_constants`` builds B and tD per day for a radial aquifer from its properties in either unit system. Carter-Tracy approximates Van Everdingen-Hurst superposition and tracks it more closely as the steps shorten; 30-day steps or shorter are usually adequate. Feed the result to ``gas_matbal`` or ``oil_matbal`` as ``We``.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -484,6 +484,76 @@ Example: the 6-month-step case of Ahmed, Reservoir Engineering Handbook (4th ed.
     >>> [round(x) for x in r['We']]
     [0, 12223, 44429, 106088, 203972]
 
+
+pyrestoolbox.matbal.aquifer_constants
+=====================================
+
+.. code-block:: python
+
+    aquifer_constants(phi, ct, h, ro, k, mu, theta=360, metric=False) -> dict
+
+Radial aquifer influx constant and dimensionless time per day (Van Everdingen and Hurst, 1949): B = 2 pi phi ct h ro^2 (theta/360) and tD = k t / (phi mu ct ro^2), with the unit factors of the chosen system. In field units these are the familiar B = 1.119 phi ct h ro^2 (theta/360) rb/psi and tD per day = 0.0063283 k / (phi mu ct ro^2); in metric the Darcy constant is 0.0085270 (bar, m). The returned keys match ``aquifer_influx``, so the dict unpacks straight into it with t in days.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - phi
+     - float
+     - Aquifer porosity (fraction)
+   * - ct
+     - float
+     - Aquifer total compressibility, water plus rock (1/psi | 1/barsa)
+   * - h
+     - float
+     - Aquifer thickness (ft | m)
+   * - ro
+     - float
+     - Reservoir (inner aquifer) radius (ft | m)
+   * - k
+     - float
+     - Aquifer permeability (mD)
+   * - mu
+     - float
+     - Aquifer water viscosity (cP)
+   * - theta
+     - float
+     - Encroachment angle in degrees, 0 < theta <= 360. Default 360
+   * - metric
+     - bool
+     - If True, inputs and B in Eclipse METRIC units. Default False
+
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 'B'
+     - float
+     - Aquifer influx constant (rb/psi | rm3/bar)
+   * - 'td_per_t'
+     - float
+     - Dimensionless time per day
+
+Example: a half-circle edge aquifer, then Carter-Tracy influx over two years. The metric call is the same aquifer (B in rm3/bar; tD per day unchanged).
+
+.. code-block:: python
+
+    >>> from pyrestoolbox import matbal
+    >>> c = matbal.aquifer_constants(phi=0.25, ct=7e-6, h=100, ro=3000, k=50, mu=0.5, theta=180)
+    >>> round(c['B'], 2), round(c['td_per_t'], 6)
+    (881.28, 0.04018)
+    >>> r = matbal.aquifer_influx(t=[0, 182.5, 365, 547.5, 730], p=[2500, 2490, 2472, 2444, 2408], **c)
+    >>> [round(x) for x in r['We']]
+    [0, 42544, 149971, 349715, 659711]
+    >>> m = matbal.aquifer_constants(phi=0.25, ct=1.015e-4, h=30.48, ro=914.4, k=50, mu=0.5, theta=180, metric=True)
+    >>> round(m['B'], 2), round(m['td_per_t'], 6)
+    (2031.62, 0.04019)
 
 Class Objects
 =============

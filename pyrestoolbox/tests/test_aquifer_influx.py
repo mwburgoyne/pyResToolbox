@@ -1,4 +1,4 @@
-"""Tests for matbal.aquifer_influx (Carter-Tracy) and the gas_matbal p/z curvature diagnostic."""
+"""Tests for matbal.aquifer_influx (Carter-Tracy), aquifer_constants and the gas_matbal p/z curvature diagnostic."""
 
 import numpy as np
 import pytest
@@ -82,3 +82,42 @@ def test_pz_curvature_sign_and_value():
     assert down.pz_curvature < 0
     assert np.isnan(matbal.gas_matbal([4000, 3500, 3000], [0, 10, 20], 200,
                                       pvt_table=table).pz_curvature)
+
+
+def test_aquifer_constants_textbook_field_factors():
+    # Field forms (Ahmed, Dake): B = 1.119 phi ct h ro^2 (theta/360) rb/psi,
+    # tD per day = 0.0063283 k / (phi mu ct ro^2); 1.119 and 0.0063283 are rounded.
+    c = matbal.aquifer_constants(phi=0.25, ct=7e-6, h=100, ro=3000, k=50, mu=0.5)
+    assert c['B'] == pytest.approx(1.119 * 0.25 * 7e-6 * 100 * 3000 ** 2, rel=2e-4)
+    assert c['td_per_t'] == pytest.approx(0.0063283 * 50 / (0.25 * 0.5 * 7e-6 * 3000 ** 2), rel=1e-5)
+    half = matbal.aquifer_constants(phi=0.25, ct=7e-6, h=100, ro=3000, k=50, mu=0.5, theta=180)
+    assert half['B'] == pytest.approx(c['B'] / 2, rel=1e-12)
+    assert half['td_per_t'] == c['td_per_t']
+
+
+def test_aquifer_constants_metric_matches_field():
+    from pyrestoolbox.constants import FT_TO_M, PSI_TO_BAR, BBL_TO_M3
+    f = matbal.aquifer_constants(phi=0.25, ct=7e-6, h=100, ro=3000, k=50, mu=0.5)
+    m = matbal.aquifer_constants(phi=0.25, ct=7e-6 / PSI_TO_BAR, h=100 * FT_TO_M,
+                                 ro=3000 * FT_TO_M, k=50, mu=0.5, metric=True)
+    assert m['td_per_t'] == pytest.approx(f['td_per_t'], rel=1e-9)
+    # metric (bar, m) Darcy constant is the ECLIPSE METRIC 0.0085270 per day
+    assert m['td_per_t'] == pytest.approx(0.0085270 * 50 / (0.25 * 0.5 * (7e-6 / PSI_TO_BAR)
+                                                           * (3000 * FT_TO_M) ** 2), rel=1e-5)
+    t = [0, 182.5, 365, 547.5, 730]
+    p = np.array([2500, 2490, 2472, 2444, 2408])
+    we_f = matbal.aquifer_influx(t, p, **f)['We']
+    we_m = matbal.aquifer_influx(t, p * PSI_TO_BAR, **m)['We']
+    # rm3 vs rb differ only by the library's 5.61458 ft3/bbl rounding (~6e-7)
+    np.testing.assert_allclose(we_m / BBL_TO_M3, we_f, rtol=2e-6)
+
+
+def test_aquifer_constants_rejects_bad_inputs():
+    good = dict(phi=0.25, ct=7e-6, h=100, ro=3000, k=50, mu=0.5)
+    for key, bad in (('phi', 0), ('phi', 1.5), ('ct', -1e-6), ('h', 0), ('ro', float('nan')),
+                     ('k', 0), ('mu', -0.5)):
+        with pytest.raises(ValueError):
+            matbal.aquifer_constants(**{**good, key: bad})
+    for theta in (0, 400):
+        with pytest.raises(ValueError):
+            matbal.aquifer_constants(**good, theta=theta)

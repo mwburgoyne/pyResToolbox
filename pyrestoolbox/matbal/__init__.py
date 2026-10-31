@@ -1,2 +1,2 @@
 from .matbal import *
-from ._aquifer_influx import aquifer_influx
+from ._aquifer_influx import aquifer_influx, aquifer_constants

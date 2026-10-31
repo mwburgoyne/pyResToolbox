@@ -1794,6 +1794,16 @@ def test_doc_matbal_pz_curvature_and_aquifer_influx():
                               B=20.4, td_per_t=0.9888)
     assert [round(x) for x in r['We']] == [0, 12223, 44429, 106088, 203972]
 
+def test_doc_matbal_aquifer_constants():
+    """matbal.rst: aquifer_constants, field and metric, feeding aquifer_influx"""
+    import pyrestoolbox.matbal as matbal
+    c = matbal.aquifer_constants(phi=0.25, ct=7e-6, h=100, ro=3000, k=50, mu=0.5, theta=180)
+    assert (round(c['B'], 2), round(c['td_per_t'], 6)) == (881.28, 0.04018)
+    r = matbal.aquifer_influx(t=[0, 182.5, 365, 547.5, 730], p=[2500, 2490, 2472, 2444, 2408], **c)
+    assert [round(x) for x in r['We']] == [0, 42544, 149971, 349715, 659711]
+    m = matbal.aquifer_constants(phi=0.25, ct=1.015e-4, h=30.48, ro=914.4, k=50, mu=0.5, theta=180, metric=True)
+    assert (round(m['B'], 2), round(m['td_per_t'], 6)) == (2031.62, 0.04019)
+
 def test_doc_dca_decline_b_range():
     """dca.rst: decline_b_range example"""
     import pyrestoolbox.dca as dca
