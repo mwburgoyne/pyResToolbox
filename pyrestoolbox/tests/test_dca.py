@@ -1040,6 +1040,44 @@ def test_fit_decline_rejects_nan_and_length_mismatch_before_windowing():
         dca.fit_decline([1, 2, 3], [1, 2, 3, 4], t_start=1)
 
 
+def test_fit_decline_refuses_rising_history():
+    """Duong pinned at its m bound fitted a rising line at R-squared 0.84."""
+    import pytest
+    rng = np.random.default_rng(0)
+    t = np.arange(1, 25.0)
+    q = 100 + 2 * t + rng.normal(0, 3, t.size)
+    for method in ('best', 'exponential', 'duong', 'mh'):
+        with pytest.raises(ValueError, match="does not decline"):
+            dca.fit_decline(t, q, method=method)
+    with pytest.raises(ValueError, match="does not decline"):
+        dca.fit_decline_cum(np.cumsum(q), q)
+    # A ramp-up followed by decline fits once windowed to the decline
+    q2 = np.concatenate([q[:6], 1000 * np.exp(-0.05 * t)])
+    t2 = np.arange(1, q2.size + 1.0)
+    r = dca.fit_decline(t2, q2, method='exponential', t_start=7)
+    assert abs(r.di - 0.05) < 1e-9
+
+
+def test_decline_b_range_brackets_the_best_fit():
+    import pytest
+    from pyrestoolbox.tests.test_rust_acceleration import force_python
+    t = np.arange(1, 37.0)
+    exact = 1000 / (1 + 0.5 * 0.15 * t) ** 2
+    r = dca.decline_b_range(t, exact, q_min=20, rms_tol=0.0)
+    assert (r['b_best'], r['b_min'], r['b_max'], r['n_fits']) == (0.5, 0.5, 0.5, 1)
+    assert r['eur_best'] == pytest.approx(dca.eur(1000, 0.15, 0.5, 20), rel=1e-6)
+    rng = np.random.default_rng(3)
+    q = exact * (1 + 0.08 * rng.standard_normal(36))
+    narrow = dca.decline_b_range(t, q, q_min=20)
+    wide = dca.decline_b_range(t, q, q_min=20, rms_tol=0.2)
+    assert wide['b_min'] <= narrow['b_min'] <= narrow['b_best'] <= narrow['b_max'] <= wide['b_max']
+    assert wide['eur_min'] <= narrow['eur_best'] <= wide['eur_max']
+    with force_python():
+        assert dca.fit_decline(t, q, method='hyperbolic').b == pytest.approx(narrow['b_best'], abs=1e-9)
+    with pytest.raises(ValueError, match="does not decline"):
+        dca.decline_b_range(t, exact[::-1], q_min=20)
+
+
 def test_ransac_fits_identical_with_and_without_rust():
     """Python used numpy's RandomState, Rust Park-Miller: fits differed on noisy data."""
     import importlib

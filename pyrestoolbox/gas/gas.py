@@ -55,9 +55,9 @@ __all__ = [
     'gas_z', 'gas_ug', 'gas_thermal', 'gas_bg', 'gas_cg', 'gas_den', 'gas_sg',
     'gas_tc_pc', 'gas_dmp', 'gas_ponz2p', 'gas_grad2sg', 'gas_fws_sg',
     'gas_water_content', 'gas_rate_radial', 'gas_rate_linear', 'darcy_gas',
-    'gas_hydrate',
+    'gas_hydrate', 'gas_deliverability',
     'gas_hvf_beta', 'gas_non_darcy_skin', 'gas_partial_penetration_skin',
-    'GasPVT', 'HydrateResult',
+    'GasPVT', 'HydrateResult', 'DeliverabilityResult',
     # Enum classes re-exported for convenience (gas.z_method.DAK, etc.)
     'z_method', 'c_method', 'hyd_method', 'inhibitor',
 ]
@@ -86,6 +86,8 @@ from pyrestoolbox.constants import (R, psc, tsc, degF2R, scf_per_mol, CUFTperBBL
 # (pyrestoolbox.gas.gas_hydrate / HydrateResult) is unchanged. _hydrate imports
 # gas_water_content lazily, so there is no circular import.
 from pyrestoolbox.gas._hydrate import gas_hydrate, HydrateResult
+# Deliverability-test fits live in _deliverability.py (gas_dmp imported lazily there).
+from pyrestoolbox.gas._deliverability import gas_deliverability, DeliverabilityResult
 
 # Precomputed Gauss-Legendre nodes/weights for pseudopressure integration
 _GL7_NODES, _GL7_WEIGHTS = np.polynomial.legendre.leggauss(7)

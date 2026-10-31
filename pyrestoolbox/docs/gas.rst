@@ -198,6 +198,8 @@ Function List
      - `pyrestoolbox.gas.gas_rate_linear`_
    * - Darcy Gas Rate from Pseudopressure
      - `pyrestoolbox.gas.darcy_gas`_
+   * - Deliverability Test Fit (C,n / LIT, AOF)
+     - `pyrestoolbox.gas.gas_deliverability`_
    * - Gas Hydrate Prediction
      - `pyrestoolbox.gas.gas_hydrate`_
    * - Forchheimer HVF Coefficient (β)
@@ -1507,6 +1509,112 @@ Examples:
     >>> dmp = gas.gas_dmp(p1=1000, p2=3000, degf=200, sg=0.75)
     >>> gas.darcy_gas(delta_mp=dmp, k=10, h=50, degf=200, l1=0.3, l2=1500, S=0, D=0, radial=True)
     35059.14281619598
+
+pyrestoolbox.gas.gas_deliverability
+===================================
+
+.. code-block:: python
+
+    gas_deliverability(pwf, qg, pr, degf=None, sg=0.65, method='LIT', pseudo=True, pwf_stab=None, qg_stab=None, pr_stab=None, co2=0, h2s=0, n2=0, h2=0, zmethod='DAK', cmethod='PMC', metric=False) -> DeliverabilityResult
+
+Fits a gas well deliverability equation to multi-rate test data: the Rawlins-Schellhardt (1935) back-pressure equation q = C dp^n (``method='CN'``), or the Houpeurt (1959) laminar-inertial-turbulent equation dp = a q + b q^2 (``method='LIT'``, default). dp is the real-gas pseudopressure difference (``pseudo=True``, default, via ``gas_dmp``; valid at any pressure) or pr^2 - pwf^2 (``pseudo=False``; assumes constant mu z, reasonable below about 2000 psia). Least squares on log q vs log dp (CN) or dp/q vs q (LIT).
+
+Three test types, chosen by the inputs:
+
+- **Flow-after-flow**: pwf and qg are stabilised flow periods; pr is a scalar.
+- **Isochronal**: pwf and qg are equal-duration transient periods, which set the slope (n, or b); the extended stabilised point (``pwf_stab``, ``qg_stab``) then sets the level (C, or a).
+- **Modified isochronal**: as isochronal, but pr is an array of the shut-in pressure before each flow period, and ``pr_stab`` is the average reservoir pressure for the stabilised point and the AOF.
+
+A back-pressure exponent outside [0.5, 1] or a negative b raises a warning (the data are likely not stabilised); a non-positive a raises ValueError. The AOF is the rate at pwf = 14.696 psia.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - pwf
+     - list or array
+     - Flowing bottomhole pressure per flow period (psia | barsa)
+   * - qg
+     - list or array
+     - Gas rate per flow period (Mscf/d | sm3/d)
+   * - pr
+     - float, list or array
+     - Reservoir pressure (psia | barsa); an array of preceding shut-in pressures for a modified isochronal test
+   * - degf
+     - float
+     - Reservoir temperature (deg F | deg C). Required when pseudo=True
+   * - sg
+     - float
+     - Gas SG relative to air. Defaults to 0.65
+   * - method
+     - string
+     - 'LIT' (default) or 'CN'
+   * - pseudo
+     - bool
+     - True (default) for pseudopressure, False for pressure-squared
+   * - pwf_stab, qg_stab
+     - float
+     - Stabilised flow point of an isochronal test (psia | barsa, Mscf/d | sm3/d)
+   * - pr_stab
+     - float
+     - Reservoir pressure for the stabilised point and AOF (psia | barsa). Defaults to pr when pr is scalar
+   * - co2, h2s, n2, h2
+     - float
+     - Mole fractions in the gas. Default 0
+   * - zmethod, cmethod
+     - string
+     - Z-factor and critical-property methods, as for ``gas_dmp``
+   * - metric
+     - bool
+     - If True, inputs and outputs in Eclipse METRIC units. Defaults to False
+
+.. list-table:: DeliverabilityResult fields
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Field
+     - Type
+     - Description
+   * - method, pseudo, test_type
+     - str, bool, str
+     - Fit description; test_type is 'flow_after_flow', 'isochronal' or 'modified_isochronal'
+   * - c, n
+     - float or None
+     - Back-pressure coefficient and exponent (CN). C is in rate / dp^n units
+   * - a, b
+     - float or None
+     - LIT coefficients, dp = a q + b q^2 (dp in psia^2 or psia^2/cP; barsa^2 or barsa^2/cP if metric)
+   * - pr
+     - float
+     - Reservoir pressure of the AOF (psia | barsa)
+   * - aof
+     - float
+     - Absolute open flow (Mscf/d | sm3/d)
+   * - r_squared
+     - float
+     - Fit quality of the slope-setting points
+   * - metric
+     - bool
+     - Unit system of the result
+
+``DeliverabilityResult.rate(pwf, pr=None)`` evaluates the fitted equation at one or more pwf; pass a lower ``pr`` to shift the curve with depletion (coefficients held fixed).
+
+Examples:
+
+The three-point test of Ahmed, Reservoir Engineering Handbook (4th ed.), Example 8-2. The book's graphical solution gives n = 0.87, C = 0.0169 and AOF 8980 Mscf/d:
+
+.. code-block:: python
+
+    >>> pwf, qg = [1700, 1500, 1300], [2624.6, 4154.7, 5425.1]
+    >>> r = gas.gas_deliverability(pwf, qg, pr=1952, pseudo=False, method='CN')
+    >>> round(r.c, 5), round(r.n, 4), round(r.aof, 1)
+    (0.017, 0.87, 9033.5)
+    >>> r = gas.gas_deliverability(pwf, qg, pr=1952, degf=180, sg=0.7)
+    >>> round(r.a, 1), round(r.b, 4), round(r.aof, 1), round(r.rate(1000), 1)
+    (21055.2, 1.2658, 8765.6, 6845.4)
 
 pyrestoolbox.gas.gas_hydrate
 ============================

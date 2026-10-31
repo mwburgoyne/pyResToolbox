@@ -86,6 +86,13 @@ class GasMatbalResult:
         Cole plot diagnostic: F/Et at each step (NaN at index 0).
     method : str
         OGIP determination method: 'pz' or 'havlena_odeh'.
+    pz_curvature : float
+        Signed bend of P/Z vs Gp: the midpoint offset of a quadratic fit from its
+        chord, as a fraction of the P/Z decline over the data. Positive (concave
+        up) is consistent with pressure support (aquifer influx, a second
+        compartment); negative with abnormal pressure (compaction) or a growing
+        drainage area. Either way a straight-line OGIP is unreliable when it is
+        large compared with the scatter. NaN with fewer than four points.
     """
     ogip: float
     pz: np.ndarray
@@ -100,6 +107,19 @@ class GasMatbalResult:
     Et: np.ndarray = field(default_factory=lambda: np.array([]))
     cole_F_over_Et: np.ndarray = field(default_factory=lambda: np.array([]))
     method: str = 'pz'
+    pz_curvature: float = float('nan')
+
+
+def _pz_curvature(gp, pz):
+    """Signed midpoint offset of a quadratic P/Z fit from its chord, per unit P/Z decline."""
+    if len(gp) < 4 or np.ptp(gp) <= 0:
+        return float('nan')
+    c2, c1, c0 = np.polyfit(gp, pz, 2)
+    g0, g1 = gp.min(), gp.max()
+    fall = abs((c2 * g1 ** 2 + c1 * g1) - (c2 * g0 ** 2 + c1 * g0))
+    if fall <= 0:
+        return float('nan')
+    return float(c2 * (g1 - g0) ** 2 / 4.0 / fall)
 
 
 @dataclass
@@ -334,6 +354,7 @@ def gas_matbal(p, Gp, degf, sg=0.65, co2=0, h2s=0, n2=0, h2=0,
         Et=Et,
         cole_F_over_Et=cole_F_over_Et,
         method=method,
+        pz_curvature=_pz_curvature(Gp, pz),
     )
 
 

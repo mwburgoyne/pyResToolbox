@@ -1741,3 +1741,102 @@ def test_doc_darcy_gas():
     dmp = gas.gas_dmp(p1=1000, p2=3000, degf=200, sg=0.75)
     result = gas.darcy_gas(delta_mp=dmp, k=10, h=50, degf=200, l1=0.3, l2=1500, S=0, D=0, radial=True)
     assert abs(result - 35059.14281619598) / 35059.14281619598 < RTOL
+
+
+def test_doc_nodal_critical_gas_rate():
+    """nodal.rst: critical_gas_rate examples"""
+    r = nodal.critical_gas_rate([150, 1200], degf=120, sg=0.65, tid=2.441)
+    assert [round(q, 1) for q in r['q_crit']] == [584.4, 1722.4]
+    r = nodal.critical_gas_rate(150, 120, 0.65, 2.441, method='COLEMAN', liquid='condensate')
+    assert round(r['q_crit'], 1) == 334.7
+
+def test_doc_nodal_erosional_velocity():
+    """nodal.rst: erosional_velocity examples"""
+    r = nodal.erosional_velocity(1000, degf=140, sg=0.7, glr=1500, tid=2.441)
+    assert (round(r['ve'], 2), round(r['q_liq_max'], 1)) == (25.64, 2544.8)
+    r = nodal.erosional_velocity(3000, degf=180, sg=0.7, tid=3.958)
+    assert round(r['q_gas_max'], 1) == 43830.4
+
+def test_doc_nodal_choke_flow():
+    """nodal.rst: choke_flow examples"""
+    assert round(nodal.choke_flow(glr=1200, q_liq=800, size=24)['p_up'], 1) == 960.3
+    assert round(nodal.choke_flow(glr=1200, p_up=450, q_liq=800, method='ACHONG')['size'], 2) == 32.72
+
+def test_doc_gas_deliverability():
+    """gas.rst: gas_deliverability examples (Ahmed Example 8-2 data)"""
+    pwf, qg = [1700, 1500, 1300], [2624.6, 4154.7, 5425.1]
+    r = gas.gas_deliverability(pwf, qg, pr=1952, pseudo=False, method='CN')
+    assert (round(r.c, 5), round(r.n, 4), round(r.aof, 1)) == (0.017, 0.87, 9033.5)
+    r = gas.gas_deliverability(pwf, qg, pr=1952, degf=180, sg=0.7)
+    assert (round(r.a, 1), round(r.b, 4), round(r.aof, 1), round(r.rate(1000), 1)) == \
+        (21055.2, 1.2658, 8765.6, 6845.4)
+
+def test_doc_index_task_table_names_resolve():
+    """index.rst: every module.function in the task table exists"""
+    import importlib, re
+    from pyrestoolbox import docs_dir
+    with open(os.path.join(docs_dir(), 'index.rst'), encoding='utf-8') as f:
+        text = f.read()
+    table = text.split('Find a function by task')[1].split('Module documentation')[0]
+    names = re.findall(r'\b([a-z]+)\.([A-Za-z_][A-Za-z0-9_]*)\b', table)
+    assert len(names) > 50
+    for mod, fn in names:
+        if mod in ('rst', 'module'):
+            continue
+        assert hasattr(importlib.import_module(f'pyrestoolbox.{mod}'), fn), f'{mod}.{fn}'
+
+def test_doc_matbal_pz_curvature_and_aquifer_influx():
+    """matbal.rst: pz_curvature on the P/Z example; aquifer_influx (Ahmed Example 10-9)"""
+    import pyrestoolbox.matbal as matbal
+    r = matbal.gas_matbal(p=[3000, 2700, 2400, 2100, 1800], Gp=[0, 5, 12, 22, 35], degf=200, sg=0.65)
+    assert round(r.pz_curvature, 4) == 0.1391
+    r = matbal.aquifer_influx(t=[0, 182.5, 365, 547.5, 730], p=[2500, 2490, 2472, 2444, 2408],
+                              B=20.4, td_per_t=0.9888)
+    assert [round(x) for x in r['We']] == [0, 12223, 44429, 106088, 203972]
+
+def test_doc_dca_decline_b_range():
+    """dca.rst: decline_b_range example"""
+    import pyrestoolbox.dca as dca
+    q = [726.0, 668.2, 602.1, 544.0, 509.6, 465.0, 446.7, 433.0, 383.8, 358.7, 348.8, 327.5]
+    r = dca.decline_b_range(list(range(1, 13)), q, q_min=5)
+    assert (r['b_best'], r['b_min'], r['b_max'], r['at_grid_edge']) == (0.86, 0.73, 0.95, True)
+    assert (round(r['eur_min']), round(r['eur_best']), round(r['eur_max'])) == (20985, 25833, 30404)
+
+def test_doc_pipeline_gas_pipeline():
+    """pipeline.rst: gas_pipeline examples"""
+    from pyrestoolbox import pipeline
+    kw = dict(d=17.5, length=105600, degf=70, sg=0.6)
+    r = pipeline.gas_pipeline(p1=1014.7, qg=150000, **kw)
+    assert (round(r['p2'], 2), round(r['z'], 4), round(r['transmission_factor'], 2)) == (960.07, 0.879, 19.44)
+    r = pipeline.gas_pipeline(p1=1014.7, qg=150000, method='PANHANDLE_B', efficiency=0.95, **kw)
+    assert round(r['p2'], 2) == 970.33
+    assert round(pipeline.gas_pipeline(p1=1014.7, p2=900, **kw)['qg']) == 214949
+    r = pipeline.gas_pipeline(p2=900, qg=150000, dz=1500, **kw)
+    assert (round(r['p1'], 2), round(r['s'], 5)) == (991.45, 0.07212)
+
+def test_doc_crm_examples():
+    """crm.rst: crm_fit recovery and forecast, crm_oil_cut_fit"""
+    import numpy as np
+    from pyrestoolbox import crm
+    t = np.arange(0, 720, 30.0)
+    inj = np.column_stack([1000 + 400 * np.sin(t / 90), 800 + 300 * np.cos(t / 60)])
+    f, tau = np.array([[0.6, 0.3], [0.2, 0.7]]), np.array([45.0, 120.0])
+    q = np.zeros((len(t), 2)); q[0] = [600, 500]
+    for k in range(1, len(t)):
+        a = np.exp(-30 / tau); q[k] = q[k - 1] * a + (1 - a) * (inj[k] @ f)
+    r = crm.crm_fit(t, inj, q)
+    assert np.round(r.f, 3).tolist() == [[0.6, 0.3], [0.2, 0.7]]
+    assert np.round(r.tau, 1).tolist() == [45.0, 120.0]
+    future = np.vstack([inj, [1500, 0], [1500, 0]])
+    assert np.round(r.predict(np.r_[t, 720, 750], future)[-2:], 1).tolist() == [[927.2, 774.7], [914.0, 702.9]]
+    r = crm.crm_oil_cut_fit([1e5, 3e5, 1e6, 3e6], [0.5, 0.33, 0.2, 0.12])
+    assert (round(r['alpha'], 6), round(r['beta'], 4), round(r['r_squared'], 4)) == (0.001249, 0.5833, 0.9987)
+
+def test_doc_nodal_choke_flow_sachdeva():
+    """nodal.rst: choke_flow_sachdeva examples"""
+    from pyrestoolbox import nodal
+    kw = dict(p_down=100, degf=120, glr=800, sg=0.7, sg_liq=0.85)
+    r = nodal.choke_flow_sachdeva(p_up=400, size=32, **kw)
+    assert (round(r['q_liq'], 1), r['critical'], round(r['y_crit'], 4)) == (742.4, True, 0.5929)
+    assert round(nodal.choke_flow_sachdeva(p_up=400, size=32, **dict(kw, p_down=350))['q_liq'], 1) == 503.6
+    assert round(nodal.choke_flow_sachdeva(q_liq=1000, size=32, **kw)['p_up'], 2) == 540.78

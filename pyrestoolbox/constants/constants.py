@@ -81,7 +81,7 @@ MW_CO2 = 44.01
 MW_H2S = 34.082
 MW_N2 = 28.014
 MW_H2 = 2.016
-MW_HE = 4.003  # Helium; the value the BNS model was fitted with (PhazeComp library), rounded like the other inert MWs
+MW_HE = 4.003  # Helium; the value the BNS model was fitted with, rounded like the other inert MWs
 
 # ---- Unit conversion constants (FIELD <-> Eclipse METRIC) ----
 # Pressure: psia <-> barsa

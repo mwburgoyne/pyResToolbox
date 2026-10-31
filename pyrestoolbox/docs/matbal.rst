@@ -119,6 +119,9 @@ P/Z gas material balance for OGIP estimation. Performs linear regression of P/Z 
    * - method
      - str
      - OGIP determination method: 'pz' or 'havlena_odeh'
+   * - pz_curvature
+     - float
+     - Signed bend of P/Z vs Gp: midpoint offset of a quadratic fit from its chord, as a fraction of the P/Z decline. Positive (concave up) is consistent with pressure support (aquifer influx, a second compartment); negative with abnormal pressure (compaction) or a growing drainage area. Compare it with the scatter before trusting a straight-line OGIP. NaN with fewer than four points
 
 P/Z Example:
 
@@ -136,6 +139,8 @@ P/Z Example:
     0.9163202021564056
     >>> r.r_squared
     0.9734793606102145
+    >>> round(r.pz_curvature, 4)  # concave up: the straight line is a poor model here
+    0.1391
 
 Cole Plot Example (volumetric diagnostic):
 
@@ -409,6 +414,75 @@ Tabulated PVT Example:
        >>> cw_usat, cw_sat = props['cw']  # [undersaturated, saturated]
 
    Similarly, ``oil.oil_co(co_sat=True)`` returns ``[co_usat, co_sat]`` - the undersaturated value is the liquid-phase compressibility, while the saturated value includes gas evolution effects (Perrine's definition).
+
+
+pyrestoolbox.matbal.aquifer_influx
+==================================
+
+.. code-block:: python
+
+    aquifer_influx(t, p, B, td_per_t, red=None, M=7) -> dict
+
+Cumulative aquifer influx by the Carter-Tracy (1960) method, the influx model behind ECLIPSE AQUCT, using the Van Everdingen-Hurst constant-terminal-rate pD from ``simtools.influence_tables`` (spline in ln tD for pD and its derivative):
+
+We_n = We_{n-1} + (tD_n - tD_{n-1}) (B dp_n - We_{n-1} pD'_n) / (pD_n - tD_{n-1} pD'_n), with dp_n = p_i - p_n.
+
+Units are consistent rather than fixed: We takes the units of B times pressure (rb/psi x psi = rb, or rm3/bar x bar = rm3), so no ``metric`` flag is needed. For a radial aquifer in field units, B = 1.119 phi ct h ro^2 (theta/360) rb/psi and tD per day = 0.0063283 k / (phi mu ct ro^2) (k mD, mu cP, ct 1/psi, ro and h ft). Carter-Tracy approximates Van Everdingen-Hurst superposition and tracks it more closely as the steps shorten; 30-day steps or shorter are usually adequate. Feed the result to ``gas_matbal`` or ``oil_matbal`` as ``We``.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - t
+     - list or array
+     - Times, strictly increasing; the first is the initial state (any unit, matching td_per_t)
+   * - p
+     - list or array
+     - Pressure at the reservoir-aquifer boundary at each time (psia | barsa, matching B)
+   * - B
+     - float
+     - Aquifer influx constant (rb/psi | rm3/bar)
+   * - td_per_t
+     - float
+     - Dimensionless time per unit of t
+   * - red
+     - float
+     - Aquifer to reservoir radius ratio re/ro (> 1). None (default) for infinite-acting
+   * - M
+     - int
+     - Laplace inversion accuracy passed to ``simtools.influence_tables``. Default 7
+
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 'We'
+     - np.ndarray
+     - Cumulative influx (units of B x pressure), zero at the first time
+   * - 'tD'
+     - np.ndarray
+     - Dimensionless time at each t
+   * - 'pD'
+     - np.ndarray
+     - Dimensionless pressure at each tD (0 at tD = 0)
+   * - 'dpD'
+     - np.ndarray
+     - dpD/dtD at each tD (NaN at tD = 0)
+
+Example: the 6-month-step case of Ahmed, Reservoir Engineering Handbook (4th ed.), Example 10-9 (infinite aquifer, B = 20.4 bbl/psi, tD = 0.9888 t days). The book prints 12,266, 42,546, 104,406 and 202,477 bbl; it rounds pD from the long-time approximation, and its second step carries an arithmetic slip (its own pD values give 44,546, not 42,546), which propagates. On its monthly-step table the two agree to 0.2-0.7% from month 6.
+
+.. code-block:: python
+
+    >>> r = matbal.aquifer_influx(t=[0, 182.5, 365, 547.5, 730], p=[2500, 2490, 2472, 2444, 2408],
+    ...                           B=20.4, td_per_t=0.9888)
+    >>> [round(x) for x in r['We']]
+    [0, 12223, 44429, 106088, 203972]
 
 
 Class Objects

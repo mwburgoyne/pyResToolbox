@@ -678,6 +678,67 @@ Two-segment hyperbolic fitting example (transient b1 = 1.8 transitioning to boun
     1.0
 
 
+pyrestoolbox.dca.decline_b_range
+================================
+
+.. code-block:: python
+
+    decline_b_range(t, q, q_min, rms_tol=0.05, t_start=None, t_end=None) -> dict
+
+Range of hyperbolic b-factors that fit nearly as well as the best, with the EUR each implies. Rate-time data rarely pin b, and the b values that fit within the scatter can give very different EURs. Every b on the ``fit_decline`` hyperbolic grid (0.05-0.95, step 0.01) whose rate-space RMS error is within (1 + ``rms_tol``) of the best is kept, and its EUR to ``q_min`` is reported, measured from the start of the fitted window. With n points the band edge is a rise in the sum of squares of about n((1 + rms_tol)^2 - 1), roughly two standard errors on b for 36 independent points at the default. ``at_grid_edge`` is True when the band reaches the end of the grid, so the true range extends further (possibly into b > 1). A non-declining window raises ``ValueError``, as in ``fit_decline``.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - t, q
+     - array-like
+     - Time and rate arrays (rate > 0), as for ``fit_decline``
+   * - q_min
+     - float
+     - Economic limit rate for the EUR (rate units of q)
+   * - rms_tol
+     - float
+     - Relative RMS tolerance defining the band. Default 0.05
+   * - t_start, t_end
+     - float
+     - Optional fitting window, as for ``fit_decline``
+
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 'b_best', 'b_min', 'b_max'
+     - float
+     - Best-fit b and the band limits
+   * - 'eur_best', 'eur_min', 'eur_max'
+     - float
+     - EUR at the best b and the band extremes (rate x time units)
+   * - 'n_fits'
+     - int
+     - Grid points in the band
+   * - 'at_grid_edge'
+     - bool
+     - True when the band reaches the end of the b grid
+
+Example: twelve months of a b = 0.6 decline with 3% noise leave b anywhere from 0.73 to beyond the grid, and EUR uncertain by about +/- 18%:
+
+.. code-block:: python
+
+    >>> q = [726.0, 668.2, 602.1, 544.0, 509.6, 465.0, 446.7, 433.0, 383.8, 358.7, 348.8, 327.5]
+    >>> r = dca.decline_b_range(list(range(1, 13)), q, q_min=5)
+    >>> r['b_best'], r['b_min'], r['b_max'], r['at_grid_edge']
+    (0.86, 0.73, 0.95, True)
+    >>> round(r['eur_min']), round(r['eur_best']), round(r['eur_max'])
+    (20985, 25833, 30404)
+
+
 pyrestoolbox.dca.fit_decline_cum
 ================================
 

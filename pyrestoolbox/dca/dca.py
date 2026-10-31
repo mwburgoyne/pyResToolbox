@@ -53,7 +53,7 @@ __all__ = [
     'arps_rate', 'arps_cum', 'mh_rate', 'mh_cum', 'mh_eur',
     'hyp2_rate', 'hyp2_cum', 'hyp2_eur', 'hyp2_from_eur',
     'duong_rate', 'duong_cum',
-    'eur', 'fit_decline', 'fit_decline_cum', 'forecast',
+    'eur', 'fit_decline', 'fit_decline_cum', 'decline_b_range', 'forecast',
     'fit_ratio', 'ratio_forecast',
     'DeclineResult', 'ForecastResult', 'RatioResult',
 ]
@@ -931,11 +931,16 @@ def _fit_hyperbolic(t, q):
         except (ImportError, AttributeError):
             pass
 
-    best_r2 = -np.inf
-    best_result = None
+    return max(_hyperbolic_grid(t, q), key=lambda r: r.r_squared, default=None)
 
+
+def _hyperbolic_grid(t, q):
+    """Yield the linearised hyperbolic fit at each grid b that gives a valid decline.
+
+    For a given b, q^(-b) = qi^(-b) + qi^(-b)*b*Di * t is linear in t; qi and di
+    follow from the intercept and slope.
+    """
     for b_trial in np.arange(_B_GRID_MIN, _B_GRID_MAX, _B_GRID_STEP):
-        # Transform: Y = q^(-b) is linear in t
         Y = q ** (-b_trial)
         slope, intercept, _ = ransac_linreg(t, Y)
 
@@ -949,14 +954,8 @@ def _fit_hyperbolic(t, q):
         if di <= 0:
             continue
 
-        # Compute R-squared in original rate space
         q_pred = qi / (1.0 + b_trial * di * t) ** (1.0 / b_trial)
-        result = _build_decline_result('hyperbolic', q, q_pred, qi=qi, di=di, b=b_trial)
-        if result.r_squared > best_r2:
-            best_r2 = result.r_squared
-            best_result = result
-
-    return best_result
+        yield _build_decline_result('hyperbolic', q, q_pred, qi=qi, di=di, b=b_trial)
 
 
 def _fit_duong(t, q):
@@ -1207,6 +1206,7 @@ def fit_decline_cum(Np: ArrayLike, q: ArrayLike, method: str = 'best',
 
     if len(Np) < 3:
         raise ValueError("Need at least 3 data points for fitting")
+    _check_declining(Np, q, 'Np')
 
     if method == 'duong':
         raise ValueError("Duong model has no analytical rate-vs-cumulative form")
@@ -1273,6 +1273,90 @@ def _check_decline_data(x, q, xname):
         raise ValueError("All rate values must be positive")
 
 
+def _check_declining(x, q, xname):
+    """Refuse a history whose rate does not decline.
+
+    Every model here assumes decline, so on a flat or rising history each
+    fitter either fails or returns a degenerate fit (Duong pinned at its
+    m bound once returned R-squared 0.84 on a rising line). Run after
+    windowing, on the robust log-rate slope.
+    """
+    slope, _, _ = ransac_linreg(x, np.log(q))
+    if slope >= 0:
+        raise ValueError(
+            f"Rate does not decline over the fitted {xname} window (log-rate "
+            f"slope {slope:.3g} >= 0); no decline model applies. Restrict "
+            f"the window to the declining period with {xname}_start/{xname}_end.")
+
+
+def _fit_window(t, q, t_start, t_end):
+    """Check rate-time data, apply the t_start/t_end window (shifted to start at t=0)
+    and refuse a non-declining window."""
+    t = np.asarray(t, dtype=float)
+    q = np.asarray(q, dtype=float)
+    _check_decline_data(t, q, 't')
+
+    if t_start is not None or t_end is not None:
+        mask = np.ones(len(t), dtype=bool)
+        if t_start is not None:
+            mask &= (t >= t_start)
+        if t_end is not None:
+            mask &= (t <= t_end)
+        t = t[mask]
+        q = q[mask]
+        if len(t) == 0:
+            raise ValueError("No data points within the specified t_start/t_end window")
+        t = t - t[0]  # Shift so window starts at t=0
+
+    if len(t) < 3:
+        raise ValueError("Need at least 3 data points for fitting")
+    _check_declining(t, q, 't')
+    return t, q
+
+
+def decline_b_range(t: ArrayLike, q: ArrayLike, q_min: float, rms_tol: float = 0.05,
+                    t_start: Optional[float] = None,
+                    t_end: Optional[float] = None) -> dict:
+    """Range of hyperbolic b-factors that fit nearly as well as the best, and their EURs.
+
+    Rate-time data rarely pin b: several b values fit within the scatter and give
+    very different EURs. Every grid b (0.05-0.95, step 0.01, the fit_decline
+    hyperbolic grid) whose rate-space RMS error is within (1 + rms_tol) of the best
+    is kept, and the EUR to q_min is reported for each, measured from the start of
+    the fitted window.
+    With n points the band edge is a rise in sum of squares of about
+    n ((1 + rms_tol)^2 - 1): 3.7 for 36 points at the default, roughly two
+    standard errors on b when the residuals are independent.
+
+    t, q: Time and rate arrays (rate > 0), as for fit_decline
+    q_min: Economic limit rate for the EUR (same rate units as q)
+    rms_tol: Relative RMS tolerance defining the band (default 0.05)
+    t_start, t_end: Optional fitting window, as for fit_decline
+
+    Returns dict with 'b_best', 'b_min', 'b_max', 'eur_best', 'eur_min', 'eur_max',
+    'n_fits' (grid points in the band) and 'at_grid_edge' (True when the band
+    reaches 0.05 or 0.95, so the true range extends beyond the grid, possibly
+    into b > 1).
+    """
+    if rms_tol < 0:
+        raise ValueError(f"rms_tol must be non-negative, got {rms_tol}")
+    t, q = _fit_window(t, q, t_start, t_end)
+    fits = list(_hyperbolic_grid(t, q))
+    if not fits:
+        raise RuntimeError("No hyperbolic b on the grid gives a valid decline")
+    rms = np.array([np.sqrt(np.mean(f.residuals ** 2)) for f in fits])
+    best = fits[int(np.argmin(rms))]
+    band = [f for f, r in zip(fits, rms) if r <= (1.0 + rms_tol) * rms.min()]
+    eurs = [eur(f.qi, f.di, f.b, q_min) for f in band]
+    bs = [f.b for f in band]
+    edge = min(bs) <= _B_GRID_MIN + _B_GRID_STEP / 2 or max(bs) >= _B_GRID_MAX - _B_GRID_STEP
+    return {'b_best': round(float(best.b), 2), 'b_min': round(float(min(bs)), 2),
+            'b_max': round(float(max(bs)), 2),
+            'eur_best': float(eur(best.qi, best.di, best.b, q_min)),
+            'eur_min': float(min(eurs)), 'eur_max': float(max(eurs)),
+            'n_fits': len(band), 'at_grid_edge': bool(edge)}
+
+
 def fit_decline(t: ArrayLike, q: ArrayLike, method: str = 'best',
                 t_start: Optional[float] = None,
                 t_end: Optional[float] = None) -> 'DeclineResult':
@@ -1300,24 +1384,7 @@ def fit_decline(t: ArrayLike, q: ArrayLike, method: str = 'best',
     -------
     DeclineResult
     """
-    t = np.asarray(t, dtype=float)
-    q = np.asarray(q, dtype=float)
-    _check_decline_data(t, q, 't')
-
-    if t_start is not None or t_end is not None:
-        mask = np.ones(len(t), dtype=bool)
-        if t_start is not None:
-            mask &= (t >= t_start)
-        if t_end is not None:
-            mask &= (t <= t_end)
-        t = t[mask]
-        q = q[mask]
-        if len(t) == 0:
-            raise ValueError("No data points within the specified t_start/t_end window")
-        t = t - t[0]  # Shift so window starts at t=0
-
-    if len(t) < 3:
-        raise ValueError("Need at least 3 data points for fitting")
+    t, q = _fit_window(t, q, t_start, t_end)
 
     fitters = {
         'exponential': _fit_exponential,

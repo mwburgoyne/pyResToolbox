@@ -261,3 +261,20 @@ def test_sw_brine_props_helium():
     out = srv.sw_brine_props(pres=3000, temp=150, ppm=50000, y_He=1.0)
     assert out['x']['He'] > 0
     assert out['bDen'][0] < out['bDen'][1]
+
+
+def test_call_returns_library_warnings_as_notes_and_engine_stamp():
+    import pyrestoolbox
+    r = srv.call('nodal.choke_flow', {'glr': 1000, 'p_up': 1000, 'size': 32, 'p_down': 700})
+    assert r['result']['critical'] is False
+    assert any('critical-flow' in n for n in r['notes'])
+    assert r['engine']['pyrestoolbox'] == pyrestoolbox.__version__
+    assert isinstance(r['engine']['rust'], bool)
+    clean = srv.call('nodal.critical_gas_rate', {'p': 500, 'degf': 120, 'sg': 0.6, 'tid': 2.441})
+    assert 'notes' not in clean and clean['result']['q_crit'] > 0
+
+
+def test_fit_and_forecast_reports_refusal_for_rising_history():
+    import pytest
+    with pytest.raises(ValueError, match="does not decline"):
+        srv.fit_and_forecast(t=list(range(1, 13)), q=[100 + 5 * i for i in range(12)], t_end=24)

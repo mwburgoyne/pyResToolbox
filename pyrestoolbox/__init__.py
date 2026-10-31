@@ -35,6 +35,10 @@ Modules
   water (supporting module used by brine density; SI units: K, MPa, cm3/mol).
 - **nodal** — VLP/IPR nodal analysis with four multiphase correlations (HB, WG, GRAY, BB).
   Multi-segment deviated/horizontal well support. Operating point solver.
+- **pipeline** — Single-segment gas pipeline flow: General Flow equation (Colebrook,
+  AGA), Weymouth, Panhandle A/B, IGT, with elevation correction.
+- **crm** — Capacitance-resistance models for waterfloods (CRMP, CRMT): injector-producer
+  connectivities, time constants, productivity indices, power-law oil cut.
 - **layer** — Lorenz heterogeneity framework and permeability distribution generation.
 - **library** — Component critical property database with EOS-model-specific parameters.
 - **simtools** — Simulation helpers: IX PRT parsing, rel-perm tables (Corey/LET),
@@ -52,6 +56,7 @@ submodules = [
     'brine',
     'classes',
     'constants',
+    'crm',
     'dca',
     'gas',
     'layer',
@@ -59,6 +64,7 @@ submodules = [
     'matbal',
     'nodal',
     'oil',
+    'pipeline',
     'plyasunov',
     'recommend',
     'sensitivity',

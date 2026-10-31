@@ -47,6 +47,14 @@ Function List
      - `pyrestoolbox.nodal.ipr_curve`_
    * - Nodal Operating Point
      - `pyrestoolbox.nodal.operating_point`_
+   * - Liquid-Loading Critical Gas Rate
+     - `pyrestoolbox.nodal.critical_gas_rate`_
+   * - Erosional Velocity (API RP 14E)
+     - `pyrestoolbox.nodal.erosional_velocity`_
+   * - Wellhead Choke (Gilbert family)
+     - `pyrestoolbox.nodal.choke_flow`_
+   * - Wellhead Choke (Sachdeva, critical and subcritical)
+     - `pyrestoolbox.nodal.choke_flow_sachdeva`_
 
 
 pyrestoolbox.nodal.WellSegment
@@ -829,6 +837,353 @@ Oil well operating point:
     2348.5
     >>> round(result['bhp'], 1)
     2013.1
+
+
+pyrestoolbox.nodal.critical_gas_rate
+====================================
+
+.. code-block:: python
+
+    critical_gas_rate(p, degf, sg, tid, method='TURNER', liquid='water', rho_liq=None, ift=None, co2=0, h2s=0, n2=0, h2=0, zmethod='DAK', cmethod='PMC', metric=False) -> dict
+
+Minimum gas rate to lift liquid droplets out of the tubing (onset of liquid loading), from the droplet model v = K [ift (rho_liq - rho_g)]^0.25 / rho_g^0.5 (ft/s, dyne/cm, lbm/ft3). ``'TURNER'`` uses K = 1.912, Turner, Hubbard & Dukler (1969) with their 20% uplift; ``'COLEMAN'`` uses the unadjusted K = 1.593, Coleman et al. (1991), who found the uplift unnecessary at wellhead pressures below about 500 psia. The liquid presets are Turner's: water 67 lbm/ft3 and 60 dyne/cm, condensate 45 lbm/ft3 and 20 dyne/cm. Evaluate at the wellhead and at the bottom of the tubing; the larger rate controls. ``p`` may be a scalar or array; outputs follow it.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - p
+     - float, list or array
+     - Flowing pressure (psia | barsa)
+   * - degf
+     - float
+     - Flowing temperature (deg F | deg C)
+   * - sg
+     - float
+     - Gas SG relative to air
+   * - tid
+     - float
+     - Tubing inside diameter (in | mm)
+   * - method
+     - string
+     - 'TURNER' (default) or 'COLEMAN'
+   * - liquid
+     - string
+     - 'water' (default) or 'condensate'; sets the default liquid density and interfacial tension
+   * - rho_liq
+     - float
+     - Liquid density, overrides the preset (lbm/ft3 | kg/m3)
+   * - ift
+     - float
+     - Gas-liquid interfacial tension, overrides the preset (dyne/cm | mN/m)
+   * - co2, h2s, n2, h2
+     - float
+     - Mole fractions in the gas. Default 0
+   * - zmethod, cmethod
+     - string
+     - Z-factor and critical-property methods, as for ``gas.gas_z``. Defaults 'DAK', 'PMC'
+   * - metric
+     - bool
+     - If True, inputs and outputs in Eclipse METRIC units. Defaults to False
+
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 'v_crit'
+     - float or array
+     - Critical velocity (ft/s | m/s)
+   * - 'q_crit'
+     - float or array
+     - Critical gas rate (Mscf/d | sm3/d)
+   * - 'z'
+     - float or array
+     - Gas Z-factor
+   * - 'rho_gas'
+     - float or array
+     - Gas density (lbm/ft3 | kg/m3)
+
+Examples:
+
+.. code-block:: python
+
+    >>> from pyrestoolbox import nodal
+    >>> r = nodal.critical_gas_rate([150, 1200], degf=120, sg=0.65, tid=2.441)
+    >>> [round(q, 1) for q in r['q_crit']]
+    [584.4, 1722.4]
+    >>> round(nodal.critical_gas_rate(150, 120, 0.65, 2.441, method='COLEMAN', liquid='condensate')['q_crit'], 1)
+    334.7
+
+
+pyrestoolbox.nodal.erosional_velocity
+=====================================
+
+.. code-block:: python
+
+    erosional_velocity(p, degf, sg, glr=None, sg_liq=1.0, c=100.0, tid=None, co2=0, h2s=0, n2=0, h2=0, zmethod='DAK', cmethod='PMC', metric=False) -> dict
+
+API RP 14E erosional velocity, Ve = C / sqrt(rho_m). With ``glr`` given, rho_m is the RP 14E no-slip mixture density, (12409 S_l P + 2.7 R S_g P) / (198.7 P + R T Z); with ``glr=None`` (dry gas) it is the gas density. ``c`` is always in field units, (lbm/ft s^2)^0.5: RP 14E gives 100 for continuous and 125 for intermittent service, and 150-200 is used for solids-free, non-corrosive service. It is a screening limit, not an erosion-rate prediction. When ``tid`` is given the maximum rate at Ve is also returned: liquid rate from the RP 14E minimum-area relation, A = (9.35 + Z R T / (21.25 P)) / Ve in2 per 1000 bbl/d, or gas rate for dry gas.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - p
+     - float, list or array
+     - Flowing pressure (psia | barsa)
+   * - degf
+     - float
+     - Flowing temperature (deg F | deg C)
+   * - sg
+     - float
+     - Gas SG relative to air
+   * - glr
+     - float
+     - Gas-liquid ratio at standard conditions (scf/STB | sm3/sm3). None (default) for dry gas
+   * - sg_liq
+     - float
+     - Liquid SG relative to water. Defaults to 1.0
+   * - c
+     - float
+     - RP 14E C-factor (field units in both unit systems). Defaults to 100
+   * - tid
+     - float
+     - Optional pipe inside diameter (in | mm)
+   * - co2, h2s, n2, h2
+     - float
+     - Mole fractions in the gas. Default 0
+   * - zmethod, cmethod
+     - string
+     - Z-factor and critical-property methods, as for ``gas.gas_z``
+   * - metric
+     - bool
+     - If True, inputs and outputs in Eclipse METRIC units. Defaults to False
+
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 've'
+     - float or array
+     - Erosional velocity (ft/s | m/s)
+   * - 'rho_mix'
+     - float or array
+     - Mixture (or gas) density (lbm/ft3 | kg/m3)
+   * - 'z'
+     - float or array
+     - Gas Z-factor
+   * - 'q_liq_max'
+     - float or array
+     - Liquid rate at Ve (STB/d | sm3/d); only when tid and glr are given
+   * - 'q_gas_max'
+     - float or array
+     - Gas rate at Ve (Mscf/d | sm3/d); only when tid is given and glr is None
+
+Examples:
+
+.. code-block:: python
+
+    >>> r = nodal.erosional_velocity(1000, degf=140, sg=0.7, glr=1500, tid=2.441)
+    >>> round(r['ve'], 2), round(r['q_liq_max'], 1)
+    (25.64, 2544.8)
+    >>> round(nodal.erosional_velocity(3000, degf=180, sg=0.7, tid=3.958)['q_gas_max'], 1)
+    43830.4
+
+
+pyrestoolbox.nodal.choke_flow
+=============================
+
+.. code-block:: python
+
+    choke_flow(glr, p_up=None, q_liq=None, size=None, method='GILBERT', p_down=None, metric=False) -> dict
+
+Gilbert-family critical-flow choke correlations, p_up = A q GLR^B / S^C with p_up in psig, q gross liquid in STB/d, GLR in scf/STB and S the bean size in 64ths of an inch. Give exactly two of ``p_up``, ``q_liq`` and ``size``; the third is solved. These are empirical fits to critical (choked) flow of oil wells and take no account of downstream pressure. When ``p_down`` is given and p_down / p_up exceeds 1/1.7 (Gilbert's criterion, absolute pressures), the flow is subcritical, a warning is issued and ``'critical'`` is False.
+
+.. list-table:: Coefficients (GLR in scf/STB)
+   :widths: 15 10 10 10
+   :header-rows: 1
+
+   * - Method
+     - A
+     - B
+     - C
+   * - 'GILBERT' (1954)
+     - 10.00
+     - 0.546
+     - 1.89
+   * - 'ROS' (1960)
+     - 17.40
+     - 0.500
+     - 2.00
+   * - 'BAXENDELL' (1958)
+     - 9.56
+     - 0.546
+     - 1.93
+   * - 'ACHONG' (1961)
+     - 3.82
+     - 0.650
+     - 1.88
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - glr
+     - float
+     - Gross gas-liquid ratio (scf/STB | sm3/sm3)
+   * - p_up
+     - float
+     - Upstream (wellhead) pressure (psia | barsa)
+   * - q_liq
+     - float
+     - Gross liquid rate (STB/d | sm3/d)
+   * - size
+     - float
+     - Bean size in 64ths of an inch (both unit systems)
+   * - method
+     - string
+     - 'GILBERT' (default), 'ROS', 'BAXENDELL' or 'ACHONG'
+   * - p_down
+     - float
+     - Optional downstream pressure for the critical-flow check (psia | barsa)
+   * - metric
+     - bool
+     - If True, inputs and outputs in Eclipse METRIC units. Defaults to False
+
+.. list-table:: Returns (dict)
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Key
+     - Type
+     - Description
+   * - 'p_up'
+     - float
+     - Upstream pressure (psia | barsa)
+   * - 'q_liq'
+     - float
+     - Gross liquid rate (STB/d | sm3/d)
+   * - 'size'
+     - float
+     - Bean size (64ths of an inch)
+   * - 'critical'
+     - bool or None
+     - Critical-flow check result; None when p_down is not given
+
+Examples:
+
+.. code-block:: python
+
+    >>> round(nodal.choke_flow(glr=1200, q_liq=800, size=24)['p_up'], 1)
+    960.3
+    >>> round(nodal.choke_flow(glr=1200, p_up=450, q_liq=800, method='ACHONG')['size'], 2)
+    32.72
+
+
+pyrestoolbox.nodal.choke_flow_sachdeva
+======================================
+
+.. code-block:: python
+
+    choke_flow_sachdeva(p_down, degf, glr, p_up=None, q_liq=None, size=None, sg=0.65,
+                        sg_liq=1.0, cd=0.75, k=1.3, cl=None, co2=0, h2s=0, n2=0, h2=0,
+                        zmethod='DAK', cmethod='PMC', metric=False) -> dict
+
+Mechanistic two-phase choke model of Sachdeva, Schmidt, Brill & Blais (1986), Two-Phase Flow Through Chokes, SPE-15657-MS (doi 10.2118/15657-MS), valid in both critical and subcritical flow. Give exactly two of ``p_up``, ``q_liq`` and ``size``; the third is solved. Unlike the Gilbert family it sees the downstream pressure and the fluid properties.
+
+The critical pressure ratio y_c solves the paper's Eq. 2 (iterated, since the throat gas volume depends on y), with the polytropic exponent n = 1 + x (Cp - Cv) / (x Cv + (1 - x) CL). When p_down / p_up <= y_c the flow is critical and the throat ratio is y_c; otherwise it is subcritical at the actual ratio. The mass flux is
+
+.. code-block:: text
+
+    G2 = CD {2 gc 144 P1 rho_m2^2 [(1 - x)(1 - y) VL + x k / (k - 1) (VG1 - y VG2)]}^0.5
+    VG2 = VG1 y^(-1/k),   1 / rho_m2 = x VG2 + (1 - x) VL
+
+with x the free-gas mass quality, V specific volumes (ft3/lbm) and P1 in psia. As in the paper, only free gas is considered (``glr`` is the free-gas ratio and ``q_liq`` the liquid rate at upstream conditions), and the gas expands adiabatically with an ideal-gas exponent ``k``. The y_c(x) curves of the paper's Fig. 5 are reproduced to within 0.025 (the reading resolution) across its five cases; in the pure-gas limit y_c is (2 / (k + 1))^(k / (k - 1)). Note that y_c from Eq. 2 is not exactly the ratio that maximises the Eq. 4 flux (the boundary uses the polytropic n, the flux the adiabatic k); the model is implemented as published.
+
+.. list-table:: Inputs
+   :widths: 10 15 40
+   :header-rows: 1
+
+   * - Parameter
+     - Type
+     - Description
+   * - p_down
+     - float
+     - Downstream pressure (psia | barsa)
+   * - degf
+     - float
+     - Upstream temperature (deg F | deg C)
+   * - glr
+     - float
+     - Free gas-liquid ratio (scf/STB | sm3/sm3), > 0
+   * - p_up, q_liq, size
+     - float
+     - Upstream pressure (psia | barsa), liquid rate (STB/d | sm3/d), choke diameter in 64ths of an inch (both unit systems). Give two
+   * - sg, sg_liq
+     - float
+     - Gas SG (air = 1) and liquid SG (water = 1). Defaults 0.65 and 1.0
+   * - cd
+     - float
+     - Discharge coefficient: 0.75 (default) for a choke in a housing with an upstream elbow, 0.85 for undisturbed upstream flow
+   * - k
+     - float
+     - Gas heat-capacity ratio Cp/Cv. Default 1.3
+   * - cl
+     - float
+     - Liquid specific heat (Btu/(lbm degF) | kJ/(kg K)). Default 0.8 Btu/(lbm degF), the paper's base case; water about 1.0, crude about 0.5
+   * - co2, h2s, n2, h2
+     - float
+     - Mole fractions in the gas
+   * - zmethod, cmethod
+     - str
+     - Z-factor and critical-property methods, as for ``gas.gas_z``
+   * - metric
+     - bool
+     - If True, inputs and outputs in Eclipse METRIC units
+
+.. list-table:: Returns (dict)
+   :widths: 10 40
+   :header-rows: 1
+
+   * - Key
+     - Description
+   * - 'p_up', 'q_liq', 'size'
+     - Upstream pressure (psia | barsa), liquid rate (STB/d | sm3/d) and choke size (64ths)
+   * - 'q_gas'
+     - Free-gas rate (Mscf/d | sm3/d)
+   * - 'critical'
+     - True when p_down / p_up <= y_c
+   * - 'y_crit', 'y'
+     - Critical and actual downstream/upstream pressure ratios
+   * - 'x'
+     - Free-gas mass quality
+
+Examples:
+
+.. code-block:: python
+
+    >>> r = nodal.choke_flow_sachdeva(p_down=100, degf=120, glr=800, p_up=400, size=32, sg=0.7, sg_liq=0.85)
+    >>> round(r['q_liq'], 1), r['critical'], round(r['y_crit'], 4)
+    (742.4, True, 0.5929)
+    >>> round(nodal.choke_flow_sachdeva(p_down=350, degf=120, glr=800, p_up=400, size=32, sg=0.7, sg_liq=0.85)['q_liq'], 1)
+    503.6
+    >>> round(nodal.choke_flow_sachdeva(p_down=100, degf=120, glr=800, q_liq=1000, size=32, sg=0.7, sg_liq=0.85)['p_up'], 2)
+    540.78
 
 
 Calculation Methods and Class Objects

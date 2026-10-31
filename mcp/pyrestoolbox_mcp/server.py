@@ -16,6 +16,7 @@ as MCP resources (docs://gas, docs://oil, ...).
 
 import importlib
 import inspect
+import warnings
 
 try:  # mcp >= 2 renamed FastMCP to MCPServer
     from mcp.server.mcpserver import MCPServer as _MCPServer
@@ -32,9 +33,11 @@ ALLOWED_MODULES = {
     "oil": "Oil PVT (Pb, Rs, Bo, density, viscosity, compressibility), flow rates, harmonization (scalar inputs only)",
     "brine": "Brine properties: CH4-saturated, CO2-saturated, multicomponent gas-saturated",
     "plyasunov": "Infinite-dilution partial molar volumes of dissolved gases in water (SI units: K, MPa, cm3/mol)",
-    "nodal": "VLP/IPR nodal analysis: fbhp, fthp, outflow_curve, ipr_curve, operating_point",
+    "nodal": "VLP/IPR nodal analysis: fbhp, fthp, outflow_curve, ipr_curve, operating_point; liquid-loading critical rate, API RP 14E erosional velocity, wellhead chokes (Gilbert family, Sachdeva)",
+    "pipeline": "Gas pipeline flow (one segment): General Flow (Colebrook, AGA), Weymouth, Panhandle A/B, IGT; solves p1, p2 or rate",
+    "crm": "Waterflood capacitance-resistance models (CRMP/CRMT): connectivity and time-constant fit from injection/production history, prediction, oil cut",
     "dca": "Decline curve analysis: Arps, Duong, modified hyperbolic, two-segment hyperbolic, fitting, EUR",
-    "matbal": "Material balance: P/Z gas and Havlena-Odeh oil",
+    "matbal": "Material balance: P/Z gas and Havlena-Odeh oil, Carter-Tracy aquifer influx",
     "simtools": "Simulation helpers: rel-perm tables, aquifer influence, VFP/PVT tables, deck checking",
     "layer": "Lorenz heterogeneity and permeability layering",
     "library": "Component critical property database",
@@ -62,9 +65,39 @@ mcp = _MCPServer(
         "Functions that take objects (Completion, Reservoir, GasPVT, OilPVT, "
         "decline results) accept them through call() as JSON objects of their "
         "constructor keywords; see the call tool description. "
-        "Full module documentation is available as docs:// resources."
+        "Full module documentation is available as docs:// resources; "
+        "docs://index maps engineering tasks to functions."
     ),
 )
+
+
+def _engine() -> dict:
+    """Which library produced a number: package version and computation path."""
+    import pyrestoolbox
+    from pyrestoolbox._accelerator import get_status
+    st = get_status()
+    return {"pyrestoolbox": pyrestoolbox.__version__,
+            "rust": bool(st["rust_available"] and not st["forced_python"])}
+
+
+def _run(fn, *args, **kwargs):
+    """Call fn, returning (result, notes) with every library warning captured.
+
+    Validity and range warnings would otherwise go to the server's stderr and
+    never reach the agent, which would quote the number without its caveat.
+    """
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = fn(*args, **kwargs)
+    return result, list(dict.fromkeys(str(w.message) for w in caught))
+
+
+def _envelope(payload: dict, notes: list) -> dict:
+    """Attach captured warnings (when any) and the engine stamp to a tool result."""
+    if notes:
+        payload["notes"] = notes
+    payload["engine"] = _engine()
+    return payload
 
 
 def _get_module(module: str):
@@ -183,8 +216,8 @@ def call(name: str, arguments: dict = {}) -> dict:
         )
     if not callable(obj):
         raise ValueError(f"{name} is not callable (it is {type(obj).__name__})")
-    result = obj(**_build_objects(obj, arguments))
-    return {"result": to_jsonable(result)}
+    result, notes = _run(obj, **_build_objects(obj, arguments))
+    return _envelope({"result": to_jsonable(result)}, notes)
 
 
 def _library_class(dotted: str):
@@ -285,11 +318,11 @@ def co2_brine_props(pres: float, temp: float, ppm: float = 0,
     [CO2-saturated, pure brine, freshwater], Rs and compressibilities.
     """
     from pyrestoolbox import brine
-    mix = brine.CO2_Brine_Mixture(pres=pres, temp=temp, ppm=ppm,
-                                  cw_sat=cw_sat, metric=metric)
+    mix, notes = _run(brine.CO2_Brine_Mixture, pres=pres, temp=temp, ppm=ppm,
+                      cw_sat=cw_sat, metric=metric)
     keys = ("x", "y", "xSalt", "rhoGas", "bDen", "bVis", "bVisblty", "bw",
             "Rs", "Cf_usat", "Cf_sat")
-    return {k: to_jsonable(getattr(mix, k, None)) for k in keys}
+    return _envelope({k: to_jsonable(getattr(mix, k, None)) for k in keys}, notes)
 
 
 @mcp.tool()
@@ -307,12 +340,12 @@ def sw_brine_props(pres: float, temp: float, ppm: float = 0,
     compressibilities.
     """
     from pyrestoolbox import brine
-    sw = brine.SoreideWhitson(pres=pres, temp=temp, ppm=ppm, y_CO2=y_CO2,
-                              y_H2S=y_H2S, y_N2=y_N2, y_H2=y_H2, sg=sg,
-                              cw_sat=cw_sat, metric=metric, y_He=y_He)
+    sw, notes = _run(brine.SoreideWhitson, pres=pres, temp=temp, ppm=ppm, y_CO2=y_CO2,
+                     y_H2S=y_H2S, y_N2=y_N2, y_H2=y_H2, sg=sg,
+                     cw_sat=cw_sat, metric=metric, y_He=y_He)
     keys = ("x", "bDen", "bVis", "bw", "Rs", "Rs_total", "water_content",
             "Cf_usat", "Cf_sat")
-    return {k: to_jsonable(getattr(sw, k, None)) for k in keys}
+    return _envelope({k: to_jsonable(getattr(sw, k, None)) for k in keys}, notes)
 
 
 @mcp.tool()
@@ -328,15 +361,15 @@ def fit_and_forecast(t: list, q: list, t_end: float, method: str = "best",
     r_squared, EUR and the forecast t/q/cumulative arrays.
     """
     from pyrestoolbox import dca
-    fit = dca.fit_decline(t=t, q=q, method=method)
-    fc = dca.forecast(fit, t_end=t_end, dt=dt, q_min=q_min)
-    return {
+    fit, notes = _run(dca.fit_decline, t=t, q=q, method=method)
+    fc, notes2 = _run(dca.forecast, fit, t_end=t_end, dt=dt, q_min=q_min)
+    return _envelope({
         "fit": {k: to_jsonable(getattr(fit, k)) for k in
                 ("method", "qi", "di", "b", "a", "m", "dterm", "b2", "telf",
                  "r_squared")},
         "forecast": {"t": to_jsonable(fc.t), "q": to_jsonable(fc.q),
                      "cum": to_jsonable(fc.Qcum), "eur": to_jsonable(fc.eur)},
-    }
+    }, list(dict.fromkeys(notes + notes2)))
 
 
 def _register_doc_resources():
