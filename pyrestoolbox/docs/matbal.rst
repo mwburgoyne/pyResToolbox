@@ -59,7 +59,7 @@ P/Z gas material balance for OGIP estimation. Performs linear regression of P/Z 
      - Water FVF (rb/stb | rm3/sm3, default 1.0). Used when Wp provided
    * - We
      - array-like, optional
-     - Cumulative water influx (rcf | rm3). Same length as p. When provided, Havlena-Odeh regression is used for OGIP
+     - Cumulative water influx (rcf | rm3). Same length as p. When provided, Havlena-Odeh regression is used for OGIP. Field-unit influx from ``aquifer_influx`` is in rb: multiply by 5.61458 to get rcf
    * - zmethod
      - str
      - Z-factor method (default 'DAK')
@@ -427,7 +427,7 @@ Cumulative aquifer influx by the Carter-Tracy (1960) method, the influx model be
 
 We_n = We_{n-1} + (tD_n - tD_{n-1}) (B dp_n - We_{n-1} pD'_n) / (pD_n - tD_{n-1} pD'_n), with dp_n = p_i - p_n.
 
-Units are consistent rather than fixed: We takes the units of B times pressure (rb/psi x psi = rb, or rm3/bar x bar = rm3), so no ``metric`` flag is needed. ``aquifer_constants`` builds B and tD per day for a radial aquifer from its properties in either unit system. Carter-Tracy approximates Van Everdingen-Hurst superposition and tracks it more closely as the steps shorten; 30-day steps or shorter are usually adequate. Feed the result to ``gas_matbal`` or ``oil_matbal`` as ``We``.
+Units are consistent rather than fixed: We takes the units of B times pressure (rb/psi x psi = rb, or rm3/bar x bar = rm3), so no ``metric`` flag is needed. ``aquifer_constants`` builds B and tD per day for a radial aquifer from its properties in either unit system. Carter-Tracy approximates Van Everdingen-Hurst superposition and tracks it more closely as the steps shorten; 30-day steps or shorter are usually adequate. Feed the result to ``oil_matbal`` as ``We`` directly. ``gas_matbal`` takes ``We`` in rcf in field units, so multiply field-unit influx (rb) by 5.61458 first; metric (rm3) passes straight through.
 
 .. list-table:: Inputs
    :widths: 10 15 40

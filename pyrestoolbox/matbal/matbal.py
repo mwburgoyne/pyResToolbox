@@ -201,6 +201,7 @@ def gas_matbal(p, Gp, degf, sg=0.65, co2=0, h2s=0, n2=0, h2=0,
     We : array-like, optional
         Cumulative water influx (rcf | rm3). Same length as p. When
         provided, Havlena-Odeh regression is used for OGIP instead of P/Z.
+        aquifer_influx returns rb in field units: multiply by 5.61458 for rcf.
     zmethod : str or z_method
         Z-factor method (default 'DAK').
     cmethod : str or c_method

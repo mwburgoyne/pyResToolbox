@@ -56,7 +56,9 @@ def aquifer_influx(t, p, B, td_per_t, red=None, M=7):
     M: Laplace inversion accuracy passed to simtools.influence_tables (default 7)
 
     Returns dict with 'We' (cumulative influx, B x pressure units), 'tD', 'pD' and
-    'dpD' (pD derivative with respect to tD), each an array aligned with t.
+    'dpD' (pD derivative with respect to tD), each an array aligned with t. We
+    passes straight to oil_matbal; gas_matbal takes We in rcf in field units, so
+    multiply rb by 5.61458 first (metric rm3 needs no conversion).
     """
     t = np.asarray(t, dtype=float)
     p = np.asarray(p, dtype=float)

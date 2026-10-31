@@ -121,3 +121,18 @@ def test_aquifer_constants_rejects_bad_inputs():
     for theta in (0, 400):
         with pytest.raises(ValueError):
             matbal.aquifer_constants(**good, theta=theta)
+
+
+def test_aquifer_influx_into_gas_matbal_field_units():
+    # Exact gas balance with Carter-Tracy influx: G Bgi = (G - Gp) Bg + We (rcf).
+    # aquifer_influx gives rb in field units; gas_matbal takes rcf (rb x 5.61458).
+    from pyrestoolbox import gas
+    from pyrestoolbox.constants import CUFTperBBL
+    p = np.linspace(3000, 2000, 13)
+    t = np.linspace(0, 1095, 13)
+    we_rb = matbal.aquifer_influx(t, p, B=500.0, td_per_t=0.5)['We']
+    bg = np.array([gas.gas_bg(x, 0.65, 250) for x in p])
+    G = 50e9
+    gp = G - (G * bg[0] - we_rb * CUFTperBBL) / bg
+    r = matbal.gas_matbal(p, gp, degf=250, sg=0.65, We=we_rb * CUFTperBBL)
+    assert r.ogip == pytest.approx(G, rel=1e-6)
