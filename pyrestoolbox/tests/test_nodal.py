@@ -1039,6 +1039,56 @@ def test_gray_single_phase_liquid_uses_dry_roughness():
     assert abs(nodal.fbhp(vlpmethod='GRAY', **kw) / nodal.fbhp(vlpmethod='BB', **kw) - 1) < 1e-4
 
 
+def test_gray_no_friction_spike_at_low_velocity():
+    """Gray wet-film eps/D was uncapped and Serghides is singular near 3.7: 33,442 psia
+    at 74.5 STB/d against ~2,500-2,900 at neighbouring rates (review 2026-10-31)."""
+    import numpy as np
+    from pyrestoolbox import nodal
+    c = nodal.Completion(tid=2.441, length=8000, tht=90, bht=200, rough=0.0006)
+    oil = [nodal.fbhp(thp=150, completion=c, vlpmethod='GRAY', well_type='oil', qt_stbpd=q,
+                      gor=600, wc=0.3, pb=2800, rsb=600, api=32)
+           for q in np.arange(70.0, 80.01, 0.5)]
+    assert max(oil) < 2500 and np.abs(np.diff(oil)).max() < 10
+    c2 = nodal.Completion(tid=2.441, length=10000, tht=90, bht=250, rough=0.0006)
+    gas = [nodal.fbhp(thp=200, completion=c2, vlpmethod='GRAY', well_type='gas', qg_mscfd=q,
+                      qw_bwpd=5) for q in np.arange(140.0, 160.01, 1.0)]
+    assert max(gas) < 1000 and np.abs(np.diff(gas)).max() < 10
+
+
+def test_operating_point_converges_across_vlp_step():
+    """Beggs-Brill BHP steps 1.0 psi between 336.50 and 336.52 STB/d; the inflow line
+    crosses inside the step. The residual-only bisection stop never reached 1e-4 psi
+    and operating_point returned rate 0, converged=False (review 2026-10-31)."""
+    from pyrestoolbox import nodal
+    c = nodal.Completion(tid=2.441, length=8000, tht=90, bht=200, rough=0.0006)
+    r = nodal.Reservoir(pr=3000, degf=200, k=6.8150241502712054, h=50, re=1500, rw=0.35)
+    res = nodal.operating_point(thp=150, completion=c, reservoir=r, vlpmethod='BB',
+                                well_type='oil', gor=600, wc=0.3, pb=2800, rsb=600, api=32)
+    assert res['converged']
+    assert abs(res['rate'] - 336.51) < 0.02
+
+
+def test_hb_chart_fits_held_at_chart_limits():
+    """The Hagedorn-Brown CNL fit fell past N_L 0.4 where the chart is flat; holding the
+    chart inputs at their limits moves this 15 API case from 3118.5 to 3175.2 psia
+    (3174.2 with Churchill transition friction)."""
+    from pyrestoolbox import nodal
+    c = nodal.Completion(tid=2.992, length=8000, tht=100, bht=200)
+    bhp = nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil', qt_stbpd=1000,
+                     gor=100, wc=0, pb=3000, rsb=100, api=15)
+    assert abs(bhp - 3174.16) < 0.5
+
+
+def test_friction_continuous_through_transition():
+    """Fanning f jumped 60% at Re 2100 (16/Re to Colebrook); Churchill (1977) now covers
+    Re < 4000, laminar 16/Re is kept and turbulent Serghides values are unchanged."""
+    from pyrestoolbox.nodal.nodal import _serghides_fanning as f
+    assert abs(f(1000, 1e-4) * 1000 / 16 - 1) < 1e-6
+    assert abs(f(2101, 1e-4) / f(2099, 1e-4) - 1) < 1e-3
+    assert abs(f(3999.999, 1e-4) / f(4000, 1e-4) - 1) < 0.02
+    assert abs(f(1e5, 1e-4) * 4 - 0.0185136) < 1e-6
+
+
 def test_ipr_curve_oil_rate_is_total_liquid_at_water_cut():
     """ipr_curve ignored wc while operating_point treated its rate as total liquid."""
     from pyrestoolbox import nodal

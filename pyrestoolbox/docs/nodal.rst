@@ -17,9 +17,9 @@ A minimal example finding the operating point for a gas well:
     >>> r = nodal.Reservoir(pr=3000, degf=200, k=10, h=50, re=1500, rw=0.35, S=2, D=0.001)
     >>> result = nodal.operating_point(thp=500, completion=c, reservoir=r, vlpmethod='HB', well_type='gas', gsg=0.65)
     >>> round(result['rate'], 1)
-    10578.1
+    10581.7
     >>> round(result['bhp'], 1)
-    1583.4
+    1583.8
 
 
 Function List
@@ -820,9 +820,9 @@ Gas well operating point:
     >>> r = nodal.Reservoir(pr=3000, degf=200, k=10, h=50, re=1500, rw=0.35, S=2, D=0.001)
     >>> result = nodal.operating_point(thp=500, completion=c, reservoir=r, vlpmethod='HB', well_type='gas', gsg=0.65)
     >>> round(result['rate'], 1)
-    10578.1
+    10581.7
     >>> round(result['bhp'], 1)
-    1583.4
+    1583.8
 
 Oil well operating point:
 
@@ -1225,7 +1225,7 @@ Comparing all four VLP methods for the same gas well:
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
     961.594453485463
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='WG', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    1127.2904240222729
+    1117.7082459938417
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='GRAY', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
     1066.755704999179
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='BB', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)

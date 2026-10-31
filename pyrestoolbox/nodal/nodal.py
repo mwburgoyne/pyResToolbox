@@ -164,6 +164,16 @@ _IFT_NOPHASE_DEFAULT = 20.0     # Default IFT when no phases flow
 _CW_ROUGH = 3.7                 # Roughness denominator
 _CW_RE = 12.0                   # Reynolds number term (laminar iteration)
 _CW_TRANS = 2.51                # Transition term coefficient
+# Below this Reynolds number friction is Churchill (1977), Chem. Eng. 84(24) 91-92,
+# which is continuous through laminar, transition and turbulent flow (the former
+# 16/Re -> Colebrook switch at Re 2100 stepped Fanning f up 60% at eps/d 1e-4).
+# Serghides is kept above it so turbulent values are unchanged.
+_CHURCHILL_RE_MAX = 4000.0
+_CH_LAM = 8.0                   # Laminar term (8/Re)^12
+_CH_A_K = 2.457                 # A = [2.457 ln(1/((7/Re)^0.9 + 0.27 eps/d))]^16
+_CH_A_RE = 7.0
+_CH_A_ROUGH = 0.27
+_CH_B_RE = 37530.0              # B = (37530/Re)^16
 
 # ============================================================================
 #  HB (Hagedorn-Brown 1965) Holdup Constants
@@ -198,6 +208,16 @@ _SC_C4 = 116174.3
 # S-correction thresholds
 _SC_F2_CLAMP = 0.012            # f2 lower clamp
 _SC_F2_FLOOR = 0.001            # f2 floor where S=1.0
+
+# Hagedorn and Brown (1965) chart limits; the fits above are held at the chart ends
+# rather than extrapolated (CNL chart N_L 0.002-0.4, Brown and Beggs 1977; psi chart
+# ends near f2 0.09). Past them the fits diverge from the charts: CNL falls (0.0011
+# at N_L 2, chart flat at ~0.0115), H_L/psi falls to 0 by f1 0.05 (chart saturates
+# at 1) and psi reaches 11.6 at f2 0.15 (chart ~1.83 at its end).
+_HB_NL_MIN = 0.002
+_HB_NL_MAX = 0.4
+_HB_LF1_MAX = 3.6722855          # log10(f1)+6 at the H_L/psi fit maximum (f1 4.70e-3, 0.99504)
+_HB_F2_MAX = 0.09
 
 # f1 exponents
 _F1_VG_EXP = 0.575              # Gas velocity number exponent
@@ -281,6 +301,17 @@ _GRAY_SP_LIQ_FRAC = 1e-6        # v_sg/v_m below this is single-phase liquid (dr
 # without the blend a trace of liquid moved dry-gas BHP by up to 16%.
 _LOW_LIQ_LAMBDA = 1e-3
 _GRAY_ROUGH_FLOOR = 2.77e-5     # Minimum effective roughness (ft)
+# Upper bound on wet-film relative roughness ke/d. Duns and Ros (1963) bound the
+# film roughness ratio at 0.5; uncapped, ke0 grows as 1/vm^2 at low velocity and
+# drives the Colebrook argument through eps/d = 3.7, where Serghides is singular.
+_GRAY_EPS_D_MAX = 0.5
+# Duns and Ros (1963) friction for large relative roughness, Moody
+# f = 4 [1/(4 log10(0.27 eps/d))^2 + 0.067 (eps/d)^1.73], independent of Re; used
+# above eps/d 0.05, where Colebrook-type fits leave their data range.
+_DR_EPS_D_MIN = 0.05
+_DR_LOG_K = 0.27
+_DR_ROUGH_K = 0.067
+_DR_ROUGH_EXP = 1.73
 
 # ============================================================================
 #  WG (Woldesemayat-Ghajar 2007) Drift-Flux Constants
@@ -1008,8 +1039,8 @@ def _interfacial_tension(p_avg, temp_f, api, rs_scf_stb,
 def _serghides_fanning(re, eps_d):
     if re < 1:
         return 0.0
-    if re <= 2100:
-        return 16.0 / re
+    if re < _CHURCHILL_RE_MAX:
+        return _churchill_fanning(re, eps_d)
     a = -2.0 * _log10(eps_d / _CW_ROUGH + _CW_RE / re)
     b = -2.0 * _log10(eps_d / _CW_ROUGH + _CW_TRANS * a / re)
     c = -2.0 * _log10(eps_d / _CW_ROUGH + _CW_TRANS * b / re)
@@ -1023,6 +1054,19 @@ def _serghides_fanning(re, eps_d):
 # ============================================================================
 #  Segment and Static Column Helpers
 # ============================================================================
+
+def _duns_ros_rough_fanning(eps_d):
+    """Duns and Ros (1963) large-roughness Fanning friction factor (eps_d > 0.05)."""
+    return 1.0 / (4.0 * _log10(_DR_LOG_K * eps_d)) ** 2 + _DR_ROUGH_K * eps_d ** _DR_ROUGH_EXP
+
+
+def _churchill_fanning(re, eps_d):
+    """Churchill (1977) Fanning friction factor, valid for all Re."""
+    a = (_CH_A_K * math.log(1.0 / ((_CH_A_RE / re) ** 0.9 + _CH_A_ROUGH * eps_d))) ** 16
+    b = (_CH_B_RE / re) ** 16
+    f_darcy = _CH_LAM * ((_CH_LAM / re) ** 12 + (a + b) ** -1.5) ** (1.0 / 12.0)
+    return f_darcy / 4.0
+
 
 def _calc_segments(length, min_seg_ft=100.0):
     ndiv = 100
@@ -1143,20 +1187,20 @@ def _hb_gradient_gas(s):
     if nl <= 0:
         nl = 1e-8
 
-    x1 = _log10(nl) + 3.0
+    x1 = _log10(_clamp(nl, _HB_NL_MIN, _HB_NL_MAX)) + 3.0
     cnl = 10.0 ** (_CNL_C0 + _CNL_C1 * x1 + _CNL_C2 * x1 * x1 +
                    _CNL_C3 * x1 ** 3 + _CNL_C4 * x1 ** 4)
 
     nvg_safe = max(nvg, 1e-10)
     f1 = nvl * s['p_avg'] ** 0.1 * cnl / (nvg_safe ** _F1_VG_EXP * _F1_P_ATM ** 0.1 * nd)
 
-    lf1 = _log10(f1) + 6.0
+    lf1 = min(_log10(f1) + 6.0, _HB_LF1_MAX)
     ylonsi = (_YL_C0 + _YL_C1 * lf1 + _YL_C2 * lf1 ** 2 +
               _YL_C3 * lf1 ** 3 + _YL_C4 * lf1 ** 4)
     ylonsi = max(ylonsi, 0.0)
 
     f2 = nvg * nl ** _F2_VISC_EXP / nd ** _F2_DIAM_EXP
-    f2 = max(f2, _SC_F2_CLAMP)
+    f2 = _clamp(f2, _SC_F2_CLAMP, _HB_F2_MAX)
 
     si = (_SC_C0 + _SC_C1 * f2 + _SC_C2 * f2 * f2 +
           _SC_C3 * f2 ** 3 + _SC_C4 * f2 ** 4)
@@ -1686,14 +1730,17 @@ def _gray_gradient_gas(s):
 
     eps_eff = _gray_effective_roughness(s['rough_ft'], s['sigma'], s['rho_ns'],
                                         s['v_sl'], s['v_sg'])
-    eps_d = eps_eff / s['diam_ft']
+    eps_d = min(eps_eff / s['diam_ft'], _GRAY_EPS_D_MAX)
 
     mu_ns = s['mu_l'] * s['lambda_l'] + s['mu_g'] * (1.0 - s['lambda_l'])
     mu_ns_lbfts = mu_ns * _CP_TO_LBFTS
     n_re = (s['rho_ns'] * s['v_m'] * s['diam_ft'] / mu_ns_lbfts
             if mu_ns_lbfts > 0 else 0.0)
 
-    f_moody = 4.0 * _serghides_fanning(n_re, eps_d)
+    if eps_d > _DR_EPS_D_MIN:
+        f_moody = 4.0 * _duns_ros_rough_fanning(eps_d)
+    else:
+        f_moody = 4.0 * _serghides_fanning(n_re, eps_d)
 
     gm = s['mflow_total'] / s['area']
     dpdz_hydro = rho_s * math.sin(s['theta']) / _IN2_PER_FT2
@@ -2136,7 +2183,8 @@ def fthp(bhp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
         return calculated_bhp - bhp_oilfield
 
     try:
-        thp_solved = bisect_solve(None, _err, thp_min_oilfield, thp_max_oilfield, tol_oilfield)
+        thp_solved = bisect_solve(None, _err, thp_min_oilfield, thp_max_oilfield, tol_oilfield,
+                                  xtol=tol_oilfield)
     except (RuntimeError, ValueError) as exc:
         raise RuntimeError(
             f"fthp could not bracket THP in [{thp_min_oilfield}, {thp_max_oilfield}] psi "
@@ -2271,6 +2319,27 @@ def _oil_ipr_rates(pwf_list, pr, degf, k, h, re, rw, S, oil_pvt, bo, uo, wc):
     return rates
 
 
+def _ipr_rates(reservoir, well_type, pwf_list, gas_pvt, oil_pvt, wc, bo, uo, gsg):
+    """Inflow rate (Mscf/d gas, STB/d oil and water; oilfield) at each pwf (psia)."""
+    r = reservoir
+    if well_type == 'gas':
+        sg = gas_pvt.sg if gas_pvt else gsg
+        co2, h2s, n2, h2_frac, he_frac, ag = (
+            (gas_pvt.co2, gas_pvt.h2s, gas_pvt.n2, gas_pvt.h2, getattr(gas_pvt, 'he', 0), getattr(gas_pvt, 'ag', False))
+            if gas_pvt else (0, 0, 0, 0, 0, False))
+        return [float(gas.gas_rate_radial(
+                    k=r.k, h=r.h, pr=r.pr, pwf=pwf, r_w=r.rw, r_ext=r.re,
+                    degf=r.degf, S=r.S, D=r.D, sg=sg,
+                    co2=co2, h2s=h2s, n2=n2, h2=h2_frac, he=he_frac, ag=ag))
+                for pwf in pwf_list]
+    if well_type == 'oil':
+        return _oil_ipr_rates(pwf_list, r.pr, r.degf, r.k, r.h, r.re, r.rw, r.S,
+                              oil_pvt, bo, uo, wc)
+    # Water injectivity
+    J = _DARCY_K * r.k * r.h / (uo * bo * (np.log(r.re / r.rw) + r.S - _DIETZ_CORR))
+    return [J * (r.pr - pwf) for pwf in pwf_list]
+
+
 def ipr_curve(reservoir: 'Reservoir', well_type: str = 'gas',
               gas_pvt=None, oil_pvt=None,
               n_points: int = 20, min_pwf: Optional[float] = None,
@@ -2305,39 +2374,8 @@ def ipr_curve(reservoir: 'Reservoir', well_type: str = 'gas',
         min_pwf = min_pwf * BAR_TO_PSI
 
     # Reservoir stores oilfield units internally (converted in constructor)
-    pr = reservoir.pr
-    degf = reservoir.degf
-    k = reservoir.k
-    h = reservoir.h
-    re = reservoir.re
-    rw = reservoir.rw
-    S = reservoir.S
-    D = reservoir.D
-
-    pwf_list = list(np.linspace(min_pwf, pr, n_points))
-    rate_list = []
-
-    if well_type == 'gas':
-        sg = gas_pvt.sg if gas_pvt else gsg
-        co2, h2s, n2, h2_frac, he_frac, ag = (
-            (gas_pvt.co2, gas_pvt.h2s, gas_pvt.n2, gas_pvt.h2, getattr(gas_pvt, 'he', 0), getattr(gas_pvt, 'ag', False))
-            if gas_pvt else (0, 0, 0, 0, 0, False))
-
-        for pwf in pwf_list:
-            qg = gas.gas_rate_radial(
-                k=k, h=h, pr=pr, pwf=pwf, r_w=rw, r_ext=re,
-                degf=degf, S=S, D=D, sg=sg,
-                co2=co2, h2s=h2s, n2=n2, h2=h2_frac, he=he_frac, ag=ag)
-            rate_list.append(float(qg))  # Mscf/d in oilfield
-
-    elif well_type == 'oil':
-        rate_list = _oil_ipr_rates(pwf_list, pr, degf, k, h, re, rw, S, oil_pvt, bo, uo, wc)
-
-    elif well_type == 'water':
-        # Water injectivity
-        J = _DARCY_K * k * h / (uo * bo * (np.log(re / rw) + S - _DIETZ_CORR))
-        for pwf in pwf_list:
-            rate_list.append(J * (pr - pwf))
+    pwf_list = list(np.linspace(min_pwf, reservoir.pr, n_points))
+    rate_list = _ipr_rates(reservoir, well_type, pwf_list, gas_pvt, oil_pvt, wc, bo, uo, gsg)
 
     # Convert outputs to metric if requested
     if metric:
@@ -2415,54 +2453,55 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
             result['ipr'] = _convert_ipr_to_metric(ipr, well_type)
         return NodalResult(result)
 
-    # Define error function: VLP BHP - IPR BHP at given rate
-    # rate is Mscf/d for gas, STB/d for oil (IPR and VLP share units)
-    def _err(args, rate):
+    # VLP BHP at a rate (Mscf/d for gas, STB/d for oil; IPR and VLP share units)
+    def _vlp_bhp(rate):
+        if well_type == 'gas':
+            return fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
+                        well_type='gas', qg_mscfd=rate, cgr=f.cgr,
+                        qw_bwpd=f.qw_bwpd, oil_vis=oil_vis, api=f.api, pr=pr,
+                        wsg=wsg, injection=injection, gsg=f.gsg, gas_pvt=gas_pvt)
+        return fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
+                    well_type='oil', qt_stbpd=rate, gor=f.gor, wc=wc,
+                    wsg=wsg, injection=injection, gsg=f.gsg, pb=f.pb, rsb=f.rsb, sgsp=f.sgsp,
+                    api=f.api, oil_pvt=oil_pvt)
+
+    def _ipr_rate(pwf):
+        return _ipr_rates(reservoir, well_type, [pwf], gas_pvt, oil_pvt, wc, bo, uo, f.gsg)[0]
+
+    # Solve on pwf: the inflow rate is evaluated directly at each trial pwf, so the
+    # residual VLP_BHP(q_IPR(pwf)) - pwf carries no interpolation error.
+    def _err(_args, pwf):
+        rate = _ipr_rate(pwf)
         if rate <= 0:
             return -1.0  # At zero rate, VLP BHP < IPR BHP (Pr)
+        return _vlp_bhp(rate) - pwf
 
-        if well_type == 'gas':
-            vlp_bhp = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
-                           well_type='gas', qg_mscfd=rate, cgr=f.cgr,
-                           qw_bwpd=f.qw_bwpd, oil_vis=oil_vis, api=f.api, pr=pr,
-                           wsg=wsg, injection=injection, gsg=f.gsg, gas_pvt=gas_pvt)
-        else:
-            vlp_bhp = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
-                           well_type='oil', qt_stbpd=rate, gor=f.gor, wc=wc,
-                           wsg=wsg, injection=injection, gsg=f.gsg, pb=f.pb, rsb=f.rsb, sgsp=f.sgsp,
-                           api=f.api, oil_pvt=oil_pvt)
-
-        # IPR BHP: interpolate from IPR curve
-        ipr_rates = ipr['rate']
-        ipr_pwfs = ipr['pwf']
-        # Rate decreases as pwf increases, so interpolate
-        ipr_bhp = np.interp(rate, ipr_rates[::-1], ipr_pwfs[::-1])
-
-        return vlp_bhp - ipr_bhp
-
-    # Bisect to find operating rate (in IPR units).
     # VLP curves for oil wells can be non-monotonic at very low rates (spurious
-    # near-shut-in high BHP from holdup correlations), so a naive bisect between
-    # min_rate and AOF may miss the true crossing. Scan the rate range first and
-    # pick the sign-change closest to AOF — that's the physical operating point.
+    # near-shut-in high BHP from holdup correlations), so a naive bisect over the
+    # whole range may miss the true crossing. Scan pwf first and take the sign
+    # change at the lowest pwf (highest rate), the physical operating point.
     min_rate = 100.0 if well_type == 'gas' else 1.0
     max_rate_search = aof * 0.999
 
     converged = True
-    scan_rates = list(np.linspace(min_rate, max_rate_search, max(n_points, 25)))
-    scan_errs = [_err(None, r) for r in scan_rates]
+    scan_pwfs = list(np.linspace(14.7, pr, max(n_points, 25)))[:-1]
+    scan_rates = _ipr_rates(reservoir, well_type, scan_pwfs, gas_pvt, oil_pvt, wc, bo, uo, f.gsg)
+    scan = [(pw, q) for pw, q in zip(scan_pwfs, scan_rates) if q >= min_rate]
+    scan_errs = [_vlp_bhp(q) - pw for pw, q in scan]
 
-    # Find all sign changes; prefer the one at the highest rate
     brackets = [
-        (scan_rates[i], scan_rates[i + 1])
-        for i in range(len(scan_rates) - 1)
+        (scan[i][0], scan[i + 1][0])
+        for i in range(len(scan) - 1)
         if scan_errs[i] * scan_errs[i + 1] < 0
     ]
 
     if brackets:
-        lo, hi = brackets[-1]
+        lo, hi = brackets[0]
         try:
-            op_rate = bisect_solve(None, _err, lo, hi, 1e-4)
+            # The bracket stop resolves a crossing at a VLP step (a regime switch can
+            # jump BHP by ~1 psi, far above the residual tolerance)
+            op_pwf = bisect_solve(None, _err, lo, hi, 1e-4, xtol=1e-5)
+            op_rate = _ipr_rate(op_pwf)
         except (RuntimeError, ValueError):
             op_rate = 0.0
             converged = False

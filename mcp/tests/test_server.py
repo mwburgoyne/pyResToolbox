@@ -127,7 +127,7 @@ def test_call_builds_segments_reservoir_and_gas_pvt():
     op = srv.call('nodal.operating_point', {'thp': 500, 'completion': _COMPLETION,
                                             'reservoir': _RESERVOIR, 'vlpmethod': 'HB',
                                             'well_type': 'gas', 'gsg': 0.65})['result']
-    assert abs(op['rate'] - 10578.1) < 0.2
+    assert abs(op['rate'] - 10581.7) < 0.2
     assert srv.call('nodal.fthp', {'bhp': 1000, 'completion': _COMPLETION, 'well_type': 'gas',
                                    'qg_mscfd': 5000, 'gas_pvt': {'sg': 0.7, 'co2': 0.1}})['result'] > 14.7
 

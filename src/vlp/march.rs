@@ -4,7 +4,7 @@
 //! Python scaffold design. nodal.py is the authoritative reference.
 
 use super::constants::*;
-use super::friction::serghides_fanning;
+use super::friction::{duns_ros_rough_fanning, serghides_fanning};
 use super::holdup_bb::*;
 use super::holdup_gray::{gray_effective_roughness, gray_liquid_holdup};
 use super::holdup_wg::{wg_friction_gradient_lm, wg_void_fraction};
@@ -144,7 +144,7 @@ fn hb_gradient(s: &SegmentState) -> f64 {
         nl = 1e-8;
     }
 
-    let x1 = log10_safe(nl) + 3.0;
+    let x1 = log10_safe(nl.clamp(HB_NL_MIN, HB_NL_MAX)) + 3.0;
     let cnl = 10.0_f64.powf(
         CNL_C0 + CNL_C1 * x1 + CNL_C2 * x1 * x1 + CNL_C3 * x1.powi(3) + CNL_C4 * x1.powi(4),
     );
@@ -152,13 +152,13 @@ fn hb_gradient(s: &SegmentState) -> f64 {
     let nvg_safe = nvg.max(1e-10);
     let f1 = nvl * s.p_avg.powf(0.1) * cnl / (nvg_safe.powf(F1_VG_EXP) * F1_P_ATM.powf(0.1) * nd);
 
-    let lf1 = log10_safe(f1) + 6.0;
+    let lf1 = (log10_safe(f1) + 6.0).min(HB_LF1_MAX);
     let mut ylonsi =
         YL_C0 + YL_C1 * lf1 + YL_C2 * lf1.powi(2) + YL_C3 * lf1.powi(3) + YL_C4 * lf1.powi(4);
     ylonsi = ylonsi.max(0.0);
 
     let mut f2 = nvg * nl.powf(F2_VISC_EXP) / nd.powf(F2_DIAM_EXP);
-    f2 = f2.max(SC_F2_CLAMP);
+    f2 = f2.clamp(SC_F2_CLAMP, HB_F2_MAX);
 
     let mut si = SC_C0 + SC_C1 * f2 + SC_C2 * f2 * f2 + SC_C3 * f2.powi(3) + SC_C4 * f2.powi(4);
     if f2 <= SC_F2_FLOOR {
@@ -247,7 +247,7 @@ fn gray_gradient(s: &SegmentState) -> f64 {
     let rho_s = s.rho_l * hl + s.rho_g * (1.0 - hl);
 
     let eps_eff = gray_effective_roughness(s.rough_ft, s.sigma, s.rho_ns, s.v_sl, s.v_sg);
-    let eps_d = eps_eff / s.diam_ft;
+    let eps_d = (eps_eff / s.diam_ft).min(GRAY_EPS_D_MAX);
 
     let mu_ns = s.mu_l * s.lambda_l + s.mu_g * (1.0 - s.lambda_l);
     let mu_ns_lbfts = mu_ns * CP_TO_LBFTS;
@@ -257,7 +257,11 @@ fn gray_gradient(s: &SegmentState) -> f64 {
         0.0
     };
 
-    let f_moody = 4.0 * serghides_fanning(n_re, eps_d);
+    let f_moody = if eps_d > DR_EPS_D_MIN {
+        4.0 * duns_ros_rough_fanning(eps_d)
+    } else {
+        4.0 * serghides_fanning(n_re, eps_d)
+    };
 
     let gm = s.mflow_total / s.area;
     let dpdz_hydro = rho_s * s.theta.sin() / IN2_PER_FT2;

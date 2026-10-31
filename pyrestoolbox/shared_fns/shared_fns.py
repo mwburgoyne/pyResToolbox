@@ -44,7 +44,10 @@ import numpy as np
 from math import ceil
 from typing import Union, List, Tuple
 
-def bisect_solve(args, f, xmin, xmax, rtol):
+def bisect_solve(args, f, xmin, xmax, rtol, xtol=None):
+    # Stops when |f| < rtol or, with xtol given, when the bracket is narrower than
+    # xtol. The bracket stop lets a root at a discontinuity of f (a step larger than
+    # rtol) resolve to the step location instead of exhausting the iterations.
     if xmin > xmax:
         xmin, xmax = xmax, xmin
     err_hi = f(args, xmax)
@@ -68,6 +71,8 @@ def bisect_solve(args, f, xmin, xmax, rtol):
         else:
             xmax = mid_val  # Otherwise must be lower than current mid_val case
             err_hi = err_mid
+        if xtol is not None and xmax - xmin < xtol:
+            break
     return mid_val
     
 def convert_to_numpy(input_data):

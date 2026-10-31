@@ -70,6 +70,15 @@ pub const SC_C4: f64 = 116174.3;
 pub const SC_F2_CLAMP: f64 = 0.012; // f2 lower clamp
 pub const SC_F2_FLOOR: f64 = 0.001; // f2 floor where S = 1.0
 
+// Hagedorn and Brown (1965) chart limits: the fits are held at the chart ends
+// rather than extrapolated (CNL chart N_L 0.002-0.4, Brown and Beggs 1977; psi
+// chart ends near f2 0.09; H_L/psi held at its fit maximum, the chart saturating
+// at 1). Python _HB_NL_MIN etc., nodal.py.
+pub const HB_NL_MIN: f64 = 0.002;
+pub const HB_NL_MAX: f64 = 0.4;
+pub const HB_LF1_MAX: f64 = 3.6722855; // log10(f1)+6 at the H_L/psi fit maximum
+pub const HB_F2_MAX: f64 = 0.09;
+
 // f1 exponents
 pub const F1_VG_EXP: f64 = 0.575; // Gas velocity number exponent
 pub const F1_P_ATM: f64 = 14.7; // Atmospheric pressure reference (psia)
@@ -156,6 +165,24 @@ pub const GRAY_SP_LIQ_FRAC: f64 = 1e-6; // v_sg/v_m below this is single-phase l
 /// _LOW_LIQ_LAMBDA, nodal.py).
 pub const LOW_LIQ_LAMBDA: f64 = 1e-3;
 pub const GRAY_ROUGH_FLOOR: f64 = 2.77e-5; // Minimum effective roughness (ft)
+/// Upper bound on wet-film relative roughness ke/d (Duns and Ros 1963 bound the
+/// film roughness ratio at 0.5); keeps Serghides away from its singularity at
+/// eps/d = 3.7 (Python _GRAY_EPS_D_MAX, nodal.py).
+pub const GRAY_EPS_D_MAX: f64 = 0.5;
+/// Duns and Ros (1963) large-roughness friction, Moody f = 4 [1/(4 log10(0.27
+/// eps/d))^2 + 0.067 (eps/d)^1.73], used above eps/d 0.05 (Python _DR_*).
+pub const DR_EPS_D_MIN: f64 = 0.05;
+/// Churchill (1977) friction below this Re (continuous through transition);
+/// Serghides above it (Python _CHURCHILL_RE_MAX, _CH_*).
+pub const CHURCHILL_RE_MAX: f64 = 4000.0;
+pub const CH_LAM: f64 = 8.0;
+pub const CH_A_K: f64 = 2.457;
+pub const CH_A_RE: f64 = 7.0;
+pub const CH_A_ROUGH: f64 = 0.27;
+pub const CH_B_RE: f64 = 37530.0;
+pub const DR_LOG_K: f64 = 0.27;
+pub const DR_ROUGH_K: f64 = 0.067;
+pub const DR_ROUGH_EXP: f64 = 1.73;
 
 // ============================================================================
 //  WG (Woldesemayat and Ghajar 2007) drift-flux constants
