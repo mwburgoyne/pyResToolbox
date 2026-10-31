@@ -206,7 +206,7 @@ pyrestoolbox.matbal.oil_matbal
                zmethod='DAK', cmethod='PMC', metric=False,
                pvt_table=None, regress=None) -> OilMatbalResult
 
-Havlena-Odeh oil material balance for OOIP estimation. Computes underground withdrawal (F), oil expansion (Eo), gas cap expansion (Eg), and formation/water compressibility (Efw) terms at each pressure step. When cumulative aquifer influx ``We`` is supplied it is subtracted from the withdrawal first (``F - We = N·[Eo + m*Eg + (1+m)*Efw]``); OOIP is the mean of ``(F - We)/(Eo + m*Eg + (1+m)*Efw)`` across valid steps. Drive indices (DDI, SDI, CDI, WDI) are computed at each step.
+Havlena-Odeh oil material balance for OOIP estimation. Computes underground withdrawal (F), oil expansion (Eo), gas cap expansion (Eg), and formation/water compressibility (Efw) terms at each pressure step. When cumulative aquifer influx ``We`` is supplied it is subtracted from the withdrawal first (``F - We = N·[Eo + m*Eg + (1+m)*Efw]``); OOIP is the least-squares slope of ``F - We`` against ``Et = Eo + m*Eg + (1+m)*Efw`` through the origin (Havlena and Odeh 1963), so late points with large Et carry most weight; earlier releases used the mean of the per-point ratios. Drive indices (DDI, SDI, CDI, WDI) use that fitted OOIP at each step.
 
 .. list-table:: Inputs
    :widths: 10 15 40
@@ -289,7 +289,7 @@ Havlena-Odeh oil material balance for OOIP estimation. Computes underground with
      - Tabulated oil PVT: ``{'p': [...], 'Rs': [...], 'Bo': [...], 'Bg': [...]}``. Units follow the metric flag. When provided, api and sg_sp are not required
    * - regress
      - dict, optional
-     - Parameters to regress with bounds: ``{'m': (0, 2), 'cf': (1e-6, 10e-6)}``. Allowed keys: 'm', 'cf', 'cw', 'sw_i'. Minimizes coefficient of variation of OOIP estimates
+     - Parameters to regress with bounds: ``{'m': (0, 2), 'cf': (1e-6, 10e-6)}``. Allowed keys: 'm', 'cf', 'cw', 'sw_i'. Least squares on F - We - N Et, with N the slope for each trial set. Raises a ``UserWarning`` when a parameter ends on a bound or is correlated with N above 0.99 (see ``regress_report``)
 
 .. list-table:: Returns (OilMatbalResult)
    :widths: 10 15 40
@@ -315,7 +315,7 @@ Havlena-Odeh oil material balance for OOIP estimation. Computes underground with
      - Formation and water compressibility term at each step
    * - drive_indices
      - dict
-     - Drive index fractions at each step: 'DDI' (depletion), 'SDI' (segregation/gas cap), 'CDI' (compaction/expansion), 'WDI' (water/aquifer influx). Each maps to np.ndarray. 'WDI' is all-zero when no ``We`` is supplied
+     - Drive index fractions of the withdrawal F at each step, from the fitted OOIP: 'DDI' (depletion), 'SDI' (segregation/gas cap), 'CDI' (compaction/expansion), 'WDI' (water/aquifer influx). Each maps to np.ndarray. Their sum is 1 only where the material balance closes, so a sum away from 1 flags a mismatch (Pletcher 2002). 'WDI' is all-zero when no ``We`` is supplied
    * - p
      - np.ndarray
      - Pressure array used
@@ -324,7 +324,13 @@ Havlena-Odeh oil material balance for OOIP estimation. Computes underground with
      - PVT properties at each step: 'Rs', 'Bo', 'Bg' arrays
    * - regressed
      - dict or None
-     - Optimized parameter values when ``regress`` is used, else None
+     - Regressed parameter values when ``regress`` is used, else None
+   * - ooip_points
+     - np.ndarray
+     - Per-point OOIP (F - We)/Et, NaN where Et is 0. Against F it is the Campbell plot: flat supports the model, rising points to support the model omits (an aquifer)
+   * - regress_report
+     - dict or None
+     - With ``regress``: 'at_bound' (parameters that ended on a bound), 'max_correlation' (largest absolute correlation between N and the regressed parameters, from a finite-difference Jacobian), 'identifiable' (False when either check fires)
 
 Examples:
 
@@ -337,9 +343,18 @@ Examples:
     ...     pb=3500, rsb=500, cf=3e-6, sw_i=0.2, cw=3e-6
     ... )
     >>> r.ooip
-    82793518.1467637
+    57244701.589534335
     >>> r.drive_indices['DDI'][1]
-    0.7108509527793809
+    0.3149045515580967
+
+These inputs do not satisfy a single OOIP, and the diagnostics show it: the per-point estimates fall (a Campbell plot that declines) and the drive indices sum well below 1 early on:
+
+.. code-block:: python
+
+    >>> [round(x / 1e6, 1) for x in r.ooip_points[1:]]
+    [129.2, 63.6, 55.6]
+    >>> [round(float(x), 3) for x in sum(r.drive_indices.values())[1:]]
+    [0.443, 0.9, 1.03]
 
 Water-drive Example (aquifer influx ``We``):
 
@@ -353,7 +368,7 @@ Water-drive Example (aquifer influx ``We``):
     ...     We=[0, 3e5, 1.2e6, 3.0e6]
     ... )
     >>> r.ooip
-    58621027.15996399
+    35077977.022075504
     >>> r.drive_indices['WDI'][-1]
     0.4055063920332815
 
@@ -369,12 +384,16 @@ Regression Example (optimizing m and cf):
     ...     m=0, cf=0, sw_i=0.2, cw=3e-6,
     ...     regress={'m': (0, 2), 'cf': (1e-7, 50e-6)}
     ... )
-    >>> r.regressed['m']
-    2.0
-    >>> r.regressed['cf']
-    5e-05
+    UserWarning: regressed m, cf ended on its bound: the data do not constrain it inside the bounds
+    UserWarning: OOIP and the regressed parameters are correlated (0.9993): the data fix only a combination of them ...
+    >>> round(r.regressed['m'], 3), round(r.regressed['cf'] * 1e6, 2)
+    (2.0, 50.0)
     >>> r.ooip
-    1468312.3564986854
+    1427566.2426175773
+    >>> r.regress_report['identifiable']
+    False
+
+Both parameters ended on their upper bounds and the fitted OOIP is below the 2.1 MMSTB already produced: four points cannot separate N, m and cf here, and the warnings say so. Fix m or cf from independent data and regress the other.
 
 Tabulated PVT Example:
 
@@ -394,7 +413,7 @@ Tabulated PVT Example:
     ...     pvt_table={'p': p_table, 'Rs': Rs_t, 'Bo': Bo_t, 'Bg': Bg_t}
     ... )
     >>> r.ooip
-    82793518.1467637
+    57244701.589534335
 
 
 .. note:: **Compressibility Guidance**

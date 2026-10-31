@@ -901,26 +901,6 @@ class TestBrineCO2Equivalence:
 
 
 # =============================================================================
-# Material balance: Objective function equivalence
-# =============================================================================
-
-@rust_required
-class TestMatbalEquivalence:
-
-    def test_oil_matbal(self):
-        from pyrestoolbox.matbal import matbal
-        p = [5000, 4500, 4000, 3500, 3000]
-        Np = [0, 50000, 120000, 210000, 320000]
-        kwargs = dict(p=p, Np=Np, api=35, sg_sp=0.8, sg_g=0.75,
-                      degf=200, pb=3500, sw_i=0.25, cf=5e-6, cw=3e-6)
-        result_rust = matbal.oil_matbal(**kwargs)
-        with force_python():
-            result_python = matbal.oil_matbal(**kwargs)
-        np.testing.assert_allclose(result_rust.ooip, result_python.ooip, rtol=RTOL_MEDIUM,
-                                   err_msg="Matbal OOIP mismatch")
-
-
-# =============================================================================
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

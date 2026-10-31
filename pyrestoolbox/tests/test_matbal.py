@@ -4,6 +4,8 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+import warnings
+
 import numpy as np
 import pytest
 from pyrestoolbox import matbal
@@ -359,29 +361,83 @@ def test_oil_matbal_no_pb_rsb():
         pass
 
 
+def _consistent_saturated(We=None):
+    """Saturated history whose Np satisfies the material balance exactly for N 50 MMSTB,
+    m 0.3, cf 5e-6 (and the given We), with free gas produced (Rp above Rs)."""
+    pk = dict(degf=200, api=35, sg_sp=0.75, pb=4000, rsb=800, cw=3e-6, sw_i=0.25)
+    p = np.linspace(4000, 2500, 9)
+    probe = matbal.oil_matbal(p=p, Np=np.r_[0, np.ones(8)], m=0.3, cf=5e-6, **pk)
+    Rs, Bo, Bg = probe.pvt['Rs'], probe.pvt['Bo'], probe.pvt['Bg']
+    Et = probe.Eo + 0.3 * probe.Eg + 1.3 * probe.Efw
+    Rp = Rs + np.linspace(0, 1500, 9)
+    We = np.zeros(9) if We is None else We
+    Np = (50e6 * Et + We) / (Bo + (Rp - Rs) * Bg)
+    return dict(p=p, Np=Np, Rp=Rp, **pk)
+
+
 def test_oil_matbal_drive_indices_sum():
-    """Drive indices should approximately sum to 1 at each valid point."""
-    result = matbal.oil_matbal(
-        p=[4000, 3500, 3000, 2500],
-        Np=[0, 500000, 1200000, 2100000],
-        degf=200,
-        api=35,
-        sg_sp=0.65,
-        pb=3500,
-        rsb=500,
-        m=0.3,
-        cf=3e-6,
-        sw_i=0.2,
-        cw=3e-6,
-    )
-    ddi = result.drive_indices['DDI']
-    sdi = result.drive_indices['SDI']
-    cdi = result.drive_indices['CDI']
-    # For non-zero points (skip initial), indices should sum to ~1
-    for i in range(1, len(ddi)):
-        total = ddi[i] + sdi[i] + cdi[i]
-        if total > 0:
-            assert abs(total - 1.0) < 0.05, f"Drive indices sum to {total} at step {i}"
+    """Drive indices come from the fitted N: on a history that satisfies the material
+    balance they sum to 1 and N is recovered."""
+    r = matbal.oil_matbal(m=0.3, cf=5e-6, **_consistent_saturated())
+    assert abs(r.ooip - 50e6) / 50e6 < 1e-9
+    total = sum(r.drive_indices[k] for k in ('DDI', 'SDI', 'CDI', 'WDI'))
+    assert np.allclose(total[1:], 1.0, atol=1e-9)
+    assert np.allclose(r.ooip_points[1:], 50e6, rtol=1e-9) and np.isnan(r.ooip_points[0])
+
+
+def test_oil_matbal_missing_aquifer_shows_in_diagnostics():
+    """Omitting real aquifer support biases N high; the drive-index sum departs from 1
+    and the per-point OOIP (Campbell plot) rises."""
+    We = np.linspace(0, 1, 9) ** 1.5 * 6e6
+    kw = _consistent_saturated(We)
+    good = matbal.oil_matbal(m=0.3, cf=5e-6, We=We, **kw)
+    assert abs(good.ooip - 50e6) / 50e6 < 1e-9
+    bad = matbal.oil_matbal(m=0.3, cf=5e-6, **kw)
+    total = sum(bad.drive_indices[k] for k in ('DDI', 'SDI', 'CDI', 'WDI'))
+    assert bad.ooip > 60e6 and total[1] > 1.05
+    assert np.all(np.diff(bad.ooip_points[1:6]) > 0)
+
+
+def test_oil_matbal_ooip_is_least_squares_slope():
+    """OOIP is the least-squares slope of F - We = N Et through the origin."""
+    r = matbal.oil_matbal(p=[4000, 3500, 3000, 2500], Np=[0, 1e6, 3e6, 6e6], degf=220,
+                          api=35, sg_sp=0.75, pb=3500, rsb=500, cf=3e-6, sw_i=0.2, cw=3e-6)
+    Et = r.Eo + r.Efw
+    assert abs(r.ooip - np.dot(Et, r.F) / np.dot(Et, Et)) / r.ooip < 1e-12
+
+
+def test_oil_matbal_regress_recovers_saturated():
+    """Noise-free saturated history: m and cf recovered from wrong starting values."""
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        r = matbal.oil_matbal(m=0.1, cf=1e-6, regress={'m': (0, 1), 'cf': (0, 2e-5)},
+                              **_consistent_saturated())
+    assert abs(r.regressed['m'] - 0.3) < 0.01 and abs(r.regressed['cf'] - 5e-6) < 1e-7
+    assert abs(r.ooip - 50e6) / 50e6 < 0.01
+
+
+def test_oil_matbal_regress_unidentifiable_warns():
+    """Undersaturated history: Et is proportional to dp for any cf, so N and cf cannot
+    be separated. The fit must say so instead of returning cf silently."""
+    pp = np.r_[5000, 4995, 4985, 4970, np.linspace(4900, 3600, 8)]
+    Boi, co = 1.35469, 10.71e-6
+    Bo = Boi * (1 + co * (5000 - pp))
+    Et = (Bo - Boi) + Boi * (3.6e-6 * 0.2 + 5e-6) / 0.8 * (5000 - pp)
+    tab = {'p': pp[::-1], 'Rs': np.full(12, 600.), 'Bo': Bo[::-1], 'Bg': np.full(12, 1e-3)}
+    with pytest.warns(UserWarning):
+        r = matbal.oil_matbal(p=pp, Np=50e6 * Et / Bo, degf=200, pb=1000, rsb=600, cf=0,
+                              cw=3.6e-6, sw_i=0.2, pvt_table=tab, regress={'cf': (0, 20e-6)})
+    assert not r.regress_report['identifiable']
+    assert r.regress_report['max_correlation'] > 0.99
+
+
+def test_oil_matbal_craft_hawkins_6_2():
+    """Craft and Hawkins Example 6.2: 51.73 MMSTB with cf and cw, 86.25 without."""
+    kw = dict(p=[5014.7, 3614.7], Np=[0, 1.25e6], Wp=[0, 32000], Bw=1.04, degf=200,
+              pb=1000, rsb=600, pvt_table={'p': [3614.7, 5014.7], 'Rs': [600, 600],
+                                           'Bo': [1.375, 1.35469], 'Bg': [1e-3, 1e-3]})
+    assert round(matbal.oil_matbal(cf=5e-6, cw=3.6e-6, sw_i=0.2, **kw).ooip / 1e6, 2) == 51.73
+    assert round(matbal.oil_matbal(**kw).ooip / 1e6, 2) == 86.26
 
 
 def test_oil_matbal_aquifer_we():
@@ -403,12 +459,11 @@ def test_oil_matbal_aquifer_we():
     assert aq.drive_indices['WDI'][-1] > 0.0
     # Removing influx from withdrawal lowers the OOIP estimate.
     assert aq.ooip < base.ooip
-    # All four indices sum to ~1 at producing steps.
+    # Indices are fractions of F from the fitted N: their sum is (N Et + We) / F.
     di = aq.drive_indices
-    for i in range(1, len(di['DDI'])):
-        total = di['DDI'][i] + di['SDI'][i] + di['CDI'][i] + di['WDI'][i]
-        if abs(total) > 1e-9:
-            assert abs(total - 1.0) < 0.05, f"indices sum to {total} at step {i}"
+    total = di['DDI'] + di['SDI'] + di['CDI'] + di['WDI']
+    Et = aq.Eo + aq.Efw
+    assert np.allclose(total[1:], ((aq.ooip * Et + We) / aq.F)[1:], rtol=1e-12)
 
 
 def test_oil_matbal_we_length_validation():
@@ -478,7 +533,7 @@ def test_oil_matbal_regress_none_default():
         pb=3500, rsb=500, cf=3e-6, sw_i=0.2, cw=3e-6
     )
     assert result.regressed is None
-    assert abs(result.ooip - 82793519.84914012) / 82793519.84914012 < 1e-6
+    assert abs(result.ooip - 57244701.589534335) / 57244701.589534335 < 1e-6
 
 
 def test_oil_matbal_regress_bad_param():

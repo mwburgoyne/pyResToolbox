@@ -38,9 +38,12 @@ __all__ = [
     'GasMatbalResult', 'OilMatbalResult',
 ]
 
+import warnings
+
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Optional, List
+from scipy.optimize import least_squares
 
 import pyrestoolbox.gas as gas
 import pyrestoolbox.oil as oil
@@ -49,9 +52,6 @@ from pyrestoolbox.constants import BAR_TO_PSI, degc_to_degf, PSI_TO_BAR
 from pyrestoolbox.constants import SCF_PER_STB_TO_SM3_PER_SM3, SM3_PER_SM3_TO_SCF_PER_STB
 from pyrestoolbox.classes import z_method, c_method, rs_method, bo_method
 from pyrestoolbox.shared_fns import ransac_linreg
-from pyrestoolbox._accelerator import RUST_AVAILABLE as _RUST_AVAILABLE
-if _RUST_AVAILABLE:
-    from pyrestoolbox import _native as _rust
 
 
 @dataclass
@@ -139,13 +139,23 @@ class OilMatbalResult:
     Efw : np.ndarray
         Formation and water compressibility term at each step.
     drive_indices : dict
-        Drive index fractions at each step: 'DDI' (depletion), 'SDI' (segregation/gas cap),
-        'CDI' (compaction/expansion), 'WDI' (water/aquifer influx). Each maps to np.ndarray.
-        'WDI' is all-zero when no ``We`` aquifer influx is supplied.
+        Drive index fractions at each step from the fitted OOIP: 'DDI' (depletion),
+        'SDI' (segregation/gas cap), 'CDI' (compaction/expansion), 'WDI' (water/aquifer
+        influx), each N x term / F (np.ndarray, 0 where F is 0). They sum to 1 only where
+        the material balance closes, so the sum is a diagnostic. 'WDI' is all-zero when no
+        ``We`` aquifer influx is supplied.
     p : np.ndarray
         Pressure array used.
     pvt : dict
         PVT properties at each step: 'Rs', 'Bo', 'Bg' arrays.
+    regressed : dict or None
+        Regressed parameter values, in the caller's units, when ``regress`` is used.
+    ooip_points : np.ndarray
+        Per-point OOIP (F - We)/Et (NaN where Et is 0). Plotted against F it is the
+        Campbell plot: a flat trend supports the model, a rising one unaccounted support.
+    regress_report : dict or None
+        With ``regress``: 'at_bound' (parameters that ended on a bound), 'max_correlation'
+        (largest |correlation| between OOIP and the regressed parameters), 'identifiable'.
     """
     ooip: float
     F: np.ndarray
@@ -156,6 +166,8 @@ class OilMatbalResult:
     p: np.ndarray
     pvt: dict
     regressed: Optional[dict] = None
+    ooip_points: np.ndarray = field(default_factory=lambda: np.array([]))
+    regress_report: Optional[dict] = None
 
 
 def gas_matbal(p, Gp, degf, sg=0.65, co2=0, h2s=0, n2=0, h2=0,
@@ -360,6 +372,91 @@ def gas_matbal(p, Gp, degf, sg=0.65, co2=0, h2s=0, n2=0, h2=0,
 
 
 _ALLOWED_REGRESS = {'m', 'cf', 'cw', 'sw_i'}
+# Regression identifiability: a parameter within this fraction of its bound range of
+# a bound is reported at the bound; |correlation| between OOIP and a parameter (or two
+# parameters) above _MB_CORR_WARN means the data fix only a combination of them.
+_MB_BOUND_TOL = 1e-3
+_MB_CORR_WARN = 0.99
+_MB_JAC_STEP = 1e-3         # finite-difference step, fraction of each bound range
+
+
+def _havlena_odeh_et(Eo, Eg, dp, Boi, m, cf, cw, sw_i):
+    """Total expansion Et = Eo + m Eg + (1 + m) Efw (Havlena and Odeh 1963) and Efw."""
+    Efw = Boi * (cw * sw_i + cf) / (1.0 - sw_i) * dp if sw_i < 1.0 else np.zeros_like(dp)
+    return Eo + m * Eg + (1.0 + m) * Efw, Efw
+
+
+def _ooip_slope(F_net, Et):
+    """Least-squares slope of F - We = N Et through the origin."""
+    ss = float(np.dot(Et, Et))
+    return float(np.dot(Et, F_net)) / ss if ss > 0 else None
+
+
+def _regress_oil(regress, base_vals, F_net, Eo, Eg, dp, Boi, metric):
+    """Least squares on F - We - N Et over the regressed parameters, N profiled out
+    (the slope for each trial set). Returns the fitted values (internal units) and a
+    report of parameters on a bound and correlations from the Jacobian."""
+    names = list(regress)
+    lo = np.array([regress[k][0] for k in names], dtype=float)
+    hi = np.array([regress[k][1] for k in names], dtype=float)
+    if metric:
+        conv = np.array([1.0 / BAR_TO_PSI if k in ('cw', 'cf') else 1.0 for k in names])
+        lo, hi = lo * conv, hi * conv
+    span = hi - lo
+    scale = max(float(np.max(np.abs(F_net))), 1e-30)
+
+    def model(u):
+        vals = dict(base_vals, **dict(zip(names, lo + u * span)))
+        Et, _ = _havlena_odeh_et(Eo, Eg, dp, Boi, vals['m'], vals['cf'], vals['cw'], vals['sw_i'])
+        return Et
+
+    def resid(u):
+        Et = model(u)
+        N = _ooip_slope(F_net, Et)
+        return (F_net - (N or 0.0) * Et) / scale
+
+    x0 = np.array([base_vals[k] for k in names], dtype=float)
+    u0 = np.where((x0 >= lo) & (x0 <= hi), (x0 - lo) / span, 0.5)
+    u = least_squares(resid, u0, bounds=(0.0, 1.0)).x
+    fitted = dict(zip(names, lo + u * span))
+    return fitted, _regress_report(names, u, model, F_net)
+
+
+def _regress_report(names, u, model, F_net):
+    """Parameters on a bound, and the largest |correlation| among N and the regressed
+    parameters from the column-normalised finite-difference Jacobian of N Et."""
+    at_bound = [k for k, v in zip(names, u) if min(v, 1.0 - v) < _MB_BOUND_TOL]
+    Et = model(u)
+    N = _ooip_slope(F_net, Et) or 0.0
+    cols = [Et]
+    for j in range(len(u)):
+        up, dn = u.copy(), u.copy()
+        up[j] += _MB_JAC_STEP
+        dn[j] -= _MB_JAC_STEP
+        cols.append(N * (model(up) - model(dn)) / (2 * _MB_JAC_STEP))
+    jac = np.column_stack(cols)
+    norms = np.linalg.norm(jac, axis=0)
+    if np.any(norms <= 0) or np.linalg.matrix_rank(jac / np.where(norms > 0, norms, 1.0)) < jac.shape[1]:
+        max_corr = 1.0
+    else:
+        cov = np.linalg.inv((jac / norms).T @ (jac / norms))
+        with np.errstate(invalid='ignore'):
+            d = np.sqrt(np.diag(cov))
+        corr = cov / np.outer(d, d)
+        max_corr = float(np.max(np.abs(corr - np.eye(len(d)))))
+        if not np.isfinite(max_corr):   # numerically collinear: inverse lost definiteness
+            max_corr = 1.0
+    notes = []
+    if at_bound:
+        notes.append(f"regressed {', '.join(at_bound)} ended on its bound: the data do not "
+                     "constrain it inside the bounds")
+    if max_corr > _MB_CORR_WARN:
+        notes.append(f"OOIP and the regressed parameters are correlated ({max_corr:.4f}): the "
+                     "data fix only a combination of them (an undersaturated history cannot "
+                     "separate N from cf); fix one or add data below the bubble point")
+    for note in notes:
+        warnings.warn(note, UserWarning, stacklevel=3)
+    return {'at_bound': at_bound, 'max_correlation': max_corr, 'identifiable': not notes}
 
 
 def _validate_regress(regress):
@@ -522,13 +619,17 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
         Units follow the metric flag. When provided, api and sg_sp are not required.
     regress : dict, optional
         Parameters to regress with bounds: ``{'m': (0, 2), 'cf': (1e-6, 10e-6)}``.
-        Allowed keys: 'm', 'cf', 'cw', 'sw_i'. Optimizes to minimize the
-        coefficient of variation of OOIP estimates across time steps.
+        Allowed keys: 'm', 'cf', 'cw', 'sw_i'. Least squares on F - We - N Et with
+        N the slope for each trial set. Warns when a parameter ends on a bound or
+        is too correlated with N to be determined (see ``regress_report``).
+
+    OOIP is the least-squares slope of F - We = N Et through the origin
+    (Havlena and Odeh 1963).
 
     Returns
     -------
     OilMatbalResult
-        With ``regressed`` dict populated when regress is used.
+        With ``regressed`` and ``regress_report`` populated when regress is used.
     """
     p = np.asarray(p, dtype=float)
     Np = np.asarray(Np, dtype=float)
@@ -617,111 +718,31 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
                   (Bo_arr - Boi) + (Rsi - Rs_arr) * Bg_arr)
 
     Eg = np.where(Bgi > 0, Boi * (Bg_arr / max(Bgi, 1e-30) - 1.0), 0.0)
+    dp = p_field[0] - p_field
 
-    # Havlena-Odeh rock/water expansion and the OOIP series it implies for one
-    # parameter set. The final answer and the regression objective both go
-    # through here, so the material balance is written once.
-    def _ooip_series(m_t, cf_t, cw_t, sw_t):
-        dp = p_field[0] - p_field
-        if (1.0 - sw_t) > 0:
-            Efw = Boi * (cw_t * sw_t + cf_t) / (1.0 - sw_t) * dp
-        else:
-            Efw = np.zeros(n)
-
-        denom = Eo + m_t * Eg + (1.0 + m_t) * Efw
-        valid = np.abs(denom) > 1e-30
-        N_estimates = F_net[valid] / denom[valid] if np.any(valid) else None
-        return N_estimates, Efw, denom, valid
-
-    def _compute_result(m_t, cf_t, cw_t, sw_t):
-        N_estimates, Efw, denom, valid = _ooip_series(m_t, cf_t, cw_t, sw_t)
-        if N_estimates is None:
-            return None, Efw, denom, valid
-        return float(np.mean(N_estimates)), Efw, denom, valid
-
-    # Regression
-    regressed_result = None
+    regressed_result = report = None
     if regress is not None:
-        from scipy.optimize import minimize
+        fitted, report = _regress_oil(regress, {'m': m, 'cf': cf, 'cw': cw, 'sw_i': sw_i},
+                                      F_net, Eo, Eg, dp, Boi, metric)
+        m, cf, cw, sw_i = (fitted.get(k, v) for k, v in
+                           (('m', m), ('cf', cf), ('cw', cw), ('sw_i', sw_i)))
+        # Regressed compressibilities back in the caller's units (1/psi -> 1/bar)
+        regressed_result = {k: float(v * BAR_TO_PSI if metric and k in ('cw', 'cf') else v)
+                            for k, v in fitted.items()}
 
-        param_names = list(regress.keys())
-        bounds = [regress[k] for k in param_names]
-
-        # Convert compressibility regression bounds from 1/bar to 1/psi when metric
-        if metric:
-            bounds = [
-                (lo / BAR_TO_PSI, hi / BAR_TO_PSI) if k in ('cw', 'cf') else (lo, hi)
-                for k, (lo, hi) in zip(param_names, bounds)
-            ]
-
-        base_vals = {'m': m, 'cf': cf, 'cw': cw, 'sw_i': sw_i}
-
-        # Initial guess: use passed value if within bounds, else midpoint
-        x0 = []
-        for k, (lo, hi) in zip(param_names, bounds):
-            v = base_vals[k]
-            if lo <= v <= hi:
-                x0.append(v)
-            else:
-                x0.append((lo + hi) / 2.0)
-
-        def objective(x):
-            # F_net (= F - We) is passed as the withdrawal series so the CV is
-            # computed over the aquifer-corrected OOIP estimates; the Rust kernel
-            # is agnostic — it minimises CV of (series)/denom.
-            if _RUST_AVAILABLE:
-                try:
-                    return _rust.matbal_objective_rust(
-                        x.tolist() if hasattr(x, 'tolist') else list(x),
-                        param_names,
-                        F_net.tolist(), Eo.tolist(), Eg.tolist(), p_field.tolist(),
-                        Boi, base_vals['m'], base_vals['cf'], base_vals['cw'], base_vals['sw_i'],
-                    )
-                except (ImportError, AttributeError):
-                    pass
-            vals = dict(base_vals)
-            for k, v in zip(param_names, x):
-                vals[k] = v
-            N_est, _, _, _ = _ooip_series(vals['m'], vals['cf'], vals['cw'], vals['sw_i'])
-            if N_est is None:
-                return 1e10
-            mean_N = np.mean(N_est)
-            if abs(mean_N) < 1e-30:
-                return 1e10
-            return float(np.std(N_est) / abs(mean_N))
-
-        opt_result = minimize(objective, x0, method='L-BFGS-B', bounds=bounds)
-        # Apply optimized values
-        for k, v in zip(param_names, opt_result.x):
-            base_vals[k] = v
-        m = base_vals['m']
-        cf = base_vals['cf']
-        cw = base_vals['cw']
-        sw_i = base_vals['sw_i']
-
-        # Report regressed values back in user's unit system
-        regressed_result = {}
-        for k, v in zip(param_names, opt_result.x):
-            if metric and k in ('cw', 'cf'):
-                regressed_result[k] = float(v * BAR_TO_PSI)  # 1/psi → 1/bar
-            else:
-                regressed_result[k] = float(v)
-
-    # Final computation with (possibly regressed) params
-    ooip, Efw, denom, valid = _compute_result(m, cf, cw, sw_i)
+    Et, Efw = _havlena_odeh_et(Eo, Eg, dp, Boi, m, cf, cw, sw_i)
+    ooip = _ooip_slope(F_net, Et)
     if ooip is None:
         raise RuntimeError("Cannot compute OOIP — all expansion terms are zero")
 
-    # Drive indices at each valid point. N is the aquifer-corrected estimate
-    # (F_net/denom); the indices are fractions of the TOTAL withdrawal F, so
-    # DDI + SDI + CDI + WDI = 1 when an aquifer is present.
-    drive_valid = (np.abs(denom) > 1e-30) & (np.abs(F) > 1e-30)
-    N_pts = np.where(drive_valid, F_net / np.where(drive_valid, denom, 1.0), 0.0)
-    F_safe = np.where(drive_valid, F, 1.0)
-    ddi = np.where(drive_valid, N_pts * Eo / F_safe, 0.0)
-    sdi = np.where(drive_valid, N_pts * m * Eg / F_safe, 0.0)
-    cdi = np.where(drive_valid, N_pts * (1.0 + m) * Efw / F_safe, 0.0)
-    wdi = np.where(drive_valid, We_arr / F_safe, 0.0)
+    # Drive indices as fractions of the total withdrawal F, from the fitted N: their
+    # sum is 1 only where N Et + We reproduces F (Pletcher 2002).
+    has_f = np.abs(F) > 1e-30
+    F_safe = np.where(has_f, F, 1.0)
+    ddi, sdi, cdi, wdi = (np.where(has_f, term / F_safe, 0.0) for term in
+                          (ooip * Eo, ooip * m * Eg, ooip * (1.0 + m) * Efw, We_arr))
+    has_et = np.abs(Et) > 1e-30
+    ooip_points = np.where(has_et, F_net / np.where(has_et, Et, 1.0), np.nan)
 
     return OilMatbalResult(
         ooip=ooip,
@@ -733,4 +754,6 @@ def oil_matbal(p, Np, degf, api=0, sg_sp=0, sg_g=0, pb=0, rsb=0,
         p=p,
         pvt={'Rs': Rs_arr, 'Bo': Bo_arr, 'Bg': Bg_arr},
         regressed=regressed_result,
+        ooip_points=ooip_points,
+        regress_report=report,
     )

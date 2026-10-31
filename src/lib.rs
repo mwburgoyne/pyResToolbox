@@ -6,7 +6,6 @@ mod gas_viscosity;
 mod pseudopressure;
 mod vlp;
 mod dca;
-mod matbal;
 mod oil;
 mod spycher_pruess;
 mod vle;
@@ -80,7 +79,6 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(dca::fit_hyperbolic_cum_rust, m)?)?;
 
     // Material balance objective
-    m.add_function(wrap_pyfunction!(matbal::matbal_objective_rust, m)?)?;
 
     // Oil density chain
     m.add_function(wrap_pyfunction!(oil::oil_deno_mccain_rust, m)?)?;

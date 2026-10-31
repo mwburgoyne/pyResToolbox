@@ -9,6 +9,7 @@ Or standalone: PYTHONPATH=/home/mark/projects python3 tests/test_doc_examples.py
 import sys
 import os
 import numpy as np
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 import pyrestoolbox.gas as gas
@@ -1430,8 +1431,10 @@ def test_doc_matbal_oil():
         degf=220, api=35, sg_sp=0.75,
         pb=3500, rsb=500, cf=3e-6, sw_i=0.2, cw=3e-6
     )
-    assert abs(r.ooip - 82793518.1467637) / 82793518.1467637 < RTOL
-    assert abs(r.drive_indices['DDI'][1] - 0.7108509527793809) / 0.7108509527793809 < RTOL
+    assert abs(r.ooip - 57244701.589534335) / 57244701.589534335 < RTOL
+    assert abs(r.drive_indices['DDI'][1] - 0.3149045515580967) / 0.3149045515580967 < RTOL
+    assert [round(x / 1e6, 1) for x in r.ooip_points[1:]] == [129.2, 63.6, 55.6]
+    assert [round(float(x), 3) for x in sum(r.drive_indices.values())[1:]] == [0.443, 0.9, 1.03]
 
 def test_doc_matbal_oil_aquifer():
     """matbal.rst: oil_matbal water-drive (We)"""
@@ -1442,7 +1445,7 @@ def test_doc_matbal_oil_aquifer():
         pb=3500, rsb=500, cf=3e-6, sw_i=0.2, cw=3e-6,
         We=[0, 3e5, 1.2e6, 3.0e6]
     )
-    assert abs(r.ooip - 58621027.15996399) / 58621027.15996399 < RTOL
+    assert abs(r.ooip - 35077977.022075504) / 35077977.022075504 < RTOL
     assert abs(r.drive_indices['WDI'][-1] - 0.4055063920332815) / 0.4055063920332815 < RTOL
 
 def test_doc_matbal_gas_cole():
@@ -1483,17 +1486,18 @@ def test_doc_matbal_gas_pvt_z_table():
 
 def test_doc_matbal_oil_regression():
     """matbal.rst: oil_matbal regression example"""
-    r = matbal.oil_matbal(
-        p=[4000, 3500, 3000, 2500],
-        Np=[0, 500000, 1200000, 2100000],
-        degf=200, api=35, sg_sp=0.65,
-        pb=3500, rsb=500,
-        m=0, cf=0, sw_i=0.2, cw=3e-6,
-        regress={'m': (0, 2), 'cf': (1e-7, 50e-6)}
-    )
-    assert abs(r.regressed['m'] - 2.0) < RTOL
-    assert abs(r.regressed['cf'] - 5e-05) / 5e-05 < RTOL
-    assert abs(r.ooip - 1468312.3564986854) / 1468312.3564986854 < RTOL
+    with pytest.warns(UserWarning, match='ended on its bound'):
+        r = matbal.oil_matbal(
+            p=[4000, 3500, 3000, 2500],
+            Np=[0, 500000, 1200000, 2100000],
+            degf=200, api=35, sg_sp=0.65,
+            pb=3500, rsb=500,
+            m=0, cf=0, sw_i=0.2, cw=3e-6,
+            regress={'m': (0, 2), 'cf': (1e-7, 50e-6)}
+        )
+    assert (round(r.regressed['m'], 3), round(r.regressed['cf'] * 1e6, 2)) == (2.0, 50.0)
+    assert r.regress_report['identifiable'] is False
+    assert abs(r.ooip - 1427566.2426175773) / 1427566.2426175773 < RTOL
 
 def test_doc_matbal_oil_pvt_table():
     """matbal.rst: oil_matbal tabulated PVT example"""
@@ -1511,7 +1515,7 @@ def test_doc_matbal_oil_pvt_table():
         pb=pb, rsb=rsb, cf=3e-6, sw_i=0.2, cw=3e-6,
         pvt_table={'p': p_table, 'Rs': Rs_t, 'Bo': Bo_t, 'Bg': Bg_t}
     )
-    assert abs(r.ooip - 82793518.1467637) / 82793518.1467637 < RTOL
+    assert abs(r.ooip - 57244701.589534335) / 57244701.589534335 < RTOL
 
 
 # =============================================================================

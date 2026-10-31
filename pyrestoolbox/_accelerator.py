@@ -189,7 +189,6 @@ RUST_FLAG_REGISTRY = [
     ('pyrestoolbox.brine._lib_vle_engine', '_RUST_AVAILABLE'),
     ('pyrestoolbox.nodal.nodal', '_RUST_AVAILABLE'),
     ('pyrestoolbox.dca.dca', '_RUST_AVAILABLE'),
-    ('pyrestoolbox.matbal.matbal', '_RUST_AVAILABLE'),
     ('pyrestoolbox.simtools.simtools', 'RUST_AVAILABLE'),
     ('pyrestoolbox.simtools._aquifer', 'RUST_AVAILABLE'),
 ]
