@@ -1108,8 +1108,7 @@ def test_fbhp_profile_parts_sum_to_bhp(vlpmethod, well_type):
     assert r['bhp'] == nodal.fbhp(**kw)
     assert abs(r['step_md'][-1] - 9000) < 1e-9 and abs(r['step_tvd'][-1] - c.total_tvd) < 1e-9
     assert np.all((r['holdup'] >= 0) & (r['holdup'] <= 1))
-    if vlpmethod in ('HB', 'WG'):
-        assert np.all(r['dp_acceleration'] == 0)
+    assert np.all(r['dp_acceleration'] >= 0)   # every method has a kinetic term
     if vlpmethod == 'BB':
         assert set(r['regime']) <= {'segregated', 'intermittent', 'distributed', 'transition'}
 

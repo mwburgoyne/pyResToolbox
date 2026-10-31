@@ -1008,14 +1008,14 @@ def test_doc_nodal_fbhp_gas():
     c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
     result = nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas',
                         qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    assert abs(result - 961.594453485463) / 961.594453485463 < RTOL
+    assert abs(result - 962.1420795511207) / 962.1420795511207 < RTOL
 
 def test_doc_nodal_fbhp_gas_wg():
     """nodal.rst: fbhp gas well WG"""
     c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
     result = nodal.fbhp(thp=500, completion=c, vlpmethod='WG', well_type='gas',
                         qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    assert abs(result - 1117.7082459938417) / 1117.7082459938417 < RTOL
+    assert abs(result - 1118.6583921121648) / 1118.6583921121648 < RTOL
 
 def test_doc_nodal_fbhp_gas_gray():
     """nodal.rst: fbhp gas well GRAY"""
@@ -1037,7 +1037,7 @@ def test_doc_nodal_fbhp_oil():
     result = nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil',
                         qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65,
                         pb=2500, rsb=500, sgsp=0.65, api=35)
-    assert abs(result - 1901.8236509686349) / 1901.8236509686349 < RTOL
+    assert abs(result - 1905.5910648207298) / 1905.5910648207298 < RTOL
 
 def test_doc_nodal_fbhp_oil_pvt():
     """nodal.rst: fbhp oil well with OilPVT"""
@@ -1045,7 +1045,7 @@ def test_doc_nodal_fbhp_oil_pvt():
     opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     result = nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil',
                         oil_pvt=opvt, qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65)
-    assert abs(result - 1902.8150784867205) / 1902.8150784867205 < RTOL
+    assert abs(result - 1906.5823034586056) / 1906.5823034586056 < RTOL
 
 def test_doc_nodal_outflow_curve():
     """nodal.rst: outflow_curve gas"""
@@ -1053,7 +1053,7 @@ def test_doc_nodal_outflow_curve():
     result = nodal.outflow_curve(thp=500, completion=c, vlpmethod='HB',
                                   well_type='gas', rates=[2000, 5000, 10000, 15000, 20000], gsg=0.65)
     assert result['rates'] == [2000, 5000, 10000, 15000, 20000]
-    expected_bhp = [681.6, 935.2, 1512.3, 2138.0, 2777.1]
+    expected_bhp = [681.7, 935.6, 1514.3, 2142.0, 2783.6]
     for actual, expected in zip(result['bhp'], expected_bhp):
         assert abs(round(actual, 1) - expected) < 0.2, f"BHP mismatch: {round(actual, 1)} vs {expected}"
 
@@ -1101,8 +1101,8 @@ def test_doc_nodal_operating_point_gas():
     r = nodal.Reservoir(pr=3000, degf=200, k=10, h=50, re=1500, rw=0.35, S=2, D=0.001)
     result = nodal.operating_point(thp=500, completion=c, reservoir=r,
                                     vlpmethod='HB', well_type='gas', gsg=0.65)
-    assert abs(round(result['rate'], 1) - 10581.7) < 0.2
-    assert abs(round(result['bhp'], 1) - 1583.8) < 0.2
+    assert abs(round(result['rate'], 1) - 10576.0) < 0.2
+    assert abs(round(result['bhp'], 1) - 1585.3) < 0.2
 
 def test_doc_nodal_operating_point_oil():
     """nodal.rst: operating_point oil"""
@@ -1112,8 +1112,8 @@ def test_doc_nodal_operating_point_oil():
     result = nodal.operating_point(thp=200, completion=c, reservoir=r,
                                     vlpmethod='HB', well_type='oil',
                                     oil_pvt=opvt, gor=800, wc=0.3, gsg=0.65)
-    assert abs(round(result['rate'], 1) - 2348.5) < 1.0
-    assert abs(round(result['bhp'], 1) - 2013.1) < 1.0
+    assert abs(round(result['rate'], 1) - 2342.5) < 1.0
+    assert abs(round(result['bhp'], 1) - 2016.3) < 1.0
 
 
 def test_doc_nodal_wellsegment_vertical():
@@ -1178,7 +1178,7 @@ def test_doc_nodal_fbhp_deviated():
     c_dev = nodal.Completion(segments=segs, tht=100, bht=200)
     result = nodal.fbhp(thp=500, completion=c_dev, vlpmethod='HB', well_type='gas',
                         qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    assert abs(result - 932.8973511781188) < 0.01
+    assert abs(result - 933.3689153319591) < 0.01
 
 
 # =============================================================================

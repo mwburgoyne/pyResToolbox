@@ -266,11 +266,14 @@ fn hb_gradient(s: &SegmentState) -> GradParts {
     let rho_avg = yl * rho_l + (1.0 - yl) * s.rho_g;
 
     let fric_term = f * mflow_pd.powi(2) / HB_FRIC_K / s.diam_ft.powi(5) / rho_avg;
+    // Hagedorn & Brown (1965) Eq. 1 kinetic term in differential form (see
+    // nodal.py _hb_gradient_gas).
+    let ek = rho_avg * vm * ugas / (GC * s.p_avg * IN2_PER_FT2);
     let sign = if s.injection { -1.0 } else { 1.0 };
     GradParts {
         grav: rho_avg * s.theta.sin() / IN2_PER_FT2,
         fric: sign * fric_term / IN2_PER_FT2,
-        ek: 0.0,
+        ek,
         holdup: yl,
         regime,
     }
@@ -304,12 +307,14 @@ fn wg_gradient(s: &SegmentState) -> GradParts {
         mflow_g_kgs, mflow_l_kgs, rho_g_kgm3, rho_l_kgm3, mu_g_pas, mu_l_pas, diam_m, rough_m,
     );
 
+    // Same differential kinetic term as HB and BB, on the drift-flux mixture density.
+    let ek = rho_mix / LBFT3_TO_KGM3 * s.v_m * s.v_sg / (GC * s.p_avg * IN2_PER_FT2);
     let sign = if s.injection { -1.0 } else { 1.0 };
     let pam_per_psift = PSI_TO_PA / FT_TO_M;
     GradParts {
         grav: dpdz_hydro / pam_per_psift,
         fric: sign * dpdz_fric / pam_per_psift,
-        ek: 0.0,
+        ek,
         holdup: 1.0 - alpha_g,
         regime: REGIME_NONE,
     }

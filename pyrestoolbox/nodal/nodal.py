@@ -1253,9 +1253,13 @@ def _hb_gradient_gas(s):
     rho_avg = yl * rho_l + (1.0 - yl) * s['rho_g']
 
     fric_term = f * mflow_pd ** 2 / _HB_FRIC_K / s['diam_ft'] ** 5 / rho_avg
+    # Kinetic term of Hagedorn & Brown (1965) Eq. 1, rho_m d(v_m^2/2gc)/dh with the
+    # holdup density of Eq. 2, in differential form: gas expansion
+    # dv_m/dh = -(v_sg/p) dp/dh gives Ek = rho_m v_m v_sg/(gc p) (as Beggs & Brill 1973).
+    ek = rho_avg * vm * ugas / (_GC * s['p_avg'] * _IN2_PER_FT2)
     sign = -1.0 if s['injection'] else 1.0
     return (rho_avg * math.sin(s['theta']) / _IN2_PER_FT2, sign * fric_term / _IN2_PER_FT2,
-            0.0, yl, regime)
+            ek, yl, regime)
 
 
 @rust_accelerated('hb_fbhp_gas_rust')
@@ -1379,9 +1383,13 @@ def _wg_gradient_gas(s):
         mflow_g_kgs, mflow_l_kgs, rho_g_kgm3, rho_l_kgm3,
         mu_g_pas, mu_l_pas, diam_m, rough_m)
 
+    # Acceleration: the void-fraction correlation has none, so use the same
+    # differential kinetic term as HB and BB, on the drift-flux mixture density.
+    rho_mix_lbft3 = rho_mix / _LBFT3_TO_KGM3
+    ek = rho_mix_lbft3 * s['v_m'] * s['v_sg'] / (_GC * s['p_avg'] * _IN2_PER_FT2)
     sign = -1.0 if s['injection'] else 1.0
     pam_per_psift = _PSI_TO_PA / _FT_TO_M
-    return (dpdz_hydro / pam_per_psift, sign * dpdz_fric / pam_per_psift, 0.0,
+    return (dpdz_hydro / pam_per_psift, sign * dpdz_fric / pam_per_psift, ek,
             1.0 - alpha_g, _REGIME_NONE)
 
 

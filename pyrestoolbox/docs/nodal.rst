@@ -17,9 +17,9 @@ A minimal example finding the operating point for a gas well:
     >>> r = nodal.Reservoir(pr=3000, degf=200, k=10, h=50, re=1500, rw=0.35, S=2, D=0.001)
     >>> result = nodal.operating_point(thp=500, completion=c, reservoir=r, vlpmethod='HB', well_type='gas', gsg=0.65)
     >>> round(result['rate'], 1)
-    10581.7
+    10576.0
     >>> round(result['bhp'], 1)
-    1583.8
+    1585.3
 
 
 Function List
@@ -521,7 +521,7 @@ Gas well:
     >>> from pyrestoolbox import nodal
     >>> c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    961.594453485463
+    962.1420795511207
 
 Oil well:
 
@@ -529,7 +529,7 @@ Oil well:
 
     >>> c = nodal.Completion(tid=2.441, length=8000, tht=100, bht=180)
     >>> nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil', qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65, pb=2500, rsb=500, sgsp=0.65, api=35)
-    1901.8236509686349
+    1905.5910648207298
 
 Oil well using OilPVT object:
 
@@ -538,7 +538,7 @@ Oil well using OilPVT object:
     >>> from pyrestoolbox import oil
     >>> opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     >>> nodal.fbhp(thp=200, completion=c, vlpmethod='HB', well_type='oil', oil_pvt=opvt, qt_stbpd=2000, gor=800, wc=0.3, gsg=0.65)
-    1902.8150784867205
+    1906.5823034586056
 
 Deviated well using WellSegment:
 
@@ -547,7 +547,7 @@ Deviated well using WellSegment:
     >>> segs = [nodal.WellSegment(md=5000, id=2.441, deviation=0), nodal.WellSegment(md=5000, id=2.441, deviation=45)]
     >>> c_dev = nodal.Completion(segments=segs, tht=100, bht=200)
     >>> nodal.fbhp(thp=500, completion=c_dev, vlpmethod='HB', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    932.8973511781188
+    933.3689153319591
 
 .. note::
 
@@ -574,7 +574,7 @@ Pass ``return_profile=True`` to ``fbhp`` to get the wellbore pressure profile at
     # array([500., ..., bhp_final])
     >>> profile['bhp']        # scalar BHP, same as return_profile=False
 
-The profile also carries one entry per march step (about 100 ft each): ``step_md``, ``step_tvd`` and ``step_p`` at the bottom of the step, ``holdup`` (the liquid holdup the method used), ``regime`` (Beggs-Brill flow pattern, or ``'bubble'`` / ``'hagedorn-brown'`` for HB; empty for WG and Gray), and the step's pressure change split into ``dp_gravity``, ``dp_friction`` and ``dp_acceleration`` (psi, or bar if metric=True). The three parts sum to the step's change, so their totals give the elevation, friction and acceleration shares of BHP - THP. HB and WG have no acceleration term (``dp_acceleration`` is zero); Gray and BB apply theirs as 1/(1 - Ek). Friction is negative for injection. A zero-rate static column is reported as a single elevation step.
+The profile also carries one entry per march step (about 100 ft each): ``step_md``, ``step_tvd`` and ``step_p`` at the bottom of the step, ``holdup`` (the liquid holdup the method used), ``regime`` (Beggs-Brill flow pattern, or ``'bubble'`` / ``'hagedorn-brown'`` for HB; empty for WG and Gray), and the step's pressure change split into ``dp_gravity``, ``dp_friction`` and ``dp_acceleration`` (psi, or bar if metric=True). The three parts sum to the step's change, so their totals give the elevation, friction and acceleration shares of BHP - THP. Every method applies acceleration as 1/(1 - Ek), with Ek = rho v_m v_sg / (g_c p): rho is the holdup (slip) density for HB, BB and WG, and the no-slip density for Gray. For HB this is the differential form of the kinetic term in Hagedorn and Brown (1965) Eq. 1; WG has no published acceleration term and uses the same form. Ek is floored at 1 - Ek = 0.1, so near-sonic flow at a low wellhead pressure is not resolved. Friction is negative for injection. A zero-rate static column is reported as a single elevation step.
 
 .. code-block:: python
 
@@ -686,7 +686,7 @@ Examples:
     >>> result['rates']
     [2000, 5000, 10000, 15000, 20000]
     >>> [round(b, 1) for b in result['bhp']]
-    [681.6, 935.2, 1512.3, 2138.0, 2777.1]
+    [681.7, 935.6, 1514.3, 2142.0, 2783.6]
 
 
 pyrestoolbox.nodal.ipr_curve
@@ -850,9 +850,9 @@ Gas well operating point:
     >>> r = nodal.Reservoir(pr=3000, degf=200, k=10, h=50, re=1500, rw=0.35, S=2, D=0.001)
     >>> result = nodal.operating_point(thp=500, completion=c, reservoir=r, vlpmethod='HB', well_type='gas', gsg=0.65)
     >>> round(result['rate'], 1)
-    10581.7
+    10576.0
     >>> round(result['bhp'], 1)
-    1583.8
+    1585.3
 
 Oil well operating point:
 
@@ -864,9 +864,9 @@ Oil well operating point:
     >>> opvt = oil.OilPVT(api=35, sg_sp=0.65, pb=2500, rsb=500)
     >>> result = nodal.operating_point(thp=200, completion=c, reservoir=r, vlpmethod='HB', well_type='oil', oil_pvt=opvt, gor=800, wc=0.3, gsg=0.65)
     >>> round(result['rate'], 1)   # total liquid, STB/d (oil 1643.9 at 30% water cut)
-    2348.5
+    2342.5
     >>> round(result['bhp'], 1)
-    2013.1
+    2016.3
 
 
 pyrestoolbox.nodal.vlp_calibrate
@@ -1300,16 +1300,16 @@ Examples:
     >>> from pyrestoolbox import nodal
     >>> c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    961.594453485463
+    962.1420795511207
 
 Comparing all four VLP methods for the same gas well:
 
 .. code-block:: python
 
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='HB', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    961.594453485463
+    962.1420795511207
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='WG', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
-    1117.7082459938417
+    1118.6583921121648
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='GRAY', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
     1066.755704999179
     >>> nodal.fbhp(thp=500, completion=c, vlpmethod='BB', well_type='gas', qg_mscfd=5000, gsg=0.65, cgr=10, qw_bwpd=10, api=45, oil_vis=1.0)
