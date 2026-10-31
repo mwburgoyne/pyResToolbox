@@ -47,6 +47,8 @@ Function List
      - `pyrestoolbox.nodal.ipr_curve`_
    * - Nodal Operating Point
      - `pyrestoolbox.nodal.operating_point`_
+   * - Calibrate VLP to Well Tests
+     - `pyrestoolbox.nodal.vlp_calibrate`_
    * - Liquid-Loading Critical Gas Rate
      - `pyrestoolbox.nodal.critical_gas_rate`_
    * - Erosional Velocity (API RP 14E)
@@ -865,6 +867,60 @@ Oil well operating point:
     2348.5
     >>> round(result['bhp'], 1)
     2013.1
+
+
+pyrestoolbox.nodal.vlp_calibrate
+================================
+
+.. code-block:: python
+
+    vlp_calibrate(tests, completion, vlpmethod='WG', well_type='gas', fit='friction', bounds=(0.5, 2.0), common=None, reservoir=None, ipr_kwargs=None, loo=True, metric=False) -> dict
+
+Fits ``gravity_mult`` and/or ``friction_mult`` (see `Pressure traverse output`_) so that ``fbhp`` matches measured flowing BHPs, by least squares on BHP. Each test is a dict holding the measured ``'bhp'`` and the ``fbhp`` inputs for that test (``'thp'``, the rate, and anything else that varies between tests); inputs shared by all tests go in ``common``. The completion should end at the gauge depth.
+
+The search starts on a log-spaced grid over ``bounds`` and refines locally (bounded Brent for one multiplier, bounded Nelder-Mead for two). The objective has small steps where a method's flow regime switches (up to a few psi), which a derivative-based search can stall on.
+
+The result says how far the tests constrain the multipliers. A multiplier that ends on a bound is listed in ``'at_bound'``. With ``fit='both'``, ``'correlation'`` is the correlation of the two estimates from a finite-difference Jacobian (5% step); near +/-1 the tests fix only a combination of the two, typically because they span too narrow a rate range (elevation dominates at low rate, friction at high). ``'std_err'`` needs more tests than multipliers. These cases raise a ``UserWarning`` and set ``'identifiable'`` to False. With ``loo=True`` and at least two more tests than multipliers, each test is predicted from a fit to the others (``'loo_residual'``, ``'loo_rms'``): a leave-one-out RMS well above the fit RMS means the multipliers are absorbing scatter rather than a systematic bias.
+
+If ``reservoir`` is given, a PI scale is also returned: the least-squares multiplier on the ``ipr_curve`` rate at each measured BHP against the measured rate (``ipr_kwargs`` passes ``gas_pvt``, ``oil_pvt``, ``wc``, ``bo``, ``uo``, ``gsg`` to ``ipr_curve``). It is exact for inflow proportional to the productivity index (Darcy, Vogel, gas without non-Darcy flow).
+
+.. list-table:: Returns (dict)
+   :widths: 15 40
+   :header-rows: 1
+
+   * - Key
+     - Description
+   * - 'gravity_mult', 'friction_mult'
+     - Fitted multipliers (1.0 for the one not fitted)
+   * - 'bhp_meas', 'bhp_calc', 'residual'
+     - Measured and calibrated BHP and their difference (calc - meas), per test (psia, or barsa if metric=True)
+   * - 'rms'
+     - RMS of the residuals
+   * - 'std_err', 'correlation', 'at_bound', 'identifiable'
+     - Identifiability report (see above)
+   * - 'loo_residual', 'loo_rms'
+     - Leave-one-out prediction errors, or None when not run
+   * - 'pi_scale', 'ipr_rate_residual'
+     - PI multiplier and rate residuals (scaled IPR - measured), or None without ``reservoir``
+   * - 'n_tests'
+     - Number of tests
+
+Four tests on an oil well with gauge BHPs, Beggs-Brill. Uncalibrated, the method reads 58-95 psi high. Fitting both multipliers matches to 0.27 psi RMS, and leave-one-out stays close (0.45 psi). Fitting friction alone leaves 55 psi RMS, because these tests also carry an elevation error that friction cannot absorb over this rate range:
+
+.. code-block:: python
+
+    >>> c = nodal.Completion(tid=2.992, length=8500, tht=110, bht=205)
+    >>> tests = [dict(thp=250, qt_stbpd=800, bhp=2797), dict(thp=250, qt_stbpd=1600, bhp=2805),
+    ...          dict(thp=300, qt_stbpd=2400, bhp=2957), dict(thp=300, qt_stbpd=3200, bhp=3039)]
+    >>> common = dict(gor=450, wc=0.4, pb=2600, rsb=450, api=34)
+    >>> r = nodal.vlp_calibrate(tests, c, vlpmethod='BB', well_type='oil', fit='both', common=common)
+    >>> round(r['gravity_mult'], 3), round(r['friction_mult'], 3)
+    (0.97, 1.181)
+    >>> round(r['rms'], 2), round(r['loo_rms'], 2), round(r['correlation'], 2), r['identifiable']
+    (0.27, 0.45, -0.83, True)
+    >>> r1 = nodal.vlp_calibrate(tests, c, vlpmethod='BB', well_type='oil', fit='friction', common=common)
+    >>> round(r1['friction_mult'], 3), round(r1['rms'], 1), round(r1['loo_rms'], 1)
+    (0.545, 54.8, 58.4)
 
 
 pyrestoolbox.nodal.critical_gas_rate

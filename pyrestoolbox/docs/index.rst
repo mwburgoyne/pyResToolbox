@@ -39,6 +39,7 @@ Brine density, viscosity, Bw, gas solubility          brine.brine_props, brine.C
 Water PVT table (PVTW)                                brine.make_pvtw_table
 Flowing BHP or THP (VLP)                              nodal.fbhp, nodal.fthp
 VLP and IPR curves, operating point                   nodal.outflow_curve, nodal.ipr_curve, nodal.operating_point
+Calibrate a VLP to measured well tests                nodal.vlp_calibrate
 Liquid loading (Turner, Coleman critical rate)        nodal.critical_gas_rate
 Erosional velocity (API RP 14E)                       nodal.erosional_velocity
 Wellhead choke (Gilbert, Ros, Baxendell, Achong)      nodal.choke_flow
@@ -79,7 +80,8 @@ plyasunov.rst        Plyasunov infinite-dilution partial molar volume model (sup
                      module used by brine density calculations)
 nodal.rst            VLP/IPR nodal analysis: fbhp, fthp, outflow_curve, ipr_curve,
                      operating_point, Completion/Reservoir/WellSegment classes;
-                     liquid loading, erosional velocity, wellhead chokes
+                     liquid loading, erosional velocity, wellhead chokes; VLP
+                     calibration to well tests, pressure-drop decomposition
 pipeline.rst         Gas pipeline flow: General Flow (Colebrook, AGA), Weymouth,
                      Panhandle A/B, IGT, elevation correction
 crm.rst              Capacitance-resistance models (CRMP, CRMT) for waterfloods,

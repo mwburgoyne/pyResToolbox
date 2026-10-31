@@ -1080,6 +1080,21 @@ def test_doc_nodal_fbhp_profile_decomposition():
     assert sorted(set(p['regime'])) == ['distributed', 'intermittent']
     assert round(nodal.fbhp(friction_mult=1.2, **kw), 1) == 2277.7
 
+def test_doc_nodal_vlp_calibrate():
+    """nodal.rst: vlp_calibrate both and friction-only"""
+    c = nodal.Completion(tid=2.992, length=8500, tht=110, bht=205)
+    tests = [dict(thp=250, qt_stbpd=800, bhp=2797), dict(thp=250, qt_stbpd=1600, bhp=2805),
+             dict(thp=300, qt_stbpd=2400, bhp=2957), dict(thp=300, qt_stbpd=3200, bhp=3039)]
+    common = dict(gor=450, wc=0.4, pb=2600, rsb=450, api=34)
+    r = nodal.vlp_calibrate(tests, c, vlpmethod='BB', well_type='oil', fit='both', common=common)
+    assert (round(r['gravity_mult'], 3), round(r['friction_mult'], 3)) == (0.97, 1.181)
+    assert (round(r['rms'], 2), round(r['loo_rms'], 2), round(r['correlation'], 2),
+            r['identifiable']) == (0.27, 0.45, -0.83, True)
+    r1 = nodal.vlp_calibrate(tests, c, vlpmethod='BB', well_type='oil', fit='friction',
+                             common=common)
+    assert (round(r1['friction_mult'], 3), round(r1['rms'], 1),
+            round(r1['loo_rms'], 1)) == (0.545, 54.8, 58.4)
+
 def test_doc_nodal_operating_point_gas():
     """nodal.rst: operating_point gas"""
     c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
