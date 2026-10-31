@@ -1089,6 +1089,47 @@ def test_friction_continuous_through_transition():
     assert abs(f(1e5, 1e-4) * 4 - 0.0185136) < 1e-6
 
 
+@pytest.mark.parametrize('vlpmethod', ['HB', 'WG', 'GRAY', 'BB'])
+@pytest.mark.parametrize('well_type', ['gas', 'oil'])
+def test_fbhp_profile_parts_sum_to_bhp(vlpmethod, well_type):
+    """return_profile steps: gravity + friction + acceleration sum to BHP - THP, the
+    profile BHP equals the scalar BHP, and step depths end at the completion depth."""
+    import numpy as np
+    from pyrestoolbox import nodal
+    c = nodal.Completion(segments=[nodal.WellSegment(md=4000, id=2.441),
+                                   nodal.WellSegment(md=5000, id=2.441, deviation=30)],
+                         tht=90, bht=220)
+    kw = (dict(qg_mscfd=4000, qw_bwpd=10, cgr=15) if well_type == 'gas'
+          else dict(qt_stbpd=1500, gor=500, wc=0.3, pb=2800, rsb=500, api=33))
+    kw.update(thp=400, completion=c, vlpmethod=vlpmethod, well_type=well_type)
+    r = nodal.fbhp(return_profile=True, **kw)
+    parts = r['dp_gravity'].sum() + r['dp_friction'].sum() + r['dp_acceleration'].sum()
+    assert abs(400 + parts - r['bhp']) < 1e-8
+    assert r['bhp'] == nodal.fbhp(**kw)
+    assert abs(r['step_md'][-1] - 9000) < 1e-9 and abs(r['step_tvd'][-1] - c.total_tvd) < 1e-9
+    assert np.all((r['holdup'] >= 0) & (r['holdup'] <= 1))
+    if vlpmethod in ('HB', 'WG'):
+        assert np.all(r['dp_acceleration'] == 0)
+    if vlpmethod == 'BB':
+        assert set(r['regime']) <= {'segregated', 'intermittent', 'distributed', 'transition'}
+
+
+def test_fbhp_gravity_friction_multipliers():
+    """Zero multipliers remove their parts; the defaults equal the unscaled march."""
+    import numpy as np
+    from pyrestoolbox import nodal
+    c = nodal.Completion(tid=2.441, length=8000, tht=100, bht=200)
+    kw = dict(thp=300, completion=c, vlpmethod='HB', well_type='oil', qt_stbpd=1000,
+              gor=400, wc=0.2, pb=2500, rsb=400, api=35)
+    assert nodal.fbhp(gravity_mult=1.0, friction_mult=1.0, **kw) == nodal.fbhp(**kw)
+    assert nodal.fbhp(gravity_mult=0.0, friction_mult=0.0, **kw) == 300.0
+    r = nodal.fbhp(friction_mult=0.0, return_profile=True, **kw)
+    assert np.all(r['dp_friction'] == 0) and r['bhp'] > 300
+    assert nodal.fbhp(friction_mult=1.2, **kw) > nodal.fbhp(**kw)
+    with pytest.raises(ValueError, match="gravity_mult"):
+        nodal.fbhp(gravity_mult=-1.0, **kw)
+
+
 def test_ipr_curve_oil_rate_is_total_liquid_at_water_cut():
     """ipr_curve ignored wc while operating_point treated its rate as total liquid."""
     from pyrestoolbox import nodal

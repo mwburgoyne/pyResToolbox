@@ -197,3 +197,11 @@ pub const WG_CHIS_TT: f64 = 20.0; // Turbulent-turbulent
 pub const WG_CHIS_LT: f64 = 12.0; // Laminar-turbulent
 pub const WG_CHIS_TL: f64 = 10.0; // Turbulent-laminar
 pub const WG_CHIS_LL: f64 = 5.0; // Laminar-laminar
+
+/// Floor on the kinetic-energy denominator 1 - Ek (Python _EK_DENOM_MIN).
+pub const EK_DENOM_MIN: f64 = 0.1;
+/// Per-step regime codes (Python _REGIME_*): Beggs-Brill patterns 0-3,
+/// Hagedorn-Brown 4 (Orkiszewski bubble flow) or 5, -1 for no regime map.
+pub const REGIME_NONE: i32 = -1;
+pub const REGIME_HB_BUBBLE: i32 = 4;
+pub const REGIME_HB: i32 = 5;

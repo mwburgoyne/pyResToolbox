@@ -44,16 +44,69 @@ pub struct SegmentState {
     pub ql_loc: f64,  // Local liquid rate (STB/d)
     pub tid: f64,     // Pipe internal diameter (inches)
     pub rough: f64,   // Pipe roughness (inches)
+    pub grav_mult: f64, // Elevation-gradient multiplier
+    pub fric_mult: f64, // Friction-gradient multiplier
 }
 
-pub type GradientFn = fn(&SegmentState) -> f64;
+/// One gradient evaluation (Python gradient callbacks' tuple): elevation and
+/// friction gradients in psi/ft (friction signed, negative for injection),
+/// the kinetic-energy group Ek (0 without an acceleration term), the liquid
+/// holdup and a regime code (REGIME_* / BB_* constants).
+#[derive(Clone, Copy)]
+pub struct GradParts {
+    pub grav: f64,
+    pub fric: f64,
+    pub ek: f64,
+    pub holdup: f64,
+    pub regime: i32,
+}
+
+/// Composed step gradient (Python _gradient_parts): total, gravity, friction
+/// and acceleration in psi/ft, plus holdup and regime.
+#[derive(Clone, Copy)]
+struct Composed {
+    total: f64,
+    grav: f64,
+    fric: f64,
+    accel: f64,
+    holdup: f64,
+    regime: i32,
+}
+
+/// Per-step record (Python _record_step): md from the section top (ft),
+/// pressure at the step bottom (psia), holdup, regime, and the gravity,
+/// friction and acceleration pressure changes over the step (psi).
+pub type StepRec = (f64, f64, f64, i32, f64, f64, f64);
+
+pub type GradientFn = fn(&SegmentState) -> GradParts;
+
+fn gradient_parts(gradient: GradientFn, s: &SegmentState) -> Composed {
+    let gp = gradient(s);
+    let grav = gp.grav * s.grav_mult;
+    let fric = gp.fric * s.fric_mult;
+    let total = (grav + fric) / (1.0 - gp.ek).max(EK_DENOM_MIN);
+    let accel = if gp.ek != 0.0 { total - grav - fric } else { 0.0 };
+    Composed { total, grav, fric, accel, holdup: gp.holdup, regime: gp.regime }
+}
+
+fn record_step(recorder: &mut Option<&mut Vec<StepRec>>, md: f64, p: f64, c: &Composed, seg_len: f64) {
+    if let Some(r) = recorder.as_deref_mut() {
+        r.push((md, p, c.holdup, c.regime, c.grav * seg_len, c.fric * seg_len, c.accel * seg_len));
+    }
+}
+
+fn record_static(recorder: &mut Option<&mut Vec<StepRec>>, length: f64, thp: f64, p_static: f64) {
+    if let Some(r) = recorder.as_deref_mut() {
+        r.push((length, p_static, f64::NAN, REGIME_NONE, p_static - thp, 0.0, 0.0));
+    }
+}
 
 /// Gradient with a continuous approach to the dry-gas limit (Python
 /// _low_liquid_gradient): for 0 < lambda_l < LOW_LIQ_LAMBDA returns
 /// g0 + (lambda_l / LOW_LIQ_LAMBDA)(g - g0), g0 being the same method with the
 /// liquid removed; otherwise exactly gradient(s).
-fn low_liquid_gradient(gradient: GradientFn, s: &SegmentState) -> f64 {
-    let g = gradient(s);
+fn low_liquid_gradient(gradient: GradientFn, s: &SegmentState) -> Composed {
+    let g = gradient_parts(gradient, s);
     let lam = s.lambda_l;
     if !(lam > 0.0 && lam < LOW_LIQ_LAMBDA) {
         return g;
@@ -68,8 +121,16 @@ fn low_liquid_gradient(gradient: GradientFn, s: &SegmentState) -> f64 {
         ql_loc: 0.0,
         ..*s
     };
-    let g0 = gradient(&s0);
-    g0 + (lam / LOW_LIQ_LAMBDA) * (g - g0)
+    let g0 = gradient_parts(gradient, &s0);
+    let w = lam / LOW_LIQ_LAMBDA;
+    Composed {
+        total: g0.total + w * (g.total - g0.total),
+        grav: g0.grav + w * (g.grav - g0.grav),
+        fric: g0.fric + w * (g.fric - g0.fric),
+        accel: g0.accel + w * (g.accel - g0.accel),
+        holdup: g0.holdup + w * (g.holdup - g0.holdup),
+        regime: g.regime,
+    }
 }
 
 /// Number of march segments for a given length (Python _calc_segments,
@@ -127,7 +188,7 @@ fn condensate_vis(
 
 /// Hagedorn-Brown gradient: polynomial holdup, Orkiszewski bubble flow,
 /// Serghides friction. Port of nodal.py _hb_gradient_gas.
-fn hb_gradient(s: &SegmentState) -> f64 {
+fn hb_gradient(s: &SegmentState) -> GradParts {
     let ul = s.v_sl;
     let ugas = s.v_sg;
     let ift = s.sigma;
@@ -178,6 +239,7 @@ fn hb_gradient(s: &SegmentState) -> f64 {
     if lb < ORK_LB_MIN {
         lb = ORK_LB_MIN;
     }
+    let mut regime = REGIME_HB;
     if vm > 0.0 {
         let b_ratio = ugas / vm;
         if b_ratio < lb {
@@ -185,6 +247,7 @@ fn hb_gradient(s: &SegmentState) -> f64 {
             if disc >= 0.0 {
                 yl = 1.0 - 0.5 * (1.0 + vm / vs - disc.sqrt());
                 yl = clamp(yl, 0.0, 1.0);
+                regime = REGIME_HB_BUBBLE;
             }
         }
     }
@@ -204,12 +267,18 @@ fn hb_gradient(s: &SegmentState) -> f64 {
 
     let fric_term = f * mflow_pd.powi(2) / HB_FRIC_K / s.diam_ft.powi(5) / rho_avg;
     let sign = if s.injection { -1.0 } else { 1.0 };
-    (rho_avg * s.theta.sin() + sign * fric_term) / IN2_PER_FT2
+    GradParts {
+        grav: rho_avg * s.theta.sin() / IN2_PER_FT2,
+        fric: sign * fric_term / IN2_PER_FT2,
+        ek: 0.0,
+        holdup: yl,
+        regime,
+    }
 }
 
 /// Woldesemayat-Ghajar gradient: drift-flux void fraction, Chisholm friction
 /// (SI). Port of nodal.py _wg_gradient_gas.
-fn wg_gradient(s: &SegmentState) -> f64 {
+fn wg_gradient(s: &SegmentState) -> GradParts {
     // Convert oilfield state to SI
     let diam_m = s.tid * IN_TO_M;
     let rough_m = s.rough * IN_TO_M;
@@ -236,13 +305,19 @@ fn wg_gradient(s: &SegmentState) -> f64 {
     );
 
     let sign = if s.injection { -1.0 } else { 1.0 };
-    let dpdz_pam = dpdz_hydro + sign * dpdz_fric;
-    dpdz_pam / (PSI_TO_PA / FT_TO_M)
+    let pam_per_psift = PSI_TO_PA / FT_TO_M;
+    GradParts {
+        grav: dpdz_hydro / pam_per_psift,
+        fric: sign * dpdz_fric / pam_per_psift,
+        ek: 0.0,
+        holdup: 1.0 - alpha_g,
+        regime: REGIME_NONE,
+    }
 }
 
 /// Gray method gradient: holdup via effective roughness, acceleration term.
 /// Port of nodal.py _gray_gradient_gas.
-fn gray_gradient(s: &SegmentState) -> f64 {
+fn gray_gradient(s: &SegmentState) -> GradParts {
     let hl = gray_liquid_holdup(s.v_sl, s.v_sg, s.rho_l, s.rho_g, s.sigma, s.diam_ft, s.lambda_l);
     let rho_s = s.rho_l * hl + s.rho_g * (1.0 - hl);
 
@@ -271,15 +346,14 @@ fn gray_gradient(s: &SegmentState) -> f64 {
         0.0
     };
     let ek = gm * s.v_sg / (GC * s.p_avg * IN2_PER_FT2);
-    let denom = (1.0 - ek).max(0.1);
 
     let sign = if s.injection { -1.0 } else { 1.0 };
-    (dpdz_hydro + sign * dpdz_fric) / denom
+    GradParts { grav: dpdz_hydro, fric: sign * dpdz_fric, ek, holdup: hl, regime: REGIME_NONE }
 }
 
 /// Beggs and Brill gradient: flow pattern map, Payne correction, two-phase
 /// friction. Port of nodal.py _bb_gradient_gas.
-fn bb_gradient(s: &SegmentState) -> f64 {
+fn bb_gradient(s: &SegmentState) -> GradParts {
     let froude = s.v_m.powi(2) / (G_FT * s.diam_ft);
     let (pattern, trans_a) = bb_flow_pattern(froude, s.lambda_l);
 
@@ -341,10 +415,9 @@ fn bb_gradient(s: &SegmentState) -> f64 {
         0.0
     };
     let ek = rho_s * s.v_m * s.v_sg / (GC * s.p_avg * IN2_PER_FT2);
-    let denom = (1.0 - ek).max(0.1);
 
     let sign = if s.injection { -1.0 } else { 1.0 };
-    (dpdz_hydro + sign * dpdz_fric) / denom
+    GradParts { grav: dpdz_hydro, fric: sign * dpdz_fric, ek, holdup: hl_theta, regime: pattern }
 }
 
 // ============================================================================
@@ -357,7 +430,8 @@ fn segment_march_gas(
     length: f64, tht: f64, bht: f64, wsg: f64,
     qg_mmscfd: f64, cgr: f64, qw_bwpd: f64, oil_vis: f64,
     injection: bool, pr: f64, theta: f64, gradient: GradientFn,
-    zspec: Option<&GasSpec>,
+    zspec: Option<&GasSpec>, grav_mult: f64, fric_mult: f64,
+    mut recorder: Option<&mut Vec<StepRec>>,
 ) -> Result<f64, String> {
     // Z and viscosity: GasPVT methods when zspec is given, else Hall-Yarborough
     // on Sutton pseudo-criticals of gsg with LGE (Python _march_gas_z_mu)
@@ -367,7 +441,9 @@ fn segment_march_gas(
         + osg * RHO_FW * cgr * qg_mmscfd * FT3_PER_BBL
         + wsg * RHO_FW * qw_bwpd * FT3_PER_BBL;
     if total_mass < 1e-6 || qg_mmscfd < 0.001 {
-        return static_gas_column_pressure(thp, length, tht, bht, gsg, theta, zspec);
+        let p_static = static_gas_column_pressure(thp, length, tht, bht, gsg, theta, zspec)?;
+        record_static(&mut recorder, length, thp, p_static);
+        return Ok(p_static);
     }
 
     let diam_ft = tid / 12.0;
@@ -390,6 +466,9 @@ fn segment_march_gas(
         let seg_gas = zspec.map(|g| gas_state(g, temp_f, true)).transpose()?;
         let temp_r = temp_f + 459.67;
         let mut p_est = p_psia;
+        let mut parts = Composed {
+            total: 0.0, grav: 0.0, fric: 0.0, accel: 0.0, holdup: 0.0, regime: REGIME_NONE,
+        };
 
         for _ in 0..2 {
             let p_avg = ((p_psia + p_est) / 2.0).max(14.7);
@@ -443,14 +522,15 @@ fn segment_march_gas(
             let s = SegmentState {
                 p_avg, mu_g, rho_g, rho_l, rho_ns, v_sg, v_sl, v_m, lambda_l,
                 sigma, mu_l, diam_ft, rough_ft, area, injection, theta,
-                mflow_g, mflow_l, mflow_total, ql_loc, tid, rough,
+                mflow_g, mflow_l, mflow_total, ql_loc, tid, rough, grav_mult, fric_mult,
             };
 
-            let dpdz = low_liquid_gradient(gradient, &s);
-            p_est = p_psia + dpdz * seg_len;
+            parts = low_liquid_gradient(gradient, &s);
+            p_est = p_psia + parts.total * seg_len;
         }
 
         p_psia = p_est;
+        record_step(&mut recorder, i as f64 * seg_len, p_psia, &parts, seg_len);
         if p_psia < 1.0 {
             return Err(DIVERGED_MSG.to_string());
         }
@@ -469,14 +549,17 @@ fn segment_march_oil(
     length: f64, tht: f64, bht: f64, wsg: f64,
     qt_stbpd: f64, gor: f64, wc: f64, pb: f64, rsb: f64, sgsp: f64,
     rsb_scale: f64, injection: bool, theta: f64, gradient: GradientFn,
-    vis_frac: f64, rsb_frac: f64,
+    vis_frac: f64, rsb_frac: f64, grav_mult: f64, fric_mult: f64,
+    mut recorder: Option<&mut Vec<StepRec>>,
 ) -> Result<f64, String> {
     let (tc, pc) = sutton_tc_pc(gsg);
     let wc_adj = wc.max(1e-9);
     if qt_stbpd < 1e-7 {
-        return Ok(static_oil_column_pressure(
+        let p_static = static_oil_column_pressure(
             thp, length, tht, bht, wc_adj, wsg, api, sgsp, pb, rsb, rsb_scale, theta,
-        ));
+        );
+        record_static(&mut recorder, length, thp, p_static);
+        return Ok(p_static);
     }
 
     let qo = qt_stbpd * (1.0 - wc);
@@ -499,6 +582,9 @@ fn segment_march_oil(
         let temp_f = tht + (bht - tht) * frac;
         let temp_r = temp_f + 459.67;
         let mut p_est = p_psia;
+        let mut parts = Composed {
+            total: 0.0, grav: 0.0, fric: 0.0, accel: 0.0, holdup: 0.0, regime: REGIME_NONE,
+        };
 
         for _ in 0..2 {
             let p_avg = ((p_psia + p_est) / 2.0).max(14.7);
@@ -561,14 +647,15 @@ fn segment_march_oil(
                 p_avg, mu_g, rho_g, rho_l, rho_ns, v_sg, v_sl, v_m, lambda_l,
                 sigma, mu_l, diam_ft, rough_ft, area, injection, theta,
                 mflow_g, mflow_l, mflow_total,
-                ql_loc: ql, tid, rough,
+                ql_loc: ql, tid, rough, grav_mult, fric_mult,
             };
 
-            let dpdz = gradient(&s);
-            p_est = p_psia + dpdz * seg_len;
+            parts = gradient_parts(gradient, &s);
+            p_est = p_psia + parts.total * seg_len;
         }
 
         p_psia = p_est;
+        record_step(&mut recorder, i as f64 * seg_len, p_psia, &parts, seg_len);
         if p_psia < 1.0 {
             return Err(DIVERGED_MSG.to_string());
         }
@@ -589,12 +676,12 @@ macro_rules! gas_entry {
             length: f64, tht: f64, bht: f64, wsg: f64,
             qg_mmscfd: f64, cgr: f64, qw_bwpd: f64, oil_vis: f64,
             injection: bool, pr: f64, theta: f64,
-            zspec: Option<GasSpec>,
+            zspec: Option<GasSpec>, grav_mult: f64, fric_mult: f64,
         ) -> Result<f64, String> {
             segment_march_gas(
                 thp, api, gsg, tid, rough, length, tht, bht, wsg,
                 qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, $gradient,
-                zspec.as_ref(),
+                zspec.as_ref(), grav_mult, fric_mult, None,
             )
         }
     };
@@ -608,12 +695,12 @@ macro_rules! oil_entry {
             length: f64, tht: f64, bht: f64, wsg: f64,
             qt_stbpd: f64, gor: f64, wc: f64, pb: f64, rsb: f64, sgsp: f64,
             rsb_scale: f64, injection: bool, theta: f64,
-            vis_frac: f64, rsb_frac: f64,
+            vis_frac: f64, rsb_frac: f64, grav_mult: f64, fric_mult: f64,
         ) -> Result<f64, String> {
             segment_march_oil(
                 thp, api, gsg, tid, rough, length, tht, bht, wsg,
                 qt_stbpd, gor, wc, pb, rsb, sgsp, rsb_scale, injection, theta,
-                $gradient, vis_frac, rsb_frac,
+                $gradient, vis_frac, rsb_frac, grav_mult, fric_mult, None,
             )
         }
     };
@@ -628,3 +715,49 @@ oil_entry!(hb_fbhp_oil, hb_gradient);
 oil_entry!(wg_fbhp_oil, wg_gradient);
 oil_entry!(gray_fbhp_oil, gray_gradient);
 oil_entry!(bb_fbhp_oil, bb_gradient);
+
+fn gradient_for(method: &str) -> Result<GradientFn, String> {
+    match method {
+        "HB" => Ok(hb_gradient),
+        "WG" => Ok(wg_gradient),
+        "GRAY" => Ok(gray_gradient),
+        "BB" => Ok(bb_gradient),
+        _ => Err(format!("unknown VLP method {method}")),
+    }
+}
+
+/// Gas march returning per-step records (Python _vlp_profile_gas).
+#[allow(clippy::too_many_arguments)]
+pub fn vlp_profile_gas(
+    method: &str, thp: f64, api: f64, gsg: f64, tid: f64, rough: f64,
+    length: f64, tht: f64, bht: f64, wsg: f64,
+    qg_mmscfd: f64, cgr: f64, qw_bwpd: f64, oil_vis: f64,
+    injection: bool, pr: f64, theta: f64,
+    zspec: Option<GasSpec>, grav_mult: f64, fric_mult: f64,
+) -> Result<(f64, Vec<StepRec>), String> {
+    let mut rec = Vec::new();
+    let p = segment_march_gas(
+        thp, api, gsg, tid, rough, length, tht, bht, wsg,
+        qg_mmscfd, cgr, qw_bwpd, oil_vis, injection, pr, theta, gradient_for(method)?,
+        zspec.as_ref(), grav_mult, fric_mult, Some(&mut rec),
+    )?;
+    Ok((p, rec))
+}
+
+/// Oil march returning per-step records (Python _vlp_profile_oil).
+#[allow(clippy::too_many_arguments)]
+pub fn vlp_profile_oil(
+    method: &str, thp: f64, api: f64, gsg: f64, tid: f64, rough: f64,
+    length: f64, tht: f64, bht: f64, wsg: f64,
+    qt_stbpd: f64, gor: f64, wc: f64, pb: f64, rsb: f64, sgsp: f64,
+    rsb_scale: f64, injection: bool, theta: f64,
+    vis_frac: f64, rsb_frac: f64, grav_mult: f64, fric_mult: f64,
+) -> Result<(f64, Vec<StepRec>), String> {
+    let mut rec = Vec::new();
+    let p = segment_march_oil(
+        thp, api, gsg, tid, rough, length, tht, bht, wsg,
+        qt_stbpd, gor, wc, pb, rsb, sgsp, rsb_scale, injection, theta,
+        gradient_for(method)?, vis_frac, rsb_frac, grav_mult, fric_mult, Some(&mut rec),
+    )?;
+    Ok((p, rec))
+}

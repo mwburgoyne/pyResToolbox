@@ -409,7 +409,7 @@ pyrestoolbox.nodal.fbhp
 
 .. code-block:: python
 
-    fbhp(thp, completion, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, qg_mmscfd=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, qt_stbpd=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65, metric=False, return_profile=False, qg_mscfd=0) -> float
+    fbhp(thp, completion, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, qg_mmscfd=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, qt_stbpd=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65, metric=False, return_profile=False, qg_mscfd=0, gravity_mult=1.0, friction_mult=1.0) -> float | dict
 
 Returns flowing bottom hole pressure (psia, or barsa if metric=True) using the specified VLP correlation. Supports both gas and oil wells. The Completion object can define vertical wells (legacy mode) or multi-segment deviated wells using WellSegment objects. The ``sin(theta)`` multiplier on hydrostatic gradient enables proper deviated and horizontal well support.
 
@@ -489,6 +489,15 @@ Returns flowing bottom hole pressure (psia, or barsa if metric=True) using the s
    * - metric
      - bool
      - If True, interpret inputs and return output in Eclipse METRIC units. Defaults to False
+   * - return_profile
+     - bool
+     - If True, return a dict with the pressure traverse and its decomposition instead of the scalar BHP (see `Pressure traverse output`_). Defaults to False
+   * - gravity_mult
+     - float
+     - Multiplier on the elevation gradient of every march step, applied before the acceleration factor. Defaults to 1.0. For matching measured pressures; the zero-rate static column is not scaled
+   * - friction_mult
+     - float
+     - Multiplier on the friction gradient of every march step, applied before the acceleration factor. Defaults to 1.0
 
 .. list-table:: Returns
    :widths: 10 15 40
@@ -499,7 +508,7 @@ Returns flowing bottom hole pressure (psia, or barsa if metric=True) using the s
      - Description
    * -
      - float
-     - Flowing bottom hole pressure (psia, or barsa if metric=True)
+     - Flowing bottom hole pressure (psia, or barsa if metric=True). A dict when ``return_profile=True``
 
 Examples:
 
@@ -563,13 +572,32 @@ Pass ``return_profile=True`` to ``fbhp`` to get the wellbore pressure profile at
     # array([500., ..., bhp_final])
     >>> profile['bhp']        # scalar BHP, same as return_profile=False
 
+The profile also carries one entry per march step (about 100 ft each): ``step_md``, ``step_tvd`` and ``step_p`` at the bottom of the step, ``holdup`` (the liquid holdup the method used), ``regime`` (Beggs-Brill flow pattern, or ``'bubble'`` / ``'hagedorn-brown'`` for HB; empty for WG and Gray), and the step's pressure change split into ``dp_gravity``, ``dp_friction`` and ``dp_acceleration`` (psi, or bar if metric=True). The three parts sum to the step's change, so their totals give the elevation, friction and acceleration shares of BHP - THP. HB and WG have no acceleration term (``dp_acceleration`` is zero); Gray and BB apply theirs as 1/(1 - Ek). Friction is negative for injection. A zero-rate static column is reported as a single elevation step.
+
+.. code-block:: python
+
+    >>> c = nodal.Completion(tid=2.441, length=8000, tht=100, bht=180)
+    >>> p = nodal.fbhp(thp=200, completion=c, vlpmethod='BB', well_type='oil', qt_stbpd=2000,
+    ...                gor=800, wc=0.3, pb=2500, rsb=500, api=35, return_profile=True)
+    >>> round(p['bhp'], 1)
+    2191.8
+    >>> round(p['dp_gravity'].sum(), 1), round(p['dp_friction'].sum(), 1), round(p['dp_acceleration'].sum(), 2)
+    (1685.1, 304.9, 1.77)
+    >>> sorted(set(p['regime']))
+    ['distributed', 'intermittent']
+    >>> round(nodal.fbhp(thp=200, completion=c, vlpmethod='BB', well_type='oil', qt_stbpd=2000,
+    ...                  gor=800, wc=0.3, pb=2500, rsb=500, api=35, friction_mult=1.2), 1)
+    2277.7
+
+``gravity_mult`` and ``friction_mult`` scale the elevation and friction gradients of every step; they are the handles for matching a VLP to measured pressures. They are also accepted by ``fthp``, ``outflow_curve`` and ``operating_point``.
+
 
 pyrestoolbox.nodal.fthp
 =======================
 
 .. code-block:: python
 
-    fthp(bhp, completion, vlpmethod='WG', well_type='gas', ..., thp_min=None, thp_max=None, tol=1e-3) -> float
+    fthp(bhp, completion, vlpmethod='WG', well_type='gas', ..., thp_min=None, thp_max=None, tol=1e-3, gravity_mult=1.0, friction_mult=1.0) -> float
 
 Inverse of ``fbhp``. Solves for the tubing head pressure that produces the target flowing bottom-hole pressure, for the given flow parameters and VLP correlation. Internally wraps ``bisect_solve`` around ``fbhp`` between ``thp_min`` and ``thp_max``. ``thp_min=None`` resolves to 14.7 psia (1.01325 barsa if metric=True); ``thp_max=None`` resolves to 20,000 psia (1378.95 barsa if metric=True). ``tol`` is the absolute THP tolerance in psia (barsa if metric=True).
 
@@ -594,7 +622,7 @@ pyrestoolbox.nodal.outflow_curve
 
 .. code-block:: python
 
-    outflow_curve(thp, completion, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, rates=None, n_points=20, max_rate=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65, metric=False, n_rates=None) -> dict
+    outflow_curve(thp, completion, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, rates=None, n_points=20, max_rate=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, pr=0, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65, metric=False, n_rates=None, gravity_mult=1.0, friction_mult=1.0) -> dict
 
 Returns VLP outflow curve as a dictionary with keys ``'rate'`` (also aliased as ``'rates'``) and ``'bhp'``. ``n_rates`` is a deprecated alias for ``n_points`` (takes precedence if both are given). Evaluates ``fbhp()`` at each rate point. Rates are Mscf/d for gas wells (sm3/d if metric=True), STB/d for oil wells (sm3/d if metric=True). BHP is in psia (barsa if metric=True).
 
@@ -751,7 +779,7 @@ pyrestoolbox.nodal.operating_point
 
 .. code-block:: python
 
-    operating_point(thp, completion, reservoir, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65, bo=1.2, uo=1.0, n_points=25, metric=False) -> dict
+    operating_point(thp, completion, reservoir, vlpmethod='WG', well_type='gas', gas_pvt=None, oil_pvt=None, cgr=0, qw_bwpd=0, oil_vis=1.0, api=45, gor=0, wc=0, wsg=1.07, injection=False, gsg=0.65, pb=0, rsb=0, sgsp=0.65, bo=1.2, uo=1.0, n_points=25, metric=False, gravity_mult=1.0, friction_mult=1.0) -> dict
 
 Finds the operating point where VLP outflow curve intersects the IPR inflow curve via bisection.
 

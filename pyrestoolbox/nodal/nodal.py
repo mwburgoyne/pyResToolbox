@@ -300,6 +300,16 @@ _GRAY_SP_LIQ_FRAC = 1e-6        # v_sg/v_m below this is single-phase liquid (dr
 # Beggs-Brill's friction parameter y = lambda/HL^2 grows without bound, so
 # without the blend a trace of liquid moved dry-gas BHP by up to 16%.
 _LOW_LIQ_LAMBDA = 1e-3
+# Floor on the kinetic-energy denominator 1 - Ek (Gray, Beggs-Brill acceleration)
+_EK_DENOM_MIN = 0.1
+# Flow-regime codes reported per march step (return_profile): Beggs-Brill patterns
+# 0-3 (_BB_SEGREGATED .. _BB_TRANSITION), Hagedorn-Brown 4 (Orkiszewski bubble
+# flow) or 5 (Hagedorn-Brown holdup); -1 where the method has no regime map.
+_REGIME_NONE = -1
+_REGIME_HB_BUBBLE = 4
+_REGIME_HB = 5
+_REGIME_NAMES = {0: 'segregated', 1: 'intermittent', 2: 'distributed', 3: 'transition',
+                 4: 'bubble', 5: 'hagedorn-brown', -1: ''}
 _GRAY_ROUGH_FLOOR = 2.77e-5     # Minimum effective roughness (ft)
 # Upper bound on wet-film relative roughness ke/d. Duns and Ros (1963) bound the
 # film roughness ratio at 0.5; uncapped, ke0 grows as 1/vm^2 at low velocity and
@@ -1220,6 +1230,7 @@ def _hb_gradient_gas(s):
     lb = _ORK_LB_A + _ORK_LB_B * vm * vm / s['diam_ft']
     if lb < _ORK_LB_MIN:
         lb = _ORK_LB_MIN
+    regime = _REGIME_HB
     if vm > 0:
         b_ratio = ugas / vm
         if b_ratio < lb:
@@ -1227,6 +1238,7 @@ def _hb_gradient_gas(s):
             if disc >= 0:
                 yl = 1.0 - 0.5 * (1.0 + vm / vs - math.sqrt(disc))
                 yl = _clamp(yl, 0.0, 1.0)
+                regime = _REGIME_HB_BUBBLE
 
     # Reynolds and friction (mass-flow basis)
     mflow_pd = (s['mflow_l'] + s['mflow_g']) * _SEC_PER_DAY
@@ -1242,29 +1254,30 @@ def _hb_gradient_gas(s):
 
     fric_term = f * mflow_pd ** 2 / _HB_FRIC_K / s['diam_ft'] ** 5 / rho_avg
     sign = -1.0 if s['injection'] else 1.0
-    return (rho_avg * math.sin(s['theta']) + sign * fric_term) / _IN2_PER_FT2
+    return (rho_avg * math.sin(s['theta']) / _IN2_PER_FT2, sign * fric_term / _IN2_PER_FT2,
+            0.0, yl, regime)
 
 
 @rust_accelerated('hb_fbhp_gas_rust')
 def _hb_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                   injection=False, pr=0.0, theta=math.pi / 2.0,
-                  zspec=None):
+                  zspec=None, grav_mult=1.0, fric_mult=1.0):
     return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                               injection, pr, theta, _hb_gradient_gas,
-                              zspec=zspec)
+                              zspec=zspec, grav_mult=grav_mult, fric_mult=fric_mult)
 
 
 @rust_accelerated('hb_fbhp_oil_rust')
 def _hb_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                   rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
-                  vis_frac=1.0, rsb_frac=1.0):
+                  vis_frac=1.0, rsb_frac=1.0, grav_mult=1.0, fric_mult=1.0):
     return _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                               rsb_scale, injection, theta, _hb_gradient_gas,
-                              vis_frac, rsb_frac)
+                              vis_frac, rsb_frac, grav_mult=grav_mult, fric_mult=fric_mult)
 
 
 # ============================================================================
@@ -1367,30 +1380,31 @@ def _wg_gradient_gas(s):
         mu_g_pas, mu_l_pas, diam_m, rough_m)
 
     sign = -1.0 if s['injection'] else 1.0
-    dpdz_pam = dpdz_hydro + sign * dpdz_fric
-    return dpdz_pam / (_PSI_TO_PA / _FT_TO_M)
+    pam_per_psift = _PSI_TO_PA / _FT_TO_M
+    return (dpdz_hydro / pam_per_psift, sign * dpdz_fric / pam_per_psift, 0.0,
+            1.0 - alpha_g, _REGIME_NONE)
 
 
 @rust_accelerated('wg_fbhp_gas_rust')
 def _wg_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                   injection=False, pr=0.0, theta=math.pi / 2.0,
-                  zspec=None):
+                  zspec=None, grav_mult=1.0, fric_mult=1.0):
     return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                               injection, pr, theta, _wg_gradient_gas,
-                              zspec=zspec)
+                              zspec=zspec, grav_mult=grav_mult, fric_mult=fric_mult)
 
 
 @rust_accelerated('wg_fbhp_oil_rust')
 def _wg_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
                   wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                   rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
-                  vis_frac=1.0, rsb_frac=1.0):
+                  vis_frac=1.0, rsb_frac=1.0, grav_mult=1.0, fric_mult=1.0):
     return _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                               rsb_scale, injection, theta, _wg_gradient_gas,
-                              vis_frac, rsb_frac)
+                              vis_frac, rsb_frac, grav_mult=grav_mult, fric_mult=fric_mult)
 
 
 # ============================================================================
@@ -1465,16 +1479,36 @@ def _gray_effective_roughness(rough_dry, sigma, rho_ns, v_sl, v_sg):
 #  Shared Gas Segment March
 # ============================================================================
 
+def _record_step(recorder, md, p, parts, seg_len):
+    """Append (md, p, holdup, regime, dp_gravity, dp_friction, dp_acceleration)
+    for one march step (md from the section top, ft; pressures psi)."""
+    if recorder is not None:
+        _, grav, fric, accel, holdup, regime = parts
+        recorder.append((md, p, holdup, regime,
+                         grav * seg_len, fric * seg_len, accel * seg_len))
+
+
+def _record_static(recorder, length, thp, p_static):
+    """A zero-rate static column is one record, all of it elevation."""
+    if recorder is not None:
+        recorder.append((length, p_static, float('nan'), _REGIME_NONE,
+                         p_static - thp, 0.0, 0.0))
+
+
 def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                        wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
-                       injection, pr, theta, gradient_fn, zspec=None):
+                       injection, pr, theta, gradient_fn, zspec=None,
+                       grav_mult=1.0, fric_mult=1.0, recorder=None):
     """Shared segment march for all gas VLP methods.
 
-    gradient_fn(s) -> dpdz (psi/ft)
+    gradient_fn(s) -> (gravity, friction, Ek, holdup, regime); see _gradient_parts.
         Called at each pressure iteration with a dict containing all
         computed PVT/flow properties for the current segment step.
     zspec: GasPVT Z/viscosity spec (_gas_pvt_zspec); None -> Hall-Yarborough
         on Sutton pseudo-criticals of gsg with Lee-Gonzalez-Eakin viscosity.
+    grav_mult, fric_mult: multipliers on the elevation and friction gradients
+        (flowing march only; the zero-rate static column is unscaled).
+    recorder: optional list; one tuple per step is appended (see _record_step).
     """
     tc, pc = _sutton_tc_pc(gsg)
     osg = 141.5 / (api + 131.5)
@@ -1495,7 +1529,9 @@ def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                 "the specified liquid rates (liquid loading not modelled).",
                 RuntimeWarning, stacklevel=3
             )
-        return _static_gas_column_pressure(thp, length, tht, bht, gsg, theta=theta, zspec=zspec)
+        p_static = _static_gas_column_pressure(thp, length, tht, bht, gsg, theta=theta, zspec=zspec)
+        _record_static(recorder, length, thp, p_static)
+        return p_static
 
     diam_ft = tid / 12.0
     rough_ft = rough / 12.0
@@ -1566,12 +1602,14 @@ def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                 'osg': osg, 'gsg': gsg, 'tid': tid, 'rough': rough,
                 'rs_est': rs_est, 'tc': tc, 'pc': pc,
                 'qg_mmscfd': qg_mmscfd, 'api': api,
+                'grav_mult': grav_mult, 'fric_mult': fric_mult,
             }
 
-            dpdz = _low_liquid_gradient(gradient_fn, s)
-            p_est = p_psia + dpdz * seg_len
+            parts = _low_liquid_gradient(gradient_fn, s)
+            p_est = p_psia + parts[0] * seg_len
 
         p_psia = p_est
+        _record_step(recorder, i * seg_len, p_psia, parts, seg_len)
         if p_psia < 1.0:
             raise RuntimeError(
                 "VLP march diverged: pressure fell below atmospheric - the "
@@ -1580,23 +1618,43 @@ def _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
     return p_psia
 
 
-def _low_liquid_gradient(gradient_fn, s):
-    """Gradient with a continuous approach to the dry-gas limit.
+def _gradient_parts(gradient_fn, s):
+    """Pressure gradient of one march step and its parts, all psi/ft.
 
-    For 0 < lambda_l < _LOW_LIQ_LAMBDA returns g0 + (lambda_l/_LOW_LIQ_LAMBDA)(g - g0),
-    where g is the method's two-phase gradient and g0 the same method with the
-    liquid removed (its existing lambda_l = 0 path). At lambda_l = 0 and at or
-    above _LOW_LIQ_LAMBDA this is exactly gradient_fn(s).
+    gradient_fn(s) returns (gravity, friction, Ek, holdup, regime): the elevation
+    and friction gradients (friction signed: negative for injection), the
+    kinetic-energy group Ek (0 for methods without an acceleration term), the
+    liquid holdup and a regime code. The gravity and friction multipliers in s
+    scale their parts before the acceleration factor 1/(1 - Ek).
+    Returns (total, gravity, friction, acceleration, holdup, regime).
     """
-    g = gradient_fn(s)
+    grav, fric, ek, holdup, regime = gradient_fn(s)
+    grav *= s['grav_mult']
+    fric *= s['fric_mult']
+    total = (grav + fric) / max(1.0 - ek, _EK_DENOM_MIN)
+    accel = total - grav - fric if ek else 0.0
+    return total, grav, fric, accel, holdup, regime
+
+
+def _low_liquid_gradient(gradient_fn, s):
+    """Gradient parts with a continuous approach to the dry-gas limit.
+
+    For 0 < lambda_l < _LOW_LIQ_LAMBDA each part is g0 + (lambda_l/_LOW_LIQ_LAMBDA)(g - g0),
+    where g is the method's two-phase value and g0 the same method with the
+    liquid removed (its existing lambda_l = 0 path); the regime is the two-phase
+    one. At lambda_l = 0 and at or above _LOW_LIQ_LAMBDA this is exactly
+    _gradient_parts(gradient_fn, s).
+    """
+    parts = _gradient_parts(gradient_fn, s)
     lam = s['lambda_l']
     if not 0.0 < lam < _LOW_LIQ_LAMBDA:
-        return g
+        return parts
     s0 = dict(s, mflow_l=0.0, mflow_o=0.0, mflow_w=0.0, v_sl=0.0,
               v_m=s['v_sg'], lambda_l=0.0, rho_ns=s['rho_g'],
               mflow_total=s['mflow_g'], qo_loc=0.0, ql_loc=0.0, qw_bwpd=0.0)
-    g0 = gradient_fn(s0)
-    return g0 + (lam / _LOW_LIQ_LAMBDA) * (g - g0)
+    parts0 = _gradient_parts(gradient_fn, s0)
+    w = lam / _LOW_LIQ_LAMBDA
+    return tuple(a0 + w * (a1 - a0) for a0, a1 in zip(parts0[:5], parts[:5])) + (parts[5],)
 
 
 # ============================================================================
@@ -1606,19 +1664,23 @@ def _low_liquid_gradient(gradient_fn, s):
 def _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
                        wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                        rsb_scale, injection, theta, gradient_fn,
-                       vis_frac=1.0, rsb_frac=1.0):
+                       vis_frac=1.0, rsb_frac=1.0,
+                       grav_mult=1.0, fric_mult=1.0, recorder=None):
     """Shared segment march for all oil VLP methods.
 
-    gradient_fn(s) -> dpdz (psi/ft)
+    gradient_fn(s) -> (gravity, friction, Ek, holdup, regime); see _gradient_parts.
         Called at each pressure iteration with a dict containing all
         computed PVT/flow properties for the current segment step.
+    grav_mult, fric_mult, recorder: as _segment_march_gas.
     """
     tc, pc = _sutton_tc_pc(gsg)
     wc_adj = max(wc, 1e-9)
     if qt_stbpd < 1e-7:
-        return _static_oil_column_pressure(
+        p_static = _static_oil_column_pressure(
             thp, length, tht, bht, wc_adj, wsg, api, sgsp, pb, rsb, rsb_scale,
             theta=theta)
+        _record_static(recorder, length, thp, p_static)
+        return p_static
 
     qo = qt_stbpd * (1.0 - wc)
     qw = qt_stbpd * wc
@@ -1704,12 +1766,14 @@ def _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
                 'osg': osg, 'gsg': gsg, 'tid': tid, 'rough': rough,
                 'rs_est': rs_local, 'tc': tc, 'pc': pc,
                 'qg_mmscfd': qg_mmscfd, 'api': api,
+                'grav_mult': grav_mult, 'fric_mult': fric_mult,
             }
 
-            dpdz = gradient_fn(s)
-            p_est = p_psia + dpdz * seg_len
+            parts = _gradient_parts(gradient_fn, s)
+            p_est = p_psia + parts[0] * seg_len
 
         p_psia = p_est
+        _record_step(recorder, i * seg_len, p_psia, parts, seg_len)
         if p_psia < 1.0:
             raise RuntimeError(
                 "VLP march diverged: pressure fell below atmospheric - the "
@@ -1747,32 +1811,31 @@ def _gray_gradient_gas(s):
     dpdz_fric = (f_moody * gm ** 2 / (2.0 * _GC * s['diam_ft'] * s['rho_ns'] * _IN2_PER_FT2)
                  if s['rho_ns'] > 0 else 0.0)
     ek = gm * s['v_sg'] / (_GC * s['p_avg'] * _IN2_PER_FT2)
-    denom = max(1.0 - ek, 0.1)
 
     sign = -1.0 if s['injection'] else 1.0
-    return (dpdz_hydro + sign * dpdz_fric) / denom
+    return dpdz_hydro, sign * dpdz_fric, ek, hl, _REGIME_NONE
 
 
 @rust_accelerated('gray_fbhp_gas_rust')
 def _gray_fbhp_gas(thp, api, gsg, tid, rough, length, tht, bht,
                     wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                     injection=False, pr=0.0, theta=math.pi / 2.0,
-                  zspec=None):
+                  zspec=None, grav_mult=1.0, fric_mult=1.0):
     return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                               injection, pr, theta, _gray_gradient_gas,
-                              zspec=zspec)
+                              zspec=zspec, grav_mult=grav_mult, fric_mult=fric_mult)
 
 
 @rust_accelerated('gray_fbhp_oil_rust')
 def _gray_fbhp_oil(thp, api, gsg, tid, rough, length, tht, bht,
                     wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                     rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
-                    vis_frac=1.0, rsb_frac=1.0):
+                    vis_frac=1.0, rsb_frac=1.0, grav_mult=1.0, fric_mult=1.0):
     return _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                               rsb_scale, injection, theta, _gray_gradient_gas,
-                              vis_frac, rsb_frac)
+                              vis_frac, rsb_frac, grav_mult=grav_mult, fric_mult=fric_mult)
 
 
 # ============================================================================
@@ -1931,34 +1994,33 @@ def _bb_gradient_gas(s):
     dpdz_fric = (4.0 * f_tp * s['rho_ns'] * s['v_m'] ** 2 /
                  (2.0 * _GC * s['diam_ft'] * _IN2_PER_FT2) if s['rho_ns'] > 0 else 0.0)
     ek = rho_s * s['v_m'] * s['v_sg'] / (_GC * s['p_avg'] * _IN2_PER_FT2)
-    denom = max(1.0 - ek, 0.1)
 
     sign = -1.0 if s['injection'] else 1.0
-    return (dpdz_hydro + sign * dpdz_fric) / denom
+    return dpdz_hydro, sign * dpdz_fric, ek, hl_theta, pattern
 
 
 @rust_accelerated('bb_fbhp_gas_rust')
 def _bb_core_gas(thp, api, gsg, tid, rough, length, tht, bht,
                  wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                  injection=False, pr=0.0, theta=math.pi / 2.0,
-                 zspec=None):
+                 zspec=None, grav_mult=1.0, fric_mult=1.0):
     """Beggs & Brill core for gas wells."""
     return _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
                               injection, pr, theta, _bb_gradient_gas,
-                              zspec=zspec)
+                              zspec=zspec, grav_mult=grav_mult, fric_mult=fric_mult)
 
 
 @rust_accelerated('bb_fbhp_oil_rust')
 def _bb_core_oil(thp, api, gsg, tid, rough, length, tht, bht,
                  wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                  rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
-                 vis_frac=1.0, rsb_frac=1.0):
+                 vis_frac=1.0, rsb_frac=1.0, grav_mult=1.0, fric_mult=1.0):
     """Beggs & Brill core for oil wells."""
     return _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
                               wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
                               rsb_scale, injection, theta, _bb_gradient_gas,
-                              vis_frac, rsb_frac)
+                              vis_frac, rsb_frac, grav_mult=grav_mult, fric_mult=fric_mult)
 
 
 # ============================================================================
@@ -1978,11 +2040,73 @@ _OIL_METHOD_DIC = {
     "GRAY": _gray_fbhp_oil,
     "BB": _bb_core_oil,
 }
+_GRADIENT_DIC = {
+    "HB": _hb_gradient_gas,
+    "WG": _wg_gradient_gas,
+    "GRAY": _gray_gradient_gas,
+    "BB": _bb_gradient_gas,
+}
+
+
+@rust_accelerated('vlp_profile_gas_rust')
+def _vlp_profile_gas(method, thp, api, gsg, tid, rough, length, tht, bht,
+                     wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
+                     injection=False, pr=0.0, theta=math.pi / 2.0,
+                     zspec=None, grav_mult=1.0, fric_mult=1.0):
+    """Gas march with per-step records: returns (p_end, [record, ...]) (_record_step)."""
+    rec = []
+    p_end = _segment_march_gas(thp, api, gsg, tid, rough, length, tht, bht,
+                               wsg, qg_mmscfd, cgr, qw_bwpd, oil_vis,
+                               injection, pr, theta, _GRADIENT_DIC[method],
+                               zspec=zspec, grav_mult=grav_mult, fric_mult=fric_mult,
+                               recorder=rec)
+    return p_end, rec
+
+
+@rust_accelerated('vlp_profile_oil_rust')
+def _vlp_profile_oil(method, thp, api, gsg, tid, rough, length, tht, bht,
+                     wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
+                     rsb_scale=1.0, injection=False, theta=math.pi / 2.0,
+                     vis_frac=1.0, rsb_frac=1.0, grav_mult=1.0, fric_mult=1.0):
+    """Oil march with per-step records: returns (p_end, [record, ...]) (_record_step)."""
+    rec = []
+    p_end = _segment_march_oil(thp, api, gsg, tid, rough, length, tht, bht,
+                               wsg, qt_stbpd, gor, wc, pb, rsb, sgsp,
+                               rsb_scale, injection, theta, _GRADIENT_DIC[method],
+                               vis_frac, rsb_frac, grav_mult=grav_mult, fric_mult=fric_mult,
+                               recorder=rec)
+    return p_end, rec
+
+
+def _validate_multipliers(gravity_mult, friction_mult):
+    for name, val in (('gravity_mult', gravity_mult), ('friction_mult', friction_mult)):
+        if not (math.isfinite(val) and val >= 0):
+            raise ValueError(f"{name} must be finite and non-negative, got {val}")
 
 
 # ============================================================================
 #  Public API: fbhp
 # ============================================================================
+
+def _profile_result(md_profile, tvd_profile, p_profile, steps, metric):
+    """fbhp(return_profile=True) result from section boundaries and march steps."""
+    st = np.asarray([r[:3] + r[5:] for r in steps], dtype=float).reshape(-1, 6)
+    holdup = np.asarray([r[3] for r in steps], dtype=float)
+    regime = np.asarray([_REGIME_NAMES[r[4]] for r in steps], dtype=object)
+    lengths = np.asarray(md_profile), np.asarray(tvd_profile), st[:, 0], st[:, 1]
+    pressures = np.asarray(p_profile), st[:, 2], st[:, 3], st[:, 4], st[:, 5]
+    if metric:
+        lengths = tuple(a * FT_TO_M for a in lengths)
+        pressures = tuple(a * PSI_TO_BAR for a in pressures)
+    md_arr, tvd_arr, step_md, step_tvd = lengths
+    p_arr, step_p, dp_g, dp_f, dp_a = pressures
+    return NodalResult({
+        'md': md_arr, 'tvd': tvd_arr, 'p': p_arr, 'bhp': p_arr[-1],
+        'step_md': step_md, 'step_tvd': step_tvd, 'step_p': step_p,
+        'holdup': holdup, 'regime': regime,
+        'dp_gravity': dp_g, 'dp_friction': dp_f, 'dp_acceleration': dp_a,
+    })
+
 
 def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type: str = 'gas',
          gas_pvt=None, oil_pvt=None,
@@ -1991,7 +2115,8 @@ def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
          qt_stbpd: float = 0, gor: float = 0, wc: float = 0,
          wsg: float = 1.07, injection: bool = False,
          gsg: float = 0.65, pb: float = 0, rsb: float = 0, sgsp: float = 0.65,
-         metric: bool = False, return_profile: bool = False, qg_mscfd: float = 0):
+         metric: bool = False, return_profile: bool = False, qg_mscfd: float = 0,
+         gravity_mult: float = 1.0, friction_mult: float = 1.0):
     """ Returns flowing bottom hole pressure (psia | barsa) using specified VLP correlation.
 
         thp: Tubing head pressure (psia | barsa)
@@ -2027,10 +2152,18 @@ def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
         gas_pvt: GasPVT object. If provided for gas wells and gsg is left at its
             default, the gas specific gravity is taken from gas_pvt.sg
         oil_pvt: OilPVT object. If provided for oil wells, extracts api, sgsp, pb, rsb from it
+        gravity_mult, friction_mult: Multipliers on the elevation and friction
+            gradients of the flowing march, applied before the acceleration factor
+            (for matching measured pressures). Default 1.0. The zero-rate static
+            column is not scaled.
         return_profile: If True, returns a NodalResult with per-segment-boundary arrays
             ``md`` (cumulative MD), ``tvd`` (cumulative TVD), ``p`` (pressure at each
-            boundary, including THP at the top and BHP at the bottom). Defaults to False
-            (scalar BHP return).
+            boundary, including THP at the top and BHP at the bottom), plus per march
+            step arrays ``step_md``, ``step_tvd``, ``step_p`` (at the bottom of each
+            step), ``holdup`` (liquid holdup used by the method), ``regime`` (flow
+            regime name where the method has one, else ''), and ``dp_gravity``,
+            ``dp_friction``, ``dp_acceleration`` (pressure change over the step,
+            psi | bar; they sum to the step's change). Defaults to False (scalar BHP).
     """
     f = _prepare_flow_inputs(
         well_type, metric, gas_pvt=gas_pvt, oil_pvt=oil_pvt,
@@ -2043,6 +2176,7 @@ def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
     validate_choice(well_type, ('gas', 'oil'), 'well_type')
     _validate_rates(qg_mmscfd=f.qg_mmscfd, qt_stbpd=f.qt_stbpd, qw_bwpd=f.qw_bwpd)
     vlpmethod = validate_methods(["vlpmethod"], [vlpmethod])
+    _validate_multipliers(gravity_mult, friction_mult)
 
     if well_type == 'gas' and f.qg_mmscfd < 0.001 and (f.qw_bwpd > 0 or f.cgr > 0):
         warnings.warn(
@@ -2052,22 +2186,26 @@ def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
             RuntimeWarning, stacklevel=2
         )
 
-    def _run_section(thp_in, tid, rough, length, tht_seg, bht_seg, theta):
+    def _run_section(thp_in, tid, rough, length, tht_seg, bht_seg, theta, recorder=None):
+        common = dict(thp=thp_in, api=f.api, gsg=f.gsg, tid=tid, rough=rough,
+                      length=length, tht=tht_seg, bht=bht_seg, wsg=wsg,
+                      injection=injection, theta=theta,
+                      grav_mult=gravity_mult, fric_mult=friction_mult)
         if well_type == 'gas':
-            return _GAS_METHOD_DIC[vlpmethod.name](
-                thp=thp_in, api=f.api, gsg=f.gsg, tid=tid, rough=rough,
-                length=length, tht=tht_seg, bht=bht_seg, wsg=wsg,
-                qg_mmscfd=f.qg_mmscfd, cgr=f.cgr, qw_bwpd=f.qw_bwpd,
-                oil_vis=oil_vis, injection=injection, pr=f.pr, theta=theta,
-                zspec=f.zspec)
+            kw = dict(common, qg_mmscfd=f.qg_mmscfd, cgr=f.cgr, qw_bwpd=f.qw_bwpd,
+                      oil_vis=oil_vis, pr=f.pr, zspec=f.zspec)
+            if recorder is None:
+                return _GAS_METHOD_DIC[vlpmethod.name](**kw)
+            p_end, rec = _vlp_profile_gas(vlpmethod.name, **kw)
         else:
-            return _OIL_METHOD_DIC[vlpmethod.name](
-                thp=thp_in, api=f.api, gsg=f.gsg, tid=tid, rough=rough,
-                length=length, tht=tht_seg, bht=bht_seg, wsg=wsg,
-                qt_stbpd=f.qt_stbpd, gor=f.gor, wc=wc,
-                pb=f.pb, rsb=f.rsb, sgsp=f.sgsp,
-                rsb_scale=f.rsb_frac, injection=injection, theta=theta,
-                vis_frac=f.vis_frac, rsb_frac=f.rsb_frac)
+            kw = dict(common, qt_stbpd=f.qt_stbpd, gor=f.gor, wc=wc,
+                      pb=f.pb, rsb=f.rsb, sgsp=f.sgsp, rsb_scale=f.rsb_frac,
+                      vis_frac=f.vis_frac, rsb_frac=f.rsb_frac)
+            if recorder is None:
+                return _OIL_METHOD_DIC[vlpmethod.name](**kw)
+            p_end, rec = _vlp_profile_oil(vlpmethod.name, **kw)
+        recorder.extend(rec)
+        return p_end
 
     # Loop over wellbore segments
     # Temperature interpolated over TVD (not MD) since geothermal
@@ -2079,6 +2217,7 @@ def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
     md_profile = [0.0]
     tvd_profile = [0.0]
     p_profile = [f.thp]
+    steps = []   # (md, tvd, p, holdup, regime, dp_gravity, dp_friction, dp_acceleration)
 
     for seg in completion.segments:
         frac_start = tvd_traversed / total_tvd if total_tvd > 0 else 0.0
@@ -2086,8 +2225,13 @@ def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
         tht_seg = completion.tht + (completion.bht - completion.tht) * frac_start
         bht_seg = completion.tht + (completion.bht - completion.tht) * frac_end
 
+        rec = [] if return_profile else None
         p_current = _run_section(p_current, seg.id, seg.roughness, seg.md,
-                                 tht_seg, bht_seg, seg.theta)
+                                 tht_seg, bht_seg, seg.theta, recorder=rec)
+        if return_profile:
+            tvd_per_md = seg.tvd / seg.md if seg.md > 0 else 0.0
+            steps.extend((md_traversed + r[0], tvd_traversed + r[0] * tvd_per_md) + tuple(r[1:])
+                         for r in rec)
         tvd_traversed += seg.tvd
         md_traversed += seg.md
         md_profile.append(md_traversed)
@@ -2098,19 +2242,7 @@ def fbhp(thp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
         raise RuntimeError(f"VLP calculation produced non-finite BHP: {p_current}")
 
     if return_profile:
-        md_arr = np.asarray(md_profile)
-        tvd_arr = np.asarray(tvd_profile)
-        p_arr = np.asarray(p_profile)
-        if metric:
-            md_arr = md_arr * FT_TO_M
-            tvd_arr = tvd_arr * FT_TO_M
-            p_arr = p_arr * PSI_TO_BAR
-        return NodalResult({
-            'md': md_arr,
-            'tvd': tvd_arr,
-            'p': p_arr,
-            'bhp': p_arr[-1],
-        })
+        return _profile_result(md_profile, tvd_profile, p_profile, steps, metric)
 
     if metric:
         return p_current * PSI_TO_BAR
@@ -2131,7 +2263,8 @@ def fthp(bhp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
          gsg: float = 0.65, pb: float = 0, rsb: float = 0, sgsp: float = 0.65,
          metric: bool = False, thp_min: Optional[float] = None,
          thp_max: Optional[float] = None, tol: float = 1e-3,
-         qg_mscfd: float = 0) -> float:
+         qg_mscfd: float = 0,
+         gravity_mult: float = 1.0, friction_mult: float = 1.0) -> float:
     """ Solves for tubing head pressure (psia | barsa) that produces the specified BHP
         under the given VLP correlation. Inverse of fbhp.
 
@@ -2144,6 +2277,8 @@ def fthp(bhp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
         thp_max: Upper bracket for THP search (psia | barsa). Defaults to
             20,000 psia (1378.95 barsa) when not supplied
         tol: Absolute convergence tolerance on THP (psia | barsa). Default 1e-3
+        gravity_mult, friction_mult: Multipliers on the elevation and friction gradients,
+            passed to fbhp. Default 1.0
         metric: If True, inputs and return are in Eclipse METRIC units. Default False.
     """
     # Same conversion path as fbhp/outflow_curve/operating_point, so every
@@ -2179,7 +2314,8 @@ def fthp(bhp: float, completion: 'Completion', vlpmethod: str = 'WG', well_type:
                               qt_stbpd=f.qt_stbpd, gor=f.gor, wc=wc,
                               wsg=wsg, injection=injection,
                               gsg=f.gsg, pb=f.pb, rsb=f.rsb, sgsp=f.sgsp,
-                              metric=False)
+                              metric=False,
+                              gravity_mult=gravity_mult, friction_mult=friction_mult)
         return calculated_bhp - bhp_oilfield
 
     try:
@@ -2209,7 +2345,8 @@ def outflow_curve(thp: float, completion: 'Completion', vlpmethod: str = 'WG',
                   gor: float = 0, wc: float = 0,
                   wsg: float = 1.07, injection: bool = False,
                   gsg: float = 0.65, pb: float = 0, rsb: float = 0, sgsp: float = 0.65,
-                  metric: bool = False, n_rates: Optional[int] = None) -> 'NodalResult':
+                  metric: bool = False, n_rates: Optional[int] = None,
+                  gravity_mult: float = 1.0, friction_mult: float = 1.0) -> 'NodalResult':
     """ Returns VLP outflow curve as a dictionary.
 
         thp: Tubing head pressure (psia | barsa)
@@ -2221,6 +2358,8 @@ def outflow_curve(thp: float, completion: 'Completion', vlpmethod: str = 'WG',
         n_points: Number of rate points if rates is None. Default 20.
         n_rates: Deprecated alias for n_points (kept for backward compatibility; takes precedence if both given).
         max_rate: Maximum rate for auto-generation
+        gravity_mult, friction_mult: Multipliers on the elevation and friction gradients,
+            passed to fbhp. Default 1.0
         Other parameters: Same as fbhp()
         metric: If True, inputs/outputs in Eclipse METRIC units. Default False.
 
@@ -2261,14 +2400,16 @@ def outflow_curve(thp: float, completion: 'Completion', vlpmethod: str = 'WG',
             bhp_val = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
                            well_type='gas', qg_mscfd=rate_mscfd, cgr=f.cgr,
                            qw_bwpd=f.qw_bwpd, oil_vis=oil_vis, api=f.api, pr=f.pr,
-                           wsg=wsg, injection=injection, gsg=f.gsg, gas_pvt=gas_pvt)
+                           wsg=wsg, injection=injection, gsg=f.gsg, gas_pvt=gas_pvt,
+                           gravity_mult=gravity_mult, friction_mult=friction_mult)
         else:
             # Convert rate to STB/d for internal fbhp call
             rate_stbpd = rate * SM3_TO_STB if metric else rate
             bhp_val = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
                            well_type='oil', qt_stbpd=rate_stbpd, gor=f.gor, wc=wc,
                            wsg=wsg, injection=injection, gsg=f.gsg,
-                           pb=f.pb, rsb=f.rsb, sgsp=f.sgsp, api=f.api, oil_pvt=oil_pvt)
+                           pb=f.pb, rsb=f.rsb, sgsp=f.sgsp, api=f.api, oil_pvt=oil_pvt,
+                           gravity_mult=gravity_mult, friction_mult=friction_mult)
         # bhp_val is in psia (fbhp called without metric=True)
         if metric:
             bhp_val = bhp_val * PSI_TO_BAR
@@ -2402,7 +2543,8 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
                     gsg: float = 0.65, pb: float = 0, rsb: float = 0, sgsp: float = 0.65,
                     bo: float = 1.2, uo: float = 1.0,
                     n_points: int = 25,
-                    metric: bool = False) -> 'NodalResult':
+                    metric: bool = False,
+                    gravity_mult: float = 1.0, friction_mult: float = 1.0) -> 'NodalResult':
     """ Returns operating point as dict with 'rate', 'bhp', 'vlp', 'ipr', 'converged'.
 
         Finds intersection of VLP outflow curve and IPR inflow curve via bisection.
@@ -2414,6 +2556,8 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
         well_type: 'gas' or 'oil'
         injection: True for injection wells — forwarded to the internal fbhp and
             outflow_curve calls. Defaults to False.
+        gravity_mult, friction_mult: Multipliers on the elevation and friction gradients,
+            passed to fbhp. Default 1.0
         Other parameters: Same as fbhp() and ipr_curve()
         metric: If True, inputs/outputs in Eclipse METRIC units. Default False.
 
@@ -2459,11 +2603,13 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
             return fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
                         well_type='gas', qg_mscfd=rate, cgr=f.cgr,
                         qw_bwpd=f.qw_bwpd, oil_vis=oil_vis, api=f.api, pr=pr,
-                        wsg=wsg, injection=injection, gsg=f.gsg, gas_pvt=gas_pvt)
+                        wsg=wsg, injection=injection, gsg=f.gsg, gas_pvt=gas_pvt,
+                        gravity_mult=gravity_mult, friction_mult=friction_mult)
         return fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
                     well_type='oil', qt_stbpd=rate, gor=f.gor, wc=wc,
                     wsg=wsg, injection=injection, gsg=f.gsg, pb=f.pb, rsb=f.rsb, sgsp=f.sgsp,
-                    api=f.api, oil_pvt=oil_pvt)
+                    api=f.api, oil_pvt=oil_pvt,
+                    gravity_mult=gravity_mult, friction_mult=friction_mult)
 
     def _ipr_rate(pwf):
         return _ipr_rates(reservoir, well_type, [pwf], gas_pvt, oil_pvt, wc, bo, uo, f.gsg)[0]
@@ -2510,16 +2656,8 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
         converged = False
 
     # Calculate operating BHP
-    if well_type == 'gas' and op_rate > 0:
-        op_bhp = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
-                      well_type='gas', qg_mscfd=op_rate, cgr=f.cgr,
-                      qw_bwpd=f.qw_bwpd, oil_vis=oil_vis, api=f.api, pr=pr,
-                      wsg=wsg, injection=injection, gsg=f.gsg, gas_pvt=gas_pvt)
-    elif well_type == 'oil' and op_rate > 0:
-        op_bhp = fbhp(thp=f.thp, completion=completion, vlpmethod=vlpmethod,
-                      well_type='oil', qt_stbpd=op_rate, gor=f.gor, wc=wc,
-                      wsg=wsg, injection=injection, gsg=f.gsg, pb=f.pb, rsb=f.rsb, sgsp=f.sgsp,
-                      api=f.api, oil_pvt=oil_pvt)
+    if op_rate > 0:
+        op_bhp = _vlp_bhp(op_rate)
     else:
         op_bhp = pr
 
@@ -2531,7 +2669,8 @@ def operating_point(thp: float, completion: 'Completion', reservoir: 'Reservoir'
                         well_type=well_type, rates=vlp_rates,
                         cgr=f.cgr, qw_bwpd=f.qw_bwpd, oil_vis=oil_vis, api=f.api,
                         pr=pr, gor=f.gor, wc=wc, wsg=wsg, injection=injection, gsg=f.gsg,
-                        pb=f.pb, rsb=f.rsb, sgsp=f.sgsp, oil_pvt=oil_pvt, gas_pvt=gas_pvt)
+                        pb=f.pb, rsb=f.rsb, sgsp=f.sgsp, oil_pvt=oil_pvt, gas_pvt=gas_pvt,
+                        gravity_mult=gravity_mult, friction_mult=friction_mult)
 
     op_rate_out = op_rate
 

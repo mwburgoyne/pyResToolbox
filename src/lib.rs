@@ -69,6 +69,8 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(vlp::bb_fbhp_gas_rust, m)?)?;
     m.add_function(wrap_pyfunction!(vlp::bb_fbhp_oil_rust, m)?)?;
     m.add_function(wrap_pyfunction!(vlp::vlp_water_viscosity_rust, m)?)?;
+    m.add_function(wrap_pyfunction!(vlp::vlp_profile_gas_rust, m)?)?;
+    m.add_function(wrap_pyfunction!(vlp::vlp_profile_oil_rust, m)?)?;
 
     // Gas-free NaCl brine viscosity (VLP water phase; parity testing)
     m.add_function(wrap_pyfunction!(brine_visc::brine_viscosity_nacl_rust, m)?)?;

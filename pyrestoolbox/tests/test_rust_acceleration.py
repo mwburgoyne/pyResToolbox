@@ -532,6 +532,28 @@ class TestNodalVLPEquivalence:
     def test_bb_oil(self):
         self._compare_fbhp_oil('BB')
 
+    @pytest.mark.parametrize('vlpmethod', ['HB', 'WG', 'GRAY', 'BB'])
+    def test_profile_and_multipliers_match(self, vlpmethod):
+        """Per-step profile parts and the gravity/friction multipliers agree."""
+        from pyrestoolbox.nodal import nodal
+        comp = nodal.Completion(segments=[nodal.WellSegment(md=3000, id=2.441),
+                                          nodal.WellSegment(md=6000, id=2.441, deviation=25)],
+                                tht=90, bht=220)
+        cases = [dict(well_type='gas', qg_mscfd=3000, qw_bwpd=5, cgr=20, pr=4000),
+                 dict(well_type='oil', qt_stbpd=800, gor=600, wc=0.4, pb=3000, rsb=600, api=32)]
+        keys = ('step_md', 'step_tvd', 'step_p', 'holdup',
+                'dp_gravity', 'dp_friction', 'dp_acceleration')
+        for kw in cases:
+            kw = dict(kw, thp=300, completion=comp, vlpmethod=vlpmethod, return_profile=True,
+                      gravity_mult=0.9, friction_mult=1.3)
+            r_rust = nodal.fbhp(**kw)
+            with force_python():
+                r_py = nodal.fbhp(**kw)
+            for k in keys:
+                np.testing.assert_allclose(r_rust[k], r_py[k], rtol=1e-9, atol=1e-9,
+                                           err_msg=f"{vlpmethod} {kw['well_type']} {k}")
+            assert list(r_rust['regime']) == list(r_py['regime'])
+
     def test_gas_pvt_z_methods_match(self):
         """The GasPVT Z/viscosity spec gives the same march in Rust and Python."""
         from pyrestoolbox.nodal import nodal

@@ -1068,6 +1068,18 @@ def test_doc_nodal_ipr_curve():
     for actual, expected in zip(ipr['rate'], expected_rate):
         assert abs(round(actual, 1) - expected) < 0.2
 
+def test_doc_nodal_fbhp_profile_decomposition():
+    """nodal.rst: fbhp return_profile decomposition and friction_mult"""
+    c = nodal.Completion(tid=2.441, length=8000, tht=100, bht=180)
+    kw = dict(thp=200, completion=c, vlpmethod='BB', well_type='oil', qt_stbpd=2000,
+              gor=800, wc=0.3, pb=2500, rsb=500, api=35)
+    p = nodal.fbhp(return_profile=True, **kw)
+    assert round(p['bhp'], 1) == 2191.8
+    assert (round(p['dp_gravity'].sum(), 1), round(p['dp_friction'].sum(), 1),
+            round(p['dp_acceleration'].sum(), 2)) == (1685.1, 304.9, 1.77)
+    assert sorted(set(p['regime'])) == ['distributed', 'intermittent']
+    assert round(nodal.fbhp(friction_mult=1.2, **kw), 1) == 2277.7
+
 def test_doc_nodal_operating_point_gas():
     """nodal.rst: operating_point gas"""
     c = nodal.Completion(tid=2.441, length=10000, tht=100, bht=200)
