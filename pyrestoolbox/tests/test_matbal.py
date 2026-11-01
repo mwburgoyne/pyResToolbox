@@ -416,9 +416,16 @@ def test_oil_matbal_regress_recovers_saturated():
     assert abs(r.ooip - 50e6) / 50e6 < 0.01
 
 
-def test_oil_matbal_regress_unidentifiable_warns():
+@pytest.mark.parametrize('singular_inv', [False, True])
+def test_oil_matbal_regress_unidentifiable_warns(monkeypatch, singular_inv):
     """Undersaturated history: Et is proportional to dp for any cf, so N and cf cannot
-    be separated. The fit must say so instead of returning cf silently."""
+    be separated. The fit must say so instead of returning cf silently. singular_inv
+    reproduces macOS Accelerate, where inv() of the near-singular normal matrix raised
+    LinAlgError though matrix_rank passed (3.9.0)."""
+    if singular_inv:
+        def _raise(a):
+            raise np.linalg.LinAlgError("Singular matrix")
+        monkeypatch.setattr(np.linalg, 'inv', _raise)
     pp = np.r_[5000, 4995, 4985, 4970, np.linspace(4900, 3600, 8)]
     Boi, co = 1.35469, 10.71e-6
     Bo = Boi * (1 + co * (5000 - pp))

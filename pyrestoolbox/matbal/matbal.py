@@ -439,7 +439,10 @@ def _regress_report(names, u, model, F_net):
     if np.any(norms <= 0) or np.linalg.matrix_rank(jac / np.where(norms > 0, norms, 1.0)) < jac.shape[1]:
         max_corr = 1.0
     else:
-        cov = np.linalg.inv((jac / norms).T @ (jac / norms))
+        try:
+            cov = np.linalg.inv((jac / norms).T @ (jac / norms))
+        except np.linalg.LinAlgError:   # rank test passed but LU met an exact zero pivot
+            cov = np.full((jac.shape[1], jac.shape[1]), np.nan)
         with np.errstate(invalid='ignore'):
             d = np.sqrt(np.diag(cov))
         corr = cov / np.outer(d, d)
