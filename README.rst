@@ -9,14 +9,19 @@ A collection of Reservoir Engineering Utilities
 This set of functions focuses on those that the author uses often while crafting programming solutions.
 These are the scripts that are often copy/pasted from previous work - sometimes slightly modified - resulting in a trail of slightly different versions over the years. Some attempt has been made here to make this implementation flexible enough such that it can be relied on as-is going forward.
 
-Modules: gas, oil, brine, nodal (VLP/IPR, VFP tables), simtools (black-oil, PVTW, rel-perm, aquifer and deck tools), dca (decline curves), matbal (material balance), layer, library, recommend and sensitivity. Every module accepts Eclipse METRIC units with ``metric=True``; the full documentation ships inside the package, and ``pyrestoolbox.docs_dir()`` returns its location for offline reading.
+Modules: gas, oil, brine, nodal (VLP/IPR, chokes, liquid loading, VFP tables), simtools (black-oil, PVTW, rel-perm, aquifer and deck tools), dca (decline curves), matbal (material balance, aquifer influx), pipeline (gas pipelines), crm (capacitance-resistance models), layer, library, recommend and sensitivity. Every module accepts Eclipse METRIC units with ``metric=True``; the full documentation ships inside the package, and ``pyrestoolbox.docs_dir()`` returns its location for offline reading.
 
 Includes functions to perform calculations including;
 
-- Decline Curve Analysis with Arps and Duong models - fitting, forecasting, EUR, windowed fitting, secondary phase ratio models, and uptime inference
-- Material Balance for gas (P/Z with Cole plot and Havlena-Odeh aquifer support) and oil (Havlena-Odeh with drive indices, parameter regression, and tabulated PVT)
+- Decline Curve Analysis with Arps and Duong models - fitting, forecasting, EUR, windowed fitting, b-factor uncertainty band, secondary phase ratio models, and uptime inference
+- Material Balance for gas (P/Z with Cole plot, curvature diagnostic and Havlena-Odeh aquifer support) and oil (least-squares Havlena-Odeh OOIP with drive indices, Campbell points, parameter regression with identifiability warnings, and tabulated PVT)
+- Carter-Tracy aquifer influx histories, with radial aquifer constants in field or metric units
 - Inflow Performance Relationships (IPR) for oil and gas wells
-- Vertical Lift Performance (VLP) with four multiphase flow correlations (Hagedorn-Brown, Woldesemayat-Ghajar, Gray, Beggs & Brill)
+- Vertical Lift Performance (VLP) with four multiphase flow correlations (Hagedorn-Brown, Woldesemayat-Ghajar, Gray, Beggs & Brill), an error-controlled adaptive march, per-step gravity/friction/acceleration breakdown, and calibration of gravity and friction multipliers to well tests
+- Liquid loading critical rate (Turner, Coleman), erosional velocity (API RP 14E) and wellhead chokes (Gilbert-family and Sachdeva)
+- Gas well deliverability tests (Rawlins-Schellhardt C,n and Houpeurt LIT, AOF)
+- Gas pipeline pressure drop and capacity (General Flow, Weymouth, Panhandle A/B, IGT)
+- Capacitance-resistance models (CRMP, CRMT) for waterflood connectivity, forecasting and oil-cut fitting
 - Nodal analysis operating point determination
 - Eclipse VFP table generation (VFPPROD and VFPINJ keywords)
 - PVT Calculations for oil
@@ -50,7 +55,6 @@ pyResToolbox includes optional Rust-compiled extensions that accelerate computat
 - **Oil density** - Standing-Witte-McCain-Hill (iterative and above-Pb)
 - **Oil FVF** - McCain density-based method
 - **DCA hyperbolic fitting** - grid search with RANSAC (``fit_decline``, ``fit_decline_cum``)
-- **Material balance** - oil matbal regression objective function
 - **CO2-Brine solubility** - Spycher-Pruess iterative RK-EOS solver
 - **VLE flash** - Soreide-Whitson multi-component Peng-Robinson flash
 
@@ -91,15 +95,19 @@ Module List
    :widths: 30 70
 
    * - `dca <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/dca.rst>`_
-     - Arps and Duong decline rate and cumulative, EUR estimation, Decline model fitting (time-domain and cumulative, with windowing), Ratio model fitting (GOR/WOR), Forecasting with uptime and secondary phase ratios
+     - Arps and Duong decline rate and cumulative, EUR estimation, Decline model fitting (time-domain and cumulative, with windowing), b-factor band and EUR spread, Ratio model fitting (GOR/WOR), Forecasting with uptime and secondary phase ratios
    * - `matbal <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/matbal.rst>`_
-     - Gas P/Z material balance (OGIP), Cole plot diagnostics, Havlena-Odeh with aquifer influx, Oil Havlena-Odeh material balance (OOIP) with drive indices, Parameter regression with bounds, Tabulated PVT support
+     - Gas P/Z material balance (OGIP), Cole plot and P/Z curvature diagnostics, Havlena-Odeh with aquifer influx, Oil Havlena-Odeh material balance (least-squares OOIP) with drive indices and Campbell points, Parameter regression with bounds and identifiability warnings, Tabulated PVT support, Carter-Tracy aquifer influx, Radial aquifer constants
    * - `gas <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/gas.rst>`_
-     - Gas Tc & Pc Calculation, Gas Z-Factor Calculation, Gas Viscosity, Gas Viscosity \* Z, Gas Compressibility, Gas Formation Volume Factor, Gas Density, Gas Water of Condensation, Convert P/Z to P, Convert Gas Gradient to SG, Delta Pseudopressure, Gas Condensate FWS SG, Gas Flow Rate Radial, Gas Flow Rate Linear, Gas Hydrate Prediction, Gas Caloric Properties (H, Cp, Cv, Joule-Thomson), Non-Darcy and Partial-Penetration Pseudoskins
+     - Gas Tc & Pc Calculation, Gas Z-Factor Calculation, Gas Viscosity, Gas Viscosity \* Z, Gas Compressibility, Gas Formation Volume Factor, Gas Density, Gas Water of Condensation, Convert P/Z to P, Convert Gas Gradient to SG, Delta Pseudopressure, Gas Condensate FWS SG, Gas Flow Rate Radial, Gas Flow Rate Linear, Gas Deliverability Tests (C,n, LIT, AOF), Gas Hydrate Prediction, Gas Caloric Properties (H, Cp, Cv, Joule-Thomson), Non-Darcy and Partial-Penetration Pseudoskins
    * - `oil <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/oil.rst>`_
      - Oil Density from MW, Oil Critical Properties with Twu, Incremental GOR post Separation, Oil Bubble Point Pressure, Oil GOR at Pb, Oil GOR at P, Oil Compressibility, Oil Density, Oil Formation Volume Factor, Oil Viscosity, Harmonize Pb and Rsb, Estimate soln gas SG from oil, Estimate SG of gas post separator, Calculate weighted average surface gas SG, Oil API to SG, Oil SG to API, Oil Flow Rate Radial, Oil Flow Rate Linear
    * - `nodal <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/nodal.rst>`_
-     - Flowing BHP (4 VLP methods), Outflow (VLP) curves, Inflow (IPR) curves, Operating point analysis, Multi-segment deviated/horizontal wells, GasPVT and OilPVT convenience classes
+     - Flowing BHP (4 VLP methods), Per-step pressure-drop profile, Gravity and friction multipliers, VLP calibration to well tests, Outflow (VLP) curves, Inflow (IPR) curves, Operating point analysis, Multi-segment deviated/horizontal wells, Liquid loading critical rate, Erosional velocity, Wellhead chokes (Gilbert-family, Sachdeva), GasPVT and OilPVT convenience classes
+   * - `pipeline <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/pipeline.rst>`_
+     - Gas pipeline pressure drop or capacity: General Flow (Colebrook or AGA friction), Weymouth, Panhandle A and B, IGT, with elevation correction
+   * - `crm <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/crm.rst>`_
+     - Capacitance-resistance models (CRMP, CRMT) fitted to injection and production rates, connectivity and time constants, forecasting, pore volume, oil-cut model fitting
    * - `library <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/library.rst>`_
      - Return critical parameters for typical single components
    * - `brine <https://github.com/mwburgoyne/pyResToolbox/blob/main/pyrestoolbox/docs/brine.rst>`_
