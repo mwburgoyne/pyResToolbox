@@ -4,6 +4,7 @@
 //! Python scaffold design. nodal.py is the authoritative reference.
 
 use super::constants::*;
+use crate::pseudopressure::GasState;
 use super::friction::{duns_ros_rough_fanning, serghides_fanning};
 use super::holdup_bb::*;
 use super::holdup_gray::{gray_effective_roughness, gray_liquid_holdup};
@@ -133,19 +134,6 @@ fn low_liquid_gradient(gradient: GradientFn, s: &SegmentState) -> Composed {
     }
 }
 
-/// Number of march segments for a given length (Python _calc_segments,
-/// min_seg_ft = 100).
-fn calc_segments(length: f64) -> usize {
-    let mut ndiv = 100usize;
-    let seg_len = length / ndiv as f64;
-    if seg_len < 100.0 {
-        ndiv = (length / 100.0) as usize + 1;
-        if ndiv < 1 {
-            ndiv = 1;
-        }
-    }
-    ndiv
-}
 
 /// Linear CGR interpolation for condensate dropout (Python _condensate_dropout).
 fn condensate_dropout(
@@ -425,6 +413,79 @@ fn bb_gradient(s: &SegmentState) -> GradParts {
     GradParts { grav: dpdz_hydro, fric: sign * dpdz_fric, ek, holdup: hl_theta, regime: pattern }
 }
 
+type GradAt<'a> = dyn FnMut(f64, f64) -> Result<Composed, String> + 'a;
+
+/// Integrate dp/dz from the section top over `length` ft with the Bogacki-Shampine
+/// 3(2) pair and error-controlled steps (Python _march_section, same constants).
+/// Recorded parts use the stage weights, so they sum to each step's pressure change.
+fn march_section(
+    thp: f64, length: f64, tht: f64, bht: f64, grad: &mut GradAt,
+    recorder: &mut Option<&mut Vec<StepRec>>,
+) -> Result<f64, String> {
+    let mut g = |z: f64, p: f64| grad(p.max(14.7), tht + (bht - tht) * z / length);
+    let tol = |p0: f64, p1: f64| STEP_ATOL + STEP_RTOL * p0.abs().max(p1.abs());
+
+    let (mut z, mut p) = (0.0, thp);
+    let mut k1 = g(z, p)?;
+    // Initial step: predicted local error 1% of tolerance (Python _march_section)
+    let sc = tol(p, p);
+    let (d0, d1) = (p.abs() / sc, k1.total.abs() / sc);
+    let h0 = if d0.min(d1) > 1e-5 { 0.01 * d0 / d1 } else { 1e-6 * length };
+    let h0 = h0.clamp(STEP_MIN_FT, STEP_MAX_FT).min(length);
+    let d2 = (g(z + h0, p + h0 * k1.total)?.total - k1.total).abs() / sc / h0;
+    let dm = d1.max(d2);
+    let h_est = if dm > 1e-15 { (0.01 / dm).powf(1.0 / 3.0) } else { 100.0 * h0 };
+    let mut h = (100.0 * h0).min(h_est).clamp(STEP_MIN_FT, STEP_MAX_FT);
+    let mut rejected = false;
+    while z < length {
+        h = h.min(length - z);
+        let k2 = g(z + BS_C[0] * h, p + BS_C[0] * h * k1.total)?;
+        let k3 = g(z + BS_C[1] * h, p + BS_C[1] * h * k2.total)?;
+        let ks = [&k1, &k2, &k3];
+        let w = |f: fn(&Composed) -> f64| -> f64 {
+            BS_B.iter().zip(ks.iter()).map(|(b, k)| b * f(k)).sum()
+        };
+        let step = Composed {
+            total: w(|k| k.total), grav: w(|k| k.grav), fric: w(|k| k.fric),
+            accel: w(|k| k.accel), holdup: w(|k| k.holdup), regime: k2.regime,
+        };
+        let p_new = p + h * step.total;
+        let k4 = g(z + h, p_new)?;
+        let err = (h * (BS_E[0] * k1.total + BS_E[1] * k2.total + BS_E[2] * k3.total
+            + BS_E[3] * k4.total)).abs();
+        let ratio = err / tol(p, p_new);
+        let floor = h <= STEP_MIN_FT * (1.0 + 1e-12) || (z + h >= length && h < STEP_MIN_FT);
+        if (ratio.is_nan() || ratio > 1.0) && !floor {
+            let fac = if ratio.is_finite() {
+                (STEP_SAFETY * ratio.powf(-1.0 / 3.0)).max(STEP_FAC_MIN)
+            } else {
+                STEP_FAC_MIN
+            };
+            h = (h * fac.min(1.0)).max(STEP_MIN_FT);
+            rejected = true;
+            continue;
+        }
+        z = if z + h >= length * (1.0 - 1e-12) { length } else { z + h };
+        record_step(recorder, z, p_new, &step, h);
+        if p_new.is_nan() || p_new < 1.0 {
+            return Err(DIVERGED_MSG.to_string());
+        }
+        p = p_new;
+        k1 = k4;
+        let fac = if ratio == 0.0 {
+            STEP_FAC_MAX
+        } else if !ratio.is_finite() {
+            1.0
+        } else {
+            (STEP_SAFETY * ratio.powf(-1.0 / 3.0)).min(STEP_FAC_MAX)
+        };
+        let fac = if rejected { fac.min(1.0) } else { fac };
+        h = (h * fac).clamp(STEP_MIN_FT, STEP_MAX_FT);
+        rejected = false;
+    }
+    Ok(p)
+}
+
 // ============================================================================
 //  Shared gas segment march (Python _segment_march_gas)
 // ============================================================================
@@ -455,93 +516,73 @@ fn segment_march_gas(
     let rough_ft = rough / 12.0;
     let area = std::f64::consts::PI * diam_ft.powi(2) / 4.0;
 
-    let ndiv = calc_segments(length);
-    let seg_len = length / ndiv as f64;
-
     let mflow_g = RHO_AIR_STC * gsg * qg_mmscfd * 1e6 / SEC_PER_DAY;
     let mflow_w = wsg * RHO_FW * qw_bwpd * FT3_PER_BBL / SEC_PER_DAY;
     let m_nacl = nacl_molality_from_wsg(wsg);
 
-    let mut p_psia = thp;
-
-    for i in 1..=ndiv {
-        let frac = (i as f64 - 0.5) / ndiv as f64;
-        let temp_f = tht + (bht - tht) * frac;
-        // GasPVT Z/viscosity evaluator at this segment temperature
-        let seg_gas = zspec.map(|g| gas_state(g, temp_f, true)).transpose()?;
+    // GasPVT Z/viscosity evaluator, rebuilt only when the step temperature changes
+    let mut seg_gas: (f64, Option<GasState>) = (f64::NAN, None);
+    let mut grad = |p_avg: f64, temp_f: f64| -> Result<Composed, String> {
+        if temp_f != seg_gas.0 {
+            seg_gas = (temp_f, zspec.map(|g| gas_state(g, temp_f, true)).transpose()?);
+        }
         let temp_r = temp_f + 459.67;
-        let mut p_est = p_psia;
-        let mut parts = Composed {
-            total: 0.0, grav: 0.0, fric: 0.0, accel: 0.0, holdup: 0.0, regime: REGIME_NONE,
+        let (cgr_loc, qo_loc, ql_loc, lsg_loc) =
+            condensate_dropout(cgr, qg_mmscfd, p_avg, pr, osg, qw_bwpd, wsg);
+
+        let mflow_o = osg * RHO_FW * qo_loc * FT3_PER_BBL / SEC_PER_DAY;
+        let mflow_l = mflow_o + mflow_w;
+        let mflow_total = mflow_g + mflow_l;
+
+        let oil_vis_loc = condensate_vis(pr, cgr_loc, gsg, api, temp_f, p_avg, oil_vis);
+
+        let (zee, mu_g) = match &seg_gas.1 {
+            Some(g) => {
+                let z = g.eval_z(p_avg);
+                (z, g.eval_ug(p_avg, z))
+            }
+            None => {
+                let z = z_factor(gsg, temp_f, p_avg, tc, pc);
+                (z, gas_viscosity(gsg, temp_f, p_avg, z, tc, pc))
+            }
         };
 
-        for _ in 0..2 {
-            let p_avg = ((p_psia + p_est) / 2.0).max(14.7);
+        let rho_g = MW_AIR * gsg * p_avg / (zee * R_GAS * temp_r);
+        let rho_l = lsg_loc * RHO_FW;
 
-            let (cgr_loc, qo_loc, ql_loc, lsg_loc) =
-                condensate_dropout(cgr, qg_mmscfd, p_avg, pr, osg, qw_bwpd, wsg);
+        let v_sg = (mflow_g / rho_g.max(1e-10)) / area;
+        let v_sl = (mflow_l / rho_l.max(1e-10)) / area;
+        let v_m = v_sg + v_sl;
+        let lambda_l = if v_m > 1e-10 { v_sl / v_m } else { 0.0 };
+        let rho_ns = rho_l * lambda_l + rho_g * (1.0 - lambda_l);
 
-            let mflow_o = osg * RHO_FW * qo_loc * FT3_PER_BBL / SEC_PER_DAY;
-            let mflow_l = mflow_o + mflow_w;
-            let mflow_total = mflow_g + mflow_l;
+        let water_visc = if qw_bwpd > 0.0 {
+            water_viscosity(p_avg, temp_f, m_nacl)
+        } else {
+            0.0
+        };
+        let mu_l = if ql_loc > 0.0 {
+            (qo_loc * oil_vis_loc + qw_bwpd * water_visc) / ql_loc
+        } else {
+            oil_vis_loc
+        };
 
-            let oil_vis_loc = condensate_vis(pr, cgr_loc, gsg, api, temp_f, p_avg, oil_vis);
+        let rs_est = standing_rs(gsg, p_avg, temp_f, api);
+        let sigma = interfacial_tension(
+            p_avg, temp_f, api, rs_est,
+            mflow_o * LB_TO_KG, mflow_w * LB_TO_KG, mflow_g * LB_TO_KG,
+        );
 
-            let (zee, mu_g) = match &seg_gas {
-                Some(g) => {
-                    let z = g.eval_z(p_avg);
-                    (z, g.eval_ug(p_avg, z))
-                }
-                None => {
-                    let z = z_factor(gsg, temp_f, p_avg, tc, pc);
-                    (z, gas_viscosity(gsg, temp_f, p_avg, z, tc, pc))
-                }
-            };
+        let s = SegmentState {
+            p_avg, mu_g, rho_g, rho_l, rho_ns, v_sg, v_sl, v_m, lambda_l,
+            sigma, mu_l, diam_ft, rough_ft, area, injection, theta,
+            mflow_g, mflow_l, mflow_total, ql_loc, tid, rough, grav_mult, fric_mult,
+        };
 
-            let rho_g = MW_AIR * gsg * p_avg / (zee * R_GAS * temp_r);
-            let rho_l = lsg_loc * RHO_FW;
+        Ok(low_liquid_gradient(gradient, &s))
+    };
 
-            let v_sg = (mflow_g / rho_g.max(1e-10)) / area;
-            let v_sl = (mflow_l / rho_l.max(1e-10)) / area;
-            let v_m = v_sg + v_sl;
-            let lambda_l = if v_m > 1e-10 { v_sl / v_m } else { 0.0 };
-            let rho_ns = rho_l * lambda_l + rho_g * (1.0 - lambda_l);
-
-            let water_visc = if qw_bwpd > 0.0 {
-                water_viscosity(p_avg, temp_f, m_nacl)
-            } else {
-                0.0
-            };
-            let mu_l = if ql_loc > 0.0 {
-                (qo_loc * oil_vis_loc + qw_bwpd * water_visc) / ql_loc
-            } else {
-                oil_vis_loc
-            };
-
-            let rs_est = standing_rs(gsg, p_avg, temp_f, api);
-            let sigma = interfacial_tension(
-                p_avg, temp_f, api, rs_est,
-                mflow_o * LB_TO_KG, mflow_w * LB_TO_KG, mflow_g * LB_TO_KG,
-            );
-
-            let s = SegmentState {
-                p_avg, mu_g, rho_g, rho_l, rho_ns, v_sg, v_sl, v_m, lambda_l,
-                sigma, mu_l, diam_ft, rough_ft, area, injection, theta,
-                mflow_g, mflow_l, mflow_total, ql_loc, tid, rough, grav_mult, fric_mult,
-            };
-
-            parts = low_liquid_gradient(gradient, &s);
-            p_est = p_psia + parts.total * seg_len;
-        }
-
-        p_psia = p_est;
-        record_step(&mut recorder, i as f64 * seg_len, p_psia, &parts, seg_len);
-        if p_psia < 1.0 {
-            return Err(DIVERGED_MSG.to_string());
-        }
-    }
-
-    Ok(p_psia)
+    march_section(thp, length, tht, bht, &mut grad, &mut recorder)
 }
 
 // ============================================================================
@@ -577,96 +618,73 @@ fn segment_march_oil(
     let rough_ft = rough / 12.0;
     let area = std::f64::consts::PI * diam_ft.powi(2) / 4.0;
 
-    let ndiv = calc_segments(length);
-    let seg_len = length / ndiv as f64;
-
-    let mut p_psia = thp;
-
-    for i in 1..=ndiv {
-        let frac = (i as f64 - 0.5) / ndiv as f64;
-        let temp_f = tht + (bht - tht) * frac;
+    let mut grad = |p_avg: f64, temp_f: f64| -> Result<Composed, String> {
         let temp_r = temp_f + 459.67;
-        let mut p_est = p_psia;
-        let mut parts = Composed {
-            total: 0.0, grav: 0.0, fric: 0.0, accel: 0.0, holdup: 0.0, regime: REGIME_NONE,
+        let rs_local = velarde_rs(sgsp, api, temp_f, pb, rsb_for_calc, p_avg) * rsb_scale;
+        let free_gas = (gor - rs_local).max(0.0);
+        let qg_mmscfd = (free_gas * qo / 1e6).max(1e-9);
+
+        let oil_vis_seg =
+            oil_viscosity_full(sgsp, api, temp_f, rsb, pb, p_avg, vis_frac, rsb_frac);
+        let rho_oil = oil_density_mccain(rs_local, sgsp, osg, p_avg.min(pb), temp_f)
+            * undersaturated_compression(api, sgsp, pb, p_avg, rsb, temp_f);
+
+        let zee = z_factor(gsg, temp_f, p_avg, tc, pc);
+        let mu_g = gas_viscosity(gsg, temp_f, p_avg, zee, tc, pc);
+
+        let rho_g = MW_AIR * gsg * p_avg / (zee * R_GAS * temp_r);
+
+        // Live oil carries its dissolved gas (mirrors Python _segment_march_oil)
+        let mflow_o = (osg * RHO_FW * qo * FT3_PER_BBL + RHO_AIR_STC * sgsp * rs_local * qo)
+            / SEC_PER_DAY;
+        let mflow_w = wsg * RHO_FW * qw * FT3_PER_BBL / SEC_PER_DAY;
+        let mflow_g = RHO_AIR_STC * gsg * qg_mmscfd * 1e6 / SEC_PER_DAY;
+        let mflow_l = mflow_o + mflow_w;
+        let mflow_total = mflow_g + mflow_l;
+
+        let ql = qo + qw;
+        let rho_w = wsg * RHO_FW;
+        // Liquid mixture density uses the live-oil (McCain) density for the
+        // oil fraction - matches Python _segment_march_oil
+        let rho_l = if ql > 0.0 {
+            (qo * rho_oil + qw * rho_w) / ql
+        } else {
+            rho_oil
         };
 
-        for _ in 0..2 {
-            let p_avg = ((p_psia + p_est) / 2.0).max(14.7);
+        let v_sg = (mflow_g / rho_g.max(1e-10)) / area;
+        let v_sl = (mflow_l / rho_l.max(1e-10)) / area;
+        let v_m = v_sg + v_sl;
+        let lambda_l = if v_m > 1e-10 { v_sl / v_m } else { 0.0 };
+        let rho_ns = rho_l * lambda_l + rho_g * (1.0 - lambda_l);
 
-            let rs_local = velarde_rs(sgsp, api, temp_f, pb, rsb_for_calc, p_avg) * rsb_scale;
-            let free_gas = (gor - rs_local).max(0.0);
-            let qg_mmscfd = (free_gas * qo / 1e6).max(1e-9);
+        let water_visc = if qw > 0.0 {
+            water_viscosity(p_avg, temp_f, m_nacl)
+        } else {
+            0.0
+        };
+        let mu_l = if ql > 0.0 {
+            (qo * oil_vis_seg + qw * water_visc) / ql
+        } else {
+            oil_vis_seg
+        };
 
-            let oil_vis_seg =
-                oil_viscosity_full(sgsp, api, temp_f, rsb, pb, p_avg, vis_frac, rsb_frac);
-            let rho_oil = oil_density_mccain(rs_local, sgsp, osg, p_avg.min(pb), temp_f)
-                * undersaturated_compression(api, sgsp, pb, p_avg, rsb, temp_f);
+        let sigma = interfacial_tension(
+            p_avg, temp_f, api, rs_local,
+            mflow_o * LB_TO_KG, mflow_w * LB_TO_KG, mflow_g * LB_TO_KG,
+        );
 
-            let zee = z_factor(gsg, temp_f, p_avg, tc, pc);
-            let mu_g = gas_viscosity(gsg, temp_f, p_avg, zee, tc, pc);
+        let s = SegmentState {
+            p_avg, mu_g, rho_g, rho_l, rho_ns, v_sg, v_sl, v_m, lambda_l,
+            sigma, mu_l, diam_ft, rough_ft, area, injection, theta,
+            mflow_g, mflow_l, mflow_total,
+            ql_loc: ql, tid, rough, grav_mult, fric_mult,
+        };
 
-            let rho_g = MW_AIR * gsg * p_avg / (zee * R_GAS * temp_r);
+        Ok(gradient_parts(gradient, &s))
+    };
 
-            // Live oil carries its dissolved gas (mirrors Python _segment_march_oil)
-            let mflow_o = (osg * RHO_FW * qo * FT3_PER_BBL + RHO_AIR_STC * sgsp * rs_local * qo)
-                / SEC_PER_DAY;
-            let mflow_w = wsg * RHO_FW * qw * FT3_PER_BBL / SEC_PER_DAY;
-            let mflow_g = RHO_AIR_STC * gsg * qg_mmscfd * 1e6 / SEC_PER_DAY;
-            let mflow_l = mflow_o + mflow_w;
-            let mflow_total = mflow_g + mflow_l;
-
-            let ql = qo + qw;
-            let rho_w = wsg * RHO_FW;
-            // Liquid mixture density uses the live-oil (McCain) density for the
-            // oil fraction - matches Python _segment_march_oil
-            let rho_l = if ql > 0.0 {
-                (qo * rho_oil + qw * rho_w) / ql
-            } else {
-                rho_oil
-            };
-
-            let v_sg = (mflow_g / rho_g.max(1e-10)) / area;
-            let v_sl = (mflow_l / rho_l.max(1e-10)) / area;
-            let v_m = v_sg + v_sl;
-            let lambda_l = if v_m > 1e-10 { v_sl / v_m } else { 0.0 };
-            let rho_ns = rho_l * lambda_l + rho_g * (1.0 - lambda_l);
-
-            let water_visc = if qw > 0.0 {
-                water_viscosity(p_avg, temp_f, m_nacl)
-            } else {
-                0.0
-            };
-            let mu_l = if ql > 0.0 {
-                (qo * oil_vis_seg + qw * water_visc) / ql
-            } else {
-                oil_vis_seg
-            };
-
-            let sigma = interfacial_tension(
-                p_avg, temp_f, api, rs_local,
-                mflow_o * LB_TO_KG, mflow_w * LB_TO_KG, mflow_g * LB_TO_KG,
-            );
-
-            let s = SegmentState {
-                p_avg, mu_g, rho_g, rho_l, rho_ns, v_sg, v_sl, v_m, lambda_l,
-                sigma, mu_l, diam_ft, rough_ft, area, injection, theta,
-                mflow_g, mflow_l, mflow_total,
-                ql_loc: ql, tid, rough, grav_mult, fric_mult,
-            };
-
-            parts = gradient_parts(gradient, &s);
-            p_est = p_psia + parts.total * seg_len;
-        }
-
-        p_psia = p_est;
-        record_step(&mut recorder, i as f64 * seg_len, p_psia, &parts, seg_len);
-        if p_psia < 1.0 {
-            return Err(DIVERGED_MSG.to_string());
-        }
-    }
-
-    Ok(p_psia)
+    march_section(thp, length, tht, bht, &mut grad, &mut recorder)
 }
 
 // ============================================================================

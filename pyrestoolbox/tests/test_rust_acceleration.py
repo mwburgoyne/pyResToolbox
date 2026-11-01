@@ -511,6 +511,19 @@ class TestNodalVLPEquivalence:
     def test_hb_gas(self):
         self._compare_fbhp_gas('HB')
 
+    def test_adaptive_step_split_case(self):
+        """Steps halved near a low wellhead pressure split identically in both paths."""
+        from pyrestoolbox.nodal import nodal
+        comp = nodal.Completion(tid=1.995, length=10000, tht=100, bht=200)
+        kw = dict(thp=50, completion=comp, well_type='gas', qg_mscfd=25000,
+                  qw_bwpd=20, cgr=10, return_profile=True)
+        for m in ('HB', 'WG', 'GRAY', 'BB'):
+            r_rust = nodal.fbhp(vlpmethod=m, **kw)
+            with force_python():
+                r_py = nodal.fbhp(vlpmethod=m, **kw)
+            assert len(r_rust['step_md']) == len(r_py['step_md']), m
+            np.testing.assert_allclose(r_rust['bhp'], r_py['bhp'], rtol=1e-9, err_msg=m)
+
     def test_hb_oil(self):
         self._compare_fbhp_oil('HB')
 

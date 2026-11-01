@@ -200,6 +200,18 @@ pub const WG_CHIS_LL: f64 = 5.0; // Laminar-laminar
 
 /// Floor on the kinetic-energy denominator 1 - Ek (Python _EK_DENOM_MIN).
 pub const EK_DENOM_MIN: f64 = 0.1;
+/// Adaptive march (march_section, Bogacki-Shampine 3(2)); mirrors Python _STEP_* / _BS_*.
+pub const STEP_RTOL: f64 = 1e-5;
+pub const STEP_ATOL: f64 = 1e-3;
+pub const STEP_MAX_FT: f64 = 500.0;
+pub const STEP_MIN_FT: f64 = 0.1;
+pub const STEP_SAFETY: f64 = 0.9;
+pub const STEP_FAC_MIN: f64 = 0.2;
+pub const STEP_FAC_MAX: f64 = 10.0;
+/// Bogacki & Shampine (1989) stage nodes, third-order weights, error weights.
+pub const BS_C: [f64; 2] = [0.5, 0.75];
+pub const BS_B: [f64; 3] = [2.0 / 9.0, 1.0 / 3.0, 4.0 / 9.0];
+pub const BS_E: [f64; 4] = [-5.0 / 72.0, 1.0 / 12.0, 1.0 / 9.0, -1.0 / 8.0];
 /// Per-step regime codes (Python _REGIME_*): Beggs-Brill patterns 0-3,
 /// Hagedorn-Brown 4 (Orkiszewski bubble flow) or 5, -1 for no regime map.
 pub const REGIME_NONE: i32 = -1;

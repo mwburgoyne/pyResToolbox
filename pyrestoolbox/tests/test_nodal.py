@@ -1113,6 +1113,34 @@ def test_fbhp_profile_parts_sum_to_bhp(vlpmethod, well_type):
         assert set(r['regime']) <= {'segregated', 'intermittent', 'distributed', 'transition'}
 
 
+def test_fbhp_adaptive_step_near_wellhead():
+    """A 25 MMscf/d gas well in 1.995 in tubing at THP 50 psia: the gradient changes
+    fastest just below the wellhead, so the first steps are short (never below the
+    0.1 ft floor) and the BHP lands within 0.1% of a march converged at 1e-6 relative
+    tolerance (5029.08 psia). The former fixed 100-step march gave 4735.7 psia."""
+    import numpy as np
+    from pyrestoolbox import nodal
+    c = nodal.Completion(tid=1.995, length=10000, tht=100, bht=200)
+    r = nodal.fbhp(thp=50, completion=c, vlpmethod='HB', well_type='gas',
+                   qg_mscfd=25000, qw_bwpd=20, cgr=10, return_profile=True)
+    h = np.diff(np.r_[0.0, r['step_md']])
+    assert h.min() >= 0.1 - 1e-9 and h.max() <= 500.0 + 1e-9
+    assert h[0] < 10.0 and abs(h.sum() - 10000) < 1e-6
+    assert abs(r['bhp'] - 5029.08) / 5029.08 < 1e-3
+
+
+def test_fbhp_adaptive_step_grows_on_smooth_case():
+    """An ordinary oil well: steps grow to the 500 ft cap, so the march takes far
+    fewer than the former 100 steps."""
+    import numpy as np
+    from pyrestoolbox import nodal
+    c = nodal.Completion(tid=2.441, length=8000, tht=100, bht=200)
+    r = nodal.fbhp(thp=300, completion=c, vlpmethod='HB', well_type='oil', qt_stbpd=1000,
+                   gor=400, wc=0.2, pb=2500, rsb=400, api=35, return_profile=True)
+    h = np.diff(np.r_[0.0, r['step_md']])
+    assert len(h) < 40 and abs(h.max() - 500.0) < 1e-9
+
+
 def test_fbhp_gravity_friction_multipliers():
     """Zero multipliers remove their parts; the defaults equal the unscaled march."""
     import numpy as np
