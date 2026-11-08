@@ -208,13 +208,13 @@ def _format_bot_results(pressures, rss, bos, denos, uos, co, gz, gfvf, cg,
         pvdg = pvdg.set_index("Pressure (psia)")
         headers = ["-- P (psia)", "Bg (rb/mscf", "ug (cP)"]
         fileout = "PVDG\n" + tabulate(pvdg, headers) + "\n/"
-        with open("PVDG.INC", "w") as text_file:
+        with open("PVDG.INC", "w", encoding="utf-8") as text_file:
             text_file.write(fileout)
         pvdo = df[["Pressure (psia)", "Bo (rb/stb)", "uo (cP)"]]
         pvdo = pvdo.set_index("Pressure (psia)")
         headers = ["-- P (psia)", "Bo (rb/stb)", "uo (cP)"]
         fileout = "PVDO\n" + tabulate(pvdo, headers) + "\n/"
-        with open("PVDO.INC", "w") as text_file:
+        with open("PVDO.INC", "w", encoding="utf-8") as text_file:
             text_file.write(fileout)
 
         if pvto:
@@ -261,7 +261,7 @@ def _format_bot_results(pressures, rss, bos, denos, uos, co, gz, gfvf, cg,
                         )
             pvto_out += tabulate(table, headers)
             pvto_out += "\n/"
-            with open("PVTO.INC", "w") as text_file:
+            with open("PVTO.INC", "w", encoding="utf-8") as text_file:
                 text_file.write(pvto_out)
 
     results = {
