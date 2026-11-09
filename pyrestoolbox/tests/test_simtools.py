@@ -577,6 +577,24 @@ def test_deck_crawl_missing_nested_include():
         assert _scan() == ["DEEP.INC"]
 
 
+def test_deck_crawl_tolerates_non_utf8_comments_and_utf8_names():
+    """cp1252 bytes in comments do not raise on any locale; a UTF-8 include name still resolves."""
+    cwd = os.getcwd()
+    with tempfile.TemporaryDirectory() as tmp:
+        deck = (b"-- Temperature 100 \xb0C, stray byte \x81\n"
+                b"INCLUDE\n  'R\xc3\xa9GION.INC' /\n"
+                b"INCLUDE\n  'ABSENT.INC' /\n")
+        with open(os.path.join(tmp, "CASE.DATA"), "wb") as fh:
+            fh.write(deck)
+        with open(os.path.join(tmp, "RéGION.INC"), "wb") as fh:
+            fh.write(b"-- r\xe9gion in cp1252\nPORO\n 0.2 /\n")
+        try:
+            os.chdir(tmp)
+            assert _scan() == ["ABSENT.INC"]
+        finally:
+            os.chdir(cwd)
+
+
 def test_deck_zip_refuses_when_files_missing():
     """Non-interactive zip with a missing INCLUDE raises rather than prompting."""
     files = {"CASE.DATA": "INCLUDE\n  'ABSENT.INC' /\n"}

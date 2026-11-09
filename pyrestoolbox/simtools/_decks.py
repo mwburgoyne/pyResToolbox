@@ -90,7 +90,8 @@ def ix_extract_problem_cells(filename: str = "", silent: bool = False, non_inter
 
     if not silent:
         print("Processing " + filename + "\n")
-    file1 = open(filename, "r")  # Kept open for line-by-line reading; closed below
+    # Keywords and numbers are ASCII; replace undecodable bytes (cp1252 comments) rather than fail
+    file1 = open(filename, "r", encoding="utf-8", errors="replace")  # Kept open for line-by-line reading; closed below
     grab_line1 = False
     grab_line2 = False
     ix_found = False
@@ -300,7 +301,9 @@ def _crawl_deck_includes(files2scrape, console_summary=True):
             print('Scanning through: '+current)
 
         try:
-            lines = list(open(current, 'r'))
+            # Decks are ASCII apart from comments and names, which may be UTF-8 or cp1252: never fail on them
+            with open(current, 'r', encoding='utf-8', errors='replace') as fh:
+                lines = list(fh)
         except (FileNotFoundError, PermissionError, OSError):
             if not exists(current) and current not in missing:
                 missing.append(current)
