@@ -119,6 +119,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # PyO3's build script needs a Python it supports; the runner's system
+      # Python (3.14 on the Ubuntu 26 image) is newer than PyO3 0.23 allows.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
