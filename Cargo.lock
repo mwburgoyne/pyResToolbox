@@ -200,7 +200,7 @@ dependencies = [
 
 [[package]]
 name = "pyrestoolbox-native"
-version = "3.10.0"
+version = "3.10.1"
 dependencies = [
  "astro-float",
  "pyo3",
