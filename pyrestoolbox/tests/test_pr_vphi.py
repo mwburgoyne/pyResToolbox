@@ -14,15 +14,17 @@ from pyrestoolbox.plyasunov import V2_inf as V_plyasunov
 def test_vshift_values_pinned():
     """The shifts are load-bearing: refitting them requires regenerating the
     brine_props calibration (code/fit_pr_vshift.py) and updating both."""
-    expected = {'CH4': -0.111430, 'CO2': -0.070103, 'H2S': -0.079416,
-                'N2': -0.176768, 'H2': -0.178503, 'C2H6': -0.073843,
+    # 3.10.0: refitted on the procedure-1 kij_AQ (brine_props sw-procedure1).
+    expected = {'CH4': -0.112883, 'CO2': -0.071746, 'H2S': -0.081822,
+                'N2': -0.176415, 'H2': -0.178293, 'C2H6': -0.073934,
                 # C3H8 is not from that calibration: it is the mean of two
-                # direct 298 K determinations (see test below).
-                'C3H8': -0.113326,
+                # direct 298 K determinations (see test below), moved only by
+                # the procedure-1 kij at that anchor.
+                'C3H8': -0.113542,
                 # NC4H10 from Moore (1982) 76.6; the only positive shift.
                 'NC4H10': +0.110920,
                 # He (3.8.3) from Zhou & Battino (2001) densimetry, 24.6 cm3/mol.
-                'He': -0.302941}
+                'He': -0.302945}
     assert pr_vphi.VSHIFT == pytest.approx(expected, abs=1e-9)
 
 
@@ -36,12 +38,12 @@ def test_peneloux_identity_is_exact():
 
 
 @pytest.mark.parametrize('gas,T,P,expected', [
-    ('CH4', 350.0, 20.0, 39.4624),
-    ('CO2', 350.0, 20.0, 37.043),
-    ('H2S', 350.0, 20.0, 37.1709),
-    ('N2', 350.0, 20.0, 37.6867),
-    ('H2', 350.0, 20.0, 27.3854),
-    ('C2H6', 350.0, 20.0, 55.6003),
+    ('CH4', 350.0, 20.0, 39.4996),
+    ('CO2', 350.0, 20.0, 37.0804),
+    ('H2S', 350.0, 20.0, 37.2317),
+    ('N2', 350.0, 20.0, 37.6704),
+    ('H2', 350.0, 20.0, 27.3772),
+    ('C2H6', 350.0, 20.0, 55.6007),
 ])
 def test_reference_values(gas, T, P, expected):
     assert pr_vphi.V2_inf(gas, T, P) == pytest.approx(expected, abs=1e-3)

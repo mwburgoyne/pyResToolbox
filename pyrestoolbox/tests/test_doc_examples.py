@@ -539,43 +539,45 @@ def test_doc_make_pvtw_table_keys():
 
 def test_doc_sw_pure_co2_field():
     """brine.rst: SoreideWhitson pure CO2 field units"""
+    # Re-pinned 2026-11-12 (3.10.0) for the procedure-1 S&W solve and refit;
+    # was bDen[0] 0.9730093241255896, Rs 151.45551874473742, bw[0] 1.1008729259876717.
     mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=1.0, metric=False)
     assert isinstance(mix.bDen, list) and len(mix.bDen) == 3
     # Re-pinned 2026-09-06 for the CO2 shift refit with McBride-Wright (2015)
     # in calibration (was 0.9738595754362946 from 2026-08-19).
-    assert abs(mix.bDen[0] - 0.9730093241255896) / 0.9730093241255896 < RTOL
-    assert abs(mix.Rs['CO2'] - 151.45551874473742) / 151.45551874473742 < RTOL
+    assert abs(mix.bDen[0] - 0.9737495400683142) / 0.9737495400683142 < RTOL
+    assert abs(mix.Rs['CO2'] - 175.11151469652475) / 175.11151469652475 < RTOL
     # Re-pinned 2026-08-19 (was 1.0964191153239935, and 1.096613263262556
     # before the 2026-07-25 V_phi route change): published framework is now the
     # default. bw is the reciprocal of the density shift above.
-    assert abs(mix.bw[0] - 1.1008729259876717) / 1.1008729259876717 < RTOL
+    assert abs(mix.bw[0] - 1.108123758654722) / 1.108123758654722 < RTOL
 
 def test_doc_sw_pure_ch4_field():
     """brine.rst: SoreideWhitson pure CH4 field units"""
     mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=0, sg=0.554, metric=False)
-    assert abs(mix.Rs['CH4'] - 22.142528744136207) / 22.142528744136207 < RTOL
+    assert abs(mix.Rs['CH4'] - 23.730041532474416) / 23.730041532474416 < RTOL
     # Re-pinned 2026-08-19 (was 0.9642344204009531).
-    assert abs(mix.bDen[0] - 0.9640205266484241) / 0.9640205266484241 < RTOL
+    assert abs(mix.bDen[0] - 0.9637253265757386) / 0.9637253265757386 < RTOL
 
 def test_doc_sw_mixed_gas_metric():
     """brine.rst: SoreideWhitson mixed gas metric"""
     mix = brine.SoreideWhitson(pres=200, temp=80, ppm=10000, y_CO2=0.1, y_H2S=0.05, sg=0.7, metric=True)
-    assert abs(mix.Rs_total - 8.620014781807498) / 8.620014781807498 < RTOL
+    assert abs(mix.Rs_total - 8.854387480089079) / 8.854387480089079 < RTOL
     # Re-pinned 2026-09-06 for the CO2 shift refit (was 0.9854888113586086 from
     # 2026-08-19). This case carries H2S.
-    assert abs(mix.bDen[0] - 0.9853891217810185) / 0.9853891217810185 < RTOL
+    assert abs(mix.bDen[0] - 0.9853534989991483) / 0.9853534989991483 < RTOL
     assert 'CO2' in mix.gas_comp and 'H2S' in mix.gas_comp and 'CH4' in mix.gas_comp
 
 def test_doc_sw_co2_freshwater_cw_sat():
     """brine.rst: SoreideWhitson pure CO2 freshwater with Cf_sat"""
     mix = brine.SoreideWhitson(pres=175, temp=85, ppm=0, y_CO2=1.0, metric=True, cw_sat=True)
-    assert abs(mix.Rs_total - 24.93242035862645) / 24.93242035862645 < RTOL
+    assert abs(mix.Rs_total - 26.091648372872093) / 26.091648372872093 < RTOL
     # Re-pinned 2026-09-06 for the CO2 shift refit (was 0.00016187484271371722
     # from 2026-09-01). Cf_sat is a difference of two densities, so it amplifies
     # whatever moves the density.
-    assert abs(mix.Cf_sat - 0.00016011819834824565) / 0.00016011819834824565 < RTOL
+    assert abs(mix.Cf_sat - 0.00017903544562664252) / 0.00017903544562664252 < RTOL
     assert isinstance(mix.water_content, dict)
-    assert abs(mix.water_content['stb_mmscf'] - 1.9211146471984861) / 1.9211146471984861 < RTOL
+    assert abs(mix.water_content['stb_mmscf'] - 1.8877077204528097) / 1.8877077204528097 < RTOL
 
 # =============================================================================
 # Layer Module Documentation Examples (docs/layer.rst)
@@ -796,8 +798,8 @@ def test_doc_gas_hydrate_composition():
     """gas.rst: gas_hydrate with CO2 composition and reservoir P,T"""
     r = gas.gas_hydrate(p=1000, degf=50, sg=0.65, hydmethod='MOTIEE', inhibitor_type='MEG', co2=0.05,
                          p_res=3000, degf_res=200)
-    assert abs(r.water_vaporized_res - 0.9115399200502281) / 0.9115399200502281 < RTOL
-    assert abs(r.water_condensed - 0.8805095446084514) / 0.8805095446084514 < RTOL
+    assert abs(r.water_vaporized_res - 0.9082325561391081) / 0.9082325561391081 < RTOL
+    assert abs(r.water_condensed - 0.8773620144888628) / 0.8773620144888628 < RTOL
     assert abs(r.required_inhibitor_wt_pct - 19.445109531719257) / 19.445109531719257 < RTOL
     assert r.inhibitor_underdosed is False
 

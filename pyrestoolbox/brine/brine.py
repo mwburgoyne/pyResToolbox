@@ -1444,7 +1444,7 @@ def make_pvtw_table(*args, **kwargs):
 # cannot distinguish exponents (RMS 1.740 vs 1.738 pp). Was 1.79 with the
 # borrowed exponent, 1.64 (S&W basis), and 1.50 before the primary source
 # was read.
-_H2S_A = 1.37          # Murphy & Gaines Table IV on S&W (default framework) loading, LS through origin, all five points
+_H2S_A = 1.33          # Murphy & Gaines Table IV on S&W (default framework, procedure-1) loading, LS through origin, all five points; 1.37 on the pre-3.10 dry-vapour kij
 
 # Calabrese et al. (2019) Eq. 25 CO2 viscosity increment (JCED 64:3831):
 # ln(mu/mu_brine) = e1 * exp(-e2*(T_K/T0 - 1)) * x_CO2
@@ -1612,25 +1612,25 @@ class SoreideWhitson:
             sg: Gas specific gravity — used to estimate HC split among C1-C4 (default 0.65)
             metric: Boolean for units (True=metric, False=oilfield). Default False.
             cw_sat: If True, also calculate saturated compressibility (default False)
-            framework: VLE framework, affecting the kij and ks correlations.
-                'default' is what Burgoyne & Nielsen (2026) publish and recommend
-                (doi:10.1016/j.fluid.2026.114824): the original S&W water alpha,
-                refitted freshwater kij, and salinity carried by an additive
-                embedded delta_kij. 'mc3' is the alternative that paper
-                investigated and did not adopt, pairing a Mathias-Copeman
-                3-parameter water alpha with an explicit gamma-phi Sechenov
-                correction; the two are indistinguishable in solubility once the
-                BIP is refitted. 'sw_original' is S&W 1992 as published.
-                'dropin' and 'proposed' remain accepted as legacy names for
-                'default' and 'mc3' respectively, so pre-3.7.5 calls keep their
-                previous numerical behaviour.
-            salinity_method: How salinity enters the flash. 'auto' (default) takes
-                the route each framework was fitted with: 'embedded' for 'default'
-                and 'sw_original', 'gamma_phi' for 'mc3'. 'embedded' puts salinity
-                inside kij and is defined for all three frameworks. 'gamma_phi'
-                applies Sechenov salting-out through an activity coefficient.
-                'explicit' treats the brine as a component. 'sechenov' is a legacy
-                alias for 'gamma_phi'.
+            framework: VLE framework, affecting the kij and ks correlations. Both
+                solve S&W's own procedure (S&W 1992 Eqs 10a/10b): one equilibrium
+                with kij_AQ in the aqueous phase and kij_NA in the vapour, which
+                carries its equilibrium water. 'default' (recommended) is the
+                Burgoyne & Nielsen (2026, doi:10.1016/j.fluid.2026.114824)
+                framework refitted on that procedure: the original S&W water
+                alpha, procedure-1 freshwater kij_AQ and an additive embedded
+                salinity delta_kij (coefficients and technical note:
+                github.com/mwburgoyne/SW_Framework_Refresh, procedure1_refit/).
+                'sw_original' is S&W 1992 as published. 'dropin' is a legacy
+                name for 'default'. 'mc3' and 'proposed' were removed in 3.10.0.
+            salinity_method: How salinity enters the flash. 'auto' (default) is
+                'embedded', the route both frameworks were fitted with: salinity
+                inside kij_AQ. 'gamma_phi' applies Sechenov salting-out through
+                an activity coefficient on the freshwater kij_AQ (CO2 Dubessy et
+                al. 2005 - 0.011, H2S Akinfiev et al. 2016 + 0.019, N2 S&W Eq 8
+                + 0.02, others S&W Eq 8, under 'default'). 'explicit' corrects a
+                freshwater flash after the solve. 'sechenov' is a legacy alias
+                for 'gamma_phi'.
 
         Returns object with following calculated properties:
             .x          : Dict of dissolved gas mole fractions, e.g. {'CO2': 0.024, 'CH4': 0.0015}
@@ -1726,7 +1726,7 @@ class SoreideWhitson:
         # was fitted with. It must resolve to something: left unresolved, the
         # flash path would silently apply no salinity correction at all.
         if salinity_method == 'auto':
-            salinity_method = 'gamma_phi' if framework == 'mc3' else 'embedded'
+            salinity_method = 'embedded'
         self.framework = framework
         self.salinity_method = salinity_method
         # Validate pressure and temperature (convert to oilfield units for validation)
