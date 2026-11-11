@@ -457,7 +457,7 @@ pub fn influence_tables_rust(
     //   3. the GWR acceleration, per (tD, ReD)
     // Every item is computed exactly as in sequential order, so the output is
     // bit-identical whatever the thread count.
-    let results = py.allow_threads(|| {
+    let results = py.detach(|| {
         let nodes: Vec<(Mp, Mp, ScaledBessel)> = (0..taus.len() * n_k)
             .into_par_iter()
             .map(|i| {
