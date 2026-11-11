@@ -6,11 +6,17 @@
 use crate::vle::components::*;
 
 // =============================================================================
-// kij_AQ Correlations (Aqueous Phase) — proposed framework (MC-3 alpha,
-// freshwater-only kij). Salinity via Sechenov/gamma-phi.
+// kij_AQ Correlations (Aqueous Phase), 'default' framework
 // =============================================================================
+// S&W water alpha with freshwater kij_AQ refitted on procedure 1 (S&W 1992
+// Eqs 10a/10b: one equilibrium, kij_AQ in the aqueous phase, kij_NA in the
+// vapour carrying its water). Burgoyne & Nielsen (2026) forms and data.
+// Salinity is NOT in these correlations: it enters through the additive
+// embedded delta_kij below. Mirrors KIJ_AQ_DEFAULT and the kij_aq_*_dropin
+// functions in _lib_vle_engine.py. The parameters are strongly correlated:
+// keep every digit.
 
-/// S&W 1992 Equations 11-12 with errata — general hydrocarbon form.
+/// S&W 1992 Equations 11-12 with errata, general hydrocarbon form.
 fn kij_aq_hydrocarbon(t_k: f64, omega: f64, tc: f64, salinity_molal: f64) -> f64 {
     let tr = t_k / tc;
     let cs = salinity_molal;
@@ -30,122 +36,61 @@ fn kij_aq_hydrocarbon(t_k: f64, omega: f64, tc: f64, salinity_molal: f64) -> f64
         + a2 * tr * tr * (1.0 + alpha2 * cs)
 }
 
-/// CH4-water kij_AQ (this work, rational form, MC-3 alpha).
-/// kij = (A + Tr) / (B + C*Tr) where Tr = T/190.60
-fn kij_aq_ch4(t_k: f64) -> f64 {
-    let tr = t_k / 190.60;
-    let (a, b, c) = (-2.1642, 1.7325, 0.2105);
-    (a + tr) / (b + c * tr)
+/// CO2: cubic in T (K). Port of kij_aq_co2_dropin.
+fn kij_aq_co2_default(t_k: f64) -> f64 {
+    -1.5502105835458762 + 0.009322719516912797 * t_k
+        + -1.977702057788579e-05 * t_k.powf(2.0)
+        + 1.527732067553674e-08 * t_k.powf(3.0)
 }
 
-/// CO2-water kij_AQ (proposed, cubic in T(K), MC-3 alpha).
-fn kij_aq_co2_proposed(t_k: f64) -> f64 {
-    -1.5127 + 9.4980e-3 * t_k - 2.1680e-5 * t_k * t_k + 1.8500e-8 * t_k * t_k * t_k
+/// H2S: a/T + b*exp(c/T) + d. Port of kij_aq_h2s_dropin.
+fn kij_aq_h2s_default(t_k: f64) -> f64 {
+    -82.78098013402487 / t_k + 1739490.5143550164 * (-8585.063329478664 / t_k).exp()
+        + 0.2518306228082515
 }
 
-/// H2S-water kij_AQ (proposed, exp form, MC-3 alpha).
-fn kij_aq_h2s_proposed(t_k: f64) -> f64 {
-    -70.8170 / t_k + 1540.9516 * (-4532.56 / t_k).exp() + 0.21517
+/// N2: linear in T (K). Port of kij_aq_n2_dropin.
+fn kij_aq_n2_default(t_k: f64) -> f64 {
+    -1.6210963967981318 + 0.003295272503921554 * t_k
 }
 
-/// N2-water kij_AQ (proposed, linear in T(K), MC-3 alpha).
-fn kij_aq_n2_proposed(t_k: f64) -> f64 {
-    -1.6669 + 3.447873e-3 * t_k
-}
-
-/// H2-water kij_AQ (proposed, rational form, MC-3 alpha).
-fn kij_aq_h2_proposed(t_k: f64) -> f64 {
+/// H2: rational in Tr = T/33.145. Port of kij_aq_h2_dropin.
+fn kij_aq_h2_default(t_k: f64) -> f64 {
     let tr = t_k / 33.145;
-    (-14.6157 + tr) / (3.5494 + 0.2230 * tr)
+    (-16.019825767516267 + tr) / (0.7312362834651882 + 0.6813619680172914 * tr)
 }
 
-/// C2H6-water kij_AQ (proposed, rational, MC-3 alpha).
-fn kij_aq_c2h6_proposed(t_k: f64) -> f64 {
+/// He: rational in Tr = T/5.1953 (NIST Tc). Port of kij_aq_he_dropin.
+fn kij_aq_he_default(t_k: f64) -> f64 {
+    let tr = t_k / 5.1953;
+    (-71.61550493445799 + tr) / (-0.1644070191372901 + 0.5017371389503704 * tr)
+}
+
+/// CH4: rational in Tr = T/190.60. Port of kij_aq_ch4_dropin.
+fn kij_aq_ch4_default(t_k: f64) -> f64 {
+    let tr = t_k / 190.60;
+    (-2.1976782374118784 + tr) / (0.7150153669761119 + 0.8945029639230546 * tr)
+}
+
+/// C2H6: rational in Tr = T/305.40. Port of kij_aq_c2h6_dropin.
+fn kij_aq_c2h6_default(t_k: f64) -> f64 {
     let tr = t_k / 305.40;
-    (-1.2683 + tr) / (0.3352 + 1.3035 * tr)
+    (-1.271347888293827 + tr) / (-0.02927136624699385 + 1.6371834535180028 * tr)
 }
 
-/// C3H8-water kij_AQ (proposed, rational, MC-3 alpha).
-fn kij_aq_c3h8_proposed(t_k: f64) -> f64 {
+/// C3H8: rational in Tr = T/369.80. Port of kij_aq_c3h8_dropin.
+fn kij_aq_c3h8_default(t_k: f64) -> f64 {
     let tr = t_k / 369.80;
-    (-1.1491 + tr) / (0.6126 + 1.3183 * tr)
+    (-1.1567778736282177 + tr) / (0.2089459674695665 + 1.81066287107836 * tr)
 }
 
-/// Freshwater wrapper for HCs without fitted proposed correlations.
-/// Uses S&W Eqs 11-12 with cs=0.
-fn kij_aq_hc_proposed(comp_idx: usize, t_k: f64) -> f64 {
+/// Freshwater S&W Eqs 11-12 (cs = 0) for butanes and heavier.
+fn kij_aq_hc_freshwater(comp_idx: usize, t_k: f64) -> f64 {
     let c = &COMPONENT_DB[comp_idx];
     kij_aq_hydrocarbon(t_k, c.omega, c.tc, 0.0)
 }
 
-/// Get kij_AQ for any supported gas (proposed framework, freshwater only).
-/// Salinity is handled via gamma-phi (Sechenov) externally.
-pub fn get_kij_aq_proposed(comp_idx: usize, t_k: f64) -> f64 {
-    match comp_idx {
-        IDX_H2 => kij_aq_h2_proposed(t_k),
-        IDX_CO2 => kij_aq_co2_proposed(t_k),
-        IDX_N2 => kij_aq_n2_proposed(t_k),
-        IDX_H2S => kij_aq_h2s_proposed(t_k),
-        IDX_CH4 => kij_aq_ch4(t_k),
-        IDX_C2H6 => kij_aq_c2h6_proposed(t_k),
-        IDX_C3H8 => kij_aq_c3h8_proposed(t_k),
-        // He: the default-framework fit, not refitted on MC-3 alpha (as in KIJ_AQ_MC3).
-        IDX_HE => kij_aq_he_default(t_k),
-        IDX_IC4H10 | IDX_NC4H10 | IDX_IC5H12 | IDX_NC5H12
-        | IDX_NC6H14 | IDX_NC7H16 | IDX_NC8H18 | IDX_NC10H22 => {
-            kij_aq_hc_proposed(comp_idx, t_k)
-        }
-        _ => 0.0, // H2O-H2O or unknown
-    }
-}
-
-// =============================================================================
-// Default framework kij_AQ (S&W water alpha, refitted freshwater correlations)
-// =============================================================================
-// Burgoyne & Nielsen (2026), the published and recommended framework. Salinity
-// is NOT in these correlations: it enters through the additive embedded
-// delta_kij below. Mirrors KIJ_AQ_DEFAULT in _lib_vle_engine.py.
-
-fn kij_aq_co2_default(t_k: f64) -> f64 {
-    -1.5893 + 9.8873e-3 * t_k - 2.2188e-5 * t_k * t_k + 1.8499e-8 * t_k * t_k * t_k
-}
-
-fn kij_aq_h2s_default(t_k: f64) -> f64 {
-    -74.6914 / t_k + 1348.9615 * (-4504.96 / t_k).exp() + 0.22598
-}
-
-fn kij_aq_n2_default(t_k: f64) -> f64 {
-    -1.6689 + 3.441589e-3 * t_k
-}
-
-fn kij_aq_h2_default(t_k: f64) -> f64 {
-    let tr = t_k / 33.145;
-    (-14.9412 + tr) / (2.2832 + 0.3893 * tr)
-}
-
-/// He-water kij_AQ (default framework, rational form, Tr on NIST Tc 5.1953 K).
-/// Port of kij_aq_he_dropin in _lib_vle_engine.py.
-fn kij_aq_he_default(t_k: f64) -> f64 {
-    let tr = t_k / 5.1953;
-    (-71.6152 + tr) / (-0.394962 + 0.505807 * tr)
-}
-
-fn kij_aq_ch4_default(t_k: f64) -> f64 {
-    let tr = t_k / 190.60;
-    (-2.1756 + tr) / (1.0388 + 0.6436 * tr)
-}
-
-fn kij_aq_c2h6_default(t_k: f64) -> f64 {
-    let tr = t_k / 305.40;
-    (-1.2669 + tr) / (0.1526 + 1.4335 * tr)
-}
-
-fn kij_aq_c3h8_default(t_k: f64) -> f64 {
-    let tr = t_k / 369.80;
-    (-1.1460 + tr) / (0.5760 + 1.3107 * tr)
-}
-
-/// Get kij_AQ for any supported gas (default framework, freshwater only).
+/// Freshwater kij_AQ for any supported gas ('default' framework).
 pub fn get_kij_aq_default(comp_idx: usize, t_k: f64) -> f64 {
     match comp_idx {
         IDX_H2 => kij_aq_h2_default(t_k),
@@ -158,14 +103,14 @@ pub fn get_kij_aq_default(comp_idx: usize, t_k: f64) -> f64 {
         IDX_HE => kij_aq_he_default(t_k),
         IDX_IC4H10 | IDX_NC4H10 | IDX_IC5H12 | IDX_NC5H12
         | IDX_NC6H14 | IDX_NC7H16 | IDX_NC8H18 | IDX_NC10H22 => {
-            kij_aq_hc_proposed(comp_idx, t_k)
+            kij_aq_hc_freshwater(comp_idx, t_k)
         }
         _ => 0.0, // H2O-H2O or unknown
     }
 }
 
 // =============================================================================
-// Embedded salinity delta_kij (paper Table 7)
+// Embedded salinity delta_kij (procedure-1 refit)
 // =============================================================================
 // delta_kij = (a0 + a1*Tr + a2*Tr^2)*m, plus (b0 + b1*Tr)*m^2 for CO2 only.
 // Mirrors EMBEDDED_SALINITY_PARAMS_DEFAULT and calc_embedded_delta_kij in
@@ -174,15 +119,16 @@ pub fn get_kij_aq_default(comp_idx: usize, t_k: f64) -> f64 {
 /// (tc, a0, a1, a2, b0, b1). b0/b1 are zero for the linear-in-m gases.
 fn embedded_delta_params(comp_idx: usize) -> Option<(f64, f64, f64, f64, f64, f64)> {
     match comp_idx {
-        IDX_CO2 => Some((304.20, 0.0409, -0.0807, 0.0526, 0.0079, -0.0085)),
-        IDX_H2S => Some((373.20, 0.0341, -0.0655, 0.0376, 0.0, 0.0)),
-        IDX_CH4 => Some((190.60, 0.1304, -0.1295, 0.0394, 0.0, 0.0)),
-        IDX_N2 => Some((126.10, 0.2173, -0.1468, 0.0302, 0.0, 0.0)),
-        IDX_H2 => Some((33.145, 0.3658, -0.0625, 0.0030, 0.0, 0.0)),
-        IDX_C2H6 => Some((305.40, 0.0813, -0.1287, 0.0646, 0.0, 0.0)),
-        IDX_C3H8 => Some((369.80, 0.0606, -0.1165, 0.0772, 0.0, 0.0)),
-        IDX_NC4H10 => Some((425.20, 0.0488, -0.1072, 0.0836, 0.0, 0.0)),
-        IDX_HE => Some((5.1953, 0.359923, -0.0095344, 7.00398e-05, 0.0, 0.0)),
+        IDX_CO2 => Some((304.2, 0.0408481264767325, -0.07898609940571702, 0.050275716341630625,
+                         0.006766107309550113, -0.007355686498441823)),
+        IDX_H2S => Some((373.2, 0.04743797774228006, -0.09161393978798885, 0.049823955842864476, 0.0, 0.0)),
+        IDX_CH4 => Some((190.6, 0.1343908999845734, -0.13425828898747677, 0.040842761446578946, 0.0, 0.0)),
+        IDX_N2 => Some((126.1, 0.2194835079768253, -0.14859950898753865, 0.030616725180758284, 0.0, 0.0)),
+        IDX_H2 => Some((33.145, 0.37671225100706046, -0.06473044235781623, 0.0031554140401859033, 0.0, 0.0)),
+        IDX_HE => Some((5.1953, 0.36301971362904206, -0.009639364760477095, 7.093021514306463e-05, 0.0, 0.0)),
+        IDX_C2H6 => Some((305.4, 0.07776955167556454, -0.12336029130715784, 0.06258661601243726, 0.0, 0.0)),
+        IDX_C3H8 => Some((369.8, 0.05805669163435654, -0.11105470117150809, 0.0692266175055278, 0.0, 0.0)),
+        IDX_NC4H10 => Some((425.2, 0.04564160593297639, -0.10008931089682649, 0.07292670218334689, 0.0, 0.0)),
         _ => None,
     }
 }
@@ -200,15 +146,6 @@ pub fn calc_embedded_delta_kij(comp_idx: usize, t_k: f64, salinity_molal: f64) -
             (a0 + a1 * tr + a2 * tr * tr) * m + (b0 + b1 * tr) * m * m
         }
     }
-}
-
-/// Which BIP set and water alpha the flash should use.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Framework {
-    /// S&W water alpha + refitted freshwater kij + embedded delta_kij.
-    Default,
-    /// Mathias-Copeman 3-parameter water alpha + freshwater kij + gamma-phi.
-    Mc3,
 }
 
 // =============================================================================
@@ -317,10 +254,9 @@ pub fn sw_equation_8_ks(t_c: f64, tb_k: f64) -> f64 {
         - 2.612e-9 * t_f * t_f * t_f
 }
 
-/// Get Sechenov coefficient ks for a given gas (proposed framework).
+/// Get Sechenov coefficient ks for a given gas.
 ///
-/// For CO2 and H2S in the full proposed framework, specialized models are used
-/// on the Python side. This Rust implementation provides the S&W Eq 8 fallback
+/// For CO2 and H2S, specialized models are used on the Python side. This Rust implementation provides the S&W Eq 8 fallback
 /// plus the N2 +0.02 offset.
 #[allow(dead_code)]  // Sechenov salting path, not currently reached
 pub fn get_sechenov_ks_sw(comp_idx: usize, t_k: f64) -> f64 {
@@ -330,7 +266,7 @@ pub fn get_sechenov_ks_sw(comp_idx: usize, t_k: f64) -> f64 {
     let t_c = t_k - 273.15;
     let tb_k = COMPONENT_DB[comp_idx].tb;
     let mut ks = sw_equation_8_ks(t_c, tb_k);
-    // N2: empirical +0.02 offset (proposed mode)
+    // N2: empirical +0.02 offset
     if comp_idx == IDX_N2 {
         ks += 0.02;
     }
@@ -341,15 +277,16 @@ pub fn get_sechenov_ks_sw(comp_idx: usize, t_k: f64) -> f64 {
 // Full kij matrix construction
 // =============================================================================
 
-/// Build N x N kij matrix for a given set of component indices and mode.
+/// Build the N x N kij matrix for one phase of the procedure-1 flash.
 ///
-/// `mode_aq`: true for AQ mode (gas-water BIPs from kij_AQ), false for NA mode.
-/// Returns flattened row-major N x N matrix.
+/// `aqueous`: true for the aqueous (liquid-root) phase, where gas-water pairs
+/// take the freshwater kij_AQ plus the embedded salinity delta_kij; false for
+/// the non-aqueous (vapour-root) phase, where they take kij_NA. Gas-gas pairs
+/// are the same in both. Returns a flattened row-major N x N matrix.
 pub fn build_kij_matrix(
     comp_indices: &[usize],
     t_k: f64,
-    mode_aq: bool,
-    framework: Framework,
+    aqueous: bool,
     salinity_molal: f64,
 ) -> Vec<f64> {
     let nc = comp_indices.len();
@@ -361,23 +298,14 @@ pub fn build_kij_matrix(
             let idx_j = comp_indices[j];
 
             let val = if idx_i == IDX_H2O || idx_j == IDX_H2O {
-                // Gas-water pair
                 let gas_idx = if idx_i == IDX_H2O { idx_j } else { idx_i };
-                if mode_aq {
-                    match framework {
-                        Framework::Mc3 => get_kij_aq_proposed(gas_idx, t_k),
-                        // Salinity rides on the BIP in the default framework,
-                        // so it is added here rather than through gamma.
-                        Framework::Default => {
-                            get_kij_aq_default(gas_idx, t_k)
-                                + calc_embedded_delta_kij(gas_idx, t_k, salinity_molal)
-                        }
-                    }
+                if aqueous {
+                    get_kij_aq_default(gas_idx, t_k)
+                        + calc_embedded_delta_kij(gas_idx, t_k, salinity_molal)
                 } else {
                     get_kij_na(gas_idx)
                 }
             } else {
-                // Gas-gas pair
                 get_gas_gas_bip(idx_i, idx_j)
             };
 
@@ -394,11 +322,11 @@ mod tests {
 
     #[test]
     fn test_kij_aq_ch4() {
-        // Verify CH4 kij_AQ at 373.15 K
-        let kij = kij_aq_ch4(373.15);
-        // Tr = 373.15/190.60 = 1.9580
-        // kij = (-2.1642 + 1.9580) / (1.7325 + 0.2105*1.9580)
-        assert!((kij - (-0.09566)).abs() < 0.001);
+        // Procedure-1 CH4 at 373.15 K: Tr = 1.957765, kij = -0.10044...
+        let tr = 373.15 / 190.60;
+        let expect = (-2.1976782374118784 + tr) / (0.7150153669761119 + 0.8945029639230546 * tr);
+        assert!((get_kij_aq_default(IDX_CH4, 373.15) - expect).abs() < 1e-15);
+        assert!(get_kij_aq_default(IDX_CH4, 373.15) < 0.0);
     }
 
     #[test]
@@ -416,13 +344,24 @@ mod tests {
 
     #[test]
     fn test_kij_he() {
-        // Same value as kij_aq_he_dropin at 323.15 K (Python): -0.30305...
         let tr = 323.15 / 5.1953;
-        let expect = (-71.6152 + tr) / (-0.394962 + 0.505807 * tr);
+        let expect = (-71.61550493445799 + tr) / (-0.1644070191372901 + 0.5017371389503704 * tr);
         assert!((get_kij_aq_default(IDX_HE, 323.15) - expect).abs() < 1e-15);
-        assert!((get_kij_aq_proposed(IDX_HE, 323.15) - expect).abs() < 1e-15);
         assert!((get_kij_na(IDX_HE) - 0.468).abs() < 1e-15);
         assert!(calc_embedded_delta_kij(IDX_HE, 323.15, 1.0) > 0.0);
+    }
+
+    #[test]
+    fn test_kij_matrix_phases() {
+        // Aqueous and non-aqueous matrices differ only in gas-water pairs.
+        let comp = [IDX_H2O, IDX_CH4, IDX_CO2];
+        let aq = build_kij_matrix(&comp, 350.0, true, 1.0);
+        let na = build_kij_matrix(&comp, 350.0, false, 1.0);
+        let expect_aq = get_kij_aq_default(IDX_CO2, 350.0) + calc_embedded_delta_kij(IDX_CO2, 350.0, 1.0);
+        assert!((aq[2] - expect_aq).abs() < 1e-15);
+        assert!((na[2] - get_kij_na(IDX_CO2)).abs() < 1e-15);
+        assert_eq!(aq[5], na[5]); // CH4-CO2
+        assert_eq!(aq[5], get_gas_gas_bip(IDX_CH4, IDX_CO2));
     }
 
     #[test]

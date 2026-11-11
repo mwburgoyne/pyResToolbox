@@ -820,17 +820,16 @@ def test_sw_parity_natural_gas_only(pres, temp):
 
 @rust_required
 @pytest.mark.parametrize('framework', ['default', 'sw_original'])
-def test_sw_framework_not_downgraded_to_mc3(framework):
+def test_sw_framework_not_downgraded(framework):
     """Each framework must deliver its own answer whether or not Rust is in play.
 
-    Rust implements two of the three: 'default' (S&W water alpha + refitted
-    kij_AQ + embedded delta_kij) and 'mc3' (MC-3 alpha + gamma-phi).
-    'sw_original' has no Rust implementation and takes the Python path. Either
-    way the requirement is the same, and it is what this test pins: with Rust
+    Rust implements 'default' (S&W water alpha, procedure-1 kij_AQ + embedded
+    delta_kij in the aqueous phase, kij_NA in the vapour). 'sw_original' has no
+    Rust implementation and takes the Python path. Either way, with Rust
     available a framework must (a) match its own forced-Python result, which is
     a parity check where Rust implements it and a no-downgrade check where it
-    does not, and (b) differ from the 'mc3' result on a saline point where the
-    framework choice matters.
+    does not, and (b) differ from the other framework on a saline point where
+    the framework choice matters.
     """
     from pyrestoolbox.brine import brine
     kwargs = dict(pres=3000, temp=200, ppm=50000, y_CO2=1.0, y_H2S=0, y_N2=0,
@@ -843,10 +842,11 @@ def test_sw_framework_not_downgraded_to_mc3(framework):
         mix_rust.Rs_total, mix_python.Rs_total, rtol=RTOL_MEDIUM, atol=1e-6,
         err_msg=f"framework={framework} silently downgraded on Rust path",
     )
-    # (b) The framework choice must actually change the answer vs 'mc3'.
-    mix_mc3 = brine.SoreideWhitson(framework='mc3', **kwargs)
-    assert abs(mix_rust.Rs_total - mix_mc3.Rs_total) > 1e-4, (
-        f"framework={framework} produced the 'mc3' result, gate ineffective"
+    # (b) The framework choice must actually change the answer.
+    other = 'sw_original' if framework == 'default' else 'default'
+    mix_other = brine.SoreideWhitson(framework=other, **kwargs)
+    assert abs(mix_rust.Rs_total - mix_other.Rs_total) > 1e-4, (
+        f"framework={framework} produced the {other!r} result, gate ineffective"
     )
 
 

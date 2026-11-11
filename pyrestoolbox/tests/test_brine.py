@@ -155,16 +155,18 @@ def test_sw_framework_and_salinity_method_exposed():
 
 
 def test_sw_accepts_legacy_framework_aliases():
-    """The pre-3.7.5 framework names must keep working AND keep their previous
-    numerical behaviour: 'proposed' was the MC-3 framework, 'dropin' was the
-    published one that is now the default."""
+    """'dropin' (pre-3.7.5 name of the default framework) still maps to
+    'default'. 'mc3' and its legacy name 'proposed' were removed in 3.10.0
+    (no procedure-1 fit) and must raise rather than fall back silently."""
     kwargs = dict(pres=200, temp=80, ppm=30000, y_CO2=1.0, metric=True,
                   salinity_method='gamma_phi')
-    for legacy_name, current_name in (('proposed', 'mc3'), ('dropin', 'default')):
-        legacy = brine.SoreideWhitson(framework=legacy_name, **kwargs)
-        current = brine.SoreideWhitson(framework=current_name, **kwargs)
-        assert legacy.framework == current_name
-        assert legacy.Rs_total == current.Rs_total
+    legacy = brine.SoreideWhitson(framework='dropin', **kwargs)
+    current = brine.SoreideWhitson(framework='default', **kwargs)
+    assert legacy.framework == 'default'
+    assert legacy.Rs_total == current.Rs_total
+    for removed in ('mc3', 'proposed'):
+        with pytest.raises(ValueError, match='removed in pyrestoolbox 3.10.0'):
+            brine.SoreideWhitson(framework=removed, **kwargs)
 
 
 def test_sw_rejects_invalid_framework():
@@ -424,15 +426,13 @@ def test_sw_salinity_method_aliases_resolve():
                                      salinity_method=sm)
         return m.salinity_method, m.x.get('CH4', 0.0)
     # 'sechenov' is gamma_phi on any framework
-    for fw in ('default', 'mc3', 'sw_original'):
+    for fw in ('default', 'sw_original'):
         base_norm, base_x = run('gamma_phi', fw)
         norm, x = run('sechenov', fw)
         assert norm == 'gamma_phi', f"sechenov should be gamma_phi on {fw}, got {norm}"
         assert abs(x - base_x) < 1e-15
-    # 'auto' takes the fitted route: embedded for the published framework and
-    # for sw_original, gamma_phi for mc3
-    for fw, expected in (('default', 'embedded'), ('sw_original', 'embedded'),
-                         ('mc3', 'gamma_phi')):
+    # 'auto' takes the fitted route: embedded for both frameworks
+    for fw, expected in (('default', 'embedded'), ('sw_original', 'embedded')):
         norm, x = run('auto', fw)
         assert norm == expected, f"auto on {fw} should be {expected}, got {norm}"
         assert x > 0, f"auto on {fw} produced no dissolved CH4"
@@ -552,7 +552,7 @@ def test_dissolved_gas_viscosity_coefficients():
     # points cannot distinguish exponents). Previously re-pinned 2026-07-25
     # (1.051235 at a_H2S = 1.79 with the borrowed exponent).
     # Re-based 2026-10-21 onto S&W loading, all five points, LS through origin.
-    assert abs((1.0 + _H2S_A * 0.03) - 1.0411) < 1e-9
+    assert abs((1.0 + _H2S_A * 0.03) - 1.0399) < 1e-9
 
     assert abs(_CH4_K - 1.52860547e-03) < 1e-10
 
@@ -622,64 +622,93 @@ def test_flash_tp_resolves_trivial_collapse_by_stability(monkeypatch):
                      framework='default', salinity_method='embedded')
     feed = np.array([1000.0 / vle.COMPONENTS['H2O'].MW, 5e-7, 5e-7])
     z = feed / feed.sum()
-    V, x, y, converged = flash.flash_tp(318.15, 1e7, z, mode='AQ')
+    V, x, y, converged = flash.flash_tp(318.15, 1e7, z)
     assert (V, converged) == (0.0, True)
     assert np.allclose(x, z, rtol=0, atol=1e-15)
 
     # Trace water in methane: single-phase vapour, y = feed
     flash = _SWFlash(['H2O', 'CH4'], framework='default', salinity_method='embedded')
     z = np.array([1e-6, 1.0 - 1e-6])
-    V, x, y, converged = flash.flash_tp(280.0, 1e5, z, mode='AQ')
+    V, x, y, converged = flash.flash_tp(280.0, 1e5, z)
     assert (V, converged) == (1.0, True)
     assert np.allclose(y, z, rtol=0, atol=1e-15)
-    # The spy only sees the Python path; Rust resolves internally.
+    # The spy only sees the Python path; Rust resolves internally. Since the
+    # procedure-1 flash (3.10.0) the undersaturated brine no longer collapses
+    # onto K = 1 (its incipient vapour root carries kij_NA, the brine kij_AQ),
+    # so SS itself returns V = 0; only the methane case needs the test.
     python_path = not vle._RUST_AVAILABLE
-    assert verdicts == (['stable', 'stable'] if python_path else [])
+    assert verdicts == (['stable'] if python_path else [])
 
-    # Brine 10% above its NA-flash methane saturation: SS collapses from the
-    # Wilson start, stability finds the split, the reseeded flash converges.
-    _, x_sat, _, _ = flash.flash_tp(280.0, 1e7, np.array([0.5, 0.5]), mode='NA')
+    # Brine 10% above its methane saturation: the flash must find the split.
+    # Before 3.10.0 SS collapsed here and the stability test reseeded it; on
+    # procedure 1 SS converges directly, so no verdict is asserted.
+    _, x_sat, _, _ = flash.flash_tp(280.0, 1e7, np.array([0.5, 0.5]))
     z = x_sat.copy()
     z[1] *= 1.1
     z[0] = 1.0 - z[1]
-    V, x, y, converged = flash.flash_tp(280.0, 1e7, z, mode='NA')
-    assert verdicts[-1:] == (['split'] if python_path else [])
+    V, x, y, converged = flash.flash_tp(280.0, 1e7, z)
     assert converged and 0.0 < V < 1.0
     assert abs(x[1] - x_sat[1]) < 1e-6 * x_sat[1]
 
 
-def test_binary_water_content_matches_flash():
-    """The binary (Henry) water-content route normalised K x instead of
-    imposing sum(K x) = 1, so y_H2O came out low by roughly y_H2O itself
-    (0.440 against 0.786 at 200 degF, 14.7 psia). It now matches the NA flash,
-    and returns nan where no split exists (below the water vapour pressure)."""
-    import warnings
-    def y_h2o(method, T, P, **gas):
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            return _cge(salinity_wt_pct=0, temperature_F=T, pressure_psia=P,
-                        method=method, framework='mc3', **gas)[1]['y_H2O']
-    for T, P, gas in ((200, 14.7, 'CH4'), (350, 4000, 'CH4'), (100, 10000, 'CO2'),
-                      (300, 100, 'H2')):
-        henry = y_h2o('henry', T, P, **{'y_' + gas: 1.0})
-        flash = y_h2o('flash', T, P, **{'y_' + gas: 1.0})
-        assert abs(henry / flash - 1) < 1e-8, (T, P, gas, henry, flash)
-    assert abs(y_h2o('henry', 200, 14.7, y_CH4=1.0) - 0.7864) < 1e-3
-    assert np.isnan(y_h2o('henry', 300, 50, y_CH4=1.0))  # Psat(300 degF) = 67 psia
+def test_henry_route_removed():
+    """The binary dry-vapour 'henry' route (procedure 0) was removed in 3.10.0;
+    asking for it must raise, not fall back."""
+    with pytest.raises(ValueError, match="'henry'"):
+        _cge(salinity_wt_pct=0, temperature_F=200, pressure_psia=1000,
+             method='henry', y_CH4=1.0)
+
+
+# Procedure-1 equilibrium check values from the S&W refresh refit
+# (github.com/mwburgoyne/SW_Framework_Refresh, tag procedure1-2026-11,
+# procedure1_refit/results/check_values.csv): gas, T degC, P bar, m NaCl,
+# kij_AQ, x_gas, y_H2O. Independent implementation (p1_solver.py).
+_P1_CHECK = [
+    ('CO2', 80, 100, 0.0, -5.152160e-02, 1.502273e-02, 1.029166e-02),
+    ('CO2', 150, 300, 0.0, 1.103012e-02, 2.676163e-02, 5.808266e-02),
+    ('CO2', 80, 100, 2.0, -2.479503e-02, 9.929649e-03, 9.600217e-03),
+    ('H2S', 150, 300, 0.0, 5.888720e-02, 8.570484e-02, 1.066951e-01),
+    ('H2S', 80, 100, 2.0, 2.819173e-02, 3.264386e-02, 3.005893e-02),
+    ('CH4', 150, 300, 0.0, 8.299541e-03, 3.812144e-03, 2.612455e-02),
+    ('N2', 80, 100, 2.0, -3.704655e-01, 4.361799e-04, 5.449174e-03),
+    ('H2', 150, 300, 0.0, -3.449859e-01, 5.964519e-03, 2.147956e-02),
+    ('C2H6', 80, 100, 0.0, -6.169656e-02, 7.365275e-04, 5.586771e-03),
+    ('C3H8', 80, 100, 0.0, -1.041245e-01, 2.504517e-04, 3.244081e-03),
+    ('He', 150, 300, 0.0, 2.415916e-01, 3.846183e-03, 2.268890e-02),
+]
+
+
+@pytest.mark.parametrize('gas,T_C,P_bar,m,kij,x_ref,y_ref', _P1_CHECK)
+def test_procedure1_check_values(gas, T_C, P_bar, m, kij, x_ref, y_ref):
+    """The default framework reproduces the S&W refresh procedure-1 check
+    values (kij_AQ incl. embedded delta, x_gas and y_H2O) to the printed
+    7 significant figures, on whichever path (Rust or Python) is active."""
+    from pyrestoolbox.brine import _lib_vle_engine as vle
+    T = T_C + 273.15
+    k = vle.get_kij_aq(gas, T) + vle.calc_embedded_delta_kij(gas, T, m)
+    assert abs(k - kij) < 1e-7
+    flash = vle.SWMultiComponentFlash(['H2O', gas], salinity_molal=m,
+                                      framework='default', salinity_method='embedded')
+    V, x, y, converged = flash.flash_tp(T, P_bar * 1e5, np.array([0.5, 0.5]))
+    assert converged and 0.0 < V < 1.0
+    assert abs(x[1] / x_ref - 1) < 1e-6, x[1]
+    assert abs(y[0] / y_ref - 1) < 1e-6, y[0]
 
 
 def test_helium_vle_and_rust_parity(monkeypatch):
     """Helium (NIST Tc 5.1953 K, default-framework kij_AQ, embedded delta_kij,
-    surrogate kij_NA 0.468). Binary solubility against Gardiner & Smith (1972)
-    Table VI, 50 degC and 200 atm, X2 = 1.363e-3; then the Rust flash against
-    the Python flash for a He-bearing gas in both Rust frameworks."""
+    surrogate kij_NA 0.468). Procedure-1 solubility against Gardiner & Smith
+    (1972) Table VI, 50 degC and 200 atm, X2 = 1.363e-3; then the Rust flash
+    against the Python flash for a He-bearing gas."""
     from pyrestoolbox.brine import _lib_vle_engine as vle
-    x = vle.SWBinaryVLE('He', 0.0, framework='default').calc_gas_solubility(323.15, 200 * 101325.0)
+    flash = vle.SWMultiComponentFlash(['H2O', 'He'], framework='default',
+                                      salinity_method='embedded')
+    x = flash.flash_tp(323.15, 200 * 101325.0, np.array([0.5, 0.5]))[1][1]
     assert abs(x / 1.363e-3 - 1) < 0.03, x
 
     names = ['H2O', 'N2', 'CO2', 'CH4', 'He']
     z = np.array([0.5, 0.05, 0.05, 0.3, 0.1])
-    cases = [('default', 'embedded', m) for m in (0.0, 2.0)] + [('mc3', 'gamma_phi', m) for m in (0.0, 2.0)]
+    cases = [('default', 'embedded', m) for m in (0.0, 2.0)]
 
     def run():
         out = []

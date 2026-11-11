@@ -94,9 +94,9 @@ SUPPORTED = ('CH4', 'CO2', 'H2S', 'N2', 'H2', 'C2H6', 'C3H8', 'NC4H10', 'He')
 _SW_NAME = {'NC4H10': 'nC4H10'}
 
 # WATER ALPHA INSENSITIVITY, measured 2026-07-25 and worth knowing before
-# porting. The S&W framework uses `alpha_water_soreide` for the sw_original and
-# dropin frameworks but Mathias-Copeman (`alpha_water_mc3`) otherwise, and the
-# ResToolbox3 Dart path uses MC3. Swapping the water alpha moves V2inf_raw by
+# porting. The S&W framework uses `alpha_water_soreide` (the removed 'mc3'
+# framework used Mathias-Copeman, `alpha_water_mc3`, and the ResToolbox3 Dart
+# path still does). Swapping the water alpha moves V2inf_raw by
 # only 0.00 to 0.05 cm3/mol over 298-473 K, i.e. delta-s of 0.0002 to 0.0018,
 # under 2% of the shift values and negligible against the 0.5-1.4% fit error.
 # So ONE VSHIFT set is valid for both water alphas and the ports do not need
@@ -107,12 +107,17 @@ _SW_NAME = {'NC4H10': 'nC4H10'}
 # measurements only by `fit_pr_vshift.py`. Regenerate with that script if any
 # calibration point changes; the values below are pinned in validation.py.
 VSHIFT = {
-    'CH4':  -0.111430,
-    'CO2':  -0.070103,
-    'H2S':  -0.079416,
-    'N2':   -0.176768,
-    'H2':   -0.178503,
-    'C2H6': -0.073843,
+    # 3.10.0: the six fitted shifts refitted (brine_props fit_pr_vshift.py) on
+    # the procedure-1 kij_AQ; the C3H8 and He anchors moved only by the
+    # procedure-1 kij change at their 298 K anchor. Was CH4 -0.111430, CO2
+    # -0.070103, H2S -0.079416, N2 -0.176768, H2 -0.178503, C2H6 -0.073843,
+    # C3H8 -0.113326, He -0.302941. Identical to brine_props pr_vphi_model.py.
+    'CH4':  -0.112883,
+    'CO2':  -0.071746,
+    'H2S':  -0.081822,
+    'N2':   -0.176415,
+    'H2':   -0.178293,
+    'C2H6': -0.073934,
     # C3H8 added 2026-07-25. NOT fitted to a densimetric data set, because none
     # exists for propane in water. Set from the only two direct 298 K
     # determinations available, Moore (1982) 70.7 and Zhou & Battino (2001)
@@ -120,7 +125,7 @@ VSHIFT = {
     # is their mean, giving V_phi = 72.85 at 298 K. Those two disagree by 6.1%,
     # which is the honest uncertainty on this gas and is far wider than for any
     # other. It replaces a fallback that sat BELOW both of them (66.99).
-    'C3H8': -0.113326,
+    'C3H8': -0.113542,
     # NC4H10 added 2026-07-25 from Moore (1982) Table I, 76.6 +/- 0.1 cm3/mol
     # (2 runs; his stated overall imprecision is +/-1.5). Two oddities that
     # should not be smoothed over: the shift is POSITIVE, alone among the
@@ -136,7 +141,7 @@ VSHIFT = {
     # solubility-derived value (13-16 cm3/mol at 25 C) is excluded under the
     # direct-data rule. Uses the engine's NIST He constants (Tc 5.1953 K), not
     # the non-standard 6.35 degR of the 5-component Z-factor model.
-    'He':   -0.302941,
+    'He':   -0.302945,
 }
 
 # Gases whose shift rests on 298 K data alone, so their temperature behaviour is

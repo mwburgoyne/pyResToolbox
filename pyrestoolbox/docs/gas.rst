@@ -1822,9 +1822,9 @@ With CO2 composition and reservoir P,T (SoreideWhitson water content):
     >>> r = gas.gas_hydrate(p=1000, degf=50, sg=0.65, hydmethod='MOTIEE', inhibitor_type='MEG', co2=0.05,
     ...                      p_res=3000, degf_res=200)
     >>> r.water_vaporized_res
-    0.9115399200502281
+    0.9082325561391081
     >>> r.water_condensed
-    0.8805095446084514
+    0.8773620144888628
     >>> r.required_inhibitor_wt_pct
     19.445109531719257
     >>> r.inhibitor_underdosed

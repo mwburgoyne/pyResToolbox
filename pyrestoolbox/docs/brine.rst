@@ -52,7 +52,7 @@ Returns tuple of (Bw (rb/stb), Density (sg), viscosity (cP), Compressibility (1/
 
 **CO2_Brine_Mixture** - CO2-saturated brine via Spycher-Pruess mutual solubility model. Returns a class object with calculated CO2 saturated brine property attributes. Retained deliberately rather than folded into ``SoreideWhitson``, because it is the more accurate route for pure CO2.
 
-**SoreideWhitson** - Multicomponent gas-saturated brine via the Soreide-Whitson VLE model, using by default the refreshed BIP relationships of `Burgoyne & Nielsen (2026) <https://doi.org/10.1016/j.fluid.2026.114824>`_. Supports mixtures of C1, C2, C3, nC4, CO2, H2S, N2, H2 and He in fresh or saline water.
+**SoreideWhitson** - Multicomponent gas-saturated brine via the Soreide-Whitson VLE model, using by default the refreshed BIP relationships of `Burgoyne & Nielsen (2026) <https://doi.org/10.1016/j.fluid.2026.114824>`_ refitted on S&W's own equilibrium procedure (since 3.10.0; see the ``framework`` parameter). Supports mixtures of C1, C2, C3, nC4, CO2, H2S, N2, H2 and He in fresh or saline water.
 
 Unit System Support
 -------------------
@@ -551,21 +551,22 @@ of this page for the routes, the fitted shifts and their validity limits.
      - str
      - VLE framework used by the S&W engine. It sets three things together: the water alpha function, the freshwater kij correlations, and how salinity is applied.
 
-       * ``'default'`` - what `Burgoyne & Nielsen (2026) <https://doi.org/10.1016/j.fluid.2026.114824>`_ publish and recommend. The **original S&W water alpha is retained** (their Table 8), the freshwater kij are refitted from roughly 2000 pointwise-regressed BIP values, and salinity is carried by an additive embedded ``delta_kij(T, m)`` fitted to reproduce modern Sechenov models (their Table 7). Because the alpha is unchanged, an existing S&W implementation adopts this by swapping its kij correlations alone.
-       * ``'sw_original'`` - Soreide & Whitson (1992) exactly as published: their water alpha, their kij correlations, salinity embedded in kij for the hydrocarbons, CO2 and N2. H2 and H2S have no embedded term there, so Sechenov salting-out is applied to those two.
-       * ``'mc3'`` - the alternative the same paper investigated and did not adopt (their Section 7.1): a Mathias-Copeman 3-parameter water alpha with salinity applied as an explicit gamma-phi Sechenov correction, which routes to the best available ks model per gas (Dubessy for CO2, Akinfiev for H2S, S&W Eq. 12 otherwise). The paper found the two indistinguishable in fit quality once the BIP is refitted, and recommended the simpler embedded approach; on delivered numbers they differ by up to about 4% in solubility.
+       Both frameworks solve Soreide & Whitson's own procedure (S&W 1992 Eqs. 10a/10b): one equilibrium in which the aqueous phase uses kij_AQ and the gas phase uses kij_NA and carries its equilibrium water. Before 3.10.0 the flash was a dual flash (kij_AQ in both phases for the dissolved gas, kij_NA in both for the water content), with kij_AQ coefficients that had been regressed against a dry, pure-gas vapour; neither matched how S&W fitted their correlations.
 
-       The pre-3.7.5 names remain accepted and keep their old meaning, so existing calls are unaffected: ``'dropin'`` for ``'default'`` and ``'proposed'`` for ``'mc3'``.
+       * ``'default'`` - the `Burgoyne & Nielsen (2026) <https://doi.org/10.1016/j.fluid.2026.114824>`_ framework refitted on that procedure with the paper's data, functional forms and Sechenov targets (coefficients, fit statistics and technical note: `SW_Framework_Refresh, procedure1_refit <https://github.com/mwburgoyne/SW_Framework_Refresh/tree/procedure1-2026-11/procedure1_refit>`_). The **original S&W water alpha is retained**, the freshwater kij_AQ are the procedure-1 refit, kij_NA are the paper's (unchanged by the refit), and salinity is carried by an additive embedded ``delta_kij(T, m)``. Freshwater solubility MARE on the paper's data: CO2 12.4%, H2S 6.8% (excluding 18 suspect points), CH4 3.9%, N2 5.3%, H2 11.3%, C2H6 8.4%, C3H8 3.4%, He 6.3%. The paper's published coefficients are not retained: they are correct only inside the dry-vapour solve they were fitted with.
+       * ``'sw_original'`` - Soreide & Whitson (1992) exactly as published: their water alpha, their kij correlations, salinity embedded in kij for the hydrocarbons, CO2 and N2. H2, H2S and He have no embedded term there and take the ``'default'`` delta_kij under ``'embedded'``.
+
+       ``'dropin'`` (the pre-3.7.5 name of ``'default'``) is still accepted. ``'mc3'`` (and its old name ``'proposed'``) was removed in 3.10.0: it had no procedure-1 fit and the paper did not adopt it. Passing it raises ``ValueError``.
    * - salinity_method
      - str
      - How salinity enters the flash.
 
-       * ``'auto'`` (default) - takes the route each framework was fitted with: ``'embedded'`` for ``'default'`` and ``'sw_original'``, ``'gamma_phi'`` for ``'mc3'``. Leave it alone unless you are deliberately crossing a framework with a route it was not fitted for.
-       * ``'embedded'`` - salinity inside kij, as an additive ``delta_kij(T, m)``. Defined for all three frameworks, each with its own fitted coefficients.
-       * ``'gamma_phi'`` - Sechenov salting-out applied as an activity coefficient on the dissolved gas, leaving the BIP freshwater. ``'sechenov'`` is an accepted alias.
+       * ``'auto'`` (default) - ``'embedded'``, the route both frameworks were fitted with.
+       * ``'embedded'`` - salinity inside kij_AQ: the fitted ``delta_kij(T, m)`` under ``'default'``, S&W's own salinity terms under ``'sw_original'``.
+       * ``'gamma_phi'`` - Sechenov salting-out applied as an activity coefficient on the dissolved gas, leaving the BIP freshwater. Under ``'default'`` the ks models are the paper's recommendations (Dubessy et al. 2005 - 0.011 for CO2, Akinfiev et al. 2016 + 0.019 for H2S, S&W Eq. 8 + 0.02 for N2, S&W Eq. 8 otherwise). ``'sechenov'`` is an accepted alias.
        * ``'explicit'`` - brine treated as a component in the flash.
 
-       The Rust-accelerated flash covers the two pairings the accelerator implements, ``'default'`` with ``'embedded'`` and ``'mc3'`` with ``'gamma_phi'``, which are both defaults. Anything else runs the pure-Python flash and returns the same numbers.
+       The Rust-accelerated flash covers ``'default'`` with ``'embedded'`` (the default pairing, and any salt-free ``'default'`` case). Anything else runs the pure-Python flash and returns the same numbers.
    * - vphi_route
      - str
      - Source of the dissolved-gas apparent molar volume for the density step. ``'auto'`` (default, S&W PR + volume shift with Plyasunov fallback), ``'pr'``, or ``'plyasunov'`` (reproduces pre-3.7.2 densities exactly). See *Density and Viscosity Calculation Details* below.
@@ -635,11 +636,11 @@ Pure CO2 case at 5000 psia x 275 deg F and 3% NaCl brine:
     >>> from pyrestoolbox import brine
     >>> mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=1.0, metric=False)
     >>> mix.bDen  # Returns [Gas Saturated, Gas-Free Brine, Freshwater]
-    [0.9730093241255896, 0.968164592979362, 0.9476497407774847]
+    [0.9737495400683142, 0.968164592979362, 0.9476497407774847]
     >>> mix.Rs  # Returns per-gas Rs dict (scf/stb)
-    {'CO2': 151.45551874473742}
+    {'CO2': 175.11151469652475}
     >>> mix.bw  # Returns [Gas Saturated, Gas-Free, Freshwater]
-    [1.1008729259876717, 1.0543023174291248, 1.0542033190822462]
+    [1.108123758654722, 1.054302317429125, 1.0542033190822462]
 
 Pure CH4 case (SG=0.554) at 5000 psia x 275 deg F and 3% NaCl brine:
 
@@ -647,9 +648,9 @@ Pure CH4 case (SG=0.554) at 5000 psia x 275 deg F and 3% NaCl brine:
 
     >>> mix = brine.SoreideWhitson(pres=5000, temp=275, ppm=30000, y_CO2=0, sg=0.554, metric=False)
     >>> mix.Rs
-    {'CH4': 22.142528744136207}
+    {'CH4': 23.730041532474416}
     >>> mix.bDen
-    [0.9640205266484241, 0.968164592979362, 0.9476497407774847]
+    [0.9637253265757386, 0.968164592979362, 0.9476497407774847]
 
 Mixed gas (10% CO2, 5% H2S, SG=0.7) at 200 Bar x 80 degC and 10,000 ppm NaCl:
 
@@ -659,9 +660,9 @@ Mixed gas (10% CO2, 5% H2S, SG=0.7) at 200 Bar x 80 degC and 10,000 ppm NaCl:
     >>> mix.gas_comp  # Estimated gas composition including HC split
     {'CO2': 0.1, 'H2S': 0.05, 'CH4': 0.8133, 'C2H6': 0.0351, 'C3H8': 0.0015, 'nC4H10': 0.0001}
     >>> mix.Rs_total  # Total dissolved gas (sm3/sm3)
-    8.620014781807498
+    8.854387480089079
     >>> mix.bDen
-    [0.9853891217810185, 0.9871360082710434, 0.9804911502375318]
+    [0.9853534989991483, 0.9871360082710434, 0.9804911502375318]
 
 Pure CO2 fresh water at 175 Bar x 85 degC with saturated compressibility:
 
@@ -669,11 +670,11 @@ Pure CO2 fresh water at 175 Bar x 85 degC with saturated compressibility:
 
     >>> mix = brine.SoreideWhitson(pres=175, temp=85, ppm=0, y_CO2=1.0, metric=True, cw_sat=True)
     >>> mix.Rs_total  # sm3 dissolved CO2 / sm3 Brine
-    24.93242035862645
+    26.091648372872093
     >>> mix.Cf_sat
-    0.00016011819834824565
+    0.00017903544562664252
     >>> mix.water_content
-    {'y_H2O': 0.013968581961446491, 'stb_mmscf': 1.9211146471984861, 'lb_mmscf': 672.5672073622544}
+    {'y_H2O': 0.01372901229954114, 'stb_mmscf': 1.8877077204528097, 'lb_mmscf': 660.8717036812741}
 
 References:
 
@@ -702,17 +703,17 @@ route as the other gases. Its basis, and where it is thin:
   These are deliberately *not* the helium constants of the BNS gas Z-factor
   model, whose helium Tc is an effective 6.35 degR tuned for LBC viscosity; the
   two sets must not be swapped.
-* **kij_AQ** is (A + Tr)/(B + C Tr) with A = -71.6152, B = -0.394962,
-  C = 0.505807 (Tr = T/5.1953 K), fitted L1 on the S&W water alpha to pointwise
-  kij from Gardiner & Smith (1972), Gerth (1983), Abrosimov & Lebedeva (2013),
+* **kij_AQ** is (A + Tr)/(B + C Tr) with A = -71.615504934, B = -0.16440701914,
+  C = 0.50173713895 (Tr = T/5.1953 K; procedure-1 refit, 3.10.0, which moves the
+  curve by -0.0002 on average from the 3.8.3 fit), fitted L1 on the S&W water
+  alpha to pointwise kij from Gardiner & Smith (1972), Gerth (1983), Abrosimov & Lebedeva (2013),
   Pray et al. (1952) and Potter & Clynne (1978): 130 points over 20-163 degC and
   1-1000 bar. Mean absolute error in dissolved mole fraction is 2.4-6.8% by
   source below 150 degC (15.7% for Pray's three 163 degC points), with a
   structured pressure bias inherent to a kij(T)-only form: about +4 to +17% at
   1-10 MPa helium partial pressure and -7 to -13% at 70-100 MPa. It is not
-  validated above 200 degC. The same kij is used, unrefitted, under ``'mc3'``
-  and ``'sw_original'``.
-* **Salinity**: embedded delta_kij = (0.359923 - 0.0095344 Tr + 7.00398e-5 Tr^2) m,
+  validated above 200 degC. The same kij is used under ``'sw_original'``.
+* **Salinity**: embedded delta_kij = (0.363020 - 0.00963936 Tr + 7.09302e-5 Tr^2) m,
   fitted to S&W Eq. 8 Sechenov targets (Tb 4.2238 K), 25-100 degC. Eq. 8 matches
   measured helium Sechenov coefficients in NaCl to 0.007 mean absolute error;
   the two NaCl data sources disagree with each other at 25 degC (0.078 against
@@ -720,7 +721,7 @@ route as the other gases. Its basis, and where it is thin:
 * **kij_NA** (water content of the gas phase) is 0.468, borrowed from H2. No
   helium water-content data exist, so water content of helium-rich gas is
   unvalidated.
-* **Density**: V_phi from the PR route with VSHIFT -0.302941, anchored on the
+* **Density**: V_phi from the PR route with VSHIFT -0.302945, anchored on the
   only direct volumetric value, Zhou & Battino (2001) densimetry, 24.6 +/- 3.0
   cm3/mol at 298.15 K (the +/-3.0 maps to +/-0.204 in the shift). Solubility-
   derived helium volumes (13-16 cm3/mol) are not used. The temperature trend is
@@ -755,11 +756,11 @@ exactly. The PR
 route needs one fitted number per gas against 35 coefficients per gas for the
 correlation, matches or beats it on five of six gases against the calibration
 densimetry, and reproduces an H2S temperature trend the correlation misses.
-The delivered shifts are CH4 -0.111430, CO2 -0.070103, H2S -0.079416,
-N2 -0.176768, H2 -0.178503, C2H6 -0.073843, C3H8 -0.113326,
-nC4H10 +0.110920 and He -0.302941. They are fitted against the ``'default'`` kij_AQ set and the
-route pins that framework internally (refitted in 3.7.7; the values before it
-went with the ``'mc3'`` set the route pinned until then). A shift and the kij
+The delivered shifts are CH4 -0.112883, CO2 -0.071746, H2S -0.081822,
+N2 -0.176415, H2 -0.178293, C2H6 -0.073934, C3H8 -0.113542,
+nC4H10 +0.110920 and He -0.302945. They are fitted against the ``'default'`` kij_AQ set and the
+route pins that framework internally (refitted in 3.10.0 on the procedure-1 kij_AQ, and in 3.7.7
+before that). A shift and the kij
 set it was fitted against are one calibration, so the two are never mixed.
 
 Three ceilings should not be conflated: the arithmetic stops at 623.15 K, the
@@ -831,8 +832,8 @@ refutes, getting the sign wrong for three of five gases.
      - mu x (1 + A exp(B/T) x/(K + x)), with A = 1.71739196e-3, B = 1239.77535 K, K = 1.52860547e-3
      - Refitted here to all 23 Ostermann (SPE-14211, 1985) measurements rather than to his three summary values
    * - H2S
-     - mu x (1 + 1.37 x)
-     - Murphy-Gaines (1974), loading from this library's Soreide-Whitson model. Five points, all below 309 K, implying 0.25 to 2.07 individually
+     - mu x (1 + 1.33 x)
+     - Murphy-Gaines (1974), loading from this library's Soreide-Whitson model. Five points, all below 309 K, implying 0.25 to 2.07 individually on the pre-3.10 loading (1.37 overall then)
    * - C2H6, N2
      - No correction
      - Measured nulls. N2's null bounds the effect below about 2.5% rather than establishing zero

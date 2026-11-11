@@ -1,10 +1,11 @@
 //! VLE Flash Engine for Multi-Gas Phase Equilibria (Rust acceleration).
 //!
-//! Implements the Soreide-Whitson Peng-Robinson EOS-based flash calculation
-//! with up to 16 components for gas-saturated brine.
+//! Implements the Soreide-Whitson Peng-Robinson EOS flash on S&W's own
+//! "procedure 1" (S&W 1992 Eqs 10a/10b: kij_AQ in the aqueous phase, kij_NA
+//! in the non-aqueous phase) for gas-saturated brine, 'default' framework.
 //!
 //! Exports:
-//!   flash_tp_rust — Single TP flash (AQ or NA mode)
+//!   flash_tp_rust - single procedure-1 TP flash
 
 use pyo3::prelude::*;
 use pyo3::exceptions::PyValueError;
@@ -48,21 +49,20 @@ fn resolve_comp_names(comp_names: &[String]) -> PyResult<Vec<usize>> {
     Ok(indices)
 }
 
-/// Single TP flash for the S&W VLE engine.
+/// Single procedure-1 TP flash for the S&W VLE engine ('default' framework:
+/// S&W water alpha, freshwater kij_AQ plus embedded salinity delta_kij in the
+/// aqueous phase, kij_NA in the non-aqueous phase).
 ///
 /// # Arguments
 /// * `t_k` - Temperature in Kelvin
 /// * `p_pa` - Pressure in Pascal
 /// * `z` - Feed composition (will be normalized)
 /// * `comp_names` - Component names (e.g., ["H2O", "CH4", "CO2"])
-/// * `salinity` - NaCl molality (mol/kg water). Informational only; the caller
-///                is responsible for baking salinity into `gamma`.
-/// * `mode` - "AQ" for aqueous phase BIPs, "NA" for non-aqueous
-/// * `gamma` - Activity coefficient array (same length as z). Must be computed
-///             by the caller. For framework='proposed', specialized ks models
-///             (Dubessy/Akinfiev/Li/Mao-Duan/Duan-Sun) live on the Python side
-///             — this Rust entry point must not substitute its own S&W Eq 8
-///             fallback silently. Use `1.0` for gases in freshwater.
+/// * `salinity` - NaCl molality (mol/kg water). Enters the water alpha and the
+///                embedded delta_kij on kij_AQ.
+/// * `gamma` - Aqueous activity coefficients (same length as z), computed by
+///             the caller; all-ones under embedded salinity. This entry point
+///             never substitutes its own Sechenov values.
 ///
 /// # Returns
 /// Tuple (V, x_vec, y_vec, converged) where V is vapor fraction, x is liquid
@@ -74,24 +74,8 @@ pub fn flash_tp_rust(
     z: Vec<f64>,
     comp_names: Vec<String>,
     salinity: f64,
-    mode: String,
     gamma: Vec<f64>,
-    framework: String,
 ) -> PyResult<(f64, Vec<f64>, Vec<f64>, bool)> {
-    // Salinity is used by the default framework, where it enters the water
-    // alpha and the embedded delta_kij. Under 'mc3' the salt effect arrives
-    // entirely through the caller-supplied gamma and salinity is unused.
-    let fw = match framework.as_str() {
-        "default" => crate::vle::bip::Framework::Default,
-        "mc3" => crate::vle::bip::Framework::Mc3,
-        _ => {
-            return Err(PyValueError::new_err(
-                "framework must be 'default' or 'mc3'",
-            ));
-        }
-    };
-
-    // Validate inputs
     if !t_k.is_finite() || t_k <= 0.0 {
         return Err(PyValueError::new_err("Temperature must be positive and finite"));
     }
@@ -109,31 +93,7 @@ pub fn flash_tp_rust(
         ));
     }
 
-    let mode_aq = match mode.as_str() {
-        "AQ" => true,
-        "NA" => false,
-        _ => {
-            return Err(PyValueError::new_err(
-                "mode must be 'AQ' or 'NA'",
-            ));
-        }
-    };
-
     let comp_indices = resolve_comp_names(&comp_names)?;
 
-    let (v, x, y, converged) = flash::flash_tp(
-        t_k,
-        p_pa,
-        &z,
-        &comp_indices,
-        mode_aq,
-        &gamma,
-        fw,
-        salinity,
-        200,
-        1e-10,
-    );
-
-    Ok((v, x, y, converged))
+    Ok(flash::flash_tp(t_k, p_pa, &z, &comp_indices, &gamma, salinity, 200, 1e-10))
 }
-
