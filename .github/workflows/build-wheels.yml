@@ -27,12 +27,13 @@ jobs:
           python-version: "3.12"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch, 16 Oct 2026
         with:
+          toolchain: stable
           targets: ${{ matrix.os == 'macos-15' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Build wheels via cibuildwheel
-        uses: pypa/cibuildwheel@v4.3.5
+        uses: pypa/cibuildwheel@f9b966cfadf4109556cadc5bb39ddb72d0ce664e # v4.3.5
         env:
           # Use maturin as the build frontend
           CIBW_BUILD_FRONTEND: "build"
@@ -87,10 +88,12 @@ jobs:
           python-version: "3.12"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch, 16 Oct 2026
+        with:
+          toolchain: stable
 
       - name: Build wheels via cibuildwheel
-        uses: pypa/cibuildwheel@v4.3.5
+        uses: pypa/cibuildwheel@f9b966cfadf4109556cadc5bb39ddb72d0ce664e # v4.3.5
         env:
           CIBW_BUILD_FRONTEND: "build"
           CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
@@ -138,7 +141,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch, 16 Oct 2026
+        with:
+          toolchain: stable
 
       - name: Install maturin
         run: pip install maturin
@@ -170,7 +175,7 @@ jobs:
           merge-multiple: true
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           packages-dir: dist/
 
@@ -203,7 +208,7 @@ jobs:
           PY
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           name: ${{ github.ref_name }}
           body_path: release_notes.md
