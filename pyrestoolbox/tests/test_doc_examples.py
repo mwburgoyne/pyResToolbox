@@ -693,7 +693,8 @@ def test_doc_library_property_list():
     assert isinstance(library.property_list, list)
     assert 'MW' in library.property_list
     assert 'Tc_R' in library.property_list
-    assert 'Pc_psia' in library.property_list
+    assert library.property_list == ['Name', 'MW', 'Tc_R', 'Pc_psia', 'Zc', 'Pchor',
+                                     'Vc_cuft_per_lbmol', 'Acentric', 'VTran', 'Tb_F', 'SpGr']
 
 def test_doc_library_models():
     """library.rst: library.models"""

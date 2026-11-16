@@ -76,10 +76,10 @@ def make_bot_og(
     Creates data required for Oil-Gas-Water black oil tables
     Returns dictionary of results, with index:
       - bot: Pandas table of blackoil data (for PVTO == False), or Saturated properties to pmax (if PVTO == True)
-      - deno: ST Oil Density (lb/cuft or kg/m3 if metric)
-      - deng: ST Gas Density (lb/cuft or kg/m3 if metric)
-      - denw: Water Density at Pi (lb/cuft or kg/m3 if metric),
-      - cw: Water Compressibility at Pi (1/psi or 1/bar if metric)
+      - deno: ST Oil Density (lb/cuft | kg/m3)
+      - deng: ST Gas Density (lb/cuft | kg/m3)
+      - denw: Water Density at Pi (lb/cuft | kg/m3),
+      - cw: Water Compressibility at Pi (1/psi | 1/bar)
       - uw: Water Viscosity at Pi (cP))
       - pb: Bubble point pressure either calculated (if only Rsb provided), or supplied by user
       - rsb: Solution GOR at Pb either calculated (if only Pb provided), or supplied by user
@@ -89,14 +89,14 @@ def make_bot_og(
     If user species Pb or Rsb only, the corresponding property will be calculated
     If both Pb and Rsb are specified, then Pb calculations will be adjusted to honor both
 
-    pi: Initial reservoir pressure (psia / barsa if metric). Used to return water properties at initial pressure
-    pb: Bubble point pressure (psia / barsa if metric)
-    rsb: Oil solution GOR at Pb (scf/stb / sm3/sm3 if metric)
-    degf: Reservoir Temperature (deg F / deg C if metric)
+    pi: Initial reservoir pressure (psia | barsa). Used to return water properties at initial pressure
+    pb: Bubble point pressure (psia | barsa)
+    rsb: Oil solution GOR at Pb (scf/stb | sm3/sm3)
+    degf: Reservoir Temperature (deg F | deg C)
     sg_g: Weighted average specific gravity of surface gas (relative to air).
     api: Stock tank oil density (deg API).
-    pmax: Maximum pressure to calcuate table to (psia / barsa if metric)
-    pmin: Minimum pressure to calculate table to (psia / barsa if metric). Default = 25
+    pmax: Maximum pressure to calcuate table to (psia | barsa)
+    pmin: Minimum pressure to calculate table to (psia | barsa). Default = 25
     nrows: Number of BOT rows. Default = 20
     wt: Salt wt% (0-100) in brine. Default = 0
     ch4_sat: Degree of methane saturation (0 - 1) in brine. Default = 0
@@ -237,12 +237,12 @@ def make_pvtw_table(
 ) -> dict:
     """ Generates a PVTW (water PVT) table over a pressure range using brine_props (Spivey correlation).
 
-        pi: Initial (reference) pressure (psia / barsa if metric)
-        degf: Temperature (deg F / deg C if metric)
+        pi: Initial (reference) pressure (psia | barsa)
+        degf: Temperature (deg F | deg C)
         wt: Salt wt% (0-100), default 0
         ch4_sat: Degree of methane saturation (0 - 1), default 0
-        pmin: Minimum pressure for table (psia / barsa if metric), default 500
-        pmax: Maximum pressure for table (psia / barsa if metric), default 10000
+        pmin: Minimum pressure for table (psia | barsa), default 500
+        pmax: Maximum pressure for table (psia | barsa), default 10000
         nrows: Number of rows in table, default 20
         export: If True, writes PVTW.INC (ECLIPSE keyword) and pvtw_table.xlsx
         metric: If True, inputs/outputs use Eclipse METRIC units (barsa, degC, sm3/sm3, 1/bar).
@@ -250,11 +250,11 @@ def make_pvtw_table(
 
         Returns dict with keys:
             table: pandas DataFrame with columns Pressure, Bw, Density, Viscosity, Cw, Rsw
-            pref: Reference pressure (psia / barsa)
-            bw_ref: Bw at reference pressure (rb/stb / rm3/sm3)
-            cw_ref: Compressibility at reference pressure (1/psi / 1/bar)
+            pref: Reference pressure (psia | barsa)
+            bw_ref: Bw at reference pressure (rb/stb | rm3/sm3)
+            cw_ref: Compressibility at reference pressure (1/psi | 1/bar)
             visw_ref: Viscosity at reference pressure (cP)
-            rsw_ref: Rsw at reference pressure (scf/stb / sm3/sm3)
+            rsw_ref: Rsw at reference pressure (scf/stb | sm3/sm3)
             den_ref: Density (sg) at reference pressure
     """
     # --- Metric input conversion ---

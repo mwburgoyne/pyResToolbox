@@ -327,16 +327,16 @@ def make_vfpinj(
         vlpmethod: VLP correlation - 'HB', 'WG', 'GRAY', or 'BB'
         flo_rates: List of flow rates in ascending order.
                    Units: stb/d (WAT/OIL) or Mscf/d (GAS) in field; sm3/d in metric. Default provided if None
-        thp_values: List of tubing head pressures (psia / barsa) in ascending order. Default provided if None
+        thp_values: List of tubing head pressures (psia | barsa) in ascending order. Default provided if None
         gas_pvt: Optional GasPVT object for gas injection
         gsg: Gas specific gravity. Default 0.65
         wsg: Water specific gravity. Default 1.07
         oil_pvt: Optional OilPVT object for oil injection
-        pb: Bubble point pressure (psia / barsa). For oil injection
-        rsb: Solution GOR at Pb (scf/stb / sm3/sm3). For oil injection
+        pb: Bubble point pressure (psia | barsa). For oil injection
+        rsb: Solution GOR at Pb (scf/stb | sm3/sm3). For oil injection
         sgsp: Separator gas SG. Default 0.65
         api: API gravity. Default 35
-        datum_depth: Bottom hole datum depth (ft / m). Default = completion total TVD
+        datum_depth: Bottom hole datum depth (ft | m). Default = completion total TVD
         export: If True, writes an Eclipse VFP file. Default False
         filename: Custom output filename. Default: VFPINJ_{table_num}.VFP
         metric: If True, inputs/outputs use Eclipse METRIC units (barsa, sm3/d, m).
@@ -600,7 +600,7 @@ def make_vfpprod(
         well_type: 'gas' or 'oil'
         vlpmethod: VLP correlation - 'HB', 'WG', 'GRAY', or 'BB'
         flo_rates: List of flow rates in ascending order. Default provided if None
-        thp_values: List of tubing head pressures (psia / barsa). Default provided if None
+        thp_values: List of tubing head pressures (psia | barsa). Default provided if None
         wfr_values: List of water fraction values. Default provided if None
                     Gas wells: WGR in stb/Mscf (field) or sm3/sm3 (metric). Oil wells: WCT as fraction (0-1)
         gfr_values: List of gas fraction values. Default provided if None
@@ -610,13 +610,13 @@ def make_vfpprod(
         gsg: Gas specific gravity. Default 0.65
         oil_vis: Condensate viscosity (cP). Default 1.0
         api: API gravity (condensate for gas wells, oil for oil wells). Default 45
-        pr: Reservoir pressure (psia / barsa) for condensate dropout model. 0 disables. Default 0
+        pr: Reservoir pressure (psia | barsa) for condensate dropout model. 0 disables. Default 0
         oil_pvt: Optional OilPVT object for oil wells
-        pb: Bubble point pressure (psia / barsa). Required for oil wells
-        rsb: Solution GOR at Pb (scf/stb / sm3/sm3). Required for oil wells
+        pb: Bubble point pressure (psia | barsa). Required for oil wells
+        rsb: Solution GOR at Pb (scf/stb | sm3/sm3). Required for oil wells
         sgsp: Separator gas SG. Default 0.65
         wsg: Water specific gravity. Default 1.07
-        datum_depth: Bottom hole datum depth (ft / m). Default = completion total TVD
+        datum_depth: Bottom hole datum depth (ft | m). Default = completion total TVD
         export: If True, writes an Eclipse VFP file. Default False
         filename: Custom output filename. Default: VFPPROD_{table_num}.VFP
         metric: If True, inputs/outputs use Eclipse METRIC units (barsa, sm3/d, m, sm3/sm3).

@@ -44,9 +44,78 @@ jobs:
           name: mcp-dist
           path: dist/
 
+  # Same check on the other desktop platforms hosts run on.
+  smoke:
+    name: Smoke-test on ${{ matrix.os }}
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-15]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: mcp-dist
+          path: dist
+
+      - name: Install the wheel and drive it over stdio
+        run: |
+          python -m venv smoke
+          if [ -d smoke/Scripts ]; then BIN=smoke/Scripts; else BIN=smoke/bin; fi
+          $BIN/python -m pip install dist/*.whl
+          $BIN/python .github/scripts/mcp_stdio_smoke.py $BIN/pyrestoolbox-mcp
+
+  # Container for shared HTTP deployments: built and tested on every run,
+  # pushed to ghcr.io on a tag or a manual run.
+  docker:
+    name: Docker image (GHCR)
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/mwburgoyne/pyrestoolbox-mcp
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build
+        run: |
+          VERSION=$(python3 -c "import re;print(re.search(r'__version__ = \"(.+)\"', open('mcp/pyrestoolbox_mcp/__init__.py').read()).group(1))")
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          docker build -t "$IMAGE:$VERSION" -t "$IMAGE:latest" \
+            --label org.opencontainers.image.source=https://github.com/mwburgoyne/pyResToolbox \
+            --label org.opencontainers.image.description="MCP server for the pyrestoolbox reservoir engineering library" \
+            --label org.opencontainers.image.licenses=GPL-3.0-or-later mcp
+
+      - name: Smoke-test over HTTP
+        run: |
+          docker run -d --name mcp -p 8000:8000 "$IMAGE:$VERSION"
+          H=(-sf -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -H "MCP-Protocol-Version: 2025-06-18")
+          for i in $(seq 30); do curl -s -o /dev/null http://127.0.0.1:8000/mcp && break; sleep 1; done
+          curl "${H[@]}" http://127.0.0.1:8000/mcp -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' | grep -q pyrestoolbox
+          curl "${H[@]}" http://127.0.0.1:8000/mcp -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"call","arguments":{"name":"gas.gas_z","arguments":{"p":2000,"sg":0.75,"degf":180}}}}' | tee /tmp/out | grep -q '0.8498'
+          docker rm -f mcp
+
+      - name: Push
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push --all-tags "$IMAGE"
+
   publish:
     name: Publish to PyPI
-    needs: build
+    needs: [build, smoke]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     environment:

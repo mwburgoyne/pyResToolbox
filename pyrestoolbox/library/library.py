@@ -46,6 +46,11 @@ import pandas as pd
 
 
 class component_library:
+    """Critical-property database for 100-odd pure components, read from
+    component_library.xlsx. The module-level ``prop``, ``components``, ``names``,
+    ``property_list`` and ``models`` come from one shared instance, so most users
+    never construct this class; ``model`` sets the default EOS for ``df``.
+    """
     def __init__(self, model='PR79'):
         path = 'component_library.xlsx'
         #filepath = pkg_resources.resource_filename(__name__, path)
@@ -74,6 +79,23 @@ class component_library:
             self.model_dics[model] = model_dic
 
     def prop(self, comp, prop, model='PR79'):
+        """Critical or EOS property of one component from the library.
+
+        comp: component name, case-insensitive (e.g. 'CH4', 'C3', 'CO2', 'H2S',
+            'N2'); ``library.components`` lists them all.
+        prop: case-insensitive, one of 'MW' (lb/lbmol), 'Tc_R' (critical
+            temperature, deg R), 'Pc_psia' (critical pressure, psia), 'Zc' (critical
+            Z used for viscosity), 'Pchor' (parachor), 'Vc_cuft_per_lbmol' (critical
+            volume, ft3/lbmol), 'Acentric', 'VTran' (dimensionless volume
+            translation), 'Tb_F' (normal boiling point, deg F), 'SpGr' (liquid
+            specific gravity), or 'ALL' for a list of every property in that order.
+            Units are fixed; there is no metric option.
+        model: EOS for the model-specific properties (Acentric, VTran, Tb_F, SpGr):
+            'PR79' (default), 'PR77', 'SRK' or 'RK'.
+
+        Returns a float (a list for 'ALL'). Raises KeyError for an unknown component
+        or property and ValueError for an unknown model.
+        """
         comp = comp.upper()
         if comp not in self.components:
             raise KeyError(f"Component '{comp}' not in Library. Available components: {', '.join(self.components[:10])}...")

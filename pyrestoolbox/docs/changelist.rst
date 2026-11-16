@@ -1,3 +1,9 @@
+Changelist in 3.10.2:
+
+- **AI agents: MCP server published.** ``pyrestoolbox-mcp`` (a separate package, Python 3.10+) lets Claude, Cursor, VS Code Copilot and other Model Context Protocol hosts search, read up on and call every public function; set up with ``claude mcp add pyrestoolbox -- uvx pyrestoolbox-mcp``, or install it with the library as ``pip install "pyrestoolbox[mcp]"`` (new extra; skipped on Python 3.9). A Docker image for HTTP deployment is at ``ghcr.io/mwburgoyne/pyrestoolbox-mcp``. See the README.
+- **Docstrings: units written as ``(field | metric)`` throughout.** ``GasPVT``, ``make_vfpprod``, ``make_vfpinj``, ``make_bot_og`` and ``make_pvtw_table`` used a slash form; agents read these docstrings as the tool contract. ``library.prop`` and ``component_library`` gain docstrings (property names and units).
+- **Documentation: ``library.rst`` listed a ``Visc_Zc`` property; the library's name is ``Zc``.** The doc test now pins the full ``property_list``. No numerical change in this release.
+
 Changelist in 3.10.1:
 
 - **Rust-accelerated wheels for Python 3.14.** PyO3 0.23 -> 0.30 (0.23 capped at Python 3.13) and cibuildwheel v2.23 -> v4.3.5; wheels are now built for CPython 3.9-3.14 on Linux x86_64, macOS arm64 and Windows AMD64 (free-threaded 3.14t is not built). Before this, Python 3.14 installs fell back to the pure-Python wheel. No numerical change: the only source edit is PyO3's rename of ``Python::allow_threads`` to ``Python::detach``.

@@ -2155,10 +2155,10 @@ class GasPVT:
         h2: Molar fraction of Hydrogen. Defaults to zero
         zmethod: Method for calculating Z-Factor. Defaults to 'DAK', or 'BNS' if h2 > 0
         cmethod: Method for calculating critical properties. Defaults to 'PMC'
-        tc: Critical gas temperature (deg R, or K if metric=True). Defaults to 0 = compute from cmethod.
+        tc: Critical gas temperature (deg R | K). Defaults to 0 = compute from cmethod.
             For BNS, overrides only the hydrocarbon pseudo-component Tc (inert Tc stay at BNS internal constants).
             May be given without pc (and vice versa); the other comes from cmethod.
-        pc: Critical gas pressure (psia, or barsa if metric=True). Defaults to 0 = compute from cmethod.
+        pc: Critical gas pressure (psia | barsa). Defaults to 0 = compute from cmethod.
             For BNS, overrides only the hydrocarbon pseudo-component Pc (inert Pc stay at BNS internal constants).
             May be given without tc (and vice versa); the other comes from cmethod.
         metric: If True, methods accept/return Eclipse METRIC units (barsa, degC, kg/m3). Defaults to False

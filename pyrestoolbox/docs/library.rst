@@ -49,7 +49,7 @@ Returns specified critical property of a component
      - The component for which critical properties are to be returned (use rtb.comp_library.components to get available list)
    * - prop
      - str
-     - The critical property to be returned. Selections are 'MW', 'Tc_R', 'Pc_psia', 'Visc_Zc', 'Pchor', 'Vc_cuft_per_lbmol', 'Acentric', 'VTran', 'Tb_F', 'SpGr'.
+     - The critical property to be returned. Selections are 'MW', 'Tc_R', 'Pc_psia', 'Zc', 'Pchor', 'Vc_cuft_per_lbmol', 'Acentric', 'VTran', 'Tb_F', 'SpGr'.
    * - model
      - str
      - The EOS model. Selections are 'PR79', 'PR77', 'SRK', 'RK', with default 'PR79'. Used for EOS specific critical properties for Acentric, VTran, Tb_F and SpGr.
@@ -161,7 +161,7 @@ Example:
 .. code-block:: python
 
     >>> print(library.property_list)
-    ['Name', 'MW', 'Tc_R', 'Pc_psia', 'Visc_Zc', 'Pchor', 'Vc_cuft_per_lbmol', 'Acentric', 'VTran', 'Tb_F', 'SpGr']
+    ['Name', 'MW', 'Tc_R', 'Pc_psia', 'Zc', 'Pchor', 'Vc_cuft_per_lbmol', 'Acentric', 'VTran', 'Tb_F', 'SpGr']
 
 
 pyrestoolbox.library.models

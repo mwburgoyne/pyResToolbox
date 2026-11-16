@@ -34,7 +34,7 @@ VS Code (`.vscode/mcp.json`):
 }
 ```
 
-Without uv: `pip install pyrestoolbox-mcp`, then use `pyrestoolbox-mcp` as the command with no arguments. Desktop apps launched from a dock or start menu often do not see your shell's PATH; if the host reports that it cannot start the server, give the full path to `uvx` or `pyrestoolbox-mcp` (`which uvx`, or `where uvx` on Windows).
+Without uv: `pip install pyrestoolbox-mcp` (or `pip install "pyrestoolbox[mcp]"` with pyrestoolbox 3.10.2 or later), then use `pyrestoolbox-mcp` as the command with no arguments. Desktop apps launched from a dock or start menu often do not see your shell's PATH; if the host reports that it cannot start the server, give the full path to `uvx` or `pyrestoolbox-mcp` (`which uvx`, or `where uvx` on Windows).
 
 To pin the version for repeatable numbers: `uvx pyrestoolbox-mcp@0.1.0` and, if the library must stay fixed too, `uvx --with pyrestoolbox==3.10.1 pyrestoolbox-mcp`.
 
@@ -79,7 +79,13 @@ Behaviour an agent can rely on:
 pyrestoolbox-mcp --transport streamable-http --host 0.0.0.0 --port 8000
 ```
 
-Serves the MCP endpoint at `/mcp`, stateless, so no session affinity is needed behind a load balancer. A `Dockerfile` is included (runs as a non-root user, pins the library version). The server has no authentication of its own: put a gateway in front of it.
+Serves the MCP endpoint at `/mcp`, stateless, so no session affinity is needed behind a load balancer. A ready-built image is on the GitHub Container Registry:
+
+```
+docker run -p 8000:8000 ghcr.io/mwburgoyne/pyrestoolbox-mcp:0.1.0
+```
+
+It runs as a non-root user with the library version pinned; the `Dockerfile` in this folder builds the same image. The server has no authentication of its own: put a gateway in front of it.
 
 One calculation runs at a time per process (the library's warning capture is process-global); scale with more processes or replicas.
 

@@ -67,7 +67,7 @@ VS Code (``.vscode/mcp.json``):
 
     {"servers": {"pyrestoolbox": {"command": "uvx", "args": ["pyrestoolbox-mcp"]}}}
 
-Without uv, run ``pip install pyrestoolbox-mcp`` and use ``pyrestoolbox-mcp`` as the command. For a shared deployment, ``pyrestoolbox-mcp --transport streamable-http`` serves it over HTTP (a Dockerfile is included). The server is read-only: it never touches files on its host unless started with ``--allow-file-io``. Tools, deployment and security notes: `mcp/README.md <https://github.com/mwburgoyne/pyResToolbox/blob/main/mcp/README.md>`_.
+Without uv, run ``pip install pyrestoolbox-mcp`` (or ``pip install "pyrestoolbox[mcp]"``) and use ``pyrestoolbox-mcp`` as the command. For a shared deployment, ``pyrestoolbox-mcp --transport streamable-http`` serves it over HTTP, and a ready-built image runs with ``docker run -p 8000:8000 ghcr.io/mwburgoyne/pyrestoolbox-mcp``. The server is read-only: it never touches files on its host unless started with ``--allow-file-io``. Tools, deployment and security notes: `mcp/README.md <https://github.com/mwburgoyne/pyResToolbox/blob/main/mcp/README.md>`_.
 
 Agents that can run Python can use the library directly instead; the documentation ships inside the package (``pyrestoolbox.docs_dir()``).
 
