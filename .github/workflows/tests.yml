@@ -83,7 +83,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mcp: ["mcp>=1.2,<2", "mcp>=2,<3"]
+        # The floor (pyrestoolbox-mcp declares mcp>=1.22), latest 1.x, latest 2.x
+        mcp: ["mcp==1.22.0", "mcp>=1.22,<2", "mcp>=2,<3"]
     steps:
       - uses: actions/checkout@v5
 

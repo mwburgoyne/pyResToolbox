@@ -3,6 +3,8 @@
 Meta-tool design: rather than one MCP tool per library function (125+), a
 small set of tools lets an agent discover and call the whole public API:
 
+    search          - engineering task in plain words -> matching functions
+    read_docs       - a module's full RST documentation with worked examples
     list_functions  - module map, or the public functions of one module
     describe        - signature + docstring for module.function
     call            - invoke any public function with keyword arguments
@@ -14,18 +16,41 @@ The full RST documentation shipped inside the pyrestoolbox wheel is exposed
 as MCP resources (docs://gas, docs://oil, ...).
 """
 
+import functools
 import importlib
 import inspect
+import json
+import os
+import re
+import threading
 import warnings
+
+import anyio
+from mcp.types import ToolAnnotations
 
 try:  # mcp >= 2 renamed FastMCP to MCPServer
     from mcp.server.mcpserver import MCPServer as _MCPServer
+    from mcp.server.mcpserver.exceptions import ToolError
     _MCP_V2 = True
 except ImportError:  # mcp 1.x
     from mcp.server.fastmcp import FastMCP as _MCPServer
+    from mcp.server.fastmcp.exceptions import ToolError
     _MCP_V2 = False
 
+from pyrestoolbox_mcp import __version__
 from pyrestoolbox_mcp.serialize import to_jsonable
+
+# Server policy, set from the command line in main().
+# File I/O: a few simtools functions read or write files on the host running
+# the server. Refused unless the operator opts in, because over HTTP the caller
+# is not the host's owner.
+ALLOW_FILE_IO = False
+# Largest tool result returned, in characters of JSON. A 20,000-row table is
+# about 3 MB, which no agent context can use; the error tells it to ask for less.
+MAX_RESULT_CHARS = 500_000
+
+_FILE_IO_FUNCTIONS = {"simtools.ix_extract_problem_cells", "simtools.zip_check_sim_deck"}
+_FILE_IO_ARGS = {"export", "filename", "files2scrape", "tozip"}
 
 # Modules whose public functions are callable through this server.
 ALLOWED_MODULES = {
@@ -65,10 +90,66 @@ mcp = _MCPServer(
         "Functions that take objects (Completion, Reservoir, GasPVT, OilPVT, "
         "decline results) accept them through call() as JSON objects of their "
         "constructor keywords; see the call tool description. "
-        "Full module documentation is available as docs:// resources; "
-        "docs://index maps engineering tasks to functions."
+        "search('liquid loading') finds functions by engineering task; "
+        "read_docs('gas') returns a module's full documentation with worked "
+        "examples (also served as docs:// resources). Errors carry the "
+        "library's message (valid method names, missing arguments, range "
+        "limits): read it and retry. Results may carry `notes` (library "
+        "validity warnings): pass them on with the number."
     ),
+    **({"version": __version__} if _MCP_V2 else {}),
 )
+if not _MCP_V2:  # 1.x takes no version argument and would report the SDK's own
+    mcp._mcp_server.version = __version__
+
+# Every tool is a pure calculation: no side effects, same answer for the same
+# input, no network. Hosts can show or auto-approve on these hints.
+_READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False,
+                             idempotentHint=True, openWorldHint=False)
+
+# One library call at a time per process. warnings.catch_warnings swaps
+# process-global state, so two concurrent calls would trade or lose each
+# other's notes; the library's pure-Python paths hold the GIL anyway. Scale
+# out with processes or replicas, not threads.
+_LIB_LOCK = threading.Lock()
+
+
+def _check_size(name, out):
+    n = len(out) if isinstance(out, str) else len(json.dumps(out, default=str))
+    if n > MAX_RESULT_CHARS:
+        raise ValueError(
+            f"{name} result is {n:,} characters of JSON, over this server's "
+            f"{MAX_RESULT_CHARS:,} limit. Ask for fewer rows or points "
+            "(e.g. rows, nrows, n_points), or a narrower range."
+        )
+
+
+def _tool(fn):
+    """Register fn as an MCP tool and return fn itself (tests call it directly).
+
+    The registered adapter runs fn in a worker thread under the library lock,
+    so a slow call never stalls the event loop (pings, other clients), and
+    re-raises any failure as ToolError. The SDK passes a ToolError's message to
+    the model; mcp 2.x replaces every other exception with a generic "Error
+    executing tool", which would hide the valid-options list an agent needs to
+    correct itself.
+    """
+    @functools.wraps(fn)
+    async def adapter(*args, **kwargs):
+        def work():
+            with _LIB_LOCK:
+                out = fn(*args, **kwargs)
+            _check_size(fn.__name__, out)
+            return out
+        try:
+            return await anyio.to_thread.run_sync(work)
+        except ToolError:
+            raise
+        except Exception as exc:
+            raise ToolError(f"{type(exc).__name__}: {exc}") from exc
+
+    mcp.tool(annotations=_READ_ONLY)(adapter)
+    return fn
 
 
 def _engine() -> dict:
@@ -127,7 +208,7 @@ def _resolve(name: str):
     return mod, getattr(mod, attr)
 
 
-@mcp.tool()
+@_tool
 def list_functions(module: str = "") -> dict:
     """List pyrestoolbox modules, or the public functions of one module.
 
@@ -147,7 +228,7 @@ def list_functions(module: str = "") -> dict:
     return out
 
 
-@mcp.tool()
+@_tool
 def describe(name: str) -> str:
     """Signature and full docstring for a public function or class.
 
@@ -176,8 +257,8 @@ def describe(name: str) -> str:
     return f"{kind} {name}{sig}\n\n{doc}"
 
 
-@mcp.tool()
-def call(name: str, arguments: dict = {}) -> dict:
+@_tool
+def call(name: str, arguments: dict | None = None) -> dict:
     """Call any public pyrestoolbox function with keyword arguments.
 
     name is 'module.function', e.g. 'gas.gas_z'. arguments is a JSON object
@@ -206,7 +287,10 @@ def call(name: str, arguments: dict = {}) -> dict:
     "completion": {"tid": 2.441, "length": 10000, "tht": 100, "bht": 200}}).
     Classes themselves cannot be called here; one-shot wrappers
     (co2_brine_props, sw_brine_props, fit_and_forecast) cover the common cases.
+    Tables come back inline; `export` and other file arguments are refused
+    unless the server was started with --allow-file-io.
     """
+    arguments = arguments or {}
     _, obj = _resolve(name)
     if inspect.isclass(obj):
         raise ValueError(
@@ -216,8 +300,22 @@ def call(name: str, arguments: dict = {}) -> dict:
         )
     if not callable(obj):
         raise ValueError(f"{name} is not callable (it is {type(obj).__name__})")
+    _check_file_io(name, arguments)
     result, notes = _run(obj, **_build_objects(obj, arguments))
     return _envelope({"result": to_jsonable(result)}, notes)
+
+
+def _check_file_io(name, arguments):
+    if ALLOW_FILE_IO:
+        return
+    hint = ("This server does not touch files on its host (start it with "
+            "--allow-file-io for local use).")
+    if name in _FILE_IO_FUNCTIONS:
+        raise ValueError(f"{name} reads files on the server host. {hint}")
+    used = sorted(k for k in _FILE_IO_ARGS & set(arguments) if arguments[k])
+    if used:
+        raise ValueError(f"{used} would read or write files on the server host. "
+                         f"Omit them: the table is returned in the result. {hint}")
 
 
 def _library_class(dotted: str):
@@ -285,7 +383,7 @@ def _construct(dotted, key, spec):
         ) from exc
 
 
-@mcp.tool()
+@_tool
 def recommend_methods(sg: float = 0.65, co2: float = 0, h2s: float = 0,
                       n2: float = 0, h2: float = 0, api: float | None = None,
                       deviation: float = 0, well_type: str = "gas", he: float = 0) -> dict:
@@ -305,7 +403,7 @@ def recommend_methods(sg: float = 0.65, co2: float = 0, h2s: float = 0,
     return to_jsonable(recs)
 
 
-@mcp.tool()
+@_tool
 def co2_brine_props(pres: float, temp: float, ppm: float = 0,
                     cw_sat: bool = False, metric: bool = False) -> dict:
     """CO2-saturated brine properties (Spycher-Pruess mutual solubility).
@@ -325,7 +423,7 @@ def co2_brine_props(pres: float, temp: float, ppm: float = 0,
     return _envelope({k: to_jsonable(getattr(mix, k, None)) for k in keys}, notes)
 
 
-@mcp.tool()
+@_tool
 def sw_brine_props(pres: float, temp: float, ppm: float = 0,
                    y_CO2: float = 0, y_H2S: float = 0, y_N2: float = 0,
                    y_H2: float = 0, sg: float = 0.65, cw_sat: bool = False,
@@ -348,7 +446,7 @@ def sw_brine_props(pres: float, temp: float, ppm: float = 0,
     return _envelope({k: to_jsonable(getattr(sw, k, None)) for k in keys}, notes)
 
 
-@mcp.tool()
+@_tool
 def fit_and_forecast(t: list, q: list, t_end: float, method: str = "best",
                      dt: float = 1.0, q_min: float = 0.0) -> dict:
     """Fit a decline model to rate-time data and forecast to t_end.
@@ -370,6 +468,140 @@ def fit_and_forecast(t: list, q: list, t_end: float, method: str = "best",
         "forecast": {"t": to_jsonable(fc.t), "q": to_jsonable(fc.q),
                      "cum": to_jsonable(fc.Qcum), "eur": to_jsonable(fc.eur)},
     }, list(dict.fromkeys(notes + notes2)))
+
+
+def _doc_paths() -> dict:
+    """{stem: path} for every RST file shipped in the pyrestoolbox wheel."""
+    import pyrestoolbox
+    docs = pyrestoolbox.docs_dir()
+    return {f[:-4]: os.path.join(docs, f) for f in sorted(os.listdir(docs)) if f.endswith(".rst")}
+
+
+@_tool
+def read_docs(topic: str = "index") -> str:
+    """Full documentation for one module: function list, signatures, input
+    and return tables, and worked examples whose printed outputs the test
+    suite verifies.
+
+    topic is a module name ('gas', 'oil', 'nodal', ...), 'index' for the map
+    of engineering tasks to functions, or 'changelist' for release history.
+    Same content as the docs:// resources, for hosts that do not surface
+    resources. Prefer describe() for one function; read_docs for the
+    background, method choices and examples.
+    """
+    paths = _doc_paths()
+    if topic not in paths:
+        raise ValueError(f"Unknown topic {topic!r}. Topics: {sorted(paths)}")
+    with open(paths[topic], encoding="utf-8") as f:
+        return f.read()
+
+
+_STOPWORDS = {"a", "an", "and", "the", "of", "for", "to", "in", "on", "from",
+              "with", "by", "or", "at", "is", "how", "what", "do", "i", "my"}
+
+
+# Engineering words that the docstrings do not use, mapped to ones they do.
+_SYNONYMS = {
+    "place": "ogip ooip material balance", "ogip": "material balance gas",
+    "ooip": "material balance oil", "gip": "material balance gas",
+    "reserves": "eur material balance", "bhp": "bottomhole flowing",
+    "pwf": "bottomhole flowing ipr", "vlp": "bottomhole flowing tubing",
+    "tubing": "vlp fbhp", "lift": "vlp fbhp", "solubility": "saturated rs",
+    "dissolved": "saturated rs", "pvt": "properties table",
+    "loading": "critical rate", "deliverability": "aof backpressure",
+    "kr": "relative permeability", "relperm": "relative permeability",
+    "forecast": "decline forecast", "z": "z factor deviation",
+}
+
+# The one-shot tools, so a search can land on them as well as on call().
+_WRAPPER_ENTRIES = [
+    ("tool:co2_brine_props", "CO2-saturated brine: CO2 solubility, density, viscosity, Bw, Rs",
+     "CO2 solubility in brine, CO2-water mutual solubility"),
+    ("tool:sw_brine_props", "Gas-saturated brine for CH4/CO2/H2S/N2/H2/He mixtures: solubility, density, Rs, water content",
+     "Gas solubility in brine, sour gas, hydrogen storage"),
+    ("tool:fit_and_forecast", "Fit a decline curve to rate-time data and forecast with EUR",
+     "Decline curve fit and production forecast"),
+]
+
+
+def _words(text):
+    return set(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+def _search_entry(name, summary, task):
+    strong = _words(re.sub(r"[._:]", " ", name) + " " + summary)
+    return (name, summary, task, strong, _words(task) - strong)
+
+
+@functools.lru_cache(maxsize=1)
+def _search_index():
+    """[(name, summary, task, strong_words, task_words)] over every public function.
+
+    The word set joins the function name, its docstring summary and every
+    task row of docs/index.rst that names it, so a query in engineering words
+    ("liquid loading") finds a function whose name does not contain them
+    (nodal.critical_gas_rate). Classes are left out: call() cannot run them.
+    """
+    tasks = {}
+    with open(_doc_paths()["index"], encoding="utf-8") as f:
+        for line in f:
+            cols = re.split(r"\s{2,}", line.strip())
+            if len(cols) == 2 and "." in cols[1] and not cols[0].startswith("="):
+                for fn_name in re.split(r",\s*", cols[1]):
+                    tasks.setdefault(fn_name.strip(), []).append(cols[0])
+    entries = []
+    for module in ALLOWED_MODULES:
+        mod = _get_module(module)
+        for n in _public_names(mod):
+            obj = getattr(mod, n, None)
+            if not callable(obj) or inspect.isclass(obj):
+                continue
+            name = f"{module}.{n}"
+            summary = (inspect.getdoc(obj) or "").split("\n", 1)[0].strip()
+            task = "; ".join(tasks.get(name, []))
+            entries.append(_search_entry(name, summary, task))
+    for name, summary, task in _WRAPPER_ENTRIES:
+        entries.append(_search_entry(name, summary, task))
+    return entries
+
+
+@_tool
+def search(query: str, limit: int = 12) -> dict:
+    """Find functions for an engineering task, best match first.
+
+    query is plain words, e.g. 'liquid loading', 'hydrate inhibitor dose',
+    'z factor sour gas', 'black oil table', 'erosional velocity'. Matches the
+    documentation's task index plus every public function's name and
+    summary. Returns {matches: [{name, summary, task}]}; then describe(name)
+    and call it.
+    Names starting 'tool:' are the one-shot tools of this server.
+    """
+    import math
+    words = [w for w in re.findall(r"[a-z0-9]+", query.lower()) if w not in _STOPWORDS]
+    if not words:
+        raise ValueError("Give a few words describing the task, e.g. 'gas viscosity'.")
+    words += [x for w in words for x in _SYNONYMS.get(w, "").split()]
+    index = _search_index()
+
+    def has(wordset, w):
+        # Prefix match ('inhibitor' finds 'inhibitors'), but only for words of
+        # three or more letters, so 'z' matches the token 'z' and nothing else.
+        return w in wordset or (len(w) > 2 and any(x.startswith(w) for x in wordset))
+
+    df = {w: sum(has(e[3] | e[4], w) for e in index) for w in set(words)}
+    scored = []
+    for name, summary, task, strong, task_words in index:
+        # Rare words carry the meaning ('loading' outranks 'gas'). A match in
+        # the name or summary counts double one in a shared task-index row.
+        score = 0.0
+        for w in words:
+            idf = math.log((1 + len(index)) / (1 + df[w]))
+            score += idf if has(strong, w) else 0.5 * idf if has(task_words, w) else 0
+        if score > 0:
+            scored.append((score, name, summary, task))
+    scored.sort(key=lambda s: (-s[0], s[1]))
+    return {"matches": [{"name": n, "summary": s, "task": t}
+                        for _, n, s, t in scored[:max(1, limit)]]}
 
 
 def _register_doc_resources():
@@ -415,11 +647,22 @@ def build_parser():
                              "127.0.0.1; use 0.0.0.0 in a container)")
     parser.add_argument("--port", type=int, default=8000,
                         help="port for streamable-http (default 8000)")
+    parser.add_argument("--allow-file-io", action="store_true",
+                        help="let simtools functions read or write files on this "
+                             "host (export=True, deck scrapers); local use only")
+    parser.add_argument("--max-result-chars", type=int, default=MAX_RESULT_CHARS,
+                        help="largest tool result returned, in characters of JSON "
+                             f"(default {MAX_RESULT_CHARS:,})")
+    parser.add_argument("--version", action="version",
+                        version=f"pyrestoolbox-mcp {__version__}")
     return parser
 
 
 def main():
+    global ALLOW_FILE_IO, MAX_RESULT_CHARS
     args = build_parser().parse_args()
+    ALLOW_FILE_IO = args.allow_file_io
+    MAX_RESULT_CHARS = args.max_result_chars
     if args.transport != "streamable-http":
         mcp.run(transport=args.transport)
         return

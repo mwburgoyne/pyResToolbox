@@ -11,6 +11,8 @@ These are the scripts that are often copy/pasted from previous work - sometimes 
 
 Modules: gas, oil, brine, nodal (VLP/IPR, chokes, liquid loading, VFP tables), simtools (black-oil, PVTW, rel-perm, aquifer and deck tools), dca (decline curves), matbal (material balance, aquifer influx), pipeline (gas pipelines), crm (capacitance-resistance models), layer, library, recommend and sensitivity. Every module accepts Eclipse METRIC units with ``metric=True``; the full documentation ships inside the package, and ``pyrestoolbox.docs_dir()`` returns its location for offline reading.
 
+**New: use it from AI agents.** ``pyrestoolbox-mcp`` is a Model Context Protocol server that lets Claude, Cursor, VS Code Copilot or any other MCP host find, read up on and run every function in the library. One line sets it up: ``claude mcp add pyrestoolbox -- uvx pyrestoolbox-mcp``. See `Use from AI agents (MCP)`_ below.
+
 Includes functions to perform calculations including;
 
 - Decline Curve Analysis with Arps and Duong models - fitting, forecasting, EUR, windowed fitting, b-factor uncertainty band, secondary phase ratio models, and uptime inference
@@ -40,6 +42,34 @@ Includes functions to perform calculations including;
 - Sensitivity analysis with parameter sweeps and tornado charts
 
 All public PVT, flow rate, and simulation table functions support both oilfield (psia, deg F, ft) and Eclipse METRIC (barsa, deg C, m) unit systems via an optional ``metric=False`` parameter. See individual module documentation for unit mapping details.
+
+Use from AI agents (MCP)
+------------------------
+
+`pyrestoolbox-mcp <https://pypi.org/project/pyrestoolbox-mcp/>`_ exposes the whole library to AI agents through the `Model Context Protocol <https://modelcontextprotocol.io>`_. The agent asks in engineering terms ("liquid loading", "black oil table", "CO2 solubility in brine"), gets the matching functions, reads their documentation with units, and runs them. Library validity warnings come back with every number, and errors carry the library's own message (valid method names, missing inputs, range limits), so the agent corrects itself.
+
+It needs Python 3.10 or later and installs pyrestoolbox 3.10.1 or later. With `uv <https://docs.astral.sh/uv/>`_ installed, nothing else needs installing first:
+
+.. code-block:: shell
+
+    # Claude Code
+    claude mcp add pyrestoolbox -- uvx pyrestoolbox-mcp
+
+Claude Desktop (``claude_desktop_config.json``) and Cursor (``.cursor/mcp.json``):
+
+.. code-block:: json
+
+    {"mcpServers": {"pyrestoolbox": {"command": "uvx", "args": ["pyrestoolbox-mcp"]}}}
+
+VS Code (``.vscode/mcp.json``):
+
+.. code-block:: json
+
+    {"servers": {"pyrestoolbox": {"command": "uvx", "args": ["pyrestoolbox-mcp"]}}}
+
+Without uv, run ``pip install pyrestoolbox-mcp`` and use ``pyrestoolbox-mcp`` as the command. For a shared deployment, ``pyrestoolbox-mcp --transport streamable-http`` serves it over HTTP (a Dockerfile is included). The server is read-only: it never touches files on its host unless started with ``--allow-file-io``. Tools, deployment and security notes: `mcp/README.md <https://github.com/mwburgoyne/pyResToolbox/blob/main/mcp/README.md>`_.
+
+Agents that can run Python can use the library directly instead; the documentation ships inside the package (``pyrestoolbox.docs_dir()``).
 
 Rust Acceleration (Optional)
 ----------------------------

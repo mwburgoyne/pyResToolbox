@@ -1,26 +1,36 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyrestoolbox-mcp"
-version = "0.1.0"
-description = "MCP server exposing the pyrestoolbox reservoir engineering library"
-license = {text = "GPL-3.0-or-later"}
+dynamic = ["version"]
+description = "MCP server exposing the pyrestoolbox reservoir engineering library to AI agents"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 authors = [{name = "Mark W. Burgoyne", email = "mark.w.burgoyne@gmail.com"}]
-keywords = ["mcp", "petroleum", "reservoir", "pyrestoolbox"]
+keywords = ["mcp", "petroleum", "reservoir", "pyrestoolbox", "pvt", "agent"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering",
+]
 requires-python = ">=3.10"
 dependencies = [
-    "mcp>=1.2,<3",
-    "pyrestoolbox>=3.8.2",
+    "mcp>=1.22,<3",
+    "pyrestoolbox>=3.10.1",
 ]
 readme = "README.md"
 
 [project.urls]
 Homepage = "https://github.com/mwburgoyne/pyResToolbox"
+Documentation = "https://github.com/mwburgoyne/pyResToolbox/tree/main/mcp"
 
 [project.scripts]
 pyrestoolbox-mcp = "pyrestoolbox_mcp.server:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "pyrestoolbox_mcp.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["pyrestoolbox_mcp*"]

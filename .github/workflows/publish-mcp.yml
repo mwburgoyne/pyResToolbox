@@ -1,0 +1,66 @@
+name: Publish pyrestoolbox-mcp
+
+# Separate distribution from the library: tag mcp-v<version> (matching
+# mcp/pyrestoolbox_mcp/__init__.py) to build, test and publish it.
+on:
+  push:
+    tags:
+      - "mcp-v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build and smoke-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Check tag matches package version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          VERSION=$(python -c "import re;print(re.search(r'__version__ = \"(.+)\"', open('mcp/pyrestoolbox_mcp/__init__.py').read()).group(1))")
+          test "mcp-v${VERSION}" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} != mcp-v${VERSION}"; exit 1; }
+
+      - name: Build sdist and wheel
+        run: |
+          pip install build twine
+          python -m build mcp --outdir dist
+          twine check --strict dist/*
+
+      # Install the wheel the way a user would (library and SDK from PyPI) and
+      # drive it over stdio as an MCP host does.
+      - name: Smoke-test the installed wheel
+        run: |
+          python -m venv /tmp/smoke
+          /tmp/smoke/bin/pip install dist/*.whl
+          /tmp/smoke/bin/python .github/scripts/mcp_stdio_smoke.py /tmp/smoke/bin/pyrestoolbox-mcp
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: mcp-dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    environment:
+      name: pypi
+      url: https://pypi.org/project/pyrestoolbox-mcp/
+    permissions:
+      id-token: write   # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: mcp-dist
+          path: dist
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          packages-dir: dist/

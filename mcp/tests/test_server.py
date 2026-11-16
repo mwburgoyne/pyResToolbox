@@ -278,3 +278,76 @@ def test_fit_and_forecast_reports_refusal_for_rising_history():
     import pytest
     with pytest.raises(ValueError, match="does not decline"):
         srv.fit_and_forecast(t=list(range(1, 13)), q=[100 + 5 * i for i in range(12)], t_end=24)
+
+
+# ------------------------------------- agent-facing robustness (17 Nov 2026)
+
+def _is_error(result):
+    return result.is_error if srv._MCP_V2 else result.isError
+
+
+@pytest.mark.anyio
+async def test_errors_reach_the_agent_through_the_protocol():
+    """mcp 2.x replaces any exception other than ToolError with a generic
+    'Error executing tool'; the adapter must convert, or the valid-options
+    list an agent needs to correct itself never arrives."""
+    async with _in_memory_client() as client:
+        bad = await client.call_tool('call', {'name': 'gas.gas_z', 'arguments': {
+            'p': 2000, 'sg': 0.7, 'degf': 180, 'zmethod': 'FOO'}})
+        assert _is_error(bad)
+        assert "Valid options" in bad.content[0].text and "DAK" in bad.content[0].text
+        missing = await client.call_tool('call', {'name': 'gas.gas_z', 'arguments': {'p': 2000}})
+        assert "missing" in missing.content[0].text and "sg" in missing.content[0].text
+
+
+@pytest.mark.anyio
+async def test_tools_are_annotated_read_only():
+    async with _in_memory_client() as client:
+        tools = (await client.list_tools()).tools
+        assert {'search', 'read_docs'} <= {t.name for t in tools}
+        for t in tools:
+            ann = t.annotations.model_dump(by_alias=True)  # 2.x attributes are snake_case
+            assert ann['readOnlyHint'] is True and ann['openWorldHint'] is False, t.name
+
+
+def test_file_io_refused_by_default(monkeypatch):
+    monkeypatch.setattr(srv, 'ALLOW_FILE_IO', False)
+    with pytest.raises(ValueError, match='files on the server host'):
+        srv.call('simtools.rel_perm_table', {'rows': 5, 'krtable': 'SWOF',
+                                             'krfamily': 'COR', 'export': True})
+    with pytest.raises(ValueError, match='reads files on the server host'):
+        srv.call('simtools.ix_extract_problem_cells', {'filename': '/etc/passwd'})
+    # export=False is harmless and allowed
+    out = srv.call('simtools.rel_perm_table', {'rows': 5, 'krtable': 'SWOF',
+                                               'krfamily': 'COR', 'export': False})
+    assert len(out['result']['records']) >= 5
+
+
+def test_oversized_result_is_refused_with_advice(monkeypatch):
+    monkeypatch.setattr(srv, 'MAX_RESULT_CHARS', 2000)
+    with pytest.raises(ValueError, match='fewer rows'):
+        srv._check_size('call', srv.call('simtools.rel_perm_table', {
+            'rows': 200, 'krtable': 'SWOF', 'krfamily': 'COR'}))
+
+
+@pytest.mark.parametrize('query, expected', [
+    ('liquid loading', 'nodal.critical_gas_rate'),
+    ('hydrate inhibitor dose', 'gas.gas_hydrate'),
+    ('gas in place', 'matbal.gas_matbal'),
+    ('bubble point', 'oil.oil_pbub'),
+    ('co2 solubility in brine', 'tool:co2_brine_props'),
+    ('erosional velocity', 'nodal.erosional_velocity'),
+])
+def test_search_finds_function_by_task(query, expected):
+    assert srv.search(query, 3)['matches'][0]['name'] == expected
+
+
+def test_read_docs_topics():
+    assert 'gas_z' in srv.read_docs('gas')
+    with pytest.raises(ValueError, match='Topics'):
+        srv.read_docs('nope')
+
+
+def test_cli_policy_flags():
+    args = srv.build_parser().parse_args(['--allow-file-io', '--max-result-chars', '1000'])
+    assert args.allow_file_io and args.max_result_chars == 1000
