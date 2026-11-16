@@ -81,6 +81,7 @@ jobs:
     name: Docker image (GHCR)
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       packages: write
@@ -101,11 +102,16 @@ jobs:
       - name: Smoke-test over HTTP
         run: |
           docker run -d --name mcp -p 8000:8000 "$IMAGE:$VERSION"
-          H=(-sf -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -H "MCP-Protocol-Version: 2025-06-18")
-          for i in $(seq 30); do curl -s -o /dev/null http://127.0.0.1:8000/mcp && break; sleep 1; done
+          H=(-sf --max-time 30 -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -H "MCP-Protocol-Version: 2025-06-18")
+          for i in $(seq 60); do docker logs mcp 2>&1 | grep -q "Uvicorn running" && break; sleep 1; done
+          docker logs mcp
           curl "${H[@]}" http://127.0.0.1:8000/mcp -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' | grep -q pyrestoolbox
           curl "${H[@]}" http://127.0.0.1:8000/mcp -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"call","arguments":{"name":"gas.gas_z","arguments":{"p":2000,"sg":0.75,"degf":180}}}}' | tee /tmp/out | grep -q '0.8498'
           docker rm -f mcp
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs mcp || true
 
       - name: Push
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
