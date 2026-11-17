@@ -7,7 +7,7 @@ FROM python:3.11-slim
 
 # Pin the library version for reproducible corporate deployments; bump
 # deliberately and rebuild.
-ARG PYRESTOOLBOX_VERSION=3.10.1
+ARG PYRESTOOLBOX_VERSION=3.10.2
 
 WORKDIR /app
 COPY . /app/mcp
